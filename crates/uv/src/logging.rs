@@ -28,11 +28,10 @@ use uv_static::EnvVars;
 pub(crate) enum Level {
     /// Suppress all tracing output by default (overridable by `RUST_LOG`).
     #[default]
-    Default,
-    /// Show debug messages by default (overridable by `RUST_LOG`).
-    Verbose,
-    /// Show messages in a hierarchical span tree. By default, debug messages are shown (overridable by `RUST_LOG`).
-    ExtraVerbose,
+    Off,
+    DebugUv,
+    TraceUv,
+    TraceAll,
 }
 
 /// Enum to set the log level for the file logs
@@ -41,13 +40,9 @@ pub(crate) enum Level {
 pub(crate) enum FileLogLevel {
     /// Write debug messages to the log file.
     #[default]
-    Verbose,
-    /// Write messages in a hierarchical span tree to the log file, debug or lower messages are written.
-    ExtraVerbose,
-    /// Write trace level logs to the log file.
-    TraceVerbose,
-    /// Write messages in a hierarchical span tree to the log file, trace messages are written.
-    TraceExtraVerbose,
+    DebugUv,
+    TraceUv,
+    TraceAll,
 }
 struct UvFormat {
     display_timestamp: bool,
@@ -137,14 +132,23 @@ pub(crate) fn setup_logging(
     log_path: Option<&PathBuf>,
     file_log_level: FileLogLevel,
 ) -> anyhow::Result<()> {
+    // We use directives here to ensure `RUST_LOG` can override them
     let default_directive = match level {
-        Level::Default => {
-            // Show nothing, but allow `RUST_LOG` to override.
+        Level::Off => {
+            // Show nothing
             tracing::level_filters::LevelFilter::OFF.into()
         }
-        Level::Verbose | Level::ExtraVerbose => {
-            // Show `DEBUG` messages from the CLI crate, but allow `RUST_LOG` to override.
+        Level::DebugUv => {
+            // Show `DEBUG` messages from the CLI crate (and ERROR/WARN/INFO)
             Directive::from_str("uv=debug").unwrap()
+        }
+        Level::TraceUv => {
+            // Show `TRACE` messages from the CLI crate (and ERROR/WARN/INFO/DEBUG)
+            Directive::from_str("uv=trace").unwrap()
+        }
+        Level::TraceAll => {
+            // Show all `TRACE` messages (and ERROR/WARN/INFO/DEBUG)
+            Directive::from_str("trace").unwrap()
         }
     };
 
@@ -182,55 +186,46 @@ pub(crate) fn setup_logging(
         };
     let writer = std::sync::Mutex::new(anstream::AutoStream::new(std::io::stderr(), color_choice));
 
-    match level {
-        Level::Default | Level::Verbose => {
-            // Regardless of the tracing level, show messages without any adornment.
-            let format = UvFormat {
-                display_timestamp: false,
-                display_level: true,
-                show_spans: false,
-            };
+    let detailed_logging = std::env::var(uv_static::EnvVars::UV_LOG_CONTEXT).is_ok();
 
-            layers.push(
-                tracing_subscriber::fmt::layer()
-                    .event_format(format)
-                    .with_writer(writer)
-                    .with_ansi(ansi)
-                    .with_filter(filter)
-                    .boxed(),
-            );
-        }
-        Level::ExtraVerbose => {
-            // Regardless of the tracing level, include the uptime and target for each message.
-            layers.push(
-                HierarchicalLayer::default()
-                    .with_targets(true)
-                    .with_timer(Uptime::default())
-                    .with_writer(writer)
-                    .with_ansi(ansi)
-                    .with_filter(filter)
-                    .boxed(),
-            );
-        }
+    if detailed_logging {
+        // Regardless of the tracing level, include the uptime and target for each message.
+        layers.push(
+            HierarchicalLayer::default()
+                .with_targets(true)
+                .with_timer(Uptime::default())
+                .with_writer(writer)
+                .with_ansi(ansi)
+                .with_filter(filter)
+                .boxed(),
+        );
+    } else {
+        // Regardless of the tracing level, show messages without any adornment.
+        let format = UvFormat {
+            display_timestamp: false,
+            display_level: true,
+            show_spans: false,
+        };
+        layers.push(
+            tracing_subscriber::fmt::layer()
+                .event_format(format)
+                .with_writer(writer)
+                .with_ansi(ansi)
+                .with_filter(filter)
+                .boxed(),
+        );
     }
 
     // If log path is provided the setup for persistent file logging is done
     if let Some(path) = log_path {
         // file_filter sets the level of logs by default debug logs are written to the file
-        let file_filter_str = match file_log_level {
-            FileLogLevel::Verbose | FileLogLevel::ExtraVerbose => "uv=debug",
-            FileLogLevel::TraceVerbose | FileLogLevel::TraceExtraVerbose => "trace",
+        let file_directive = match file_log_level {
+            FileLogLevel::DebugUv => "uv=debug",
+            FileLogLevel::TraceUv => "uv=trace",
+            FileLogLevel::TraceAll => "trace",
         };
-
         let file_filter =
-            EnvFilter::try_new(file_filter_str).unwrap_or_else(|_| EnvFilter::new("uv=debug"));
-        let file_format = UvFormat {
-            // Setting timestamp display as false as to mimic the behavior of the console logs
-            // however wanted to discuss:                                                                                                           the case where user might want to know when they wrote the logs
-            display_timestamp: false,
-            display_level: true,
-            show_spans: false,
-        };
+            EnvFilter::try_new(file_directive).unwrap_or_else(|_| EnvFilter::new("uv=debug"));
 
         let mut new_path = path.clone();
         new_path.set_extension("log");
@@ -251,28 +246,34 @@ pub(crate) fn setup_logging(
             anstream::ColorChoice::Never,
         ));
 
+        let detailed_file_logging = std::env::var(uv_static::EnvVars::UV_FILE_LOG_CONTEXT).is_ok();
+
         // Depending on the log level, different layers are added to the subscriber.
         // An equivalent of `RUST_LOG` for file logs might be needed to be implemented.
-        match file_log_level {
-            FileLogLevel::Verbose | FileLogLevel::TraceVerbose => {
-                layers.push(
-                    tracing_subscriber::fmt::layer()
-                        .event_format(file_format)
-                        .with_writer(file_writer)
-                        .with_filter(file_filter)
-                        .boxed(),
-                );
-            }
-            FileLogLevel::ExtraVerbose | FileLogLevel::TraceExtraVerbose => {
-                layers.push(
-                    HierarchicalLayer::default()
-                        .with_targets(true)
-                        .with_writer(file_writer)
-                        .with_timer(Uptime::default())
-                        .with_filter(file_filter)
-                        .boxed(),
-                );
-            }
+        if detailed_file_logging {
+            layers.push(
+                HierarchicalLayer::default()
+                    .with_targets(true)
+                    .with_timer(Uptime::default())
+                    .with_writer(file_writer)
+                    .with_filter(file_filter)
+                    .boxed(),
+            );
+        } else {
+            let file_format = UvFormat {
+                // Setting timestamp display as false as to mimic the behavior of the console logs
+                // however wanted to discuss: the case where user might want to know when they wrote the logs
+                display_timestamp: false,
+                display_level: true,
+                show_spans: false,
+            };
+            layers.push(
+                tracing_subscriber::fmt::layer()
+                    .event_format(file_format)
+                    .with_writer(file_writer)
+                    .with_filter(file_filter)
+                    .boxed(),
+            );
         }
     };
 

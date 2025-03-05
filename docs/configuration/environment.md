@@ -79,6 +79,12 @@ Equivalent to the `--extra-index-url` command-line argument. If set, uv will
 use this space-separated list of URLs as additional indexes when searching for packages.
 (Deprecated: use `UV_INDEX` instead.)
 
+### `UV_FILE_LOG_CONTEXT`
+
+Add additional context and structure to file logs.
+
+If logging is not enabled, e.g., with `--log` not set this has no effect
+
 ### `UV_FIND_LINKS`
 
 Equivalent to the `--find-links` command-line argument. If set, uv will use this
@@ -176,6 +182,12 @@ Equivalent to the `--locked` command-line argument. If set, uv will assert that 
 ### `UV_LOG`
 
 Path to log file that uv would write to
+
+### `UV_LOG_CONTEXT`
+
+Add additional context and structure to log messages.
+
+If logging is not enabled, e.g., with `RUST_LOG` or `-v`, this has no effect.
 
 ### `UV_NATIVE_TLS`
 
