@@ -768,7 +768,11 @@ async fn get_or_create_environment(
                             .cloned()
                             .map(UnresolvedRequirementSpecification::from)
                             .collect::<Vec<_>>();
-                        let constraints = [];
+                        let constraints = constraints
+                            .iter()
+                            .cloned()
+                            .map(NameRequirementSpecification::from)
+                            .collect::<Vec<_>>();
 
                         if matches!(
                             site_packages.satisfies(
