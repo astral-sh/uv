@@ -663,3 +663,47 @@ fn python_find_venv_invalid() {
     ----- stderr -----
     "###);
 }
+
+/// See: <https://github.com/astral-sh/uv/issues/11825>
+#[test]
+#[cfg(unix)]
+fn python_required_python_major_minor() {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    // Find the Python 3.11 executable.
+    let path = &context.python_versions.first().unwrap().1;
+
+    // Symlink it to `python3.11`.
+    fs_err::create_dir_all(context.temp_dir.child("child")).unwrap();
+    std::os::unix::fs::symlink(path, context.temp_dir.child("child").join("python3.11")).unwrap();
+
+    // Find `python3.11`, which is `>=3.11.4`.
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child/python3.11
+
+    ----- stderr -----
+    "###);
+
+    // Find `python3.11`, which is `>3.11.4`.
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child/python3.11
+
+    ----- stderr -----
+    "###);
+
+    // Fail to find any matching Python interpreter.
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.11.255, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python >3.11.[X], <3.12 in virtual environments, managed installations, or search path
+    "###);
+}

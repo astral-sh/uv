@@ -72,7 +72,7 @@ impl schemars::JsonSchema for IndexUrl {
         "IndexUrl".to_string()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
             metadata: Some(Box::new(schemars::schema::Metadata {

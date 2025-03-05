@@ -13,7 +13,7 @@ use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
 use uv_normalize::{ExtraName, InvalidNameError, PackageName};
-use uv_pep440::{LocalVersionSlice, Version};
+use uv_pep440::{LocalVersionSlice, LowerBound, Version};
 use uv_platform_tags::Tags;
 use uv_static::EnvVars;
 
@@ -24,7 +24,6 @@ use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
 use crate::python_requirement::PythonRequirement;
-use crate::requires_python::LowerBound;
 use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
     MetadataUnavailable, ResolverEnvironment, UnavailablePackage, UnavailableReason,

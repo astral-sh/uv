@@ -1,5 +1,6 @@
 use std::fmt::Display;
 use std::fmt::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -13,9 +14,12 @@ use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
-use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
-use uv_distribution_types::{Name, UnresolvedRequirement, UnresolvedRequirementSpecification};
+use uv_client::BaseClientBuilder;
+use uv_configuration::{Concurrency, PreviewMode};
+use uv_distribution_types::{
+    Name, NameRequirementSpecification, UnresolvedRequirement, UnresolvedRequirementSpecification,
+};
+use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
@@ -27,7 +31,7 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_static::EnvVars;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
@@ -45,6 +49,7 @@ use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::ExitStatus;
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 use crate::settings::ResolverInstallerSettings;
 
 /// The user-facing command used to invoke a tool run.
@@ -71,23 +76,30 @@ pub(crate) async fn run(
     command: Option<ExternalCommand>,
     from: Option<String>,
     with: &[RequirementsSource],
+    constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
     show_resolution: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
+    options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
+    network_settings: NetworkSettings,
     invocation_source: ToolRunCommand,
     isolated: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: Cache,
     printer: Printer,
     preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
+    /// Whether or not a path looks like a Python script based on the file extension.
+    fn has_python_script_ext(path: &Path) -> bool {
+        path.extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
+    }
+
     let Some(command) = command else {
         // When a command isn't provided, we'll show a brief help including available tools
         show_help(invocation_source, &cache, printer).await?;
@@ -101,8 +113,45 @@ pub(crate) async fn run(
     };
 
     let Some(target) = target.to_str() else {
-        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
+        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"));
     };
+
+    if let Some(ref from) = from {
+        if has_python_script_ext(Path::new(from)) {
+            let package_name = PackageName::from_str(from)?;
+            return Err(anyhow::anyhow!(
+                "It looks you provided a Python script to `--from`, which is not supported\n\n{}{} If you meant to run a command from the `{}` package, use the normalized package name instead to disambiguate, e.g., `{}`",
+                "hint".bold().cyan(),
+                ":".bold(),
+                package_name.cyan(),
+                format!("{} --from {} {}", invocation_source, package_name.cyan(), target),
+            ));
+        }
+    } else {
+        let target_path = Path::new(target);
+        if has_python_script_ext(target_path) {
+            return if target_path.try_exists()? {
+                Err(anyhow::anyhow!(
+                    "It looks you tried to run a Python script at `{}`, which is not supported by `{}`\n\n{}{} Use `{}` instead",
+                    target_path.user_display(),
+                    invocation_source,
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    format!("uv run {}", target_path.user_display().cyan()),
+                ))
+            } else {
+                let package_name = PackageName::from_str(target)?;
+                Err(anyhow::anyhow!(
+                    "It looks you provided a Python script to run, which is not supported supported by `{}`\n\n{}{} We did not find a script at the requested path. If you meant to run a command from the `{}` package, pass the normalized package name to `--from` to disambiguate, e.g., `{}`",
+                    invocation_source,
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package_name.cyan(),
+                    format!("{} --from {} {}", invocation_source, package_name, target),
+                ))
+            };
+        }
+    }
 
     let request = ToolRequest::parse(target, from.as_deref());
 
@@ -117,18 +166,19 @@ pub(crate) async fn run(
     let result = get_or_create_environment(
         &request,
         with,
+        constraints,
+        overrides,
         show_resolution,
         python.as_deref(),
         install_mirrors,
+        options,
         &settings,
+        &network_settings,
         isolated,
         python_preference,
         python_downloads,
         installer_metadata,
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         &cache,
         printer,
         preview,
@@ -138,7 +188,7 @@ pub(crate) async fn run(
     let (from, environment) = match result {
         Ok(resolution) => resolution,
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .with_context("tool")
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
@@ -449,26 +499,27 @@ impl std::fmt::Display for ToolRequirement {
 async fn get_or_create_environment(
     request: &ToolRequest<'_>,
     with: &[RequirementsSource],
+    constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
     show_resolution: bool,
     python: Option<&str>,
     install_mirrors: PythonInstallMirrors,
+    options: ResolverInstallerOptions,
     settings: &ResolverInstallerSettings,
+    network_settings: &NetworkSettings,
     isolated: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -560,11 +611,9 @@ async fn get_or_create_environment(
                     vec![spec],
                     &interpreter,
                     settings,
+                    network_settings,
                     &state,
-                    connectivity,
                     concurrency,
-                    native_tls,
-                    allow_insecure_host,
                     cache,
                     printer,
                     preview,
@@ -638,13 +687,9 @@ async fn get_or_create_environment(
     };
 
     // Read the `--with` requirements.
-    let spec = {
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls)
-            .allow_insecure_host(allow_insecure_host.to_vec());
-        RequirementsSpecification::from_simple_sources(with, &client_builder).await?
-    };
+    let spec =
+        RequirementsSpecification::from_sources(with, constraints, overrides, &client_builder)
+            .await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -658,11 +703,9 @@ async fn get_or_create_environment(
                 spec.requirements.clone(),
                 &interpreter,
                 settings,
+                network_settings,
                 &state,
-                connectivity,
                 concurrency,
-                native_tls,
-                allow_insecure_host,
                 cache,
                 printer,
                 preview,
@@ -671,6 +714,28 @@ async fn get_or_create_environment(
         );
         requirements
     };
+
+    // Resolve the constraints.
+    let constraints = spec
+        .constraints
+        .clone()
+        .into_iter()
+        .map(|constraint| constraint.requirement)
+        .collect::<Vec<_>>();
+
+    // Resolve the overrides.
+    let overrides = resolve_names(
+        spec.overrides.clone(),
+        &interpreter,
+        settings,
+        network_settings,
+        &state,
+        concurrency,
+        cache,
+        printer,
+        preview,
+    )
+    .await?;
 
     // Check if the tool is already installed in a compatible environment.
     if !isolated && !request.is_latest() {
@@ -685,27 +750,52 @@ async fn get_or_create_environment(
                         python_request.satisfied(environment.interpreter(), cache)
                     })
                 });
+
+            // Check if the installed packages meet the requirements.
             if let Some(environment) = existing_environment {
-                // Check if the installed packages meet the requirements.
-                let site_packages = SitePackages::from_environment(&environment)?;
+                if let Some(tool_receipt) = installed_tools
+                    .get_tool_receipt(&requirement.name)
+                    .ok()
+                    .flatten()
+                    .filter(|receipt| ToolOptions::from(options) == *receipt.options())
+                {
+                    if overrides.is_empty() {
+                        // Check if the installed packages meet the requirements.
+                        let site_packages = SitePackages::from_environment(&environment)?;
 
-                let requirements = requirements
-                    .iter()
-                    .cloned()
-                    .map(UnresolvedRequirementSpecification::from)
-                    .collect::<Vec<_>>();
-                let constraints = [];
+                        let requirements = requirements
+                            .iter()
+                            .cloned()
+                            .map(UnresolvedRequirementSpecification::from)
+                            .collect::<Vec<_>>();
+                        let constraints = constraints
+                            .iter()
+                            .cloned()
+                            .map(NameRequirementSpecification::from)
+                            .collect::<Vec<_>>();
 
-                if matches!(
-                    site_packages.satisfies(
-                        &requirements,
-                        &constraints,
-                        &interpreter.resolver_marker_environment()
-                    ),
-                    Ok(SatisfiesResult::Fresh { .. })
-                ) {
-                    debug!("Using existing tool `{}`", requirement.name);
-                    return Ok((from, environment));
+                        if matches!(
+                            site_packages.satisfies(
+                                &requirements,
+                                &constraints,
+                                &interpreter.resolver_marker_environment()
+                            ),
+                            Ok(SatisfiesResult::Fresh { .. })
+                        ) {
+                            debug!("Using existing tool `{}`", requirement.name);
+                            return Ok((from, environment));
+                        }
+                    } else {
+                        // Check if the installed packages match the requirements.
+                        // TODO(charlie): Support overrides in `SitePackages::satisfies`.
+                        if requirements == tool_receipt.requirements()
+                            && constraints == tool_receipt.constraints()
+                            && overrides == tool_receipt.overrides()
+                        {
+                            debug!("Using existing tool `{}`", requirement.name);
+                            return Ok((from, environment));
+                        }
+                    }
                 }
             }
         }
@@ -714,6 +804,14 @@ async fn get_or_create_environment(
     // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.
     let spec = EnvironmentSpecification::from(RequirementsSpecification {
         requirements: requirements
+            .into_iter()
+            .map(UnresolvedRequirementSpecification::from)
+            .collect(),
+        constraints: constraints
+            .into_iter()
+            .map(NameRequirementSpecification::from)
+            .collect(),
+        overrides: overrides
             .into_iter()
             .map(UnresolvedRequirementSpecification::from)
             .collect(),
@@ -727,6 +825,7 @@ async fn get_or_create_environment(
         spec.clone(),
         &interpreter,
         settings,
+        network_settings,
         &state,
         if show_resolution {
             Box::new(DefaultResolveLogger)
@@ -739,10 +838,7 @@ async fn get_or_create_environment(
             Box::new(SummaryInstallLogger)
         },
         installer_metadata,
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         printer,
         preview,
@@ -786,6 +882,7 @@ async fn get_or_create_environment(
                     spec,
                     &interpreter,
                     settings,
+                    network_settings,
                     &state,
                     if show_resolution {
                         Box::new(DefaultResolveLogger)
@@ -798,10 +895,7 @@ async fn get_or_create_environment(
                         Box::new(SummaryInstallLogger)
                     },
                     installer_metadata,
-                    connectivity,
                     concurrency,
-                    native_tls,
-                    allow_insecure_host,
                     cache,
                     printer,
                     preview,
@@ -814,6 +908,7 @@ async fn get_or_create_environment(
 
     // Clear any existing overlay.
     environment.clear_overlay()?;
+    environment.clear_system_site_packages()?;
 
     Ok((from, environment.into()))
 }

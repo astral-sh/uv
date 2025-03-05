@@ -218,8 +218,8 @@ pub struct GlobalOptions {
     pub no_cache: Option<bool>,
     /// Path to the cache directory.
     ///
-    /// Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on
-    /// Linux, and `%LOCALAPPDATA%\uv\cache` on Windows.
+    /// Defaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux and macOS, and
+    /// `%LOCALAPPDATA%\uv\cache` on Windows.
     #[option(
         default = "None",
         value_type = "str",
@@ -779,7 +779,7 @@ impl ResolverInstallerOptions {
 }
 
 /// Shared settings, relevant to all operations that might create managed python installations.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PythonInstallMirrors {
@@ -1950,9 +1950,7 @@ impl From<OptionsWire> for Options {
     }
 }
 
-#[derive(
-    Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, CombineOptions, OptionsMetadata,
-)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct PublishOptions {

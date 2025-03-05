@@ -1091,9 +1091,6 @@ jobs:
           & .venv\Scripts\python.exe --version
 
       - name: "Check install"
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           .\uv.exe pip install anyio
 
@@ -1223,9 +1220,6 @@ jobs:
           & .venv\Scripts\python.exe --version
 
       - name: "Check install"
-        env:
-          # Avoid debug build stack overflows.
-          UV_STACK_SIZE: 3000000 # 3 megabyte, triple the default on windows
         run: |
           .\uv.exe pip install anyio
 

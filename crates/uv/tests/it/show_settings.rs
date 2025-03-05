@@ -60,14 +60,16 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -147,14 +149,14 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -234,14 +236,16 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -321,14 +325,14 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -409,14 +413,16 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -496,14 +502,14 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -616,14 +622,16 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -703,14 +711,14 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -792,14 +800,16 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -849,14 +859,14 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -947,14 +957,16 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1034,14 +1046,14 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -1146,14 +1158,16 @@ fn resolve_index_url() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1262,14 +1276,14 @@ fn resolve_index_url() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -1351,14 +1365,16 @@ fn resolve_index_url() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1498,14 +1514,14 @@ fn resolve_index_url() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -1610,14 +1626,16 @@ fn resolve_find_links() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1697,14 +1715,14 @@ fn resolve_find_links() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -1808,14 +1826,16 @@ fn resolve_top_level() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -1865,14 +1885,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -1969,14 +1989,16 @@ fn resolve_top_level() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2085,14 +2107,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -2172,14 +2194,16 @@ fn resolve_top_level() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2288,14 +2312,14 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -2399,14 +2423,16 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2456,14 +2482,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -2550,14 +2576,16 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2607,14 +2635,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -2701,14 +2729,16 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2758,14 +2788,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -2854,14 +2884,16 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -2911,14 +2943,14 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -3026,14 +3058,16 @@ fn resolve_tool() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3187,14 +3221,16 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3244,14 +3280,14 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -3366,14 +3402,16 @@ fn resolve_both() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3453,14 +3491,14 @@ fn resolve_both() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -3663,14 +3701,16 @@ fn resolve_config_file() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3750,14 +3790,14 @@ fn resolve_config_file() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -3938,14 +3978,16 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -3995,14 +4037,14 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -4092,14 +4134,16 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4149,14 +4193,14 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -4254,25 +4298,27 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [
+                Host {
+                    scheme: None,
+                    host: "google.com",
+                    port: None,
+                },
+                Host {
+                    scheme: None,
+                    host: "example.com",
+                    port: None,
+                },
+            ],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [
-            Host {
-                scheme: None,
-                host: "google.com",
-                port: None,
-            },
-            Host {
-                scheme: None,
-                host: "example.com",
-                port: None,
-            },
-        ],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4322,14 +4368,14 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -4430,14 +4476,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4548,14 +4596,14 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -4635,14 +4683,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4753,14 +4803,14 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -4846,14 +4896,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -4964,14 +5016,14 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -5052,14 +5104,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5170,14 +5224,14 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -5265,14 +5319,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5383,14 +5439,14 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -5471,14 +5527,16 @@ fn index_priority() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5589,14 +5647,14 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -5690,14 +5748,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5748,14 +5808,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -5835,14 +5895,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -5893,14 +5955,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -5978,14 +6040,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -6036,14 +6100,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -6123,14 +6187,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -6181,14 +6247,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -6266,14 +6332,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -6324,14 +6392,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],
@@ -6410,14 +6478,16 @@ fn verify_hashes() -> anyhow::Result<()> {
         quiet: false,
         verbose: 0,
         color: Auto,
-        native_tls: false,
+        network_settings: NetworkSettings {
+            connectivity: Online,
+            native_tls: false,
+            allow_insecure_host: [],
+        },
         concurrency: Concurrency {
             downloads: 50,
             builds: 16,
             installs: 8,
         },
-        connectivity: Online,
-        allow_insecure_host: [],
         show_settings: true,
         preview: Disabled,
         python_preference: Managed,
@@ -6468,14 +6538,14 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DevGroupsSpecification(
-                DevGroupsSpecificationInner {
+            groups: DependencyGroups(
+                DependencyGroupsInner {
                     include: Some(
                         [],
                     ),
                     exclude: [],
                     only_groups: false,
-                    history: DevGroupsSpecificationHistory {
+                    history: DependencyGroupsHistory {
                         dev_mode: None,
                         group: [],
                         only_group: [],

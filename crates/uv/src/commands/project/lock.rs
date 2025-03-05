@@ -10,10 +10,10 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DevGroupsSpecification, DryRun, ExtrasSpecification, PreviewMode,
-    Reinstall, TrustedHost, Upgrade,
+    Concurrency, Constraints, DependencyGroups, DryRun, ExtrasSpecification, PreviewMode,
+    Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -47,7 +47,7 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, pip, ExitStatus, ScriptPath};
 use crate::printer::Printer;
-use crate::settings::{ResolverSettings, ResolverSettingsRef};
+use crate::settings::{NetworkSettings, ResolverSettings, ResolverSettingsRef};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -84,13 +84,11 @@ pub(crate) async fn lock(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
+    network_settings: NetworkSettings,
     script: Option<ScriptPath>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     cache: &Cache,
     printer: Printer,
@@ -100,9 +98,9 @@ pub(crate) async fn lock(
     let script = match script {
         Some(ScriptPath::Path(path)) => {
             let client_builder = BaseClientBuilder::new()
-                .connectivity(connectivity)
-                .native_tls(native_tls)
-                .allow_insecure_host(allow_insecure_host.to_vec());
+                .connectivity(network_settings.connectivity)
+                .native_tls(network_settings.native_tls)
+                .allow_insecure_host(network_settings.allow_insecure_host.clone());
             let reporter = PythonDownloadReporter::single(printer);
             let requires_python = init_script_python_requirement(
                 python.as_deref(),
@@ -142,11 +140,9 @@ pub(crate) async fn lock(
                 workspace,
                 project_dir,
                 python.as_deref().map(PythonRequest::parse),
+                &network_settings,
                 python_preference,
                 python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
                 &install_mirrors,
                 no_config,
                 Some(false),
@@ -158,11 +154,9 @@ pub(crate) async fn lock(
             LockTarget::Script(script) => ScriptInterpreter::discover(
                 Pep723ItemRef::Script(script),
                 python.as_deref().map(PythonRequest::parse),
+                &network_settings,
                 python_preference,
                 python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
                 &install_mirrors,
                 no_config,
                 Some(false),
@@ -190,12 +184,10 @@ pub(crate) async fn lock(
         mode,
         target,
         settings.as_ref(),
+        &network_settings,
         &state,
         Box::new(DefaultResolveLogger),
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         printer,
         preview,
@@ -230,7 +222,7 @@ pub(crate) async fn lock(
             Ok(ExitStatus::Success)
         }
         Err(ProjectError::Operation(err)) => {
-            diagnostics::OperationDiagnostic::native_tls(native_tls)
+            diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -256,12 +248,10 @@ pub(super) async fn do_safe_lock(
     mode: LockMode<'_>,
     target: LockTarget<'_>,
     settings: ResolverSettingsRef<'_>,
+    network_settings: &NetworkSettings,
     state: &UniversalState,
     logger: Box<dyn ResolveLogger>,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
@@ -288,12 +278,10 @@ pub(super) async fn do_safe_lock(
                 interpreter,
                 Some(existing),
                 settings,
+                network_settings,
                 state,
                 logger,
-                connectivity,
                 concurrency,
-                native_tls,
-                allow_insecure_host,
                 cache,
                 printer,
                 preview,
@@ -327,12 +315,10 @@ pub(super) async fn do_safe_lock(
                 interpreter,
                 existing,
                 settings,
+                network_settings,
                 state,
                 logger,
-                connectivity,
                 concurrency,
-                native_tls,
-                allow_insecure_host,
                 cache,
                 printer,
                 preview,
@@ -357,12 +343,10 @@ async fn do_lock(
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
     settings: ResolverSettingsRef<'_>,
+    network_settings: &NetworkSettings,
     state: &UniversalState,
     logger: Box<dyn ResolveLogger>,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
@@ -553,12 +537,12 @@ async fn do_lock(
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(native_tls)
-        .connectivity(connectivity)
+        .native_tls(network_settings.native_tls)
+        .connectivity(network_settings.connectivity)
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host.to_vec())
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -592,7 +576,7 @@ async fn do_lock(
     // optional on the downstream APIs.
     let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
-    let groups = DevGroupsSpecification::default();
+    let groups = DependencyGroups::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

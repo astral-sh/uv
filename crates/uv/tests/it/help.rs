@@ -1,3 +1,5 @@
+use uv_static::EnvVars;
+
 use crate::common::{uv_snapshot, TestContext};
 
 #[test]
@@ -472,7 +474,7 @@ fn help_subcommand() {
 fn help_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r#"
+    uv_snapshot!(context.filters(), context.help().env_remove(EnvVars::UV_PYTHON_INSTALL_DIR).arg("python").arg("install"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

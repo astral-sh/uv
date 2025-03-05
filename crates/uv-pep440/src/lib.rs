@@ -24,7 +24,9 @@
 #![warn(missing_docs)]
 
 #[cfg(feature = "version-ranges")]
-pub use version_ranges::{release_specifier_to_range, release_specifiers_to_ranges};
+pub use version_ranges::{
+    release_specifier_to_range, release_specifiers_to_ranges, LowerBound, UpperBound,
+};
 pub use {
     version::{
         LocalSegment, LocalVersion, LocalVersionSlice, Operator, OperatorParseError, Prerelease,

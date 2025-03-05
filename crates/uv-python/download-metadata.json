@@ -29771,8 +29771,8 @@
     "minor": 11,
     "patch": 11,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.18-macos_arm64.tar.bz2",
-    "sha256": "cc4d6dd621dffd474eb9a2d01e5844d1b6a6f88b404aac2c48a9c267b5370df4",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.19-macos_arm64.tar.bz2",
+    "sha256": "7704e0d5302e53920d32dcfe9afeeb10436d4c94233e8830cf603aa955a861c1",
     "variant": null
   },
   "pypy-3.11.11-darwin-x86_64-none": {
@@ -29787,8 +29787,8 @@
     "minor": 11,
     "patch": 11,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.18-macos_x86_64.tar.bz2",
-    "sha256": "4f2274ffb4b787fd5b5f15cd61f7fef5a3710bf0ecbd4293bf0251035b468865",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.19-macos_x86_64.tar.bz2",
+    "sha256": "a2439f9d30dfdae96a5e9101c7dc54a8a68b56c9d7314ea399b0a25d3e87ebb2",
     "variant": null
   },
   "pypy-3.11.11-linux-aarch64-gnu": {
@@ -29803,8 +29803,8 @@
     "minor": 11,
     "patch": 11,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.18-aarch64.tar.bz2",
-    "sha256": "95bc3021cb9be2aa766ecb776c215e97ae8c0dda99dd48840b40b5b87d90bc45",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.19-aarch64.tar.bz2",
+    "sha256": "13207dbf81ce24e96da760b1b863627b77bb20b1fb4c95191e02a0b72383df74",
     "variant": null
   },
   "pypy-3.11.11-linux-i686-gnu": {
@@ -29819,8 +29819,8 @@
     "minor": 11,
     "patch": 11,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.18-linux32.tar.bz2",
-    "sha256": "70357a69cdbf4ce449b5743901fcd36208e0a89eadcfb4d2ebdc9b4711a0612c",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.19-linux32.tar.bz2",
+    "sha256": "5c6cdafd0a0abd14ca59926ed1b6aeb13b228c18b4b46de655aae48734c731ad",
     "variant": null
   },
   "pypy-3.11.11-linux-x86_64-gnu": {
@@ -29835,8 +29835,8 @@
     "minor": 11,
     "patch": 11,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.18-linux64.tar.bz2",
-    "sha256": "df5fa534800ff09d990e50ca4fdb02d8a06b9ed948dbcb3a09bea0739ef42de7",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.19-linux64.tar.bz2",
+    "sha256": "9177d9e0bb91b05f921c642cb0ff71a0f3653b5d29a42d40d6a078c15b75720f",
     "variant": null
   },
   "pypy-3.11.11-windows-x86_64-none": {
@@ -29851,11 +29851,11 @@
     "minor": 11,
     "patch": 11,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.18-win64.zip",
-    "sha256": "ccbea242f623700027e713d845dff5c7f7a5806413bbce229d3dcb88715970fd",
+    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.19-win64.zip",
+    "sha256": "b61c7c1dbf879eda6f779c374bfbbeecd3f618ada08404705a1a19d39df48dbd",
     "variant": null
   },
-  "pypy-3.10.19-darwin-aarch64-none": {
+  "pypy-3.10.16-darwin-aarch64-none": {
     "name": "pypy",
     "arch": {
       "family": "aarch64",
@@ -29865,13 +29865,13 @@
     "libc": "none",
     "major": 3,
     "minor": 10,
-    "patch": 19,
+    "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.18-macos_arm64.tar.bz2",
-    "sha256": "1d47da22bc9f7b5329f97c9c7b3ee0b051252ff1e82ca76999ad2d44758be41f",
+    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-macos_arm64.tar.bz2",
+    "sha256": "3db8a03fc496164801646844d7f3b12baa0adb3ad9a0b7cb124521bc2e168a36",
     "variant": null
   },
-  "pypy-3.10.19-darwin-x86_64-none": {
+  "pypy-3.10.16-darwin-x86_64-none": {
     "name": "pypy",
     "arch": {
       "family": "x86_64",
@@ -29881,13 +29881,13 @@
     "libc": "none",
     "major": 3,
     "minor": 10,
-    "patch": 19,
+    "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.18-macos_x86_64.tar.bz2",
-    "sha256": "b7031cbf815b7ba26ed2503b76ee3e73d7322b55f3671219019e8385042e212f",
+    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-macos_x86_64.tar.bz2",
+    "sha256": "2c5e5c2a33ac882551d7f28b98d19d486b8995aa50824a73b4edcc6aeec35c63",
     "variant": null
   },
-  "pypy-3.10.19-linux-aarch64-gnu": {
+  "pypy-3.10.16-linux-aarch64-gnu": {
     "name": "pypy",
     "arch": {
       "family": "aarch64",
@@ -29897,13 +29897,13 @@
     "libc": "gnu",
     "major": 3,
     "minor": 10,
-    "patch": 19,
+    "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.18-aarch64.tar.bz2",
-    "sha256": "e843aecd48eb06b625af67891b99e3440313cfb64c6851fc37df1e5572c8ef9e",
+    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-aarch64.tar.bz2",
+    "sha256": "af27a589178f11198e2244ab65ca510630ba97c131d7ccc4021eb5bc58de7f57",
     "variant": null
   },
-  "pypy-3.10.19-linux-i686-gnu": {
+  "pypy-3.10.16-linux-i686-gnu": {
     "name": "pypy",
     "arch": {
       "family": "i686",
@@ -29913,13 +29913,13 @@
     "libc": "gnu",
     "major": 3,
     "minor": 10,
-    "patch": 19,
+    "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.18-linux32.tar.bz2",
-    "sha256": "34ef09a481254aad0f22bf09fd7c99efb65ffef4f79f5b4222505f55f8d9c22e",
+    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-linux32.tar.bz2",
+    "sha256": "e63a4fcad2641ee541e852918befb513abf04ce7070f743a50778cae9f9da80e",
     "variant": null
   },
-  "pypy-3.10.19-linux-x86_64-gnu": {
+  "pypy-3.10.16-linux-x86_64-gnu": {
     "name": "pypy",
     "arch": {
       "family": "x86_64",
@@ -29929,13 +29929,13 @@
     "libc": "gnu",
     "major": 3,
     "minor": 10,
-    "patch": 19,
+    "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.18-linux64.tar.bz2",
-    "sha256": "834ccd4544bb47112a66977add7e47f30619f74061ae990876bcba95d98c27c5",
+    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-linux64.tar.bz2",
+    "sha256": "c73ac2cc2380ac9227fd297482bf2a3e17a80618ba46db7544d535515321ec1e",
     "variant": null
   },
-  "pypy-3.10.19-windows-x86_64-none": {
+  "pypy-3.10.16-windows-x86_64-none": {
     "name": "pypy",
     "arch": {
       "family": "x86_64",
@@ -29945,10 +29945,10 @@
     "libc": "none",
     "major": 3,
     "minor": 10,
-    "patch": 19,
+    "patch": 16,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.18-win64.zip",
-    "sha256": "e7ae89c5d45efcc927425281c870d0ce62cd624628f869cb0a25a0647e39a7be",
+    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-win64.zip",
+    "sha256": "c0d07bba6c8fb4e5804f4a8b3f8ef07cc3d89f6ad1db42a45ffb9be60bbb7cc2",
     "variant": null
   },
   "pypy-3.10.14-darwin-aarch64-none": {

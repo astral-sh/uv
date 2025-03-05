@@ -15,6 +15,17 @@ on:
         type: string
   pull_request:
     paths:
+      # We want to ensure that the maturin builds still work when we change
+      # Project metadata
+      - pyproject.toml
+      - Cargo.toml
+      - .cargo/config.toml
+      # Toolchain or dependency versions
+      - Cargo.lock
+      - rust-toolchain.toml
+      # The Dockerfile itself
+      - Dockerfile
+      # And the workflow itself
       - .github/workflows/build-docker.yml
 
 env:

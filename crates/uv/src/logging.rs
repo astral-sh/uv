@@ -21,12 +21,10 @@ use tracing_tree::time::Uptime;
 use tracing_tree::HierarchicalLayer;
 
 use uv_cli::ColorChoice;
-#[cfg(feature = "tracing-durations-export")]
 use uv_static::EnvVars;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Level {
-    /// Suppress all tracing output by default (overridable by `RUST_LOG`).
     #[default]
     Off,
     DebugUv,
@@ -276,10 +274,10 @@ pub(crate) fn setup_logging(
             );
         }
     };
+ 
+  subscriber.with(layers).init();
 
-    subscriber.with(layers).init();
-
-    Ok(())
+  Ok(())
 }
 
 /// Setup the `TRACING_DURATIONS_FILE` environment variable to enable tracing durations.

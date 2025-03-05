@@ -470,7 +470,7 @@ impl InternerGuard<'_> {
                 .children
                 .nodes()
                 .all(|y| self.disjointness(y.negate(yi), xi)),
-            // X and Y represent the same variable, their merged edges must be unsatisifiable.
+            // X and Y represent the same variable, their merged edges must be unsatisfiable.
             Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
         }
     }
@@ -514,7 +514,7 @@ impl InternerGuard<'_> {
                 .children
                 .nodes()
                 .all(|y| self.disjointness(y.negate(yi), xi)),
-            // X and Y represent the same variable, their merged edges must be unsatisifiable.
+            // X and Y represent the same variable, their merged edges must be unsatisfiable.
             Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
         }
     }
@@ -631,7 +631,7 @@ impl InternerGuard<'_> {
         // we recursively simplify.
         let Node {
             var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-            children: Edges::Version { ref edges },
+            children: Edges::Version { edges },
         } = node
         else {
             // Simplify all nodes recursively.
@@ -713,7 +713,7 @@ impl InternerGuard<'_> {
         let node = self.shared.node(i);
         let Node {
             var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-            children: Edges::Version { ref edges },
+            children: Edges::Version { edges },
         } = node
         else {
             // Complexify all nodes recursively.
@@ -1630,7 +1630,7 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
         Ok(match specifier.operator() {
             // `python_version` cannot have more than two release segments, so equality is impossible.
             Operator::Equal | Operator::ExactEqual | Operator::EqualStar | Operator::TildeEqual => {
-                return Err(NodeId::FALSE)
+                return Err(NodeId::FALSE);
             }
 
             // Similarly, inequalities are always `true`.

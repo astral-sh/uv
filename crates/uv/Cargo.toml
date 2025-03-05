@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.6.3"
+version = "0.6.4"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -37,7 +37,6 @@ uv-installer = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
-uv-performance-flate2-backend = { path = "../uv-performance-flate2-backend", optional = true }
 uv-performance-memory-allocator = { path = "../uv-performance-memory-allocator", optional = true }
 uv-platform-tags = { workspace = true }
 uv-publish = { workspace = true }
@@ -130,7 +129,6 @@ nix = { workspace = true }
 ignored = [
     "flate2",
     "uv-performance-memory-allocator",
-    "uv-performance-flate2-backend",
 ]
 
 [features]
@@ -138,11 +136,9 @@ default = ["python", "python-managed", "pypi", "git", "performance", "crates-io"
 # Use better memory allocators, etc.
 performance = [
     "performance-memory-allocator",
-    "performance-flate2-backend",
     "uv-distribution/performance",
 ]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
-performance-flate2-backend = ["dep:uv-performance-flate2-backend"]
 tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing-durations-export"]
 
 # Introduces a dependency on a local Python installation.

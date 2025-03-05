@@ -205,10 +205,20 @@ extract package metadata, if available.
 Equivalent to the `--no-binary-package` command line argument. If set, uv will
 not use pre-built wheels for the given space-delimited list of packages.
 
+### `UV_NO_BUILD`
+
+Equivalent to the `--no-build` command-line argument. If set, uv will not build
+source distributions.
+
 ### `UV_NO_BUILD_ISOLATION`
 
 Equivalent to the `--no-build-isolation` command-line argument. If set, uv will
 skip isolation when building source distributions.
+
+### `UV_NO_BUILD_PACKAGE`
+
+Equivalent to the `--no-build-package` command line argument. If set, uv will
+not build source distributions for the given space-delimited list of packages.
 
 ### `UV_NO_CACHE`
 

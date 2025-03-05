@@ -8,30 +8,13 @@ which are good opportunities for new contributors.
 
 ## Setup
 
-[Rust](https://rustup.rs/), a C compiler, and CMake are required to build uv.
+[Rust](https://rustup.rs/) (and a C compiler) are required to build uv.
 
-### Linux
-
-On Ubuntu and other Debian-based distributions, you can install the C compiler and CMake with:
+On Ubuntu and other Debian-based distributions, you can install a C compiler with:
 
 ```shell
-sudo apt install build-essential cmake
+sudo apt install build-essential
 ```
-
-### macOS
-
-You can install CMake with Homebrew:
-
-```shell
-brew install cmake
-```
-
-See the [Python](#python) section for instructions on installing the Python versions.
-
-### Windows
-
-You can install CMake from the [installers](https://cmake.org/download/) or with
-`pipx install cmake`.
 
 ## Testing
 
@@ -47,7 +30,7 @@ Testing uv requires multiple specific Python versions; they can be installed wit
 cargo run python install
 ```
 
-The storage directory can be configured with `UV_PYTHON_INSTALL_DIR`.
+The storage directory can be configured with `UV_PYTHON_INSTALL_DIR`. (It must be an absolute path.)
 
 ### Snapshot testing
 

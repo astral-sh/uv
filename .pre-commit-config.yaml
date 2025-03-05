@@ -12,7 +12,7 @@ repos:
       - id: validate-pyproject
 
   - repo: https://github.com/crate-ci/typos
-    rev: v1.29.7
+    rev: v1.30.0
     hooks:
       - id: typos
 
@@ -42,7 +42,7 @@ repos:
         types_or: [yaml, json5]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.6
+    rev: v0.9.9
     hooks:
       - id: ruff-format
       - id: ruff

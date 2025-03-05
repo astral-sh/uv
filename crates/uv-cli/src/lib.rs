@@ -2737,7 +2737,7 @@ pub struct RunArgs {
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Ignore the the default dependency groups.
+    /// Ignore the default dependency groups.
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
@@ -3032,7 +3032,7 @@ pub struct SyncArgs {
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Ignore the the default dependency groups.
+    /// Ignore the default dependency groups.
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
@@ -3551,7 +3551,7 @@ pub struct TreeArgs {
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Ignore the the default dependency groups.
+    /// Ignore the default dependency groups.
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
@@ -3724,7 +3724,7 @@ pub struct ExportArgs {
     #[arg(long)]
     pub no_group: Vec<GroupName>,
 
-    /// Ignore the the default dependency groups.
+    /// Ignore the default dependency groups.
     ///
     /// uv includes the groups defined in `tool.uv.default-groups` by default.
     /// This disables that option, however, specific groups can still be included with `--group`.
@@ -3963,6 +3963,28 @@ pub struct ToolRunArgs {
     /// Run with all packages listed in the given `requirements.txt` files.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
+
+    /// Constrain versions using the given requirements files.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. However, including a package in a constraints file will _not_
+    /// trigger the installation of that package.
+    ///
+    /// This is equivalent to pip's `--constraint` option.
+    #[arg(long, short, alias = "constraint", env = EnvVars::UV_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub constraints: Vec<Maybe<PathBuf>>,
+
+    /// Override versions using the given requirements files.
+    ///
+    /// Overrides files are `requirements.txt`-like files that force a specific version of a
+    /// requirement to be installed, regardless of the requirements declared by any constituent
+    /// package, and regardless of whether this would be considered an invalid resolution.
+    ///
+    /// While constraints are _additive_, in that they're combined with the requirements of the
+    /// constituent packages, overrides are _absolute_, in that they completely replace the
+    /// requirements of the constituent packages.
+    #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub overrides: Vec<Maybe<PathBuf>>,
 
     /// Run the tool in an isolated virtual environment, ignoring any already-installed tools.
     #[arg(long)]
@@ -4804,7 +4826,13 @@ pub struct BuildOptionsArgs {
     /// When enabled, resolving will not run arbitrary Python code. The cached wheels of
     /// already-built source distributions will be reused, but operations that require building
     /// distributions will exit with an error.
-    #[arg(long, overrides_with("build"), help_heading = "Build options")]
+    #[arg(
+        long,
+        env = EnvVars::UV_NO_BUILD,
+        overrides_with("build"),
+        value_parser = clap::builder::BoolishValueParser::new(),
+        help_heading = "Build options",
+    )]
     pub no_build: bool,
 
     #[arg(
@@ -4816,7 +4844,7 @@ pub struct BuildOptionsArgs {
     pub build: bool,
 
     /// Don't build source distributions for a specific package.
-    #[arg(long, help_heading = "Build options")]
+    #[arg(long, help_heading = "Build options", env = EnvVars::UV_NO_BUILD_PACKAGE, value_delimiter = ' ')]
     pub no_build_package: Vec<PackageName>,
 
     /// Don't install pre-built wheels.

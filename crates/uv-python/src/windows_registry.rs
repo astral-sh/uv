@@ -14,6 +14,7 @@ use uv_warnings::{warn_user, warn_user_once};
 use windows_registry::{Key, Value, CURRENT_USER, HSTRING, LOCAL_MACHINE};
 use windows_result::HRESULT;
 use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
+use windows_sys::Win32::System::Registry::{KEY_WOW64_32KEY, KEY_WOW64_64KEY};
 
 /// Code returned when the registry key doesn't exist.
 const ERROR_NOT_FOUND: HRESULT = HRESULT::from_win32(ERROR_FILE_NOT_FOUND);
@@ -32,9 +33,22 @@ pub(crate) struct WindowsPython {
 /// Find all Pythons registered in the Windows registry following PEP 514.
 pub(crate) fn registry_pythons() -> Result<Vec<WindowsPython>, windows_result::Error> {
     let mut registry_pythons = Vec::new();
-    // Prefer `HKEY_CURRENT_USER` over `HKEY_LOCAL_MACHINE`
-    for root_key in [CURRENT_USER, LOCAL_MACHINE] {
-        let Ok(key_python) = root_key.open(r"Software\Python") else {
+    // Prefer `HKEY_CURRENT_USER` over `HKEY_LOCAL_MACHINE`.
+    // By default, a 64-bit program does not see a 32-bit global (HKLM) installation of Python in
+    // the registry (https://github.com/astral-sh/uv/issues/11217). To work around this, we manually
+    // request both 32-bit and 64-bit access. The flags have no effect on 32-bit
+    // (https://stackoverflow.com/a/12796797/3549270).
+    for (root_key, access_modifier) in [
+        (CURRENT_USER, None),
+        (LOCAL_MACHINE, Some(KEY_WOW64_64KEY)),
+        (LOCAL_MACHINE, Some(KEY_WOW64_32KEY)),
+    ] {
+        let mut open_options = root_key.options();
+        open_options.read();
+        if let Some(access_modifier) = access_modifier {
+            open_options.access(access_modifier);
+        }
+        let Ok(key_python) = open_options.open(r"Software\Python") else {
             continue;
         };
         for company in key_python.keys()? {

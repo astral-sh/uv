@@ -7,11 +7,11 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification, DryRun,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, DryRun,
     ExtrasSpecification, HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy,
-    TrustedHost, Upgrade,
+    Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -38,6 +38,7 @@ use crate::commands::pip::operations::{report_interpreter, report_target_environ
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Install a set of locked requirements into the current Python environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -53,9 +54,9 @@ pub(crate) async fn pip_sync(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
+    network_settings: &NetworkSettings,
     allow_empty_requirements: bool,
     installer_metadata: bool,
-    connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
@@ -72,23 +73,21 @@ pub(crate) async fn pip_sync(
     sources: SourceStrategy,
     python_preference: PythonPreference,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: Cache,
     dry_run: DryRun,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Initialize a few defaults.
     let overrides = &[];
     let extras = ExtrasSpecification::default();
-    let groups = DevGroupsSpecification::default();
+    let groups = DependencyGroups::default();
     let upgrade = Upgrade::default();
     let resolution_mode = ResolutionMode::default();
     let prerelease_mode = PrereleaseMode::default();
@@ -381,7 +380,7 @@ pub(crate) async fn pip_sync(
     {
         Ok(resolution) => Resolution::from(resolution),
         Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -415,7 +414,7 @@ pub(crate) async fn pip_sync(
     {
         Ok(_) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }

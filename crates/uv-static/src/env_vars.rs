@@ -162,6 +162,14 @@ impl EnvVars {
     /// not use pre-built wheels for the given space-delimited list of packages.
     pub const UV_NO_BINARY_PACKAGE: &'static str = "UV_NO_BINARY_PACKAGE";
 
+    /// Equivalent to the `--no-build` command-line argument. If set, uv will not build
+    /// source distributions.
+    pub const UV_NO_BUILD: &'static str = "UV_NO_BUILD";
+
+    /// Equivalent to the `--no-build-package` command line argument. If set, uv will
+    /// not build source distributions for the given space-delimited list of packages.
+    pub const UV_NO_BUILD_PACKAGE: &'static str = "UV_NO_BUILD_PACKAGE";
+
     /// Equivalent to the `--publish-url` command-line argument. The URL of the upload
     /// endpoint of the index to use with `uv publish`.
     pub const UV_PUBLISH_URL: &'static str = "UV_PUBLISH_URL";

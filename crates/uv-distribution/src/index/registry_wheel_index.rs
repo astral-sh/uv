@@ -103,7 +103,7 @@ impl<'a> RegistryWheelIndex<'a> {
 
             // For registry wheels, the cache structure is: `<index>/<package-name>/<wheel>.http`
             // or `<index>/<package-name>/<version>/<wheel>.rev`.
-            for file in files(&wheel_dir) {
+            for file in files(&wheel_dir).ok().into_iter().flatten() {
                 match index.url() {
                     // Add files from remote registries.
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
@@ -170,7 +170,7 @@ impl<'a> RegistryWheelIndex<'a> {
             );
 
             // For registry source distributions, the cache structure is: `<index>/<package-name>/<version>/`.
-            for shard in directories(&cache_shard) {
+            for shard in directories(&cache_shard).ok().into_iter().flatten() {
                 let cache_shard = cache_shard.shard(shard);
 
                 // Read the revision from the cache.
@@ -205,7 +205,7 @@ impl<'a> RegistryWheelIndex<'a> {
                         cache_shard.shard(cache_digest(build_configuration))
                     };
 
-                    for wheel_dir in uv_fs::entries(cache_shard) {
+                    for wheel_dir in uv_fs::entries(cache_shard).ok().into_iter().flatten() {
                         // Ignore any `.lock` files.
                         if wheel_dir
                             .extension()

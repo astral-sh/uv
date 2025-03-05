@@ -75,7 +75,7 @@ impl InstalledTools {
     /// 3. A directory in the local data directory, e.g., `./.uv/tools`
     pub fn from_settings() -> Result<Self, Error> {
         if let Some(tool_dir) = std::env::var_os(EnvVars::UV_TOOL_DIR) {
-            Ok(Self::from_path(tool_dir))
+            Ok(Self::from_path(std::path::absolute(tool_dir)?))
         } else {
             Ok(Self::from_path(
                 StateStore::from_settings(None)?.bucket(StateBucket::Tools),
@@ -97,9 +97,14 @@ impl InstalledTools {
     #[allow(clippy::type_complexity)]
     pub fn tools(&self) -> Result<Vec<(PackageName, Result<Tool, Error>)>, Error> {
         let mut tools = Vec::new();
-        for directory in uv_fs::directories(self.root()) {
-            let name = directory.file_name().unwrap().to_string_lossy().to_string();
-            let name = PackageName::from_str(&name)?;
+        for directory in uv_fs::directories(self.root())? {
+            let Some(name) = directory
+                .file_name()
+                .and_then(|file_name| file_name.to_str())
+            else {
+                continue;
+            };
+            let name = PackageName::from_str(name)?;
             let path = directory.join("uv-receipt.toml");
             let contents = match fs_err::read_to_string(&path) {
                 Ok(contents) => contents,

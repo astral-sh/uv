@@ -1027,14 +1027,14 @@ impl CacheBucket {
                 // For alternate indices, we expect a directory for every index (under an `index`
                 // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
-                for directory in directories(root) {
+                for directory in directories(root)? {
                     summary += rm_rf(directory.join(name.to_string()))?;
                 }
 
                 // For direct URLs, we expect a directory for every URL, followed by a
                 // directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
-                for directory in directories(root) {
+                for directory in directories(root)? {
                     summary += rm_rf(directory.join(name.to_string()))?;
                 }
             }
@@ -1046,7 +1046,7 @@ impl CacheBucket {
                 // For alternate indices, we expect a directory for every index (under an `index`
                 // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
-                for directory in directories(root) {
+                for directory in directories(root)? {
                     summary += rm_rf(directory.join(name.to_string()))?;
                 }
 
@@ -1054,8 +1054,8 @@ impl CacheBucket {
                 // directory per version. To determine whether the URL is relevant, we need to
                 // search for a wheel matching the package name.
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
-                for url in directories(root) {
-                    if directories(&url).any(|version| is_match(&version, name)) {
+                for url in directories(root)? {
+                    if directories(&url)?.any(|version| is_match(&version, name)) {
                         summary += rm_rf(url)?;
                     }
                 }
@@ -1064,8 +1064,8 @@ impl CacheBucket {
                 // directory per version. To determine whether the path is relevant, we need to
                 // search for a wheel matching the package name.
                 let root = cache.bucket(self).join(WheelCacheKind::Path);
-                for path in directories(root) {
-                    if directories(&path).any(|version| is_match(&version, name)) {
+                for path in directories(root)? {
+                    if directories(&path)?.any(|version| is_match(&version, name)) {
                         summary += rm_rf(path)?;
                     }
                 }
@@ -1074,8 +1074,8 @@ impl CacheBucket {
                 // directory for every SHA. To determine whether the SHA is relevant, we need to
                 // search for a wheel matching the package name.
                 let root = cache.bucket(self).join(WheelCacheKind::Git);
-                for repository in directories(root) {
-                    for sha in directories(repository) {
+                for repository in directories(root)? {
+                    for sha in directories(repository)? {
                         if is_match(&sha, name) {
                             summary += rm_rf(sha)?;
                         }
@@ -1090,7 +1090,7 @@ impl CacheBucket {
                 // For alternate indices, we expect a directory for every index (under an `index`
                 // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
-                for directory in directories(root) {
+                for directory in directories(root)? {
                     summary += rm_rf(directory.join(format!("{name}.rkyv")))?;
                 }
             }
