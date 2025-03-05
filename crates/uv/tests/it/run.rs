@@ -4372,3 +4372,234 @@ fn run_uv_variable() {
     ----- stderr -----
     "###);
 }
+
+/// Test legacy scripts <https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/#scripts>.
+///
+/// This tests for execution and detection of legacy windows scripts with .bat, .cmd, and .ps1 extensions.
+#[cfg(windows)]
+#[test]
+fn run_windows_legacy_scripts() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+
+    // Use `script-files` which enables legacy scripts packaging.
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = []
+
+        [tool.setuptools]
+        packages = []
+        script-files = [
+            "misc/custom_pydoc.bat",
+            "misc/custom_pydoc.cmd",
+            "misc/custom_pydoc.ps1"
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+
+    let custom_pydoc_bat = context.temp_dir.child("misc").child("custom_pydoc.bat");
+    let custom_pydoc_cmd = context.temp_dir.child("misc").child("custom_pydoc.cmd");
+    let custom_pydoc_ps1 = context.temp_dir.child("misc").child("custom_pydoc.ps1");
+
+    custom_pydoc_bat.write_str("python.exe -m pydoc %*")?;
+    custom_pydoc_cmd.write_str("python.exe -m pydoc %*")?;
+    custom_pydoc_ps1.write_str("python.exe -m pydoc $args")?;
+
+    uv_snapshot!(context.filters(), context.run(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+    Provide a command or script to invoke with `uv run <command>` or `uv run <script>.py`.
+
+    The following commands are available in the environment:
+
+    - custom_pydoc.bat
+    - custom_pydoc.cmd
+    - custom_pydoc.ps1
+    - pydoc.bat
+    - python
+    - pythonw
+
+    See `uv run --help` for more information.
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Test with explicit .bat extension
+    uv_snapshot!(context.filters(), context.run().arg("custom_pydoc.bat"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pydoc - the Python documentation tool
+
+    pydoc <name> ...
+        Show text documentation on something.  <name> may be the name of a
+        Python keyword, topic, function, module, or package, or a dotted
+        reference to a class or function within a module or module in a
+        package.  If <name> contains a '\', it is used as the path to a
+        Python source file to document. If name is 'keywords', 'topics',
+        or 'modules', a listing of these things is displayed.
+
+    pydoc -k <keyword>
+        Search for a keyword in the synopsis lines of all available modules.
+
+    pydoc -n <hostname>
+        Start an HTTP server with the given hostname (default: localhost).
+
+    pydoc -p <port>
+        Start an HTTP server on the given port on the local machine.  Port
+        number 0 can be used to get an arbitrary unused port.
+
+    pydoc -b
+        Start an HTTP server on an arbitrary unused port and open a web browser
+        to interactively browse documentation.  This option can be used in
+        combination with -n and/or -p.
+
+    pydoc -w <name> ...
+        Write out the HTML documentation for a module to a file in the current
+        directory.  If <name> contains a '\', it is treated as a filename; if
+        it names a directory, documentation is written for all the contents.
+
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Test with explicit .cmd extension
+    uv_snapshot!(context.filters(), context.run().arg("custom_pydoc.cmd"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pydoc - the Python documentation tool
+
+    pydoc <name> ...
+        Show text documentation on something.  <name> may be the name of a
+        Python keyword, topic, function, module, or package, or a dotted
+        reference to a class or function within a module or module in a
+        package.  If <name> contains a '\', it is used as the path to a
+        Python source file to document. If name is 'keywords', 'topics',
+        or 'modules', a listing of these things is displayed.
+
+    pydoc -k <keyword>
+        Search for a keyword in the synopsis lines of all available modules.
+
+    pydoc -n <hostname>
+        Start an HTTP server with the given hostname (default: localhost).
+
+    pydoc -p <port>
+        Start an HTTP server on the given port on the local machine.  Port
+        number 0 can be used to get an arbitrary unused port.
+
+    pydoc -b
+        Start an HTTP server on an arbitrary unused port and open a web browser
+        to interactively browse documentation.  This option can be used in
+        combination with -n and/or -p.
+
+    pydoc -w <name> ...
+        Write out the HTML documentation for a module to a file in the current
+        directory.  If <name> contains a '\', it is treated as a filename; if
+        it names a directory, documentation is written for all the contents.
+
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Test with explicit .ps1 extension
+    uv_snapshot!(context.filters(), context.run().arg("custom_pydoc.ps1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pydoc - the Python documentation tool
+
+    pydoc <name> ...
+        Show text documentation on something.  <name> may be the name of a
+        Python keyword, topic, function, module, or package, or a dotted
+        reference to a class or function within a module or module in a
+        package.  If <name> contains a '\', it is used as the path to a
+        Python source file to document. If name is 'keywords', 'topics',
+        or 'modules', a listing of these things is displayed.
+
+    pydoc -k <keyword>
+        Search for a keyword in the synopsis lines of all available modules.
+
+    pydoc -n <hostname>
+        Start an HTTP server with the given hostname (default: localhost).
+
+    pydoc -p <port>
+        Start an HTTP server on the given port on the local machine.  Port
+        number 0 can be used to get an arbitrary unused port.
+
+    pydoc -b
+        Start an HTTP server on an arbitrary unused port and open a web browser
+        to interactively browse documentation.  This option can be used in
+        combination with -n and/or -p.
+
+    pydoc -w <name> ...
+        Write out the HTML documentation for a module to a file in the current
+        directory.  If <name> contains a '\', it is treated as a filename; if
+        it names a directory, documentation is written for all the contents.
+
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    // Test without explicit extension (.ps1 should be used)
+    uv_snapshot!(context.filters(), context.run().arg("custom_pydoc"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pydoc - the Python documentation tool
+
+    pydoc <name> ...
+        Show text documentation on something.  <name> may be the name of a
+        Python keyword, topic, function, module, or package, or a dotted
+        reference to a class or function within a module or module in a
+        package.  If <name> contains a '\', it is used as the path to a
+        Python source file to document. If name is 'keywords', 'topics',
+        or 'modules', a listing of these things is displayed.
+
+    pydoc -k <keyword>
+        Search for a keyword in the synopsis lines of all available modules.
+
+    pydoc -n <hostname>
+        Start an HTTP server with the given hostname (default: localhost).
+
+    pydoc -p <port>
+        Start an HTTP server on the given port on the local machine.  Port
+        number 0 can be used to get an arbitrary unused port.
+
+    pydoc -b
+        Start an HTTP server on an arbitrary unused port and open a web browser
+        to interactively browse documentation.  This option can be used in
+        combination with -n and/or -p.
+
+    pydoc -w <name> ...
+        Write out the HTML documentation for a module to a file in the current
+        directory.  If <name> contains a '\', it is treated as a filename; if
+        it names a directory, documentation is written for all the contents.
+
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
