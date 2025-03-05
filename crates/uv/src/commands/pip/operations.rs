@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -28,7 +28,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
-use uv_normalize::PackageName;
+use uv_normalize::{PackageName, PipGroupName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
@@ -54,7 +54,7 @@ pub(crate) async fn read_requirements(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification,
-    groups: &DependencyGroups,
+    groups: &[PipGroupName],
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
@@ -75,19 +75,13 @@ pub(crate) async fn read_requirements(
         )
         .into());
     }
-    if !groups.is_empty() && !requirements.iter().any(RequirementsSource::allows_groups) {
-        let flags = groups.history().as_flags_pretty().join(" ");
-        return Err(anyhow!(
-            "Requesting groups requires a `pyproject.toml`. Requested via: {flags}"
-        )
-        .into());
-    }
 
     // Read all requirements from the provided sources.
     Ok(RequirementsSpecification::from_sources(
         requirements,
         constraints,
         overrides,
+        groups,
         client_builder,
     )
     .await?)
@@ -99,7 +93,7 @@ pub(crate) async fn read_constraints(
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<Vec<NameRequirementSpecification>, Error> {
     Ok(
-        RequirementsSpecification::from_sources(&[], constraints, &[], client_builder)
+        RequirementsSpecification::from_sources(&[], constraints, &[], &[], client_builder)
             .await?
             .constraints,
     )
@@ -114,7 +108,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
     extras: &ExtrasSpecification,
-    groups: &DependencyGroups,
+    groups: &BTreeMap<PathBuf, DependencyGroups>,
     preferences: Vec<Preference>,
     installed_packages: InstalledPackages,
     hasher: &HashStrategy,

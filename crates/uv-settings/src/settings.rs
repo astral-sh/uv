@@ -13,7 +13,7 @@ use uv_distribution_types::{
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -1127,6 +1127,16 @@ pub struct PipOptions {
         "#
     )]
     pub no_deps: Option<bool>,
+    /// Ignore package dependencies, instead only add those packages explicitly listed
+    /// on the command line to the resulting requirements file.
+    #[option(
+        default = "None",
+        value_type = "list[str]",
+        example = r#"
+            group = ["dev", "docs"]
+        "#
+    )]
+    pub group: Option<Vec<PipGroupName>>,
     /// Allow `uv pip sync` with empty requirements, which will clear the environment of all
     /// packages.
     #[option(
