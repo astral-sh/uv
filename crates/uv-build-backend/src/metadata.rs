@@ -851,8 +851,8 @@ pub(crate) struct BuildBackendSettings {
     /// The default module name is the package name with dots and dashes replaced by underscores.
     ///
     /// Note that using this option runs the risk of creating two packages with different names but
-    /// the same module names. Installing such packages together leads to undefined behavior, often
-    /// with corrupted files or directory trees.
+    /// the same module names. Installing such packages together leads to unspecified behavior,
+    /// often with corrupted files or directory trees.
     pub(crate) module_name: Option<Identifier>,
 
     /// Glob expressions which files and directories to additionally include in the source

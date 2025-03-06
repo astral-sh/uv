@@ -9,28 +9,30 @@ use thiserror::Error;
 /// (we just use Rust's `is_alphabetic`) and we don't convert to NFKC, but it's good enough
 /// for our validation purposes.
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Identifier(String);
+pub struct Identifier(Box<str>);
 
 #[derive(Debug, Clone, Error)]
 pub enum IdentifierParseError {
     #[error("An identifier must not be empty")]
     Empty,
     #[error(
-        "Invalid first character `{first}` at for `{identifier}`, expected an underscore or an alphabetic character"
+        "Invalid first character `{first}` for identifier `{identifier}`, expected an underscore or an alphabetic character"
     )]
-    InvalidFirstChar { first: char, identifier: String },
+    InvalidFirstChar { first: char, identifier: Box<str> },
     #[error(
-        "Invalid character `{invalid_char}` at position {pos} for `{identifier}`, expected an underscore or an alphanumeric character"
+        "Invalid character `{invalid_char}` at position {pos} for identifier `{identifier}`, \
+        expected an underscore or an alphanumeric character"
     )]
     InvalidChar {
         pos: usize,
         invalid_char: char,
-        identifier: String,
+        identifier: Box<str>,
     },
 }
 
 impl Identifier {
-    pub fn new(identifier: String) -> Result<Self, IdentifierParseError> {
+    pub fn new(identifier: impl Into<Box<str>>) -> Result<Self, IdentifierParseError> {
+        let identifier = identifier.into();
         let mut chars = identifier.chars().enumerate();
         let (_, first_char) = chars.next().ok_or(IdentifierParseError::Empty)?;
         if first_char != '_' && !first_char.is_alphabetic() {
@@ -121,17 +123,38 @@ mod tests {
 
     #[test]
     fn invalid_first_char() {
-        assert_snapshot!(Identifier::from_str("1foo").unwrap_err(), @"Invalid first character `1` at for `1foo`, expected an underscore or an alphabetic character");
-        assert_snapshot!(Identifier::from_str("$foo").unwrap_err(), @"Invalid first character `$` at for `$foo`, expected an underscore or an alphabetic character");
-        assert_snapshot!(Identifier::from_str(".foo").unwrap_err(), @"Invalid first character `.` at for `.foo`, expected an underscore or an alphabetic character");
+        assert_snapshot!(
+            Identifier::from_str("1foo").unwrap_err(),
+            @"Invalid first character `1` at for `1foo`, expected an underscore or an alphabetic character"
+        );
+        assert_snapshot!(
+            Identifier::from_str("$foo").unwrap_err(),
+            @"Invalid first character `$` at for `$foo`, expected an underscore or an alphabetic character"
+        );
+        assert_snapshot!(
+            Identifier::from_str(".foo").unwrap_err(),
+            @"Invalid first character `.` at for `.foo`, expected an underscore or an alphabetic character"
+        );
     }
 
     #[test]
     fn invalid_char() {
         // A dot in module names equals a path separator, which is a separate problem.
-        assert_snapshot!(Identifier::from_str("foo.bar").unwrap_err(), @"Invalid character `.` at position 4 for `foo.bar`, expected an underscore or an alphanumeric character");
-        assert_snapshot!(Identifier::from_str("foo-bar").unwrap_err(), @"Invalid character `-` at position 4 for `foo-bar`, expected an underscore or an alphanumeric character");
-        assert_snapshot!(Identifier::from_str("foo_bar$").unwrap_err(), @"Invalid character `$` at position 8 for `foo_bar$`, expected an underscore or an alphanumeric character");
-        assert_snapshot!(Identifier::from_str("foo🦀bar").unwrap_err(), @"Invalid character `🦀` at position 4 for `foo🦀bar`, expected an underscore or an alphanumeric character");
+        assert_snapshot!(
+            Identifier::from_str("foo.bar").unwrap_err(),
+            @"Invalid character `.` at position 4 for `foo.bar`, expected an underscore or an alphanumeric character"
+        );
+        assert_snapshot!(
+            Identifier::from_str("foo-bar").unwrap_err(),
+            @"Invalid character `-` at position 4 for `foo-bar`, expected an underscore or an alphanumeric character"
+        );
+        assert_snapshot!(
+            Identifier::from_str("foo_bar$").unwrap_err(),
+            @"Invalid character `$` at position 8 for `foo_bar$`, expected an underscore or an alphanumeric character"
+        );
+        assert_snapshot!(
+            Identifier::from_str("foo🦀bar").unwrap_err(),
+            @"Invalid character `🦀` at position 4 for `foo🦀bar`, expected an underscore or an alphanumeric character"
+        );
     }
 }

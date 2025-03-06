@@ -71,7 +71,7 @@ fn source_dist_matcher(
     let module_name = if let Some(module_name) = settings.module_name {
         module_name
     } else {
-        // Should never happen, the rules for package names (in dist-info formatting) are stricter
+        // Should never error, the rules for package names (in dist-info formatting) are stricter
         // than those for identifiers
         Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
     };

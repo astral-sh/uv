@@ -281,6 +281,9 @@ fn preserve_executable_bit() -> Result<()> {
 }
 
 /// Test `tool.uv.build-backend.module-name`.
+///
+/// We include only the module specified by `module-name`, ignoring the project name and all other
+/// potential modules.
 #[test]
 fn rename_module() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -302,10 +305,13 @@ fn rename_module() -> Result<()> {
         build-backend = "uv"
     "#})?;
 
+    // This is the module we would usually include, but due to the renaming by `module-name` must
+    // ignore.
     context
         .temp_dir
         .child("src/foo/__init__.py")
         .write_str(r#"print("Hi from foo")"#)?;
+    // This module would be ignored from just `project.name`, but is selected due to the renaming.
     context
         .temp_dir
         .child("src/bar/__init__.py")
@@ -330,7 +336,7 @@ fn rename_module() -> Result<()> {
         .assert()
         .success();
 
-    // Importing the renamed module succeeds
+    // Importing the module with the `module-name` name succeeds.
     uv_snapshot!(Command::new(context.interpreter())
         .arg("-c")
         .arg("import bar")
@@ -344,7 +350,7 @@ fn rename_module() -> Result<()> {
     ----- stderr -----
     "###);
 
-    // Importing the package name fails
+    // Importing the package name fails, it was overridden by `module-name`.
     uv_snapshot!(Command::new(context.interpreter())
         .arg("-c")
         .arg("import foo")
