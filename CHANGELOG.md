@@ -3,6 +3,39 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.6.5
+
+### Enhancements
+
+- Allow `--constraints` and `--overrides` in `uvx` ([#10207](https://github.com/astral-sh/uv/pull/10207))
+- Allow overrides in `satisfies` check for `uv tool run` ([#11994](https://github.com/astral-sh/uv/pull/11994))
+- Allow users to set `package = true` on `tool.uv.sources` ([#12014](https://github.com/astral-sh/uv/pull/12014))
+- Add support for Windows legacy scripts via `uv run` ([#11888](https://github.com/astral-sh/uv/pull/11888))
+- Return error when running uvx with a `.py` script ([#11623](https://github.com/astral-sh/uv/pull/11623))
+- Warn user on use of `uvx run` ([#11992](https://github.com/astral-sh/uv/pull/11992))
+
+### Configuration
+
+- Add `NO_BUILD` and `NO_BUILD_PACKAGE` environment variables ([#11968](https://github.com/astral-sh/uv/pull/11968))
+
+### Performance
+
+- Allow overrides in all satisfies checks ([#11995](https://github.com/astral-sh/uv/pull/11995))
+- Respect markers on constraints when validating current environment ([#11976](https://github.com/astral-sh/uv/pull/11976))
+
+### Bug fixes
+
+- Compare major-minor specifiers when filtering interpreters ([#11952](https://github.com/astral-sh/uv/pull/11952))
+- Fix system site packages detection default ([#11956](https://github.com/astral-sh/uv/pull/11956))
+- Invalidate lockfile when empty dependency groups are added or removed ([#12010](https://github.com/astral-sh/uv/pull/12010))
+- Remove prepended sys.path ([#11954](https://github.com/astral-sh/uv/pull/11954))
+- Fix PyPy Python version label ([#11965](https://github.com/astral-sh/uv/pull/11965))
+- Fix error message suggesting `--user` instead of `--username` ([#11947](https://github.com/astral-sh/uv/pull/11947))
+
+### Preview 
+
+- Move the uv build backend into a separate, minimal `uv_build` package ([#11446](https://github.com/astral-sh/uv/pull/11446))
+
 ## 0.6.4
 
 ### Enhancements
