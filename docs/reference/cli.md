@@ -569,6 +569,8 @@ uv init [OPTIONS] [PATH]
 
 <p>Implicitly sets <code>--package</code>.</p>
 
+<p>If not passed, uv will use <code>hatch</code>. Omitting <code>--build-backend</code> and passing <code>--build-backend hatch</code> currently result in slightly different generated projects: Among others, <code>--build-backend hatch</code> will add a <code>[build-system]</code> section to the generated <code>pyproject.toml</code> file.</p>
+
 <p>Possible values:</p>
 
 <ul>
