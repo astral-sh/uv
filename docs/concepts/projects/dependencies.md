@@ -410,7 +410,28 @@ $ uv add ~/projects/bar/
     default. An editable installation may be requested for project directories:
 
     ```console
-    $ uv add --editable ~/projects/bar/
+    $ uv add --editable ../projects/bar/
+    ```
+
+    Which will result in a `pyproject.toml` with:
+
+    ```toml title="pyproject.toml"
+    [project]
+    dependencies = ["bar"]
+
+    [tool.uv.sources]
+    bar = { path = "../projects/bar", editable = true }
+    ```
+
+    Similarly, if a project is marked as a [non-package](./config.md#build-systems), but you'd
+    like to install it in the environment as a package, set `package = true` on the source:
+
+    ```toml title="pyproject.toml"
+    [project]
+    dependencies = ["bar"]
+
+    [tool.uv.sources]
+    bar = { path = "../projects/bar", package = true }
     ```
 
     For multiple packages in the same repository, [_workspaces_](./workspaces.md) may be a better

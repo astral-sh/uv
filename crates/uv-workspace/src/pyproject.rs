@@ -1069,6 +1069,13 @@ pub enum Source {
         path: PortablePathBuf,
         /// `false` by default.
         editable: Option<bool>,
+        /// Whether to treat the dependency as a buildable Python package (`true`) or as a virtual
+        /// package (`false`). If `false`, the package will not be built or installed, but its
+        /// dependencies will be included in the virtual environment.
+        ///
+        /// When omitted, the package status is inferred based on the presence of a `[build-system]`
+        /// in the project's `pyproject.toml`.
+        package: Option<bool>,
         #[serde(
             skip_serializing_if = "uv_pep508::marker::ser::is_empty",
             serialize_with = "uv_pep508::marker::ser::serialize",
@@ -1124,6 +1131,7 @@ impl<'de> Deserialize<'de> for Source {
             url: Option<Url>,
             path: Option<PortablePathBuf>,
             editable: Option<bool>,
+            package: Option<bool>,
             index: Option<IndexName>,
             workspace: Option<bool>,
             #[serde(
@@ -1146,6 +1154,7 @@ impl<'de> Deserialize<'de> for Source {
             url,
             path,
             editable,
+            package,
             index,
             workspace,
             marker,
@@ -1185,6 +1194,11 @@ impl<'de> Deserialize<'de> for Source {
             if editable.is_some() {
                 return Err(serde::de::Error::custom(
                     "cannot specify both `git` and `editable`",
+                ));
+            }
+            if package.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `git` and `package`",
                 ));
             }
 
@@ -1262,6 +1276,11 @@ impl<'de> Deserialize<'de> for Source {
                     "cannot specify both `url` and `editable`",
                 ));
             }
+            if package.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `url` and `package`",
+                ));
+            }
 
             return Ok(Self::Url {
                 url,
@@ -1310,9 +1329,17 @@ impl<'de> Deserialize<'de> for Source {
                 ));
             }
 
+            // A project must be packaged in order to be installed as editable.
+            if editable == Some(true) && package == Some(false) {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `editable = true` and `package = false`",
+                ));
+            }
+
             return Ok(Self::Path {
                 path,
                 editable,
+                package,
                 marker,
                 extra,
                 group,
@@ -1359,6 +1386,11 @@ impl<'de> Deserialize<'de> for Source {
             if editable.is_some() {
                 return Err(serde::de::Error::custom(
                     "cannot specify both `index` and `editable`",
+                ));
+            }
+            if package.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `index` and `package`",
                 ));
             }
 
@@ -1410,6 +1442,11 @@ impl<'de> Deserialize<'de> for Source {
             if editable.is_some() {
                 return Err(serde::de::Error::custom(
                     "cannot specify both `workspace` and `editable`",
+                ));
+            }
+            if package.is_some() {
+                return Err(serde::de::Error::custom(
+                    "cannot specify both `workspace` and `package`",
                 ));
             }
 
@@ -1554,6 +1591,7 @@ impl Source {
             RequirementSource::Path { install_path, .. }
             | RequirementSource::Directory { install_path, .. } => Source::Path {
                 editable,
+                package: None,
                 path: PortablePathBuf::from(
                     relative_to(&install_path, root)
                         .or_else(|_| std::path::absolute(&install_path))
