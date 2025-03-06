@@ -16,7 +16,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::{Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex};
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::Requirement;
+use uv_pep508::{MarkerTree, Requirement};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
@@ -3271,6 +3271,10 @@ pub struct AddArgs {
     /// Add all packages listed in the given `requirements.txt` files.
     #[arg(long, short, alias = "requirement", group = "sources", value_parser = parse_file_path)]
     pub requirements: Vec<PathBuf>,
+
+    /// Apply markers to all added packages.
+    #[arg(long, short, value_parser = MarkerTree::from_str)]
+    pub marker: Option<MarkerTree>,
 
     /// Add the requirements to the development dependency group.
     ///
