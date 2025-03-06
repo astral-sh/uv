@@ -587,6 +587,13 @@ impl Lock {
         (self.version(), self.revision()) >= (1, 1)
     }
 
+    /// Returns `true` if this [`Lock`] includes entries for empty `dependency-group` metadata.
+    pub fn includes_empty_groups(&self) -> bool {
+        // Empty dependency groups are included as of https://github.com/astral-sh/uv/pull/8598,
+        // but Version 1 Revision 1 is the first revision published after that change.
+        (self.version(), self.revision()) >= (1, 1)
+    }
+
     /// Returns the lockfile version.
     pub fn version(&self) -> u32 {
         self.version
@@ -1099,7 +1106,7 @@ impl Lock {
         // Validate the `dependency-groups` metadata.
         let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = dependency_groups
             .into_iter()
-            .filter(|(_, requirements)| !requirements.is_empty())
+            .filter(|(_, requirements)| self.includes_empty_groups() || !requirements.is_empty())
             .map(|(group, requirements)| {
                 Ok::<_, LockError>((
                     group,
@@ -1114,7 +1121,7 @@ impl Lock {
             .metadata
             .dependency_groups
             .iter()
-            .filter(|(_, requirements)| !requirements.is_empty())
+            .filter(|(_, requirements)| self.includes_empty_groups() || !requirements.is_empty())
             .map(|(group, requirements)| {
                 Ok::<_, LockError>((
                     group.clone(),
