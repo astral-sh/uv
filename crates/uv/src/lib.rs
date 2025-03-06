@@ -11,9 +11,13 @@ use anstream::eprintln;
 use anyhow::{bail, Context, Result};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
+use commands::{list_credentials, set_credentials, unset_credentials};
 use futures::FutureExt;
 use owo_colors::OwoColorize;
-use settings::PipTreeSettings;
+use settings::{
+    IndexAddCredentialsSettings, IndexListCredentialsSettings, IndexUnsetCredentialsSettings,
+    PipTreeSettings,
+};
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument};
 use uv_cache::{Cache, Refresh};
@@ -22,7 +26,10 @@ use uv_cli::{
     compat::CompatArgs, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
     PipCommand, PipNamespace, ProjectCommand,
 };
-use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLevelArgs};
+use uv_cli::{
+    IndexCommand, IndexCredentialsCommand, IndexNamespace, PythonCommand, PythonNamespace,
+    ToolCommand, ToolNamespace, TopLevelArgs,
+};
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use uv_fs::{Simplified, CWD};
@@ -1383,6 +1390,65 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         })
         .await
         .expect("tokio threadpool exited unexpectedly"),
+        // Commands::Index(IndexNamespace {
+        //     command: IndexCommand::Set(args),
+        // }) => {
+        //     println!("This is not implemented yet!");
+        //     println!("Set an index with name {}", args.name);
+        //     return Ok(ExitStatus::Success);
+        // }
+        // Commands::Index(IndexNamespace {
+        //     command: IndexCommand::List(_),
+        // }) => {
+        //     println!("This is not implemented yet!");
+        //     println!("List all indexes");
+        //     return Ok(ExitStatus::Success);
+        // }
+        // Commands::Index(IndexNamespace {
+        //     command: IndexCommand::Unset(args),
+        // }) => {
+        //     println!("This is not implemented yet!");
+        //     println!("Unset index {}", args.name);
+        //     return Ok(ExitStatus::Success);
+        // }
+        Commands::Index(IndexNamespace {
+            command: IndexCommand::Credentials(IndexCredentialsCommand::Set(args)),
+        }) => {
+            let IndexAddCredentialsSettings {
+                name,
+                username,
+                password,
+                keyring_provider,
+                index,
+            } = IndexAddCredentialsSettings::resolve(args, filesystem);
+
+            let _ = set_credentials(name, username, password, keyring_provider, index).await;
+            return Ok(ExitStatus::Success);
+        }
+        Commands::Index(IndexNamespace {
+            command: IndexCommand::Credentials(IndexCredentialsCommand::List(args)),
+        }) => {
+            let IndexListCredentialsSettings {
+                keyring_provider,
+                index,
+            } = IndexListCredentialsSettings::resolve(&args, filesystem);
+
+            let _ = list_credentials(keyring_provider, index, printer).await;
+            return Ok(ExitStatus::Success);
+        }
+        Commands::Index(IndexNamespace {
+            command: IndexCommand::Credentials(IndexCredentialsCommand::Unset(args)),
+        }) => {
+            let IndexUnsetCredentialsSettings {
+                name,
+                username,
+                keyring_provider,
+                index,
+            } = IndexUnsetCredentialsSettings::resolve(args, filesystem);
+
+            let _ = unset_credentials(name, username, keyring_provider, index).await;
+            return Ok(ExitStatus::Success);
+        }
     };
     result
 }
