@@ -379,6 +379,144 @@ impl SitePackages {
             recursive_requirements: seen,
         })
     }
+
+    /// Like [`SitePackages::satisfies`], but with resolved names for all requirements.
+    pub fn satisfies_names(
+        &self,
+        requirements: &[NameRequirementSpecification],
+        constraints: &[NameRequirementSpecification],
+        overrides: &[NameRequirementSpecification],
+        markers: &ResolverMarkerEnvironment,
+    ) -> Result<SatisfiesResult> {
+        // Collect the constraints and overrides by package name.
+        let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
+            constraints
+                .iter()
+                .fold(FxHashMap::default(), |mut constraints, constraint| {
+                    constraints
+                        .entry(&constraint.requirement.name)
+                        .or_default()
+                        .push(&constraint.requirement);
+                    constraints
+                });
+        let overrides: FxHashMap<&PackageName, Vec<&Requirement>> =
+            overrides
+                .iter()
+                .fold(FxHashMap::default(), |mut overrides, r#override| {
+                    overrides
+                        .entry(&r#override.requirement.name)
+                        .or_default()
+                        .push(&r#override.requirement);
+                    overrides
+                });
+
+        let mut stack = Vec::with_capacity(requirements.len());
+        let mut seen = FxHashSet::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
+
+        // Add the direct requirements to the queue.
+        for entry in requirements {
+            if let Some(r#overrides) = overrides.get(&entry.requirement.name) {
+                for r#override in r#overrides {
+                    if r#override.evaluate_markers(Some(markers), &[]) {
+                        let entry = NameRequirementSpecification::from((*r#override).clone());
+                        if seen.insert(entry.clone()) {
+                            stack.push(entry);
+                        }
+                    }
+                }
+            } else {
+                if entry.requirement.evaluate_markers(Some(markers), &[]) {
+                    if seen.insert(entry.clone()) {
+                        stack.push(entry.clone());
+                    }
+                }
+            }
+        }
+
+        // Verify that all non-editable requirements are met.
+        while let Some(entry) = stack.pop() {
+            let name = &entry.requirement.name;
+            let installed = self.get_packages(name);
+            match installed.as_slice() {
+                [] => {
+                    // The package isn't installed.
+                    return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()));
+                }
+                [distribution] => {
+                    // Validate that the requirement is satisfied.
+                    if entry.requirement.evaluate_markers(Some(markers), &[]) {
+                        match RequirementSatisfaction::check(
+                            distribution,
+                            &entry.requirement.source,
+                        )? {
+                            RequirementSatisfaction::Mismatch
+                            | RequirementSatisfaction::OutOfDate => {
+                                return Ok(SatisfiesResult::Unsatisfied(
+                                    entry.requirement.to_string(),
+                                ))
+                            }
+                            RequirementSatisfaction::Satisfied => {}
+                        }
+                    }
+
+                    // Validate that the installed version satisfies the constraints.
+                    for constraint in constraints.get(name).into_iter().flatten() {
+                        if constraint.evaluate_markers(Some(markers), &[]) {
+                            match RequirementSatisfaction::check(distribution, &constraint.source)?
+                            {
+                                RequirementSatisfaction::Mismatch
+                                | RequirementSatisfaction::OutOfDate => {
+                                    return Ok(SatisfiesResult::Unsatisfied(
+                                        entry.requirement.to_string(),
+                                    ))
+                                }
+                                RequirementSatisfaction::Satisfied => {}
+                            }
+                        }
+                    }
+
+                    // Recurse into the dependencies.
+                    let metadata = distribution
+                        .metadata()
+                        .with_context(|| format!("Failed to read metadata for: {distribution}"))?;
+
+                    // Add the dependencies to the queue.
+                    for dependency in metadata.requires_dist {
+                        let dependency = Requirement::from(dependency);
+                        if let Some(r#overrides) = overrides.get(&dependency.name) {
+                            for dependency in r#overrides {
+                                if dependency
+                                    .evaluate_markers(Some(markers), &entry.requirement.extras)
+                                {
+                                    let dependency =
+                                        NameRequirementSpecification::from((*dependency).clone());
+                                    if seen.insert(dependency.clone()) {
+                                        stack.push(dependency);
+                                    }
+                                }
+                            }
+                        } else {
+                            if dependency.evaluate_markers(Some(markers), &entry.requirement.extras)
+                            {
+                                let dependency = NameRequirementSpecification::from(dependency);
+                                if seen.insert(dependency.clone()) {
+                                    stack.push(dependency);
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    // There are multiple installed distributions for the same package.
+                    return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()));
+                }
+            }
+        }
+
+        Ok(SatisfiesResult::Fresh {
+            recursive_requirements: FxHashSet::default(),
+        })
+    }
 }
 
 /// We check if all requirements are already satisfied, recursing through the requirements tree.
