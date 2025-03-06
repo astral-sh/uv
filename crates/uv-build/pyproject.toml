@@ -1,0 +1,54 @@
+[project]
+name = "uv-build"
+version = "0.6.3"
+description = "The uv build backend"
+authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
+requires-python = ">=3.8"
+keywords = [
+  "uv", "requirements", "packaging"
+]
+license = "MIT OR Apache-2.0"
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "License :: OSI Approved :: MIT License",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Software Development :: Testing",
+  "Topic :: Software Development :: Libraries",
+]
+readme = "README.md"
+
+[project.urls]
+Repository = "https://github.com/astral-sh/uv"
+Documentation = "https://docs.astral.sh/uv"
+Changelog = "https://github.com/astral-sh/uv/blob/main/CHANGELOG.md"
+Releases = "https://github.com/astral-sh/uv/releases"
+Discord = "https://discord.gg/astral-sh"
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+bindings = "bin"
+module-name = "uv_build"
+python-source = "python"
+strip = true
+include = [
+  { path = "LICENSE-APACHE", format = "sdist" },
+  { path = "LICENSE-MIT", format = "sdist" },
+]
+
+[tool.uv]
+managed = false

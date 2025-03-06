@@ -39,7 +39,7 @@ def call(
 
     warn_config_settings(config_settings)
     # Unlike `find_uv_bin`, this mechanism must work according to PEP 517
-    uv_bin = shutil.which("uv")
+    uv_bin = shutil.which("uv-build")
     if uv_bin is None:
         raise RuntimeError("uv was not properly installed")
     # Forward stderr, capture stdout for the filename
