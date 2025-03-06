@@ -4724,6 +4724,175 @@ fn sync_wheel_path_source_error() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sync_override_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a dependency.
+    let pyproject_toml = context.temp_dir.child("core").child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "core"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        package = false
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("core")
+        .child("src")
+        .child("core")
+        .child("__init__.py")
+        .touch()?;
+
+    // Create a package that depends on it.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["core"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        core = { path = "./core" }
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Syncing the project should _not_ install `core`.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.0.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Mark the source as `package = true`.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["core"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        core = { path = "./core", package = true }
+        "#,
+    )?;
+
+    // Syncing the project _should_ install `core`.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + core==0.1.0 (from file://[TEMP_DIR]/core)
+     ~ project==0.0.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    // Remove `package = false`.
+    let pyproject_toml = context.temp_dir.child("core").child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "core"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    // Syncing the project _should_ install `core`.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ core==0.1.0 (from file://[TEMP_DIR]/core)
+    "###);
+
+    // Mark the source as `package = false`.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.0.0"
+        requires-python = ">=3.12"
+        dependencies = ["core"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv.sources]
+        core = { path = "./core", package = false }
+        "#,
+    )?;
+
+    // Syncing the project should _not_ install `core`.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     - core==0.1.0 (from file://[TEMP_DIR]/core)
+     ~ project==0.0.0 (from file://[TEMP_DIR]/)
+    "###);
+
+    Ok(())
+}
+
 /// Avoid installing dev dependencies of transitive dependencies.
 #[test]
 fn transitive_dev() -> Result<()> {

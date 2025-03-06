@@ -192,6 +192,7 @@ impl LoweredRequirement {
                         Source::Path {
                             path,
                             editable,
+                            package,
                             marker,
                             ..
                         } => {
@@ -201,7 +202,8 @@ impl LoweredRequirement {
                                 origin,
                                 project_dir,
                                 workspace.install_path(),
-                                editable.unwrap_or(false),
+                                editable,
+                                package,
                             )?;
                             (source, marker)
                         }
@@ -421,6 +423,7 @@ impl LoweredRequirement {
                         Source::Path {
                             path,
                             editable,
+                            package,
                             marker,
                             ..
                         } => {
@@ -430,7 +433,8 @@ impl LoweredRequirement {
                                 RequirementOrigin::Project,
                                 dir,
                                 dir,
-                                editable.unwrap_or(false),
+                                editable,
+                                package,
                             )?;
                             (source, marker)
                         }
@@ -511,8 +515,10 @@ pub enum LoweringError {
     MissingGitSource(PackageName, Url),
     #[error("`workspace = false` is not yet supported")]
     WorkspaceFalse,
-    #[error("Editable must refer to a local directory, not a file: `{0}`")]
+    #[error("Source with `editable = true` must refer to a local directory, not a file: `{0}`")]
     EditableFile(String),
+    #[error("Source with `package = true` must refer to a local directory, not a file: `{0}`")]
+    PackagedFile(String),
     #[error("Git repository references local file source, but only directories are supported as transitive Git dependencies: `{0}`")]
     GitFile(String),
     #[error(transparent)]
@@ -651,7 +657,8 @@ fn path_source(
     origin: RequirementOrigin,
     project_dir: &Path,
     workspace_root: &Path,
-    editable: bool,
+    editable: Option<bool>,
+    package: Option<bool>,
 ) -> Result<RequirementSource, LoweringError> {
     let path = path.as_ref();
     let base = match origin {
@@ -687,32 +694,30 @@ fn path_source(
             });
         }
 
-        if editable {
+        if editable == Some(true) {
             Ok(RequirementSource::Directory {
                 install_path,
                 url,
-                editable,
+                editable: true,
                 r#virtual: false,
             })
         } else {
             // Determine whether the project is a package or virtual.
-            let is_package = {
+            let is_package = package.unwrap_or_else(|| {
                 let pyproject_path = install_path.join("pyproject.toml");
                 fs_err::read_to_string(&pyproject_path)
                     .ok()
                     .and_then(|contents| PyProjectToml::from_string(contents).ok())
                     .map(|pyproject_toml| pyproject_toml.is_package())
                     .unwrap_or(true)
-            };
-
-            // If a project is not a package, treat it as a virtual dependency.
-            let r#virtual = !is_package;
+            });
 
             Ok(RequirementSource::Directory {
                 install_path,
                 url,
-                editable,
-                r#virtual,
+                editable: false,
+                // If a project is not a package, treat it as a virtual dependency.
+                r#virtual: !is_package,
             })
         }
     } else {
@@ -720,8 +725,11 @@ fn path_source(
         if git_member.is_some() {
             return Err(LoweringError::GitFile(url.to_string()));
         }
-        if editable {
+        if editable == Some(true) {
             return Err(LoweringError::EditableFile(url.to_string()));
+        }
+        if package == Some(true) {
+            return Err(LoweringError::PackagedFile(url.to_string()));
         }
         Ok(RequirementSource::Path {
             ext: DistExtension::from_path(&install_path)

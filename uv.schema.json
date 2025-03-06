@@ -1653,6 +1653,13 @@
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },
+            "package": {
+              "description": "Whether to treat the dependency as a buildable Python package (`true`) or as a virtual package (`false`). If `false`, the package will not be built or installed, but its dependencies will be included in the virtual environment.\n\nWhen omitted, the package status is inferred based on the presence of a `[build-system]` in the project's `pyproject.toml`.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "path": {
               "$ref": "#/definitions/String"
             }
