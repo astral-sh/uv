@@ -34,8 +34,6 @@ jobs:
   pypi-publish-uv-build:
     name: Upload uv-build to PyPI
     runs-on: ubuntu-latest
-    # Run sequentially instead of concurrently
-    needs: pypi-publish-uv
     environment:
       name: release
     permissions:
