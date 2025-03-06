@@ -110,7 +110,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-macos-x86_64
+          name: wheels_uv-macos-x86_64
           path: dist
       - name: "Archive binary"
         run: |
@@ -170,7 +170,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-aarch64-apple-darwin
+          name: wheels_uv-aarch64-apple-darwin
           path: dist
       - name: "Archive binary"
         run: |
