@@ -66,5 +66,15 @@ need to be explicitly defined using
 
 ## Dependabot
 
-Support for uv is not yet available. Progress can be tracked at
+Partial support for uv is available with `requirements.txt`, `requirements.in`, and
+`pyproject.toml`. `uv.lock` and dependency groups are not yet supported.
+
+```yaml title="dependabot.yml"
+enable-beta-ecosystems: true
+updates:
+  - package-ecosystem: "uv"
+    directory: "/" # Location of package manifests
+```
+
+Progress can be tracked at
 [dependabot/dependabot-core#10478](https://github.com/dependabot/dependabot-core/issues/10478).
