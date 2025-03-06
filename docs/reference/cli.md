@@ -951,6 +951,8 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
 
 <p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt id="uv-add--marker"><a href="#uv-add--marker"><code>--marker</code></a>, <code>-m</code> <i>marker</i></dt><dd><p>Apply markers to all added packages</p>
+
 </dd><dt id="uv-add--native-tls"><a href="#uv-add--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>

@@ -4736,6 +4736,132 @@ fn add_requirements_file() -> Result<()> {
     Ok(())
 }
 
+/// Add from requirement file, passing a marker flag that is applied to all packages in the file.
+#[test]
+fn add_requirements_file_with_marker_flag() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    let requirements_win_txt = context.temp_dir.child("requirements.win.txt");
+    requirements_win_txt.write_str("requests>=2.31.0\nrich>=12")?;
+
+    if cfg!(windows) {
+        // TODO(thejchap) windows stderr
+    } else {
+        uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.win.txt").arg("-m").arg("sys_platform == 'win32'"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+        let pyproject_toml = context.read("pyproject.toml");
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                pyproject_toml, @r###"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = [
+                "requests>=2.31.0 ; sys_platform == 'win32'",
+                "rich>=12 ; sys_platform == 'win32'",
+            ]
+
+            [build-system]
+            requires = ["setuptools>=42"]
+            build-backend = "setuptools.build_meta"
+            "###
+            );
+        });
+    }
+
+    Ok(())
+}
+
+/// Add from requirement file, passing a marker flag that is applied to all packages in the file.
+/// If markers are included on individual packages, they are AND-ed with the flag.
+#[test]
+fn add_requirements_file_with_marker_flag_merges_markers() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+
+    let requirements_win_txt = context.temp_dir.child("requirements.win.txt");
+    requirements_win_txt.write_str("requests>=2.31.0; python_version >= '3.12'\nrich>=12")?;
+
+    if cfg!(windows) {
+        // TODO(thejchap) windows stderr
+    } else {
+        uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.win.txt").arg("-m").arg("sys_platform == 'win32'"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###);
+
+        let pyproject_toml = context.read("pyproject.toml");
+
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            assert_snapshot!(
+                pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "requests>=2.31.0 ; python_full_version >= '3.12' and sys_platform == 'win32'",
+            "rich>=12 ; sys_platform == 'win32'",
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "###
+            );
+        });
+    }
+
+    Ok(())
+}
+
 /// Add a requirement to a dependency group.
 #[test]
 fn add_group() -> Result<()> {
