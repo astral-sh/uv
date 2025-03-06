@@ -5378,6 +5378,7 @@ dependencies = [
  "anyhow",
  "hashbrown 0.15.2",
  "indexmap",
+ "insta",
  "itertools 0.14.0",
  "jiff",
  "mailparse",
