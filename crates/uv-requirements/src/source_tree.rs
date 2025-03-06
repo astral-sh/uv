@@ -121,7 +121,10 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // Apply dependency-groups
         for (group_name, group) in &metadata.dependency_groups {
             if groups.contains(group_name) {
-                requirements.extend(group.iter().cloned());
+                requirements.extend(group.iter().cloned().map(|group| Requirement { 
+                    origin: Some(RequirementOrigin::Group(path.to_path_buf(), metadata.name.clone(), group_name.clone())),
+                    ..group
+                }));
             }
         }
         // Complain if dependency groups are named that don't appear.
