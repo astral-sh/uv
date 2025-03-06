@@ -205,14 +205,29 @@ impl Workspace {
                 pyproject_toml,
             });
 
-        Self::collect_members(
+        let mut workspace = Self::collect_members(
             workspace_root.clone(),
             workspace_definition,
             workspace_pyproject_toml,
-            current_project,
             options,
         )
-        .await
+        .await?;
+
+        // For the cases such as `MemberDiscovery::None`, add the current project if missing.
+        if let Some(root_member) = current_project {
+            if !workspace.packages.contains_key(&root_member.project.name) {
+                debug!(
+                    "Adding current workspace member: `{}`",
+                    root_member.root.simplified_display()
+                );
+
+                workspace
+                    .packages
+                    .insert(root_member.project.name.clone(), root_member);
+            }
+        }
+
+        Ok(workspace)
     }
 
     /// Set the current project to the given workspace member.
@@ -655,7 +670,6 @@ impl Workspace {
         workspace_root: PathBuf,
         workspace_definition: ToolUvWorkspace,
         workspace_pyproject_toml: PyProjectToml,
-        current_project: Option<WorkspaceMember>,
         options: &DiscoveryOptions<'_>,
     ) -> Result<Workspace, WorkspaceError> {
         let mut workspace_members = BTreeMap::new();
@@ -663,50 +677,27 @@ impl Workspace {
         let mut seen = FxHashSet::default();
 
         // Add the project at the workspace root, if it exists and if it's distinct from the current
-        // project.
-        if current_project
-            .as_ref()
-            .map(|root_member| root_member.root != workspace_root)
-            .unwrap_or(true)
-        {
-            if let Some(project) = &workspace_pyproject_toml.project {
-                let pyproject_path = workspace_root.join("pyproject.toml");
-                let contents = fs_err::read_to_string(&pyproject_path)?;
-                let pyproject_toml = PyProjectToml::from_string(contents)
-                    .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
+        // project. If it is the current project, it is added as such in the next step.
+        if let Some(project) = &workspace_pyproject_toml.project {
+            let pyproject_path = workspace_root.join("pyproject.toml");
+            let contents = fs_err::read_to_string(&pyproject_path)?;
+            let pyproject_toml = PyProjectToml::from_string(contents)
+                .map_err(|err| WorkspaceError::Toml(pyproject_path.clone(), Box::new(err)))?;
 
-                debug!(
-                    "Adding root workspace member: `{}`",
-                    workspace_root.simplified_display()
-                );
-
-                seen.insert(workspace_root.clone());
-                if let Some(existing) = workspace_members.insert(
-                    project.name.clone(),
-                    WorkspaceMember {
-                        root: workspace_root.clone(),
-                        project: project.clone(),
-                        pyproject_toml,
-                    },
-                ) {
-                    return Err(WorkspaceError::DuplicatePackage {
-                        name: project.name.clone(),
-                        first: existing.root.clone(),
-                        second: workspace_root,
-                    });
-                }
-            };
-        }
-
-        // The current project is a workspace member, especially in a single project workspace.
-        if let Some(root_member) = current_project {
             debug!(
-                "Adding current workspace member: `{}`",
-                root_member.root.simplified_display()
+                "Adding root workspace member: `{}`",
+                workspace_root.simplified_display()
             );
 
-            seen.insert(root_member.root.clone());
-            workspace_members.insert(root_member.project.name.clone(), root_member);
+            seen.insert(workspace_root.clone());
+            workspace_members.insert(
+                project.name.clone(),
+                WorkspaceMember {
+                    root: workspace_root.clone(),
+                    project: project.clone(),
+                    pyproject_toml,
+                },
+            );
         }
 
         // Add all other workspace members.
@@ -1188,14 +1179,28 @@ impl ProjectWorkspace {
             workspace_root.simplified_display()
         );
 
-        let workspace = Workspace::collect_members(
+        let mut workspace = Workspace::collect_members(
             workspace_root,
             workspace_definition,
             workspace_pyproject_toml,
-            Some(current_project),
             options,
         )
         .await?;
+
+        // For the cases such as `MemberDiscovery::None`, add the current project if missing.
+        if !workspace
+            .packages
+            .contains_key(&current_project.project.name)
+        {
+            debug!(
+                "Adding current workspace member: `{}`",
+                current_project.root.simplified_display()
+            );
+
+            workspace
+                .packages
+                .insert(current_project.project.name.clone(), current_project);
+        }
 
         Ok(Self {
             project_root: project_path,
@@ -1418,7 +1423,6 @@ impl VirtualProject {
                 project_path,
                 workspace.clone(),
                 pyproject_toml,
-                None,
                 options,
             )
             .await?;
