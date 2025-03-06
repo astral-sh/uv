@@ -79,7 +79,11 @@ fn main() -> Result<()> {
             ).context("stdout is closed")?;
         }
         unknown => {
-            bail!("Unknown subcommand: {}", unknown)
+            bail!(
+                "Unknown subcommand: {} (cli: {:?})",
+                unknown,
+                env::args_os()
+            );
         }
     }
     Ok(())
