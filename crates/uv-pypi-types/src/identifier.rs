@@ -125,7 +125,7 @@ mod tests {
     fn invalid_first_char() {
         assert_snapshot!(
             Identifier::from_str("1foo").unwrap_err(),
-            @"Invalid first character `1` at for `1foo`, expected an underscore or an alphabetic character"
+            @"Invalid first character `1` for identifier `1foo`, expected an underscore or an alphabetic character"
         );
         assert_snapshot!(
             Identifier::from_str("$foo").unwrap_err(),
@@ -142,7 +142,7 @@ mod tests {
         // A dot in module names equals a path separator, which is a separate problem.
         assert_snapshot!(
             Identifier::from_str("foo.bar").unwrap_err(),
-            @"Invalid character `.` at position 4 for `foo.bar`, expected an underscore or an alphanumeric character"
+            @"Invalid character `.` at position 4 for identifier `foo.bar`, expected an underscore or an alphanumeric character"
         );
         assert_snapshot!(
             Identifier::from_str("foo-bar").unwrap_err(),
