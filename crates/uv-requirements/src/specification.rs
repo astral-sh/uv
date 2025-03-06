@@ -245,7 +245,7 @@ impl RequirementsSpecification {
             let mut groups_by_path = BTreeMap::<PathBuf, Vec<GroupName>>::new();
             for group in groups {
                 groups_by_path
-                    .entry(group.path.clone())
+                    .entry(group.path().to_owned())
                     .or_default()
                     .push(group.name.clone());
             }

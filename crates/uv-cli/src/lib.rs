@@ -1023,9 +1023,9 @@ pub struct PipCompileArgs {
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
 
-    /// Install the specified dependency group in the specified pyproject.toml
+    /// Install the specified dependency group from a `pyproject.toml`.
     ///
-    /// If no path is provided, ./pyproject.toml is used.
+    /// If no path is provided, the `pyproject.toml` in the working directory is used.
     ///
     /// May be provided multiple times.
     #[arg(long, group = "sources")]
@@ -1595,9 +1595,9 @@ pub struct PipInstallArgs {
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
 
-    /// Install the specified dependency group in the specified pyproject.toml
+    /// Install the specified dependency group from a `pyproject.toml`.
     ///
-    /// If no path is provided, ./pyproject.toml is used.
+    /// If no path is provided, the `pyproject.toml` in the working directory is used.
     ///
     /// May be provided multiple times.
     #[arg(long, group = "sources")]
