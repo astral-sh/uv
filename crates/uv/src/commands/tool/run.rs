@@ -814,28 +814,11 @@ async fn get_or_create_environment(
                 {
                     // Check if the installed packages meet the requirements.
                     let site_packages = SitePackages::from_environment(&environment)?;
-
-                    let requirements = requirements
-                        .iter()
-                        .cloned()
-                        .map(NameRequirementSpecification::from)
-                        .collect::<Vec<_>>();
-                    let constraints = constraints
-                        .iter()
-                        .cloned()
-                        .map(NameRequirementSpecification::from)
-                        .collect::<Vec<_>>();
-                    let overrides = overrides
-                        .iter()
-                        .cloned()
-                        .map(NameRequirementSpecification::from)
-                        .collect::<Vec<_>>();
-
                     if matches!(
-                        site_packages.satisfies_names(
-                            &requirements,
-                            &constraints,
-                            &overrides,
+                        site_packages.satisfies_requirements(
+                            requirements.iter(),
+                            constraints.iter(),
+                            overrides.iter(),
                             &interpreter.resolver_marker_environment()
                         ),
                         Ok(SatisfiesResult::Fresh { .. })

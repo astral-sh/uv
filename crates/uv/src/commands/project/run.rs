@@ -1084,9 +1084,10 @@ fn can_skip_ephemeral(
         return false;
     }
 
-    match site_packages.satisfies(
+    match site_packages.satisfies_spec(
         &spec.requirements,
         &spec.constraints,
+        &spec.overrides,
         &base_interpreter.resolver_marker_environment(),
     ) {
         // If the requirements are already satisfied, we're done.
@@ -1097,7 +1098,7 @@ fn can_skip_ephemeral(
                 "Base environment satisfies requirements: {}",
                 recursive_requirements
                     .iter()
-                    .map(|entry| entry.requirement.to_string())
+                    .map(ToString::to_string)
                     .sorted()
                     .join(" | ")
             );

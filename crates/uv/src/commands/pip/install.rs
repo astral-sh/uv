@@ -239,10 +239,9 @@ pub(crate) async fn pip_install(
     if reinstall.is_none()
         && upgrade.is_none()
         && source_trees.is_empty()
-        && overrides.is_empty()
         && matches!(modifications, Modifications::Sufficient)
     {
-        match site_packages.satisfies(&requirements, &constraints, &marker_env)? {
+        match site_packages.satisfies_spec(&requirements, &constraints, &overrides, &marker_env)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -250,7 +249,7 @@ pub(crate) async fn pip_install(
                 if enabled!(Level::DEBUG) {
                     for requirement in recursive_requirements
                         .iter()
-                        .map(|entry| entry.requirement.to_string())
+                        .map(ToString::to_string)
                         .sorted()
                     {
                         debug!("Requirement satisfied: {requirement}");

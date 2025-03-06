@@ -2009,8 +2009,8 @@ pub(crate) async fn update_environment(
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
-    if source_trees.is_empty() && reinstall.is_none() && upgrade.is_none() && overrides.is_empty() {
-        match site_packages.satisfies(&requirements, &constraints, &marker_env)? {
+    if source_trees.is_empty() && reinstall.is_none() && upgrade.is_none() {
+        match site_packages.satisfies_spec(&requirements, &constraints, &overrides, &marker_env)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -2022,7 +2022,7 @@ pub(crate) async fn update_environment(
                         "All requirements satisfied: {}",
                         recursive_requirements
                             .iter()
-                            .map(|entry| entry.requirement.to_string())
+                            .map(ToString::to_string)
                             .sorted()
                             .join(" | ")
                     );
