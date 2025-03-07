@@ -73,7 +73,7 @@ pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {
         // Search for the command in the file, to avoid redundant updates.
         match fs_err::tokio::read_to_string(&file).await {
             Ok(contents) => {
-                if contents.contains(&command) {
+                if contents.lines().any(|line| line.trim() == command.trim()) {
                     debug!(
                         "Skipping already-updated configuration file: {}",
                         file.simplified_display()
