@@ -1362,6 +1362,42 @@ jobs:
           UV_TEST_PUBLISH_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_CLOUDSMITH_TOKEN }}
           UV_TEST_PUBLISH_PYTHON_VERSION: ${{ env.PYTHON_VERSION }}
 
+  integration-uv-build-backend:
+    timeout-minutes: 10
+    needs: build-binary-linux-libc
+    name: "integration test | uv_build"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "${{ env.PYTHON_VERSION }}"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-libc-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: |
+          chmod +x ./uv
+          chmod +x ./uvx
+
+      - name: "Test uv_build package"
+        run: |
+          ./uv build -v crates/uv-build
+          ./uv venv -v --seed
+          # Test the main path (`build_wheel`) through pip
+          ./uv run --no-project python -m pip install -v scripts/packages/built-by-uv --find-links crates/uv-build/dist --no-index --no-deps
+          ./uv run --no-project python -c "from built_by_uv import greet; print(greet())"
+          # Test both `build_wheel` and `build_sdist` through uv
+          ./uv venv -v
+          ./uv build -v --force-pep517 scripts/packages/built-by-uv --find-links crates/uv-build/dist --offline
+          ./uv pip install -v scripts/packages/built-by-uv/dist/*.tar.gz --find-links crates/uv-build/dist --offline --no-deps
+
   cache-test-ubuntu:
     timeout-minutes: 10
     needs: build-binary-linux-libc
