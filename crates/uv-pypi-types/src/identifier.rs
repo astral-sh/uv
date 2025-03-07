@@ -129,11 +129,11 @@ mod tests {
         );
         assert_snapshot!(
             Identifier::from_str("$foo").unwrap_err(),
-            @"Invalid first character `$` at for `$foo`, expected an underscore or an alphabetic character"
+            @"Invalid first character `$` for identifier `$foo`, expected an underscore or an alphabetic character"
         );
         assert_snapshot!(
             Identifier::from_str(".foo").unwrap_err(),
-            @"Invalid first character `.` at for `.foo`, expected an underscore or an alphabetic character"
+            @"Invalid first character `.` for identifier `.foo`, expected an underscore or an alphabetic character"
         );
     }
 
@@ -146,15 +146,15 @@ mod tests {
         );
         assert_snapshot!(
             Identifier::from_str("foo-bar").unwrap_err(),
-            @"Invalid character `-` at position 4 for `foo-bar`, expected an underscore or an alphanumeric character"
+            @"Invalid character `-` at position 4 for identifier `foo-bar`, expected an underscore or an alphanumeric character"
         );
         assert_snapshot!(
             Identifier::from_str("foo_bar$").unwrap_err(),
-            @"Invalid character `$` at position 8 for `foo_bar$`, expected an underscore or an alphanumeric character"
+            @"Invalid character `$` at position 8 for identifier `foo_bar$`, expected an underscore or an alphanumeric character"
         );
         assert_snapshot!(
             Identifier::from_str("foo🦀bar").unwrap_err(),
-            @"Invalid character `🦀` at position 4 for `foo🦀bar`, expected an underscore or an alphanumeric character"
+            @"Invalid character `🦀` at position 4 for identifier `foo🦀bar`, expected an underscore or an alphanumeric character"
         );
     }
 }
