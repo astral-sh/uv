@@ -55,7 +55,13 @@ impl PythonInstallation {
         preference: PythonPreference,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        let installation = find_python_installation(request, environments, preference, cache)??;
+        let installation = find_python_installation(
+            request,
+            environments,
+            preference,
+            cache,
+            crate::current_dir()?.as_path(),
+        )??;
         Ok(installation)
     }
 
