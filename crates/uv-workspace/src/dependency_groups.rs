@@ -7,9 +7,7 @@ use tracing::warn;
 
 use uv_normalize::{GroupName, DEV_DEPENDENCIES};
 use uv_pep508::Pep508Error;
-use uv_pypi_types::VerbatimParsedUrl;
-
-use crate::pyproject::DependencyGroupSpecifier;
+use uv_pypi_types::{DependencyGroupSpecifier, VerbatimParsedUrl};
 
 /// PEP 735 dependency groups, with any `include-group` entries resolved.
 #[derive(Debug, Default, Clone)]
