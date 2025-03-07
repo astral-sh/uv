@@ -1,7 +1,7 @@
 use anstream::println;
 use anyhow::Result;
-use std::path::Path;
 use std::fmt::Write;
+use std::path::Path;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;

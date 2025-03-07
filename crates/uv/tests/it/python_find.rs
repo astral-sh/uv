@@ -773,14 +773,25 @@ fn python_find_script_no_environment() {
         "})
         .unwrap();
 
-    uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    [VENV]/bin/python3
+    if cfg!(windows) {
+        uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        [VENV]/Scripts/python.exe
 
-    ----- stderr -----
-    "###);
+        ----- stderr -----
+        "###);
+    } else {
+        uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        [VENV]/bin/python3
+
+        ----- stderr -----
+        "###);
+    }
 }
 
 #[test]
@@ -797,14 +808,25 @@ fn python_find_script_python_not_found() {
         "})
         .unwrap();
 
-    uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r"
-    success: false
-    exit_code: 1
-    ----- stdout -----
+    if cfg!(windows) {
+        uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r"
+        success: false
+        exit_code: 1
+        ----- stdout -----
 
-    ----- stderr -----
-    No interpreter found in virtual environments, managed installations, or search path
-    ");
+        ----- stderr -----
+        No interpreter found in virtual environments, managed installations, search path, or registry
+        ");
+    } else {
+        uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+        No interpreter found in virtual environments, managed installations, or search path
+        ");
+    }
 }
 
 #[test]
@@ -848,12 +870,23 @@ fn python_find_script_no_such_version() {
         "#})
         .unwrap();
 
-    uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r"
-    success: false
-    exit_code: 1
-    ----- stdout -----
+    if cfg!(windows) {
+        uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r"
+        success: false
+        exit_code: 1
+        ----- stdout -----
 
-    ----- stderr -----
-    No interpreter found for Python >=3.14 in virtual environments, managed installations, or search path
-    ");
+        ----- stderr -----
+        No interpreter found for Python >=3.14 in virtual environments, managed installations, search path, or registry
+        ");
+    } else {
+        uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r"
+        success: false
+        exit_code: 1
+        ----- stdout -----
+
+        ----- stderr -----
+        No interpreter found for Python >=3.14 in virtual environments, managed installations, or search path
+        ");
+    }
 }
