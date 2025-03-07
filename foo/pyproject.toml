@@ -1,0 +1,29 @@
+
+[project]
+name = "vanna"
+version = "0.7.6"
+authors = [
+  { name="Zain Hoda", email="zain@vanna.ai" },
+]
+
+description = "Generate SQL queries from natural language"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "torch"
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu" },
+]

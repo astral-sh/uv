@@ -168,6 +168,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // still extract the requirements without performing a build, unlike in the database where
         // we typically construct a "complete" metadata object.
         if let Some(metadata) = self.database.requires_dist(source_tree).await? {
+            println!("{:?}", metadata);
             return Ok(metadata);
         }
 
@@ -223,6 +224,8 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                 archive.metadata.clone()
             }
         };
+
+        println!("{:?}", metadata);
 
         Ok(RequiresDist::from(metadata))
     }

@@ -249,6 +249,9 @@ impl RegistryClient {
             Either::Right(self.index_urls.indexes().map(Index::url))
         };
 
+        println!("name: {}", package_name);
+        println!("index: {:?}", index);
+
         let mut it = indexes.peekable();
         if it.peek().is_none() {
             return Err(ErrorKind::NoIndex(package_name.to_string()).into());

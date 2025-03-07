@@ -152,6 +152,8 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
         package_name: &'io PackageName,
         index: Option<&'io IndexUrl>,
     ) -> PackageVersionsResult {
+        println!("Fetching versions for {} ({:?})", package_name, index);
+
         let result = self
             .fetcher
             .client()

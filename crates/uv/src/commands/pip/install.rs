@@ -413,6 +413,8 @@ pub(crate) async fn pip_install(
         .build_options(build_options.clone())
         .build();
 
+    println!("requirements: {:?}", requirements);
+
     // Resolve the requirements.
     let resolution = match operations::resolve(
         requirements,

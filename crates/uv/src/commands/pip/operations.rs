@@ -219,6 +219,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         requirements
     };
 
+    println!("requirements: {:?}", requirements);
+
     // Resolve the overrides from the provided sources.
     let overrides = {
         // Partition the overrides into named and unnamed requirements.
