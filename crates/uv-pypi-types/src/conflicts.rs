@@ -13,7 +13,7 @@ use crate::dependency_groups::{DependencyGroupSpecifier, DependencyGroups};
 /// This is useful to force the resolver to fork according to extras that have
 /// unavoidable conflicts with each other. (The alternative is that resolution
 /// will fail.)
-#[derive(Debug, Default, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Default, Clone, Eq, PartialEq, serde::Deserialize)]
 pub struct Conflicts(Vec<ConflictSet>);
 
 impl Conflicts {
@@ -217,7 +217,7 @@ impl Conflicts {
 ///
 /// A `TryFrom<Vec<ConflictItem>>` impl may be used to build a set from a
 /// sequence. Note though that at least 2 items are required.
-#[derive(Debug, Default, Clone, Hash, Eq, PartialEq, serde::Serialize)]
+#[derive(Debug, Default, Clone, Hash, Eq, PartialEq)]
 pub struct ConflictSet {
     set: BTreeSet<ConflictItem>,
     is_inferred_conflict: bool,
