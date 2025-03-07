@@ -115,7 +115,18 @@ pub(crate) async fn find_script(
     )
     .await
     {
-        Err(_) | Ok(ScriptInterpreter::Interpreter(_)) => Ok(ExitStatus::Failure),
+        Err(error) => {
+            eprintln!("{}", error);
+
+            Ok(ExitStatus::Failure)
+        }
+
+        Ok(ScriptInterpreter::Interpreter(interpreter)) => {
+            let path = interpreter.sys_executable();
+            println!("{}", std::path::absolute(path)?.simplified_display());
+
+            Ok(ExitStatus::Success)
+        }
 
         Ok(ScriptInterpreter::Environment(environment)) => {
             let path = environment.interpreter().sys_executable();
