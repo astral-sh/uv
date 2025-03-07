@@ -130,7 +130,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         &self,
         requirement: Requirement,
     ) -> Result<Option<RequestedRequirements>, Error> {
-        println!("Performing lookahead for {requirement}");
+        trace!("Performing lookahead for {requirement}");
 
         // Determine whether the requirement represents a local distribution and convert to a
         // buildable distribution.
@@ -206,8 +206,6 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                 }
             })
             .collect();
-
-        println!("{:?}", requires_dist);
 
         // Return the requirements from the metadata.
         Ok(Some(RequestedRequirements::new(

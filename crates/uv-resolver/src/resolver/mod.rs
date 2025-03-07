@@ -632,7 +632,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         self.visit_dependencies(&dependencies, &state, &request_sink)?;
 
                         // Add the dependencies to the state.
-                        state.add_package_version_dependencies(next_id, &version, dependencies)?;
+                        state.add_package_version_dependencies(next_id, &version, dependencies);
                     }
                     ForkedDependencies::Forked {
                         mut forks,
@@ -864,14 +864,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 )?;
 
                 // Emit a request to fetch the metadata for each registry package.
-                self.visit_dependencies(&fork.dependencies, &forked_state, &request_sink)?;
+                self.visit_dependencies(&fork.dependencies, &forked_state, request_sink)?;
 
                 // Add the dependencies to the state.
-                forked_state.add_package_version_dependencies(
-                    package,
-                    version,
-                    fork.dependencies,
-                )?;
+                forked_state.add_package_version_dependencies(package, version, fork.dependencies);
 
                 Ok(forked_state)
             })
@@ -1016,7 +1012,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if indexes.contains_key(name) {
                 continue;
             }
-            println!("Pre-visiting {name} ({range})");
             request_sink.blocking_send(Request::Prefetch(
                 name.clone(),
                 range.clone(),
@@ -2631,6 +2626,8 @@ impl ForkState {
         }
     }
 
+    /// Visit the dependencies for the selected version of the current package, incorporating any
+    /// relevant URLs and pinned indexes into the [`ForkState`].
     fn visit_package_version_dependencies(
         &mut self,
         for_package: Id<PubGrubPackage>,
@@ -2703,14 +2700,13 @@ impl ForkState {
         Ok(())
     }
 
-    /// Add the dependencies for the selected version of the current package, checking for
-    /// self-dependencies and handling URLs.
+    /// Add the dependencies for the selected version of the current package.
     fn add_package_version_dependencies(
         &mut self,
         for_package: Id<PubGrubPackage>,
         for_version: &Version,
         dependencies: Vec<PubGrubDependency>,
-    ) -> Result<(), ResolveError> {
+    ) {
         let conflict = self.pubgrub.add_package_version_dependencies(
             self.next,
             for_version.clone(),
@@ -2729,8 +2725,6 @@ impl ForkState {
         if let Some(incompatibility) = conflict {
             self.record_conflict(for_package, Some(for_version), incompatibility);
         }
-
-        Ok(())
     }
 
     fn record_conflict(
