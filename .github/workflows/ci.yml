@@ -1386,15 +1386,28 @@ jobs:
 
       - name: "Test uv_build package"
         run: |
+          # Build the Python package, which is not covered by uv's integration tests since they can't depend on having
+          # a Python package (only the binary itself is built before running Rust's tests)
           ./uv build -v crates/uv-build
-          ./uv venv -v --seed
+
           # Test the main path (`build_wheel`) through pip
+          ./uv venv -v --seed
           ./uv run --no-project python -m pip install -v scripts/packages/built-by-uv --find-links crates/uv-build/dist --no-index --no-deps
           ./uv run --no-project python -c "from built_by_uv import greet; print(greet())"
+
           # Test both `build_wheel` and `build_sdist` through uv
           ./uv venv -v
           ./uv build -v --force-pep517 scripts/packages/built-by-uv --find-links crates/uv-build/dist --offline
           ./uv pip install -v scripts/packages/built-by-uv/dist/*.tar.gz --find-links crates/uv-build/dist --offline --no-deps
+          ./uv run --no-project python -c "from built_by_uv import greet; print(greet())"
+
+          # Test both `build_wheel` and `build_sdist` through the official `build`
+          rm -rf scripts/packages/built-by-uv/dist/
+          ./uv venv -v
+          ./uv pip install build
+          UV_OFFLINE=1 UV_FIND_LINKS=crates/uv-build/dist ./uv run --no-project python -m build -v --installer uv scripts/packages/built-by-uv
+          ./uv pip install -v scripts/packages/built-by-uv/dist/*.tar.gz --find-links crates/uv-build/dist --offline --no-deps
+          ./uv run --no-project python -c "from built_by_uv import greet; print(greet())"
 
   cache-test-ubuntu:
     timeout-minutes: 10
