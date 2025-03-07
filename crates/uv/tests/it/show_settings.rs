@@ -18,7 +18,8 @@ fn add_shared_args(mut command: Command, cwd: &Path) -> Command {
         .env(EnvVars::UV_CONCURRENT_BUILDS, "16")
         .env(EnvVars::UV_CONCURRENT_INSTALLS, "8")
         // Set an explicit `XDG_CONFIG_DIRS` to avoid loading system configuration.
-        .env(EnvVars::XDG_CONFIG_DIRS, cwd);
+        .env(EnvVars::XDG_CONFIG_DIRS, cwd)
+        .env(EnvVars::XDG_CONFIG_HOME, cwd);
 
     if cfg!(unix) {
         // Avoid locale issues in tests

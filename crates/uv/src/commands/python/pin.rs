@@ -7,6 +7,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
+use uv_dirs::user_uv_config_dir;
 use uv_fs::Simplified;
 use uv_python::{
     EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
@@ -25,6 +26,7 @@ pub(crate) async fn pin(
     resolved: bool,
     python_preference: PythonPreference,
     no_project: bool,
+    global: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -43,8 +45,16 @@ pub(crate) async fn pin(
         }
     };
 
-    let version_file =
-        PythonVersionFile::discover(project_dir, &VersionFileDiscoveryOptions::default()).await;
+    let version_file = if global {
+        if let Some(path) = user_uv_config_dir() {
+            PythonVersionFile::discover_user_config(path, &VersionFileDiscoveryOptions::default())
+                .await
+        } else {
+            Ok(None)
+        }
+    } else {
+        PythonVersionFile::discover(project_dir, &VersionFileDiscoveryOptions::default()).await
+    };
 
     let Some(request) = request else {
         // Display the current pinned Python version
@@ -130,8 +140,16 @@ pub(crate) async fn pin(
 
     let existing = version_file.ok().flatten();
     // TODO(zanieb): Allow updating the discovered version file with an `--update` flag.
-    let new = PythonVersionFile::new(project_dir.join(PYTHON_VERSION_FILENAME))
-        .with_versions(vec![request]);
+    let new = if global {
+        let Some(config_dir) = user_uv_config_dir() else {
+            return Err(anyhow::anyhow!("No user-level config directory found."));
+        };
+        PythonVersionFile::new(config_dir.join(PYTHON_VERSION_FILENAME))
+            .with_versions(vec![request])
+    } else {
+        PythonVersionFile::new(project_dir.join(PYTHON_VERSION_FILENAME))
+            .with_versions(vec![request])
+    };
 
     new.write().await?;
 

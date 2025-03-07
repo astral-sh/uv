@@ -4676,6 +4676,15 @@ pub struct PythonPinArgs {
     /// `requires-python` constraint.
     #[arg(long, alias = "no-workspace")]
     pub no_project: bool,
+
+    /// Pin the global (user-level) Python version.
+    ///
+    /// This causes uv to write the specified version to a user-level
+    /// `.python-version` file. This will be used as a fallback for any
+    /// project that doesn't contain a `.python-version` file in its
+    /// local directory or ancestor directories.
+    #[arg(long)]
+    pub global: bool,
 }
 
 #[derive(Args)]

@@ -89,6 +89,7 @@ pub struct TestContext {
     pub cache_dir: ChildPath,
     pub python_dir: ChildPath,
     pub home_dir: ChildPath,
+    pub user_config_dir: ChildPath,
     pub bin_dir: ChildPath,
     pub venv: ChildPath,
     pub workspace_root: PathBuf,
@@ -357,6 +358,10 @@ impl TestContext {
         let home_dir = ChildPath::new(root.path()).child("home");
         fs_err::create_dir_all(&home_dir).expect("Failed to create test home directory");
 
+        let user_config_dir = ChildPath::new(home_dir.path()).child(".config");
+        fs_err::create_dir_all(&user_config_dir)
+            .expect("Failed to create test user config directory");
+
         // Canonicalize the temp dir for consistent snapshot behavior
         let canonical_temp_dir = temp_dir.canonicalize().unwrap();
         let venv = ChildPath::new(canonical_temp_dir.join(".venv"));
@@ -478,6 +483,11 @@ impl TestContext {
                 .map(|pattern| (pattern, "[HOME]/".to_string())),
         );
         filters.extend(
+            Self::path_patterns(&user_config_dir)
+                .into_iter()
+                .map(|pattern| (pattern, "[USER_CONFIG_DIR]/".to_string())),
+        );
+        filters.extend(
             Self::path_patterns(&workspace_root)
                 .into_iter()
                 .map(|pattern| (pattern, "[WORKSPACE]/".to_string())),
@@ -532,6 +542,7 @@ impl TestContext {
             cache_dir,
             python_dir,
             home_dir,
+            user_config_dir,
             bin_dir,
             venv,
             workspace_root,
@@ -606,6 +617,7 @@ impl TestContext {
             .env(EnvVars::COLUMNS, "100")
             .env(EnvVars::PATH, path)
             .env(EnvVars::HOME, self.home_dir.as_os_str())
+            .env(EnvVars::XDG_CONFIG_HOME, self.user_config_dir.as_os_str())
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             // Installations are not allowed by default; see `Self::with_managed_python_dirs`
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")

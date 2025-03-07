@@ -1,11 +1,12 @@
 use crate::common::{uv_snapshot, TestContext};
 use anyhow::Result;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use insta::assert_snapshot;
 use uv_python::{
     platform::{Arch, Os},
     PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME,
 };
+use uv_static::EnvVars;
 
 #[test]
 fn python_pin() {
@@ -196,6 +197,131 @@ fn python_pin() {
     3.7
     "###);
     }
+}
+
+#[test]
+fn python_pin_use_global_if_no_local() -> Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
+    let uv = xdg.child("uv");
+
+    // Without arguments, we attempt to read the current pin (which does not exist yet)
+    uv_snapshot!(context.filters(), context.python_pin().env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No pinned Python version found
+    "###);
+
+    let versions = uv.child(".python-version");
+    versions.write_str("3.11")?;
+
+    // If no local pin, use global.
+    uv_snapshot!(context.filters(), context.python_pin().env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn python_pin_global() -> Result<()> {
+    let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
+    let uv = xdg.child("uv");
+    uv.create_dir_all()?;
+
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_path(uv.as_ref(), "USER_CONFIG_PATH");
+
+    // Without arguments, we attempt to read the current pin (which does not exist yet)
+    uv_snapshot!(context.filters(), context.python_pin().env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No pinned Python version found
+    "###);
+
+    // Given an argument, we globally pin to that version
+    uv_snapshot!(context.filters(), context.python_pin().arg("any").arg("--global").env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `[USER_CONFIG_PATH]/.python-version` to `any`
+
+    ----- stderr -----
+    ");
+
+    // Without arguments, we read the current pin
+    uv_snapshot!(context.filters(), context.python_pin().env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    any
+
+    ----- stderr -----
+    "###);
+
+    // Request Python 3.12 globally
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").arg("--global").env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `[USER_CONFIG_PATH]/.python-version` from `any` -> `3.12`
+
+    ----- stderr -----
+    ");
+
+    // With no local, we get global
+    uv_snapshot!(context.filters(), context.python_pin().env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    "###);
+
+    // Request Python 3.11 for local .python-version
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.11").env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.11`
+
+    ----- stderr -----
+    "###);
+
+    // Local should override global
+    uv_snapshot!(context.filters(), context.python_pin().env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11
+
+    ----- stderr -----
+    "###);
+
+    // We should still be able to check global pin
+    uv_snapshot!(context.filters(), context.python_pin().arg("--global").env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
 }
 
 /// We do not need a Python interpreter to pin without `--resolved`
