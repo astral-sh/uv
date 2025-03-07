@@ -194,7 +194,7 @@ impl Conflicts {
                         .replaced_item(&canonical_item, (**sub).clone())
                         .expect("`ConflictItem` should be in `ConflictSet`");
                     if !direct_conflict_sets.contains(&new_set) {
-                        new_set.set_as_inferred_conflict();
+                        new_set = new_set.with_inferred_conflict();
                         if !transitive_conflict_sets.contains(&new_set) {
                             new_conflict_sets.insert(new_set);
                         }
@@ -280,8 +280,9 @@ impl ConflictSet {
 
     /// Mark this [`ConflictSet`] as being inferred from directly
     /// defined conflicts.
-    fn set_as_inferred_conflict(&mut self) {
+    fn with_inferred_conflict(mut self) -> Self {
         self.is_inferred_conflict = true;
+        self
     }
 }
 
