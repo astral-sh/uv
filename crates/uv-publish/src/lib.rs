@@ -381,6 +381,7 @@ pub async fn upload(
 
     let mut n_past_retries = 0;
     let start_time = SystemTime::now();
+    // N.B. We cannot use the client policy here because it is set to zero retries
     let retry_policy = ExponentialBackoff::builder().build_with_max_retries(DEFAULT_RETRIES);
     loop {
         let (request, idx) = build_request(
