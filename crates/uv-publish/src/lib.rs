@@ -11,6 +11,7 @@ use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
 use reqwest_middleware::RequestBuilder;
+use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{RetryPolicy, Retryable, RetryableStrategy};
 use rustc_hash::FxHashSet;
 use serde::Deserialize;
@@ -23,20 +24,21 @@ use tokio::io::{AsyncReadExt, BufReader};
 use tokio::sync::Semaphore;
 use tokio_util::io::ReaderStream;
 use tracing::{debug, enabled, trace, warn, Level};
+use trusted_publishing::TrustedPublishingToken;
 use url::Url;
-use uv_client::{BaseClient, OwnedArchive, RegistryClientBuilder, UvRetryableStrategy};
+use uv_cache::{Cache, Refresh};
+use uv_client::{
+    BaseClient, OwnedArchive, RegistryClientBuilder, UvRetryableStrategy, DEFAULT_RETRIES,
+};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
+use uv_distribution_types::{IndexCapabilities, IndexUrl};
+use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
-
-pub use trusted_publishing::TrustedPublishingToken;
-use uv_cache::{Cache, Refresh};
-use uv_distribution_types::{IndexCapabilities, IndexUrl};
-use uv_extract::hash::{HashReader, Hasher};
 
 #[derive(Error, Debug)]
 pub enum PublishError {
@@ -379,7 +381,7 @@ pub async fn upload(
 
     let mut n_past_retries = 0;
     let start_time = SystemTime::now();
-    let retry_policy = client.retry_policy();
+    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(DEFAULT_RETRIES);
     loop {
         let (request, idx) = build_request(
             file,
