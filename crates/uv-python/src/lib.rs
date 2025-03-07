@@ -446,6 +446,7 @@ mod tests {
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
                 &context.cache,
+                &context.workdir,
             )
         });
         assert!(
@@ -460,6 +461,7 @@ mod tests {
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
                 &context.cache,
+                &context.workdir,
             )
         });
         assert!(
@@ -484,6 +486,7 @@ mod tests {
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
                 &context.cache,
+                &context.workdir,
             )
         });
         assert!(
@@ -505,6 +508,7 @@ mod tests {
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert!(
@@ -566,6 +570,7 @@ mod tests {
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert!(
@@ -597,6 +602,7 @@ mod tests {
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
                 &context.cache,
+                &context.workdir,
             )
         });
         assert!(
@@ -633,6 +639,7 @@ mod tests {
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::default(),
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert!(
@@ -664,6 +671,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -685,6 +693,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -710,6 +719,7 @@ mod tests {
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -735,6 +745,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -757,6 +768,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
 
@@ -790,6 +802,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
 
@@ -823,6 +836,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })?;
         assert!(
@@ -844,6 +858,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })?;
         assert!(
@@ -998,6 +1013,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             })??;
         assert_eq!(
@@ -1023,6 +1039,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             })??;
         assert_eq!(
@@ -1049,6 +1066,7 @@ mod tests {
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             },
         )??;
@@ -1073,6 +1091,7 @@ mod tests {
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             },
         )?;
@@ -1094,6 +1113,7 @@ mod tests {
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             },
         )??;
@@ -1116,6 +1136,7 @@ mod tests {
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             },
         )??;
@@ -1148,6 +1169,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             },
         )??;
@@ -1168,6 +1190,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             },
         )??;
@@ -1194,6 +1217,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
 
@@ -1211,6 +1235,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
 
@@ -1239,6 +1264,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             })??;
         assert_eq!(
@@ -1276,6 +1302,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             },
         )??;
@@ -1303,6 +1330,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             },
         )??;
@@ -1327,6 +1355,7 @@ mod tests {
                     EnvironmentPreference::ExplicitSystem,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             },
         )??;
@@ -1351,6 +1380,7 @@ mod tests {
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             },
         )??;
@@ -1375,6 +1405,7 @@ mod tests {
                     EnvironmentPreference::OnlyVirtual,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             },
         )??;
@@ -1412,6 +1443,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             },
         )??;
@@ -1439,6 +1471,7 @@ mod tests {
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             })??;
         assert_eq!(
@@ -1455,6 +1488,7 @@ mod tests {
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             })??;
         assert_eq!(
@@ -1471,6 +1505,7 @@ mod tests {
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             })?;
         assert!(
@@ -1492,6 +1527,7 @@ mod tests {
                 EnvironmentPreference::OnlyVirtual,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })?;
         assert!(
@@ -1508,6 +1544,7 @@ mod tests {
                     EnvironmentPreference::OnlySystem,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             },
         )?;
@@ -1529,6 +1566,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1543,6 +1581,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })?;
         assert!(
@@ -1556,6 +1595,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })?;
         assert!(
@@ -1584,6 +1624,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1599,6 +1640,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1628,6 +1670,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1643,6 +1686,7 @@ mod tests {
                 EnvironmentPreference::ExplicitSystem,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1658,6 +1702,7 @@ mod tests {
                 EnvironmentPreference::OnlyVirtual,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1673,6 +1718,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1696,6 +1742,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1710,6 +1757,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1733,6 +1781,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1752,6 +1801,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             },
         )??;
@@ -1780,6 +1830,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1801,6 +1852,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })?;
         assert!(
@@ -1830,6 +1882,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1845,6 +1898,7 @@ mod tests {
                 EnvironmentPreference::ExplicitSystem,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })?;
         assert!(
@@ -1871,6 +1925,7 @@ mod tests {
                     EnvironmentPreference::ExplicitSystem,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             })
             .unwrap()
@@ -1895,6 +1950,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })?;
         assert!(
@@ -1911,6 +1967,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1925,6 +1982,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1950,6 +2008,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1964,6 +2023,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -1989,6 +2049,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -2015,6 +2076,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -2041,6 +2103,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -2067,6 +2130,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -2093,6 +2157,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -2120,6 +2185,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })?;
         assert!(
@@ -2141,6 +2207,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -2155,6 +2222,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -2180,6 +2248,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -2194,6 +2263,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
         assert_eq!(
@@ -2231,6 +2301,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             })
             .unwrap()
@@ -2248,6 +2319,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             })
             .unwrap()
@@ -2289,6 +2361,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             })
             .unwrap()
@@ -2306,6 +2379,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             })
             .unwrap()
@@ -2342,6 +2416,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             })
             .unwrap()
@@ -2364,6 +2439,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             })
             .unwrap()
@@ -2386,6 +2462,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    &context.workdir,
                 )
             })
             .unwrap()
@@ -2424,6 +2501,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
 
@@ -2476,6 +2554,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                &context.workdir,
             )
         })??;
 

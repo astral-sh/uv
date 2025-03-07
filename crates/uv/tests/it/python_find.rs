@@ -1,4 +1,9 @@
+<<<<<<< HEAD
 use assert_fs::prelude::{FileTouch, PathChild};
+=======
+use assert_cmd::assert::OutputAssertExt;
+use assert_fs::prelude::PathChild;
+>>>>>>> acd01479d (respect --project during uv python find (#11990))
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
 use indoc::indoc;
 
@@ -596,6 +601,124 @@ fn python_find_venv() {
         ----- stderr -----
         "###);
     }
+}
+
+// If we query from outside the project, but specify the project via the --project flag, we find the executable in the project's virtual environment
+#[test]
+fn python_find_outside_project_with_project_flag_and_venv() {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+        // Enable additional filters for Windows compatibility
+        .with_filtered_exe_suffix()
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+    let child_dir = context.temp_dir.child("child-project");
+    child_dir.create_dir_all().unwrap();
+    let pyproject_toml = child_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "child-project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["anyio==3.7.0"]
+    "#})
+        .unwrap();
+    context
+        .venv()
+        .current_dir(child_dir)
+        .arg("-q")
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.python_find().arg("--project").arg("child-project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child-project/.venv/[BIN]/python
+
+    ----- stderr -----
+    "###);
+}
+
+// If we query from outside the project, but specify the project via the --project flag,
+// and no venv has been created, we find a version that respects the project's version range
+#[test]
+fn python_find_outside_project_with_project_flag_without_venv() {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+        // Enable additional filters for Windows compatibility
+        .with_filtered_exe_suffix()
+        .with_filtered_python_names()
+        .with_filtered_python_sources()
+        .with_filtered_virtualenv_bin();
+    // If we query from outside the project, but specify the project via the --project flag
+    // and there are version requirements in the pyproject.toml, but we haven't installed the venv
+    // return the globally installed version that satisfies those requirements
+    let child_dir = context.temp_dir.child("child-project");
+    child_dir.create_dir_all().unwrap();
+    let pyproject_toml = child_dir.child("pyproject.toml");
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "child-project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["anyio==3.7.0"]
+    "#})
+        .unwrap();
+    uv_snapshot!(context.filters(), context.python_find().arg("--project").arg("child-project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    "###);
+
+    // If the project specifies a version requirement that's not installed,
+    // make sure we return an error
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "child-project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = ["anyio==3.7.0"]
+    "#})
+        .unwrap();
+    uv_snapshot!(context.filters(), context.python_find().arg("--project").arg("child-project"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python >=3.13 in [PYTHON SOURCES]
+    "###);
+
+    // Ensure pinned version takes precedence
+    pyproject_toml
+        .write_str(indoc! {r#"
+        [project]
+        name = "child-project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["anyio==3.7.0"]
+    "#})
+        .unwrap();
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").arg("--project").arg("child-project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `child-project/.python-version` to `3.12`
+
+    ----- stderr -----
+    "###);
+    uv_snapshot!(context.filters(), context.python_find().arg("--project").arg("child-project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
 }
 
 #[cfg(unix)]
