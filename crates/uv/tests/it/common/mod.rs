@@ -1383,6 +1383,7 @@ pub fn python_installations_for_versions(
     python_versions: &[&str],
 ) -> anyhow::Result<Vec<PathBuf>> {
     let cache = Cache::from_path(temp_dir.child("cache").to_path_buf()).init()?;
+    let root_dir = env::current_dir().expect("Failed to get current directory");
     let selected_pythons = python_versions
         .iter()
         .map(|python_version| {
@@ -1391,6 +1392,7 @@ pub fn python_installations_for_versions(
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::Managed,
                 &cache,
+                root_dir.as_path(),
             ) {
                 python.into_interpreter().sys_executable().to_owned()
             } else {
