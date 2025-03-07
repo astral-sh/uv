@@ -4,6 +4,7 @@ use std::str::FromStr;
 use std::{fmt, io};
 
 use thiserror::Error;
+use uv_pep440::Version;
 
 #[derive(Error, Debug)]
 pub enum PlatformError {
@@ -17,12 +18,18 @@ pub enum PlatformError {
 pub struct Platform {
     os: Os,
     arch: Arch,
+    accelerator: Option<Accelerator>,
 }
 
 impl Platform {
     /// Create a new platform from the given operating system and architecture.
     pub const fn new(os: Os, arch: Arch) -> Self {
-        Self { os, arch }
+        Self {
+            os,
+            arch,
+            // Let's track accelerator separately.
+            accelerator: None,
+        }
     }
 
     /// Return the platform's operating system.
@@ -33,6 +40,11 @@ impl Platform {
     /// Return the platform's architecture.
     pub fn arch(&self) -> Arch {
         self.arch
+    }
+
+    /// Return the platform's accelerator.
+    pub fn accelerator(&self) -> Option<&Accelerator> {
+        self.accelerator.as_ref()
     }
 }
 
@@ -208,5 +220,19 @@ impl Arch {
         ]
         .iter()
         .copied()
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(tag = "name", rename_all = "lowercase")]
+pub enum Accelerator {
+    Cuda { driver_version: Version },
+}
+
+impl fmt::Display for Accelerator {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Cuda { driver_version } => write!(f, "CUDA {driver_version}"),
+        }
     }
 }

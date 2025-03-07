@@ -5383,6 +5383,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "thiserror 2.0.11",
+ "uv-pep440",
  "uv-small-str",
 ]
 
