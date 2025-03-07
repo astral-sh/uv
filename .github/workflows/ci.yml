@@ -1405,7 +1405,8 @@ jobs:
           rm -rf scripts/packages/built-by-uv/dist/
           ./uv venv -v
           ./uv pip install build
-          UV_OFFLINE=1 UV_FIND_LINKS=crates/uv-build/dist ./uv run --no-project python -m build -v --installer uv scripts/packages/built-by-uv
+          # Add the uv binary to PATH for `build` to find
+          PATH="$(pwd):$PATH" UV_OFFLINE=1 UV_FIND_LINKS=crates/uv-build/dist ./uv run --no-project python -m build -v --installer uv scripts/packages/built-by-uv
           ./uv pip install -v scripts/packages/built-by-uv/dist/*.tar.gz --find-links crates/uv-build/dist --offline --no-deps
           ./uv run --no-project python -c "from built_by_uv import greet; print(greet())"
 
