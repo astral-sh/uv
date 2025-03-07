@@ -301,8 +301,8 @@ fn rename_module() -> Result<()> {
         module-name = "bar"
 
         [build-system]
-        requires = ["uv>=0.5,<0.7"]
-        build-backend = "uv"
+        requires = ["uv_build>=0.5,<0.7"]
+        build-backend = "uv_build"
     "#})?;
 
     // This is the module we would usually include, but due to the renaming by `module-name` must
