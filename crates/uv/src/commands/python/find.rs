@@ -1,6 +1,7 @@
 use anstream::println;
 use anyhow::Result;
 use std::path::Path;
+use std::fmt::Write;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
@@ -116,7 +117,7 @@ pub(crate) async fn find_script(
     .await
     {
         Err(error) => {
-            eprintln!("{}", error);
+            writeln!(printer.stderr(), "{error}")?;
 
             Ok(ExitStatus::Failure)
         }
