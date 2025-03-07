@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::env::current_dir;
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -167,6 +168,7 @@ pub(crate) async fn pip_install(
             EnvironmentPreference::from_system_flag(system, false),
             python_preference,
             &cache,
+            current_dir()?.as_path(),
         )?;
         report_interpreter(&installation, true, printer)?;
         PythonEnvironment::from_installation(installation)

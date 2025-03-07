@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::collections::BTreeSet;
+use std::env::current_dir;
 use std::fmt::Write;
 use uv_cli::PythonListFormat;
 use uv_pep440::Version;
@@ -113,6 +114,7 @@ pub(crate) async fn list(
                 EnvironmentPreference::OnlySystem,
                 python_preference,
                 cache,
+                current_dir()?.as_path()
             )
             // Raise discovery errors if critical
             .filter(|result| {
