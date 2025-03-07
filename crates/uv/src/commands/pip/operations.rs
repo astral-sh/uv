@@ -28,7 +28,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
-use uv_normalize::{PackageName, PipGroupName};
+use uv_normalize::{GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
@@ -54,7 +54,7 @@ pub(crate) async fn read_requirements(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification,
-    groups: &[PipGroupName],
+    groups: BTreeMap<PathBuf, Vec<GroupName>>,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
@@ -92,11 +92,15 @@ pub(crate) async fn read_constraints(
     constraints: &[RequirementsSource],
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<Vec<NameRequirementSpecification>, Error> {
-    Ok(
-        RequirementsSpecification::from_sources(&[], constraints, &[], &[], client_builder)
-            .await?
-            .constraints,
+    Ok(RequirementsSpecification::from_sources(
+        &[],
+        constraints,
+        &[],
+        BTreeMap::default(),
+        client_builder,
     )
+    .await?
+    .constraints)
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.

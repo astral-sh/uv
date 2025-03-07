@@ -9321,7 +9321,7 @@ fn many_pyproject_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The dependency-group 'bar' is not defined in pyproject.toml
+    error: The dependency group 'bar' was not found in pyproject.toml
     ");
 
     Ok(())

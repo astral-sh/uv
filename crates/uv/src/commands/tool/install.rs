@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
 
@@ -234,9 +235,14 @@ pub(crate) async fn install(
     };
 
     // Read the `--with` requirements.
-    let spec =
-        RequirementsSpecification::from_sources(with, constraints, overrides, &[], &client_builder)
-            .await?;
+    let spec = RequirementsSpecification::from_sources(
+        with,
+        constraints,
+        overrides,
+        BTreeMap::default(),
+        &client_builder,
+    )
+    .await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {

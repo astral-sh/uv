@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use uv_normalize::{PackageName, GroupName};
+use uv_normalize::{GroupName, PackageName};
 
 /// The origin of a dependency, e.g., a `-r requirements.txt` file.
 #[derive(

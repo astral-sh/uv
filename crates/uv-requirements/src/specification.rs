@@ -41,8 +41,7 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_fs::{Simplified, CWD};
-use uv_normalize::{ExtraName, PackageName};
-use uv_normalize::{GroupName, PipGroupName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::{MarkerTree, UnnamedRequirement, UnnamedRequirementUrl};
 use uv_pypi_types::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
@@ -227,12 +226,12 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
         overrides: &[RequirementsSource],
-        groups: &[PipGroupName],
+        groups: BTreeMap<PathBuf, Vec<GroupName>>,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         let mut spec = Self::default();
 
-        // Resolve sources into specifications so we know their `source_tree`s
+        // Resolve sources into specifications so we know their `source_tree`s∂
         let mut requirement_sources = Vec::new();
         for source in requirements {
             let source = Self::from_source(source, client_builder).await?;
@@ -241,17 +240,8 @@ impl RequirementsSpecification {
 
         // pip `--group` flags specify their own sources, which we need to process here
         if !groups.is_empty() {
-            // Deduplicate with `BTreeMap` to get deterministic behaviour
-            let mut groups_by_path = BTreeMap::<PathBuf, Vec<GroupName>>::new();
-            for group in groups {
-                groups_by_path
-                    .entry(group.path().to_owned())
-                    .or_default()
-                    .push(group.name.clone());
-            }
-
             let mut group_specs = BTreeMap::new();
-            for (path, groups) in groups_by_path {
+            for (path, groups) in groups {
                 // Conceptually pip `--group` flags just add the group referred to by the file.
                 // In uv semantics this would be like `--only-group`, however if you do this:
                 //
@@ -410,7 +400,7 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
-        Self::from_sources(requirements, &[], &[], &[], client_builder).await
+        Self::from_sources(requirements, &[], &[], BTreeMap::default(), client_builder).await
     }
 
     /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`].

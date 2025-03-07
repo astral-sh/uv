@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -87,7 +87,7 @@ pub(crate) async fn pip_sync(
     // Initialize a few defaults.
     let overrides = &[];
     let extras = ExtrasSpecification::default();
-    let groups = Vec::new();
+    let groups = BTreeMap::default();
     let upgrade = Upgrade::default();
     let resolution_mode = ResolutionMode::default();
     let prerelease_mode = PrereleaseMode::default();
@@ -113,7 +113,7 @@ pub(crate) async fn pip_sync(
         constraints,
         overrides,
         &extras,
-        &groups,
+        groups,
         &client_builder,
     )
     .await?;
