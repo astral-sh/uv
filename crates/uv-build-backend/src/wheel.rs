@@ -1,11 +1,11 @@
-use std::io::{BufReader, Read, Write};
-use std::path::{Path, PathBuf};
-use std::{io, mem};
-
 use fs_err::File;
 use globset::{GlobSet, GlobSetBuilder};
 use itertools::Itertools;
 use sha2::{Digest, Sha256};
+use std::io::{BufReader, Read, Write};
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use std::{io, mem};
 use tracing::{debug, trace};
 use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter};
@@ -14,6 +14,7 @@ use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
+use uv_pypi_types::Identifier;
 use uv_warnings::warn_user_once;
 
 use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
@@ -128,7 +129,17 @@ fn write_wheel(
         return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
     }
     let strip_root = source_tree.join(settings.module_root);
-    let module_root = strip_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
+
+    let module_name = if let Some(module_name) = settings.module_name {
+        module_name
+    } else {
+        // Should never error, the rules for package names (in dist-info formatting) are stricter
+        // than those for identifiers
+        Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
+    };
+    debug!("Module name: `{:?}`", module_name);
+
+    let module_root = strip_root.join(module_name.as_ref());
     if !module_root.join("__init__.py").is_file() {
         return Err(Error::MissingModule(module_root));
     }
