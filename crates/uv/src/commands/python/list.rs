@@ -12,7 +12,7 @@ use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::{
-    find_python_installations, DiscoveryError, EnvironmentPreference, PythonDownloads,
+    current_dir, find_python_installations, DiscoveryError, EnvironmentPreference, PythonDownloads,
     PythonInstallation, PythonNotFound, PythonPreference, PythonRequest, PythonSource,
 };
 
@@ -113,6 +113,7 @@ pub(crate) async fn list(
                 EnvironmentPreference::OnlySystem,
                 python_preference,
                 cache,
+                current_dir()?.as_path()
             )
             // Raise discovery errors if critical
             .filter(|result| {

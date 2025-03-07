@@ -9,8 +9,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::{
-    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions, PYTHON_VERSION_FILENAME,
+    current_dir, EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest,
+    PythonVersionFile, VersionFileDiscoveryOptions, PYTHON_VERSION_FILENAME,
 };
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject};
@@ -68,6 +68,7 @@ pub(crate) async fn pin(
         EnvironmentPreference::OnlySystem,
         python_preference,
         cache,
+        project_dir,
     ) {
         Ok(python) => Some(python),
         // If no matching Python version is found, don't fail unless `resolved` was requested
@@ -203,6 +204,14 @@ fn warn_if_existing_pin_incompatible_with_project(
         }
     }
 
+    let root_directory = match current_dir() {
+        Ok(dir) => dir,
+        Err(err) => {
+            warn_user_once!("Failed to resolve current directory: {err}");
+            return;
+        }
+    };
+
     // If there is not a version in the pinned request, attempt to resolve the pin into an
     // interpreter to check for compatibility on the current system.
     match PythonInstallation::find(
@@ -210,6 +219,7 @@ fn warn_if_existing_pin_incompatible_with_project(
         EnvironmentPreference::OnlySystem,
         python_preference,
         cache,
+        root_directory.as_path(),
     ) {
         Ok(python) => {
             let python_version = python.python_version();

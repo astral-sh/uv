@@ -22,8 +22,8 @@ use uv_installer::SitePackages;
 use uv_pep508::PackageName;
 use uv_pypi_types::Conflicts;
 use uv_python::{
-    EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
-    PythonRequest, PythonVersion, Target,
+    current_dir, EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersion, Target,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
@@ -140,6 +140,7 @@ pub(crate) async fn pip_sync(
             EnvironmentPreference::from_system_flag(system, false),
             python_preference,
             &cache,
+            current_dir()?.as_path(),
         )?;
         report_interpreter(&installation, true, printer)?;
         PythonEnvironment::from_installation(installation)

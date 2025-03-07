@@ -4,7 +4,9 @@ use std::path::Path;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
-use uv_python::{EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest};
+use uv_python::{
+    current_dir, EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest,
+};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
 
@@ -61,6 +63,7 @@ pub(crate) async fn find(
         environment_preference,
         python_preference,
         cache,
+        current_dir()?.as_path(),
     )?;
 
     // Warn if the discovered Python version is incompatible with the current workspace
