@@ -1,4 +1,3 @@
-use std::cmp::max;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::Write;
@@ -13,7 +12,6 @@ use tracing::debug;
 pub use archive::ArchiveId;
 use uv_cache_info::Timestamp;
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_types::InstalledDist;
 use uv_fs::{cachedir, directories, LockedFile};
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
@@ -1140,123 +1138,6 @@ impl CacheBucket {
 impl Display for CacheBucket {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.to_str())
-    }
-}
-
-/// A timestamp for an archive, which could be a directory (in which case the modification time is
-/// the latest modification time of the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the
-/// directory) or a single file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ArchiveTimestamp(Timestamp);
-
-impl ArchiveTimestamp {
-    /// Return the modification timestamp for an archive, which could be a file (like a wheel or a zip
-    /// archive) or a directory containing a Python package.
-    ///
-    /// If the path is to a directory with no entrypoint (i.e., no `pyproject.toml`, `setup.py`, or
-    /// `setup.cfg`), returns `None`.
-    pub fn from_path(path: impl AsRef<Path>) -> Result<Option<Self>, io::Error> {
-        let metadata = fs_err::metadata(path.as_ref())?;
-        if metadata.is_file() {
-            Ok(Some(Self(Timestamp::from_metadata(&metadata))))
-        } else {
-            Self::from_source_tree(path)
-        }
-    }
-
-    /// Return the modification timestamp for a file.
-    pub fn from_file(path: impl AsRef<Path>) -> Result<Self, io::Error> {
-        let metadata = fs_err::metadata(path.as_ref())?;
-        Ok(Self(Timestamp::from_metadata(&metadata)))
-    }
-
-    /// Return the modification timestamp for a source tree, i.e., a directory.
-    ///
-    /// If the source tree doesn't contain an entrypoint (i.e., no `pyproject.toml`, `setup.py`, or
-    /// `setup.cfg`), returns `None`.
-    pub fn from_source_tree(path: impl AsRef<Path>) -> Result<Option<Self>, io::Error> {
-        // Compute the modification timestamp for the `pyproject.toml`, `setup.py`, and
-        // `setup.cfg` files, if they exist.
-        let pyproject_toml = path
-            .as_ref()
-            .join("pyproject.toml")
-            .metadata()
-            .ok()
-            .filter(std::fs::Metadata::is_file)
-            .as_ref()
-            .map(Timestamp::from_metadata);
-
-        let setup_py = path
-            .as_ref()
-            .join("setup.py")
-            .metadata()
-            .ok()
-            .filter(std::fs::Metadata::is_file)
-            .as_ref()
-            .map(Timestamp::from_metadata);
-
-        let setup_cfg = path
-            .as_ref()
-            .join("setup.cfg")
-            .metadata()
-            .ok()
-            .filter(std::fs::Metadata::is_file)
-            .as_ref()
-            .map(Timestamp::from_metadata);
-
-        // Take the most recent timestamp of the three files.
-        let Some(timestamp) = max(pyproject_toml, max(setup_py, setup_cfg)) else {
-            return Ok(None);
-        };
-
-        Ok(Some(Self(timestamp)))
-    }
-
-    /// Return the modification timestamp for an archive.
-    pub fn timestamp(&self) -> Timestamp {
-        self.0
-    }
-
-    /// Returns `true` if the `target` (an installed or cached distribution) is up-to-date with the
-    /// source archive (`source`).
-    ///
-    /// The `target` should be an installed package in a virtual environment, or an unzipped
-    /// package in the cache.
-    ///
-    /// The `source` is a source archive, i.e., a path to a built wheel or a Python package directory.
-    pub fn up_to_date_with(source: &Path, target: ArchiveTarget) -> Result<bool, io::Error> {
-        let Some(modified_at) = Self::from_path(source)? else {
-            // If there's no entrypoint, we can't determine the modification time, so we assume that the
-            // target is not up-to-date.
-            return Ok(false);
-        };
-        let created_at = match target {
-            ArchiveTarget::Install(installed) => {
-                Timestamp::from_path(installed.path().join("METADATA"))?
-            }
-            ArchiveTarget::Cache(cache) => Timestamp::from_path(cache)?,
-        };
-        Ok(modified_at.timestamp() <= created_at)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum ArchiveTarget<'a> {
-    /// The target is an installed package in a virtual environment.
-    Install(&'a InstalledDist),
-    /// The target is an unzipped package in the cache.
-    Cache(&'a Path),
-}
-
-impl PartialOrd for ArchiveTimestamp {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.timestamp().cmp(&other.timestamp()))
-    }
-}
-
-impl Ord for ArchiveTimestamp {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.timestamp().cmp(&other.timestamp())
     }
 }
 
