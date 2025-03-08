@@ -9062,6 +9062,7 @@ fn direct_url_json_direct_url() -> Result<()> {
 
 #[test]
 fn dependency_group() -> Result<()> {
+    // testing basic `uv pip install --group` functionality
     fn new_context() -> Result<TestContext> {
         let context = TestContext::new("3.12");
 
@@ -9069,7 +9070,7 @@ fn dependency_group() -> Result<()> {
         pyproject_toml.write_str(
             r#"
             [project]
-            name = "project"
+            name = "myproject"
             version = "0.1.0"
             requires-python = ">=3.12"
             dependencies = ["typing-extensions"]
@@ -9086,6 +9087,7 @@ fn dependency_group() -> Result<()> {
 
     let mut context;
 
+    // 'bar' using path sugar
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("bar"), @r"
@@ -9100,6 +9102,8 @@ fn dependency_group() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
+    // 'bar' using path sugar
+    // and also pulling in the same pyproject.toml with -r
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r").arg("pyproject.toml")
@@ -9116,6 +9120,7 @@ fn dependency_group() -> Result<()> {
      + typing-extensions==4.10.0
     ");
 
+    // 'bar' with an explicit path
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("pyproject.toml:bar"), @r"
@@ -9130,6 +9135,8 @@ fn dependency_group() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
+    // 'bar' using explicit path
+    // and also pulling in the same pyproject.toml with -r
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r").arg("pyproject.toml")
@@ -9146,6 +9153,7 @@ fn dependency_group() -> Result<()> {
      + typing-extensions==4.10.0
     ");
 
+    // 'bar' using path sugar
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("foo"), @r"
@@ -9160,6 +9168,8 @@ fn dependency_group() -> Result<()> {
      + sortedcontainers==2.4.0
     ");
 
+    // 'foo' using path sugar
+    // 'bar' using path sugar
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("foo")
@@ -9176,6 +9186,7 @@ fn dependency_group() -> Result<()> {
      + sortedcontainers==2.4.0
     ");
 
+    // all together now!
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r").arg("pyproject.toml")
@@ -9199,6 +9210,7 @@ fn dependency_group() -> Result<()> {
 
 #[test]
 fn many_pyproject_group() -> Result<()> {
+    // `uv pip install --group` tests with multiple projects
     fn new_context() -> Result<TestContext> {
         let context = TestContext::new("3.12");
 
@@ -9206,7 +9218,7 @@ fn many_pyproject_group() -> Result<()> {
         pyproject_toml.write_str(
             r#"
             [project]
-            name = "project"
+            name = "myproject"
             version = "0.1.0"
             requires-python = ">=3.12"
             dependencies = ["typing-extensions"]
@@ -9221,7 +9233,7 @@ fn many_pyproject_group() -> Result<()> {
         pyproject_toml2.write_str(
             r#"
             [project]
-            name = "project"
+            name = "mysubproject"
             version = "0.1.0"
             requires-python = ">=3.12"
             [dependency-groups]
@@ -9236,6 +9248,7 @@ fn many_pyproject_group() -> Result<()> {
 
     let mut context;
 
+    // 'foo' from main toml
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("pyproject.toml:foo"), @r"
@@ -9250,6 +9263,7 @@ fn many_pyproject_group() -> Result<()> {
      + sortedcontainers==2.4.0
     ");
 
+    // 'foo' from subtoml
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("subdir/pyproject.toml:foo"), @r"
     success: true
@@ -9263,6 +9277,8 @@ fn many_pyproject_group() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
+    // 'foo' from main toml
+    // 'foo' from sub toml
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("pyproject.toml:foo")
@@ -9279,6 +9295,118 @@ fn many_pyproject_group() -> Result<()> {
      + sortedcontainers==2.4.0
     ");
 
+    Ok(())
+}
+
+#[test]
+fn other_sources_group() -> Result<()> {
+    // `uv pip install --group` tests just slamming random other sources like -e and .
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let mut context;
+
+    // 'foo' from main toml
+    // and install '.'
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(".")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + myproject==0.1.0 (from file://[TEMP_DIR]/)
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    ");
+
+    // 'foo' from main toml
+    // and install an editable
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e").arg(context.workspace_root.join("scripts/packages/poetry_editable"))
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn suspicious_group() -> Result<()> {
+    // uv pip compile --group tests, where the invocations are suspicious
+    // and we might want to add warnings
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let mut context;
+
+    // Another variant of "both" but with the path sugar applied to the one in cwd
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("foo")
@@ -9295,6 +9423,9 @@ fn many_pyproject_group() -> Result<()> {
      + sortedcontainers==2.4.0
     ");
 
+    // Using the path sugar for "foo" but requesting "bar" for the subtoml
+    // Although you would be forgiven for thinking "foo" should be used from
+    // the subtoml, that's not what should happen.
     context = new_context()?;
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("foo")
@@ -9311,8 +9442,129 @@ fn many_pyproject_group() -> Result<()> {
      + sortedcontainers==2.4.0
     ");
 
+    // Using the path sugar to request pyproject.toml:foo
+    // while also importing subdir/pyproject.toml's dependencies
+    // Although you would be forgiven for thinking "foo" should be used from
+    // the subtoml, that's not what should happen.
     context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("subdir/pyproject.toml")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    ");
+
+    // An inversion of the previous -- this one isn't terribly ambiguous
+    // but we should have it in the suite too in case it should be distinguished!
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--group").arg("subdir/pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn invalid_group() -> Result<()> {
+    // uv pip compile --group tests, where the invocations should fail
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let context = new_context()?;
+
+    // Hey you passed a path and not a group!
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("subdir/"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'subdir/' for '--group <GROUP>': Not a valid package or extra name: "subdir/". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+
+    For more information, try '--help'.
+    "#);
+
+    // Hey this path needs to end with "pyproject.toml"!
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("./:foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value './:foo' for '--group <GROUP>': The --group path is required to end in pyproject.toml for compatibility with pip; got: ./
+
+    For more information, try '--help'.
+    ");
+
+    // Hey this path needs to end with "pyproject.toml"!
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("subdir/:foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'subdir/:foo' for '--group <GROUP>': The --group path is required to end in pyproject.toml for compatibility with pip; got: subdir/
+
+    For more information, try '--help'.
+    ");
+
+    // Another invocation that Looks Weird but is asking for bar from two
+    // different tomls. In this case the main one doesn't define it and
+    // we should error!
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--group").arg("bar")
         .arg("--group").arg("subdir/pyproject.toml:bar"), @r"
@@ -9322,6 +9574,230 @@ fn many_pyproject_group() -> Result<()> {
 
     ----- stderr -----
     error: The dependency group 'bar' was not found in pyproject.toml
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn project_and_group() -> Result<()> {
+    // Checking that --project is handled properly with --group
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let mut context;
+
+    // 'foo' from subtoml, by implicit-sugar + --project
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--project").arg("subdir")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // 'foo' from subtoml, by implicit-sugar + --project
+    // 'bar' from subtoml, by explicit relpath from cwd
+    // (explicit relpaths are not affected by --project)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--project").arg("subdir")
+        .arg("--group").arg("subdir/pyproject.toml:bar")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    ");
+
+    // 'bar' from subtoml, by implicit-sugar + --project
+    // 'foo' from main toml, by explicit relpath from cwd
+    // (explicit relpaths are not affected by --project)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--project").arg("subdir")
+        .arg("--group").arg("bar")
+        .arg("--group").arg("pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+    ");
+
+    // 'bar' from subtoml, by explicit relpath from cwd
+    // 'foo' from main toml, by explicit relpath from cwd
+    // (explicit relpaths are not affected by --project)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--project").arg("subdir")
+        .arg("--group").arg("subdir/pyproject.toml:bar")
+        .arg("--group").arg("pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn directory_and_group() -> Result<()> {
+    // Checking that --directory is handled properly with --group
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let mut context;
+
+    // 'bar' from subtoml, by implicit-sugar + --directory
+    // 'foo' from main toml, by explicit relpath from --directory
+    // (explicit relpaths ARE affected by --directory)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--directory").arg("subdir")
+        .arg("--group").arg("bar")
+        .arg("--group").arg("../pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: [VENV]/
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+    ");
+
+    // 'bar' from subtoml, by explicit relpath from --directory
+    // 'foo' from main toml, by explicit relpath from --directory
+    // (explicit relpaths ARE affected by --directory)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--directory").arg("subdir")
+        .arg("--group").arg("pyproject.toml:bar")
+        .arg("--group").arg("../pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: [VENV]/
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+    ");
+
+    // 'bar' from subtoml, by explicit relpath from --directory
+    // 'foo' from main toml, by implicit path + --project + --directory
+    // (explicit relpaths ARE affected by --directory)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--directory").arg("subdir")
+        .arg("--project").arg("../")
+        .arg("--group").arg("pyproject.toml:bar")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: [VENV]/
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
     ");
 
     Ok(())
