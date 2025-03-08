@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::max;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -83,11 +84,11 @@ impl CacheInfo {
         // If no cache keys were defined, use the defaults.
         let cache_keys = cache_keys.unwrap_or_else(|| {
             vec![
-                CacheKey::Path("pyproject.toml".to_string()),
-                CacheKey::Path("setup.py".to_string()),
-                CacheKey::Path("setup.cfg".to_string()),
+                CacheKey::Path(Cow::Borrowed("pyproject.toml")),
+                CacheKey::Path(Cow::Borrowed("setup.py")),
+                CacheKey::Path(Cow::Borrowed("setup.cfg")),
                 CacheKey::Directory {
-                    dir: "src".to_string(),
+                    dir: Cow::Borrowed("src"),
                 },
             ]
         });
@@ -97,14 +98,14 @@ impl CacheInfo {
         for cache_key in cache_keys {
             match cache_key {
                 CacheKey::Path(file) | CacheKey::File { file } => {
-                    if file.chars().any(|c| matches!(c, '*' | '?' | '[' | '{')) {
+                    if file.as_ref().chars().any(|c| matches!(c, '*' | '?' | '[' | '{')) {
                         // Defer globs to a separate pass.
                         globs.push(file);
                         continue;
                     }
 
                     // Treat the path as a file.
-                    let path = directory.join(&file);
+                    let path = directory.join(file.as_ref());
                     let metadata = match path.metadata() {
                         Ok(metadata) => metadata,
                         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -126,7 +127,7 @@ impl CacheInfo {
                 }
                 CacheKey::Directory { dir } => {
                     // Treat the path as a directory.
-                    let path = directory.join(&dir);
+                    let path = directory.join(dir.as_ref());
                     let metadata = match path.metadata() {
                         Ok(metadata) => metadata,
                         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -287,11 +288,11 @@ struct ToolUv {
 #[serde(untagged, rename_all = "kebab-case", deny_unknown_fields)]
 pub enum CacheKey {
     /// Ex) `"Cargo.lock"` or `"**/*.toml"`
-    Path(String),
+    Path(Cow<'static, str>),
     /// Ex) `{ file = "Cargo.lock" }` or `{ file = "**/*.toml" }`
-    File { file: String },
+    File { file: Cow<'static, str> },
     /// Ex) `{ dir = "src" }`
-    Directory { dir: String },
+    Directory { dir: Cow<'static, str> },
     /// Ex) `{ git = true }` or `{ git = { commit = true, tags = false } }`
     Git { git: GitPattern },
     /// Ex) `{ env = "UV_CACHE_INFO" }`
