@@ -15,6 +15,7 @@ use thiserror::Error;
 use tracing::debug;
 use uv_fs::Simplified;
 use uv_globfilter::PortableGlobError;
+use uv_pypi_types::IdentifierParseError;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -24,6 +25,8 @@ pub enum Error {
     Toml(#[from] toml::de::Error),
     #[error("Invalid pyproject.toml")]
     Validation(#[from] ValidationError),
+    #[error(transparent)]
+    Identifier(#[from] IdentifierParseError),
     #[error("Unsupported glob expression in: `{field}`")]
     PortableGlob {
         field: String,
