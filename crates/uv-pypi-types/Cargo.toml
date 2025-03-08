@@ -29,8 +29,10 @@ indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
 jiff = { workspace = true, features = ["serde"] }
 mailparse = { workspace = true }
+petgraph = { workspace = true }
 regex = { workspace = true }
 rkyv = { workspace = true }
+rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 serde-untagged = { workspace = true }
