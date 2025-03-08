@@ -367,16 +367,14 @@ fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
         members = ["child"]
         "#,
     )?;
-
-    let src = context.temp_dir.child("src").child("albatross");
-    src.create_dir_all()?;
-
-    let init = src.child("__init__.py");
-    init.touch()?;
+    context
+        .temp_dir
+        .child("src")
+        .child("albatross")
+        .child("__init__.py")
+        .touch()?;
 
     let child = context.temp_dir.child("child");
-    fs_err::create_dir_all(&child)?;
-
     let pyproject_toml = child.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -387,16 +385,15 @@ fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
-
-    let src = child.child("src").child("albatross");
-    src.create_dir_all()?;
-
-    let init = src.child("__init__.py");
-    init.touch()?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
 
     // Syncing with `--no-dev` should omit all dependencies except `iniconfig`.
     uv_snapshot!(context.filters(), context.sync().arg("--no-dev"), @r###"
@@ -521,15 +518,14 @@ fn sync_legacy_non_project_group() -> Result<()> {
         "#,
     )?;
 
-    let src = context.temp_dir.child("src").child("albatross");
-    src.create_dir_all()?;
-
-    let init = src.child("__init__.py");
-    init.touch()?;
+    context
+        .temp_dir
+        .child("src")
+        .child("albatross")
+        .child("__init__.py")
+        .touch()?;
 
     let child = context.temp_dir.child("child");
-    fs_err::create_dir_all(&child)?;
-
     let pyproject_toml = child.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -543,16 +539,15 @@ fn sync_legacy_non_project_group() -> Result<()> {
         baz = ["typing-extensions"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
-
-    let src = child.child("src").child("albatross");
-    src.create_dir_all()?;
-
-    let init = src.child("__init__.py");
-    init.touch()?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
 
     uv_snapshot!(context.filters(), context.sync(), @r###"
     success: true
@@ -5911,8 +5906,8 @@ fn sync_all_extras() -> Result<()> {
         testing = ["packaging>=24"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
     child
@@ -6028,8 +6023,8 @@ fn sync_all_extras_dynamic() -> Result<()> {
         async = ["anyio>3"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
 
         [tool.uv.workspace]
         members = ["child"]
@@ -6057,6 +6052,9 @@ fn sync_all_extras_dynamic() -> Result<()> {
 
         [tool.setuptools.dynamic.optional-dependencies]
         dev = { file = "requirements-dev.txt" }
+
+        [tool.uv]
+        cache-keys = ["pyproject.toml"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -6168,8 +6166,8 @@ fn sync_all_groups() -> Result<()> {
         testing = ["packaging>=24"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
     child
