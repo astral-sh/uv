@@ -60,6 +60,18 @@ $ uv pip compile pyproject.toml --all-extras
 
 Note extras are not supported with the `requirements.in` format.
 
+To lock dependency groups in the current project directory's pyproject.toml:
+
+```console
+$ uv pip compile --group foo
+```
+
+To lock dependency groups for an arbitrary pyproject.toml:
+
+```console
+$ uv pip compile --group some/path/pyproject.toml:foo
+```
+
 ## Upgrading requirements
 
 When using an output file, uv will consider the versions pinned in an existing output file. If a
