@@ -881,18 +881,20 @@
       "pattern": "^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
     },
     "PipGroupName": {
-      "description": "The pip variant of a `GroupName`\n\nEither <groupname> or <path>:<groupname>. If <path> is omitted it defaults to \"pyproject.toml\".",
+      "description": "The pip-compatible variant of a [`GroupName`].\n\nEither <groupname> or <path>:<groupname>. If <path> is omitted it defaults to \"pyproject.toml\".",
       "type": "object",
       "required": [
-        "name",
-        "path"
+        "name"
       ],
       "properties": {
         "name": {
           "$ref": "#/definitions/GroupName"
         },
         "path": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
@@ -1062,7 +1064,7 @@
           ]
         },
         "group": {
-          "description": "Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting requirements file.",
+          "description": "Include the following dependency groups.",
           "type": [
             "array",
             "null"

@@ -5722,9 +5722,9 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 </ul>
 </dd><dt id="uv-pip-compile--generate-hashes"><a href="#uv-pip-compile--generate-hashes"><code>--generate-hashes</code></a></dt><dd><p>Include distribution hashes in the output file</p>
 
-</dd><dt id="uv-pip-compile--group"><a href="#uv-pip-compile--group"><code>--group</code></a> <i>group</i></dt><dd><p>Install the specified dependency group in the specified pyproject.toml</p>
+</dd><dt id="uv-pip-compile--group"><a href="#uv-pip-compile--group"><code>--group</code></a> <i>group</i></dt><dd><p>Install the specified dependency group from a <code>pyproject.toml</code>.</p>
 
-<p>If no path is provided, ./pyproject.toml is used.</p>
+<p>If no path is provided, the <code>pyproject.toml</code> in the working directory is used.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -6602,9 +6602,9 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
 </ul>
-</dd><dt id="uv-pip-install--group"><a href="#uv-pip-install--group"><code>--group</code></a> <i>group</i></dt><dd><p>Install the specified dependency group in the specified pyproject.toml</p>
+</dd><dt id="uv-pip-install--group"><a href="#uv-pip-install--group"><code>--group</code></a> <i>group</i></dt><dd><p>Install the specified dependency group from a <code>pyproject.toml</code>.</p>
 
-<p>If no path is provided, ./pyproject.toml is used.</p>
+<p>If no path is provided, the <code>pyproject.toml</code> in the working directory is used.</p>
 
 <p>May be provided multiple times.</p>
 

@@ -2311,8 +2311,7 @@ Include distribution hashes in the output file.
 #### [`group`](#pip_group) {: #pip_group }
 <span id="group"></span>
 
-Ignore package dependencies, instead only add those packages explicitly listed
-on the command line to the resulting requirements file.
+Include the following dependency groups.
 
 **Default value**: `None`
 
