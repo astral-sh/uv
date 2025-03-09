@@ -6,6 +6,13 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
+use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
+use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{report_interpreter, report_target_environment};
+use crate::commands::pip::{operations, resolution_markers, resolution_tags};
+use crate::commands::{diagnostics, ExitStatus};
+use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -30,15 +37,9 @@ use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
     ResolutionMode, ResolverEnvironment,
 };
+use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
-
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
-use crate::commands::pip::operations::Modifications;
-use crate::commands::pip::operations::{report_interpreter, report_target_environment};
-use crate::commands::pip::{operations, resolution_markers, resolution_tags};
-use crate::commands::{diagnostics, ExitStatus};
-use crate::printer::Printer;
-use crate::settings::NetworkSettings;
+use uv_warnings::warn_user;
 
 /// Install a set of locked requirements into the current Python environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -52,6 +53,7 @@ pub(crate) async fn pip_sync(
     hash_checking: Option<HashCheckingMode>,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
+    torch_backend: Option<TorchMode>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     network_settings: &NetworkSettings,
@@ -259,11 +261,29 @@ pub(crate) async fn pip_sync(
         }
     }
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend.map(|mode| {
+        if preview.is_disabled() {
+            warn_user!("The `--torch-backend` setting is experimental and may change without warning. Pass `--preview` to disable this warning.");
+        }
+
+        TorchStrategy::from_mode(
+            mode,
+            python_platform
+                .map(TargetTriple::platform)
+                .as_ref()
+                .unwrap_or(interpreter.platform())
+                .os(),
+            interpreter.accelerator(),
+        )
+    });
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
+        .torch_backend(torch_backend)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();

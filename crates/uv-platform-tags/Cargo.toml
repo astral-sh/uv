@@ -16,6 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-pep440 = { workspace = true }
 uv-small-str = { workspace = true }
 
 memchr = { workspace = true }

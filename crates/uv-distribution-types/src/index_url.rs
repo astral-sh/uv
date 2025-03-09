@@ -492,6 +492,11 @@ impl<'a> IndexUrls {
             )
         }
     }
+
+    /// Return the `--no-index` flag.
+    pub fn no_index(&self) -> bool {
+        self.no_index
+    }
 }
 
 bitflags::bitflags! {
