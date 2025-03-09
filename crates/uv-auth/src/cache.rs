@@ -1,3 +1,4 @@
+use std::fmt::Formatter;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -41,26 +42,30 @@ impl CredentialsCache {
     /// Return the credentials that should be used for a realm and username, if any.
     pub(crate) fn get_realm(&self, realm: Realm, username: Username) -> Option<Arc<Credentials>> {
         let realms = self.realms.read().unwrap();
-        let name = if let Some(username) = username.as_deref() {
-            format!("{username}@{realm}")
-        } else {
-            realm.to_string()
-        };
         let given_username = username.is_some();
         let key = (realm, username);
 
         let Some(credentials) = realms.get(&key).cloned() else {
-            trace!("No credentials in cache for realm {name}");
+            trace!(
+                "No credentials in cache for realm {}",
+                RealmUsername::from(key)
+            );
             return None;
         };
 
         if given_username && credentials.password().is_none() {
             // If given a username, don't return password-less credentials
-            trace!("No password in cache for realm {name}");
+            trace!(
+                "No password in cache for realm {}",
+                RealmUsername::from(key)
+            );
             return None;
         }
 
-        trace!("Found cached credentials for realm {name}");
+        trace!(
+            "Found cached credentials for realm {}",
+            RealmUsername::from(key)
+        );
         Some(credentials)
     }
 
@@ -211,6 +216,26 @@ impl TrieState {
     fn index(&self, component: &str) -> Result<usize, usize> {
         self.children
             .binary_search_by(|(label, _)| label.as_str().cmp(component))
+    }
+}
+
+#[derive(Debug)]
+struct RealmUsername(Realm, Username);
+
+impl std::fmt::Display for RealmUsername {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let Self(realm, username) = self;
+        if let Some(username) = username.as_deref() {
+            write!(f, "{username}@{realm}")
+        } else {
+            write!(f, "{realm}")
+        }
+    }
+}
+
+impl From<(Realm, Username)> for RealmUsername {
+    fn from((realm, username): (Realm, Username)) -> Self {
+        Self(realm, username)
     }
 }
 
