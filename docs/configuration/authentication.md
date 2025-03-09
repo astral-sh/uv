@@ -98,3 +98,9 @@ security risks due to the lack of certificate verification.
 
 See the [alternative indexes integration guide](../guides/integration/alternative-indexes.md) for
 details on authentication with popular alternative Python package indexes.
+
+## Configuring authentication for indexes
+
+It is possible to configure how uv will handle authentication for requests to indexes. See
+[configuring authentication for indexes](indexes.md#configuring-authentication-for-indexes) for more
+details.

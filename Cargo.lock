@@ -4600,6 +4600,8 @@ dependencies = [
  "reqwest-middleware",
  "rust-netrc",
  "rustc-hash",
+ "schemars",
+ "serde",
  "tempfile",
  "test-log",
  "tokio",

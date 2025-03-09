@@ -10,6 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use url::{ParseError, Url};
 
+use uv_auth::UrlAuthPolicies;
 use uv_pep508::{split_scheme, Scheme, VerbatimUrl, VerbatimUrlError};
 
 use crate::{Index, Verbatim};
@@ -63,6 +64,27 @@ impl IndexUrl {
             }
         };
         Ok(Self::from(url.with_given(path)))
+    }
+
+    /// Return the root [`Url`] of the index, if applicable.
+    ///
+    /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
+    /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
+    pub fn root(&self) -> Option<Url> {
+        let mut segments = self.url().path_segments()?;
+        let last = match segments.next_back()? {
+            // If the last segment is empty due to a trailing `/`, skip it (as in `pop_if_empty`)
+            "" => segments.next_back()?,
+            segment => segment,
+        };
+
+        if !last.eq_ignore_ascii_case("simple") {
+            return None;
+        }
+
+        let mut url = self.url().clone();
+        url.path_segments_mut().ok()?.pop_if_empty().pop();
+        Some(url)
     }
 }
 
@@ -386,6 +408,20 @@ impl<'a> IndexLocations {
             indexes.reverse();
             indexes
         }
+    }
+}
+
+impl From<&IndexLocations> for UrlAuthPolicies {
+    fn from(index_locations: &IndexLocations) -> UrlAuthPolicies {
+        UrlAuthPolicies::from_tuples(index_locations.indexes().map(|index| {
+            let mut url = index
+                .url()
+                .root()
+                .unwrap_or_else(|| index.url().url().clone());
+            url.set_username("").ok();
+            url.set_password(None).ok();
+            (url, index.authenticate)
+        }))
     }
 }
 
