@@ -3275,6 +3275,67 @@ environment. The packages will be installed at the top-level of the directory.
 
 ---
 
+#### [`torch-backend`](#pip_torch-backend) {: #pip_torch-backend }
+<span id="torch-backend"></span>
+
+The backend to use when fetching packages in the PyTorch ecosystem.
+
+When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+and will instead use the defined backend.
+
+For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+uv will use the PyTorch index for CUDA 12.6.
+
+The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+installed CUDA drivers.
+
+**Default value**: `null`
+
+**Possible values**:
+
+- `"auto"`: Select the appropriate PyTorch index based on the operating system and CUDA driver version
+- `"cpu"`: Use the CPU-only `PyTorch` index
+- `"cu126"`: Use the `PyTorch` index for CUDA 12.6
+- `"cu125"`: Use the `PyTorch` index for CUDA 12.5
+- `"cu124"`: Use the `PyTorch` index for CUDA 12.4
+- `"cu123"`: Use the `PyTorch` index for CUDA 12.3
+- `"cu122"`: Use the `PyTorch` index for CUDA 12.2
+- `"cu121"`: Use the `PyTorch` index for CUDA 12.1
+- `"cu120"`: Use the `PyTorch` index for CUDA 12.0
+- `"cu118"`: Use the `PyTorch` index for CUDA 11.8
+- `"cu117"`: Use the `PyTorch` index for CUDA 11.7
+- `"cu116"`: Use the `PyTorch` index for CUDA 11.6
+- `"cu115"`: Use the `PyTorch` index for CUDA 11.5
+- `"cu114"`: Use the `PyTorch` index for CUDA 11.4
+- `"cu113"`: Use the `PyTorch` index for CUDA 11.3
+- `"cu112"`: Use the `PyTorch` index for CUDA 11.2
+- `"cu111"`: Use the `PyTorch` index for CUDA 11.1
+- `"cu110"`: Use the `PyTorch` index for CUDA 11.0
+- `"cu102"`: Use the `PyTorch` index for CUDA 10.2
+- `"cu101"`: Use the `PyTorch` index for CUDA 10.1
+- `"cu100"`: Use the `PyTorch` index for CUDA 10.0
+- `"cu92"`: Use the `PyTorch` index for CUDA 9.2
+- `"cu91"`: Use the `PyTorch` index for CUDA 9.1
+- `"cu90"`: Use the `PyTorch` index for CUDA 9.0
+- `"cu80"`: Use the `PyTorch` index for CUDA 8.0
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    torch-backend = "auto"
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    torch-backend = "auto"
+    ```
+
+---
+
 #### [`universal`](#pip_universal) {: #pip_universal }
 <span id="universal"></span>
 

@@ -405,7 +405,48 @@ def get_scheme(use_sysconfig_scheme: bool):
         return get_distutils_scheme()
 
 
-def get_platform_info():
+def _detect_cuda_driver_version():
+    """Detect the installed CUDA Driver version.
+
+    Reads from the `UV_CUDA_DRIVER_VERSION` environment variable, if set; otherwise,
+    queries `nvidia-smi` for the driver version.
+    """
+    driver_version = os.getenv("UV_CUDA_DRIVER_VERSION")
+    if driver_version is not None:
+        return driver_version
+
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=driver_version",
+                "--format=csv",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.splitlines()[-1]
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+
+
+def get_accelerator():
+    cuda_driver_version = _detect_cuda_driver_version()
+    if cuda_driver_version is None:
+        accelerator = None
+    else:
+        accelerator = {
+            "name": "cuda",
+            "driver_version": cuda_driver_version,
+        }
+
+    return accelerator
+
+
+def get_operating_system_and_architecture():
     """Determine the Python interpreter architecture and operating system.
 
     This can differ from uv's architecture and operating system. For example, Apple
@@ -534,37 +575,7 @@ def get_platform_info():
         )
         sys.exit(0)
 
-    nvidia_driver_version = _detect_nvidia_driver_version()
-    if nvidia_driver_version is None:
-        accelerator = None
-    else:
-        accelerator = {
-            "name": "cuda",
-            "driver_version": nvidia_driver_version,
-        }
-
-    return {"os": operating_system, "arch": architecture, "accelerator": accelerator}
-
-
-def _detect_nvidia_driver_version():
-    import subprocess
-
-    return "525.60.13"
-
-    try:
-        result = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-gpu=driver_version",
-                "--format=csv",
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        return result.stdout.splitlines()[-1]
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return None
+    return {"os": operating_system, "arch": architecture}
 
 
 def main() -> None:
@@ -582,20 +593,20 @@ def main() -> None:
         "sys_platform": sys.platform,
     }
 
-    os_arch_accelerator = get_platform_info()
+    os_arch = get_operating_system_and_architecture()
+    accelerator = get_accelerator()
 
     manylinux_compatible = False
 
-    if os_arch_accelerator["os"]["name"] == "manylinux":
+    if os_arch["os"]["name"] == "manylinux":
         # noinspection PyProtectedMember
         from .packaging._manylinux import _get_glibc_version, _is_compatible
 
         manylinux_compatible = _is_compatible(
-            arch=os_arch_accelerator["arch"], version=_get_glibc_version()
+            arch=os_arch["arch"], version=_get_glibc_version()
         )
-    elif os_arch_accelerator["os"]["name"] == "musllinux":
+    elif os_arch["os"]["name"] == "musllinux":
         manylinux_compatible = True
-
 
     # By default, pip uses sysconfig on Python 3.10+.
     # But Python distributors can override this decision by setting:
@@ -654,10 +665,14 @@ def main() -> None:
         # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
         # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
         # location. So in newer versions, we also write a dedicated flag to indicate standalone builds.
-        "standalone": sysconfig.get_config_var("prefix") == "/install" or bool(sysconfig.get_config_var("PYTHON_BUILD_STANDALONE")),
+        "standalone": (
+            sysconfig.get_config_var("prefix") == "/install"
+            or bool(sysconfig.get_config_var("PYTHON_BUILD_STANDALONE"))
+        ),
         "scheme": get_scheme(use_sysconfig_scheme),
         "virtualenv": get_virtualenv(),
-        "platform": os_arch_accelerator,
+        "platform": os_arch,
+        "accelerator": accelerator,
         "manylinux_compatible": manylinux_compatible,
         # The `t` abiflag for freethreading Python.
         # https://peps.python.org/pep-0703/#build-configuration-changes

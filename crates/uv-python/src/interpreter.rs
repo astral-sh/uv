@@ -21,7 +21,7 @@ use uv_fs::{write_atomic_sync, PythonExt, Simplified};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
-use uv_platform_tags::Platform;
+use uv_platform_tags::{Accelerator, Platform};
 use uv_platform_tags::{Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
@@ -53,6 +53,7 @@ pub struct Interpreter {
     target: Option<Target>,
     prefix: Option<Prefix>,
     pointer_size: PointerSize,
+    accelerator: Option<Accelerator>,
     gil_disabled: bool,
 }
 
@@ -76,6 +77,7 @@ impl Interpreter {
             sys_prefix: info.sys_prefix,
             sys_base_exec_prefix: info.sys_base_exec_prefix,
             pointer_size: info.pointer_size,
+            accelerator: info.accelerator,
             gil_disabled: info.gil_disabled,
             sys_base_prefix: info.sys_base_prefix,
             sys_base_executable: info.sys_base_executable,
@@ -172,10 +174,16 @@ impl Interpreter {
         Ok(base_python)
     }
 
-    /// Returns the path to the Python virtual environment.
+    /// Returns the [`Platform`] for this Python executable.
     #[inline]
     pub fn platform(&self) -> &Platform {
         &self.platform
+    }
+
+    /// Returns the [`Accelerator`] for this Python executable.
+    #[inline]
+    pub fn accelerator(&self) -> Option<&Accelerator> {
+        self.accelerator.as_ref()
     }
 
     /// Returns the [`MarkerEnvironment`] for this Python executable.
@@ -729,6 +737,7 @@ struct InterpreterInfo {
     stdlib: PathBuf,
     standalone: bool,
     pointer_size: PointerSize,
+    accelerator: Option<Accelerator>,
     gil_disabled: bool,
 }
 

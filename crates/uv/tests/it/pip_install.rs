@@ -5835,7 +5835,7 @@ fn already_installed_local_path_dependent() {
         .arg(root_path.join("second_local"))
         .arg(root_path.join("first_local"))
         .arg("--reinstall-package")
-        .arg("first-local"), @r###"
+        .arg("first-local"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5847,7 +5847,7 @@ fn already_installed_local_path_dependent() {
     Installed 2 packages in [TIME]
      ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
      ~ second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
-    "###
+    "
     );
 
     // Request upgrade of the first package

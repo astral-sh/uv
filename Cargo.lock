@@ -4625,6 +4625,7 @@ dependencies = [
  "uv-shell",
  "uv-static",
  "uv-tool",
+ "uv-torch",
  "uv-trampoline-builder",
  "uv-types",
  "uv-version",
@@ -4844,6 +4845,7 @@ dependencies = [
  "uv-resolver",
  "uv-settings",
  "uv-static",
+ "uv-torch",
  "uv-version",
  "uv-warnings",
 ]
@@ -4897,6 +4899,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-small-str",
  "uv-static",
+ "uv-torch",
  "uv-version",
  "uv-warnings",
 ]
@@ -5701,6 +5704,7 @@ dependencies = [
  "uv-python",
  "uv-resolver",
  "uv-static",
+ "uv-torch",
  "uv-warnings",
 ]
 
@@ -5770,6 +5774,20 @@ dependencies = [
  "uv-state",
  "uv-static",
  "uv-virtualenv",
+]
+
+[[package]]
+name = "uv-torch"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "either",
+ "schemars",
+ "serde",
+ "uv-distribution-types",
+ "uv-normalize",
+ "uv-pep440",
+ "uv-platform-tags",
 ]
 
 [[package]]

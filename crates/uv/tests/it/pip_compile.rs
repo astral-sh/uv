@@ -5354,7 +5354,7 @@ fn find_links_directory() -> Result<()> {
     Ok(())
 }
 
-/// Compile using `--find-links` with a URL by resolving `tqdm` from the `PyTorch` wheels index.
+/// Compile using `--find-links` with a URL by resolving `tqdm` from the PyTorch wheels index.
 #[test]
 fn find_links_url() -> Result<()> {
     let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -5409,7 +5409,7 @@ fn find_links_env_var() -> Result<()> {
     Ok(())
 }
 
-/// Compile using `--find-links` with a URL by resolving `tqdm` from the `PyTorch` wheels index,
+/// Compile using `--find-links` with a URL by resolving `tqdm` from the PyTorch wheels index,
 /// with the URL itself provided in a `requirements.txt` file.
 #[test]
 fn find_links_requirements_txt() -> Result<()> {

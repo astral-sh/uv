@@ -21,6 +21,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
+use uv_torch::TorchMode;
 
 pub mod comma;
 pub mod compat;
@@ -1290,6 +1291,19 @@ pub struct PipCompileArgs {
     #[arg(long, overrides_with("emit_index_annotation"), hide = true)]
     pub no_emit_index_annotation: bool,
 
+    /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cu126` or `auto`)
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    #[arg(long, value_enum)]
+    pub torch_backend: Option<TorchMode>,
+
     #[command(flatten)]
     pub compat_args: compat::PipCompileCompatArgs,
 }
@@ -1530,6 +1544,19 @@ pub struct PipSyncArgs {
     /// print the resulting plan.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cu126` or `auto`)
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate `PyTorch` index based on the currently
+    /// installed CUDA drivers.
+    #[arg(long, value_enum)]
+    pub torch_backend: Option<TorchMode>,
 
     #[command(flatten)]
     pub compat_args: compat::PipSyncCompatArgs,
@@ -1830,6 +1857,19 @@ pub struct PipInstallArgs {
     /// print the resulting plan.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// The backend to use when fetching packages in the `PyTorch` ecosystem (e.g., `cu126` or `auto`)
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the `PyTorch` ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only `PyTorch` index; when set to `cu126`,
+    /// uv will use the `PyTorch` index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate `PyTorch` index based on the currently
+    /// installed CUDA drivers.
+    #[arg(long, value_enum)]
+    pub torch_backend: Option<TorchMode>,
 
     #[command(flatten)]
     pub compat_args: compat::PipInstallCompatArgs,

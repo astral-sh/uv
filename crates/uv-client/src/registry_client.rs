@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::LazyLock;
 use std::time::Duration;
 
 use async_http_range_reader::AsyncHttpRangeReader;
@@ -16,12 +15,6 @@ use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 use uv_auth::UrlAuthPolicies;
 
-use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
-use crate::cached_client::CacheControl;
-use crate::html::SimpleHtml;
-use crate::remote_metadata::wheel_metadata_from_remote_zip;
-use crate::rkyvutil::OwnedArchive;
-use crate::{BaseClient, CachedClient, CachedClientError, Error, ErrorKind};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
@@ -33,145 +26,24 @@ use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
-use uv_platform_tags::{Accelerator, Platform};
+use uv_platform_tags::Platform;
 use uv_pypi_types::{ResolutionMetadata, SimpleJson};
 use uv_small_str::SmallString;
+use uv_torch::TorchStrategy;
 
-// See: https://github.com/pmeier/light-the-torch/blob/33397cbe45d07b51ad8ee76b004571a4c236e37f/light_the_torch/_cb.py#L150-L213
-//
-// TODO(charlie): These differ for Windows and Linux.
-static DRIVERS: LazyLock<[(Version, Version, IndexUrl); 23]> = LazyLock::new(|| {
-    [
-        // Table 2 from
-        // https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html
-        (
-            Version::new([12, 6]),
-            Version::new([525, 60, 13]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu126").unwrap(),
-        ),
-        (
-            Version::new([12, 5]),
-            Version::new([525, 60, 13]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu125").unwrap(),
-        ),
-        (
-            Version::new([12, 4]),
-            Version::new([525, 60, 13]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu124").unwrap(),
-        ),
-        (
-            Version::new([12, 3]),
-            Version::new([525, 60, 13]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu123").unwrap(),
-        ),
-        (
-            Version::new([12, 2]),
-            Version::new([525, 60, 13]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu122").unwrap(),
-        ),
-        (
-            Version::new([12, 1]),
-            Version::new([525, 60, 13]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu121").unwrap(),
-        ),
-        (
-            Version::new([12, 0]),
-            Version::new([525, 60, 13]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu120").unwrap(),
-        ),
-        // Table 2 from
-        // https://docs.nvidia.com/cuda/archive/11.8.0/cuda-toolkit-release-notes/index.html
-        (
-            Version::new([11, 8]),
-            Version::new([450, 80, 2]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu118").unwrap(),
-        ),
-        (
-            Version::new([11, 7]),
-            Version::new([450, 80, 2]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu117").unwrap(),
-        ),
-        (
-            Version::new([11, 6]),
-            Version::new([450, 80, 2]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu116").unwrap(),
-        ),
-        (
-            Version::new([11, 5]),
-            Version::new([450, 80, 2]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu115").unwrap(),
-        ),
-        (
-            Version::new([11, 4]),
-            Version::new([450, 80, 2]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu114").unwrap(),
-        ),
-        (
-            Version::new([11, 3]),
-            Version::new([450, 80, 2]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu113").unwrap(),
-        ),
-        (
-            Version::new([11, 2]),
-            Version::new([450, 80, 2]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu112").unwrap(),
-        ),
-        (
-            Version::new([11, 1]),
-            Version::new([450, 80, 2]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu111").unwrap(),
-        ),
-        (
-            Version::new([11, 0]),
-            Version::new([450, 36, 6]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu110").unwrap(),
-        ),
-        // Table 1 from
-        // https://docs.nvidia.com/cuda/archive/10.2/cuda-toolkit-release-notes/index.html
-        (
-            Version::new([10, 2]),
-            Version::new([440, 33]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu102").unwrap(),
-        ),
-        (
-            Version::new([10, 1]),
-            Version::new([418, 39]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu101").unwrap(),
-        ),
-        (
-            Version::new([10, 0]),
-            Version::new([410, 48]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu100").unwrap(),
-        ),
-        (
-            Version::new([9, 2]),
-            Version::new([396, 26]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu92").unwrap(),
-        ),
-        (
-            Version::new([9, 1]),
-            Version::new([390, 46]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu91").unwrap(),
-        ),
-        (
-            Version::new([9, 0]),
-            Version::new([384, 81]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu90").unwrap(),
-        ),
-        (
-            Version::new([8, 0]),
-            Version::new([375, 26]),
-            IndexUrl::from_str("https://download.pytorch.org/whl/cu80").unwrap(),
-        ),
-    ]
-});
+use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
+use crate::cached_client::CacheControl;
+use crate::html::SimpleHtml;
+use crate::remote_metadata::wheel_metadata_from_remote_zip;
+use crate::rkyvutil::OwnedArchive;
+use crate::{BaseClient, CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
     index_strategy: IndexStrategy,
-    platform: Option<&'a Platform>,
+    torch_backend: Option<TorchStrategy>,
     cache: Cache,
     base_client_builder: BaseClientBuilder<'a>,
 }
@@ -181,7 +53,7 @@ impl RegistryClientBuilder<'_> {
         Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
-            platform: None,
+            torch_backend: None,
             cache,
             base_client_builder: BaseClientBuilder::new(),
         }
@@ -198,6 +70,12 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn index_strategy(mut self, index_strategy: IndexStrategy) -> Self {
         self.index_strategy = index_strategy;
+        self
+    }
+
+    #[must_use]
+    pub fn torch_backend(mut self, torch_backend: Option<TorchStrategy>) -> Self {
+        self.torch_backend = torch_backend;
         self
     }
 
@@ -261,7 +139,6 @@ impl<'a> RegistryClientBuilder<'a> {
 
     #[must_use]
     pub fn platform(mut self, platform: &'a Platform) -> Self {
-        self.platform = Some(platform);
         self.base_client_builder = self.base_client_builder.platform(platform);
         self
     }
@@ -287,10 +164,7 @@ impl<'a> RegistryClientBuilder<'a> {
         RegistryClient {
             index_urls: self.index_urls,
             index_strategy: self.index_strategy,
-            accelerator: self
-                .platform
-                .and_then(|platform| platform.accelerator())
-                .cloned(),
+            torch_backend: self.torch_backend,
             cache: self.cache,
             connectivity,
             client,
@@ -312,10 +186,7 @@ impl<'a> RegistryClientBuilder<'a> {
         RegistryClient {
             index_urls: self.index_urls,
             index_strategy: self.index_strategy,
-            accelerator: self
-                .platform
-                .and_then(|platform| platform.accelerator())
-                .cloned(),
+            torch_backend: self.torch_backend,
             cache: self.cache,
             connectivity,
             client,
@@ -331,7 +202,7 @@ impl<'a> TryFrom<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
         Ok(Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
-            platform: None,
+            torch_backend: None,
             cache: Cache::temp()?,
             base_client_builder: value,
         })
@@ -345,8 +216,8 @@ pub struct RegistryClient {
     index_urls: IndexUrls,
     /// The strategy to use when fetching across multiple indexes.
     index_strategy: IndexStrategy,
-    /// The accelerator for the current platform.
-    accelerator: Option<Accelerator>,
+    /// The strategy to use when selecting a PyTorch backend, if any.
+    torch_backend: Option<TorchStrategy>,
     /// The underlying HTTP client.
     client: CachedClient,
     /// Used for the remote wheel METADATA cache.
@@ -383,42 +254,13 @@ impl RegistryClient {
         self.timeout
     }
 
-    pub fn index_urls_for(&self, package_name: &PackageName) -> impl Iterator<Item = &IndexUrl> {
-        // If this is a GPU-enabled package, and CUDA drivers are installed, use PyTorch's CUDA
-        // indexes.
-        //
-        // See: https://github.com/pmeier/light-the-torch/blob/33397cbe45d07b51ad8ee76b004571a4c236e37f/light_the_torch/_patch.py#L36-L49
-        if matches!(
-            package_name.as_str(),
-            "torch"
-                | "torch-model-archiver"
-                | "torch-tb-profiler"
-                | "torcharrow"
-                | "torchaudio"
-                | "torchcsprng"
-                | "torchdata"
-                | "torchdistx"
-                | "torchserve"
-                | "torchtext"
-                | "torchvision"
-                | "pytorch-triton"
-        ) {
-            if let Some(accelerator) = self.accelerator.as_ref() {
-                return match accelerator {
-                    Accelerator::Cuda { driver_version } => {
-                        Either::Left(DRIVERS.iter().filter_map(move |(.., driver, url)| {
-                            if driver_version >= driver {
-                                Some(url)
-                            } else {
-                                None
-                            }
-                        }))
-                    }
-                };
-            }
-        }
-
-        Either::Right(self.index_urls.indexes().map(Index::url))
+    /// Return the appropriate index URLs for the given [`PackageName`].
+    fn index_urls_for(&self, package_name: &PackageName) -> impl Iterator<Item = &IndexUrl> {
+        self.torch_backend
+            .as_ref()
+            .and_then(|torch_backend| torch_backend.index_urls(package_name))
+            .map(Either::Left)
+            .unwrap_or_else(|| Either::Right(self.index_urls.indexes().map(Index::url)))
     }
 
     /// Fetch a package from the `PyPI` simple API.
@@ -434,25 +276,24 @@ impl RegistryClient {
         capabilities: &IndexCapabilities,
         download_concurrency: &Semaphore,
     ) -> Result<Vec<(&'index IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
+        // If `--no-index` is specified, avoid fetching regardless of whether the index is implicit,
+        // explicit, etc.
+        if self.index_urls.no_index() {
+            return Err(ErrorKind::NoIndex(package_name.to_string()).into());
+        }
+
         let indexes = if let Some(index) = index {
             Either::Left(std::iter::once(index))
         } else {
             Either::Right(self.index_urls_for(package_name))
         };
 
-        // let mut it = indexes.peekable();
-        // if it.peek().is_none() {
-        //     return Err(ErrorKind::NoIndex(package_name.to_string()).into());
-        // }
-
-        let it = indexes;
-
         let mut results = Vec::new();
 
         match self.index_strategy {
             // If we're searching for the first index that contains the package, fetch serially.
             IndexStrategy::FirstIndex => {
-                for index in it {
+                for index in indexes {
                     let _permit = download_concurrency.acquire().await;
                     if let Some(metadata) = self
                         .simple_single_index(package_name, index, capabilities)
@@ -466,7 +307,7 @@ impl RegistryClient {
 
             // Otherwise, fetch concurrently.
             IndexStrategy::UnsafeBestMatch | IndexStrategy::UnsafeFirstMatch => {
-                results = futures::stream::iter(it)
+                results = futures::stream::iter(indexes)
                     .map(|index| async move {
                         let _permit = download_concurrency.acquire().await;
                         let metadata = self

@@ -19,6 +19,7 @@ use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
+use uv_torch::TorchMode;
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -1543,6 +1544,25 @@ pub struct PipOptions {
         "#
     )]
     pub reinstall_package: Option<Vec<PackageName>>,
+    /// The backend to use when fetching packages in the PyTorch ecosystem.
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    #[option(
+        default = "null",
+        value_type = "str",
+        example = r#"
+            torch-backend = "auto"
+        "#,
+        possible_values = true
+    )]
+    pub torch_backend: Option<TorchMode>,
 }
 
 impl PipOptions {
