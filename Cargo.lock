@@ -4606,6 +4606,7 @@ dependencies = [
  "tracing",
  "url",
  "uv-once-map",
+ "uv-small-str",
  "uv-static",
  "wiremock",
 ]
