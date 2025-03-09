@@ -4487,7 +4487,7 @@ dependencies = [
 
 [[package]]
 name = "uv"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4635,6 +4635,15 @@ dependencies = [
  "uv-python",
  "uv-resolver",
  "uv-types",
+]
+
+[[package]]
+name = "uv-build"
+version = "0.6.5"
+dependencies = [
+ "anyhow",
+ "uv-build-backend",
+ "uv-version",
 ]
 
 [[package]]
@@ -5378,11 +5387,14 @@ dependencies = [
  "anyhow",
  "hashbrown 0.15.2",
  "indexmap",
+ "insta",
  "itertools 0.14.0",
  "jiff",
  "mailparse",
+ "petgraph",
  "regex",
  "rkyv",
+ "rustc-hash",
  "schemars",
  "serde",
  "serde-untagged",
@@ -5734,7 +5746,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.6.4"
+version = "0.6.5"
 
 [[package]]
 name = "uv-virtualenv"

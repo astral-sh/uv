@@ -17,8 +17,9 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
     ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement, VersionOrUrl,
 };
-use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
+use uv_pypi_types::{Identifier, Metadata23, VerbatimParsedUrl};
 
+use crate::serde_verbatim::SerdeVerbatim;
 use crate::Error;
 
 /// By default, we ignore generated python files.
@@ -161,14 +162,14 @@ impl PyProjectToml {
     ///
     /// ```toml
     /// [build-system]
-    /// requires = ["uv>=0.4.15,<5"]
-    /// build-backend = "uv"
+    /// requires = ["uv_build>=0.4.15,<5"]
+    /// build-backend = "uv_build"
     /// ```
     pub fn check_build_system(&self, uv_version: &str) -> Vec<String> {
         let mut warnings = Vec::new();
-        if self.build_system.build_backend.as_deref() != Some("uv") {
+        if self.build_system.build_backend.as_deref() != Some("uv_build") {
             warnings.push(format!(
-                r#"The value for `build_system.build-backend` should be `"uv"`, not `"{}"`"#,
+                r#"The value for `build_system.build-backend` should be `"uv_build"`, not `"{}"`"#,
                 self.build_system.build_backend.clone().unwrap_or_default()
             ));
         }
@@ -189,7 +190,7 @@ impl PyProjectToml {
             warnings.push(expected());
             return warnings;
         };
-        if uv_requirement.name.as_str() != "uv" {
+        if uv_requirement.name.as_str() != "uv-build" {
             warnings.push(expected());
             return warnings;
         }
@@ -221,10 +222,13 @@ impl PyProjectToml {
 
         if !bounded {
             warnings.push(format!(
-                "`build_system.requires = [\"{uv_requirement}\"]` is missing an \
-                upper bound on the uv version such as `<{next_breaking}`. \
-                Without bounding the uv version, the source distribution will break \
-                when a future, breaking version of uv is released.",
+                "`build_system.requires = [\"{}\"]` is missing an \
+                upper bound on the `uv_build` version such as `<{next_breaking}`. \
+                Without bounding the `uv_build` version, the source distribution will break \
+                when a future, breaking version of `uv_build` is released.",
+                // Use an underscore consistently, to avoid confusing users between a package name with dash and a
+                // module name with underscore
+                uv_requirement.verbatim()
             ));
         }
 
@@ -768,7 +772,7 @@ pub(crate) enum Contact {
 #[serde(rename_all = "kebab-case")]
 struct BuildSystem {
     /// PEP 508 dependencies required to execute the build system.
-    requires: Vec<Requirement<VerbatimParsedUrl>>,
+    requires: Vec<SerdeVerbatim<Requirement<VerbatimParsedUrl>>>,
     /// A string naming a Python object that will be used to perform the build.
     build_backend: Option<String>,
     /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
@@ -799,7 +803,7 @@ pub(crate) struct ToolUv {
 /// When building the source distribution, the following files and directories are included:
 /// * `pyproject.toml`
 /// * The module under `tool.uv.build-backend.module-root`, by default
-///   `src/<project_name_with_underscores>/**`.
+///   `src/<module-name or project_name_with_underscores>/**`.
 /// * `project.license-files` and `project.readme`.
 /// * All directories under `tool.uv.build-backend.data`.
 /// * All patterns from `tool.uv.build-backend.source-include`.
@@ -808,7 +812,7 @@ pub(crate) struct ToolUv {
 ///
 /// When building the wheel, the following files and directories are included:
 /// * The module under `tool.uv.build-backend.module-root`, by default
-///   `src/<project_name_with_underscores>/**`.
+///   `src/<module-name or project_name_with_underscores>/**`.
 /// * `project.license-files` and `project.readme`, as part of the project metadata.
 /// * Each directory under `tool.uv.build-backend.data`, as data directories.
 ///
@@ -842,6 +846,15 @@ pub(crate) struct BuildBackendSettings {
     /// using the flat layout over the src layout.
     pub(crate) module_root: PathBuf,
 
+    /// The name of the module directory inside `module-root`.
+    ///
+    /// The default module name is the package name with dots and dashes replaced by underscores.
+    ///
+    /// Note that using this option runs the risk of creating two packages with different names but
+    /// the same module names. Installing such packages together leads to unspecified behavior,
+    /// often with corrupted files or directory trees.
+    pub(crate) module_name: Option<Identifier>,
+
     /// Glob expressions which files and directories to additionally include in the source
     /// distribution.
     ///
@@ -873,6 +886,7 @@ impl Default for BuildBackendSettings {
     fn default() -> Self {
         Self {
             module_root: PathBuf::from("src"),
+            module_name: None,
             source_include: Vec::new(),
             default_excludes: true,
             source_exclude: Vec::new(),
@@ -940,8 +954,8 @@ mod tests {
             {payload}
 
             [build-system]
-            requires = ["uv>=0.4.15,<5"]
-            build-backend = "uv"
+            requires = ["uv_build>=0.4.15,<5"]
+            build-backend = "uv_build"
         "#
         }
     }
@@ -1023,8 +1037,8 @@ mod tests {
             foo-bar = "foo:bar"
 
             [build-system]
-            requires = ["uv>=0.4.15,<5"]
-            build-backend = "uv"
+            requires = ["uv_build>=0.4.15,<5"]
+            build-backend = "uv_build"
         "#
         };
 
@@ -1150,8 +1164,8 @@ mod tests {
             foo-bar = "foo:bar"
 
             [build-system]
-            requires = ["uv>=0.4.15,<5"]
-            build-backend = "uv"
+            requires = ["uv_build>=0.4.15,<5"]
+            build-backend = "uv_build"
         "#
         };
 
@@ -1231,13 +1245,13 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv"]
-            build-backend = "uv"
+            requires = ["uv_build"]
+            build-backend = "uv_build"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r###"`build_system.requires = ["uv"]` is missing an upper bound on the uv version such as `<0.5`. Without bounding the uv version, the source distribution will break when a future, breaking version of uv is released."###
+            @r###"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."###
         );
     }
 
@@ -1249,8 +1263,8 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv>=0.4.15,<5", "wheel"]
-            build-backend = "uv"
+            requires = ["uv_build>=0.4.15,<5", "wheel"]
+            build-backend = "uv_build"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
@@ -1268,7 +1282,7 @@ mod tests {
 
             [build-system]
             requires = ["setuptools"]
-            build-backend = "uv"
+            build-backend = "uv_build"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
@@ -1285,13 +1299,13 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv>=0.4.15,<5"]
+            requires = ["uv_build>=0.4.15,<5"]
             build-backend = "setuptools"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r###"The value for `build_system.build-backend` should be `"uv"`, not `"setuptools"`"###
+            @r###"The value for `build_system.build-backend` should be `"uv_build"`, not `"setuptools"`"###
         );
     }
 

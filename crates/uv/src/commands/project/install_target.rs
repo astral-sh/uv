@@ -8,10 +8,10 @@ use rustc_hash::FxHashSet;
 use uv_configuration::{DependencyGroupsWithDefaults, ExtrasSpecification};
 use uv_distribution_types::Index;
 use uv_normalize::PackageName;
-use uv_pypi_types::{LenientRequirement, VerbatimParsedUrl};
+use uv_pypi_types::{DependencyGroupSpecifier, LenientRequirement, VerbatimParsedUrl};
 use uv_resolver::{Installable, Lock, Package};
 use uv_scripts::Pep723Script;
-use uv_workspace::pyproject::{DependencyGroupSpecifier, Source, Sources, ToolUvSources};
+use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
 use uv_workspace::Workspace;
 
 use crate::commands::project::ProjectError;

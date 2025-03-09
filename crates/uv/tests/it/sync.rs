@@ -8019,15 +8019,381 @@ fn multiple_group_conflicts() -> Result<()> {
      + iniconfig==1.1.1
     "###);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo").arg("--group").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo").arg("--group").arg("bar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: Groups `foo` and `bar` are incompatible with the declared conflicts: {`project:foo`, `project:bar`}
-    "###);
+    error: Groups `bar` and `foo` are incompatible with the declared conflicts: {`project:bar`, `project:foo`}
+    ");
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/11232>
+#[test]
+fn transitive_group_conflicts_shallow() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = [
+            { include-group = "test" },
+        ]
+        test = ["anyio>4"]
+        magic = ["anyio<4"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                { group = "test" },
+                { group = "magic" },
+            ],
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Audited 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("test"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Audited 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("test").arg("--group").arg("magic"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    error: Groups `magic` and `test` are incompatible with the declared conflicts: {`example:magic`, `example:test`}
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("magic"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    error: Groups `dev` and `magic` are incompatible with the transitively inferred conflicts: {`example:dev`, `example:magic`}
+    ");
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/11232>
+#[test]
+fn transitive_group_conflicts_deep() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = [
+            { include-group = "intermediate" },
+        ]
+        intermediate = [
+            { include-group = "test" },
+            { include-group = "other" },
+        ]
+        test = ["iniconfig>=2"]
+        magic = ["iniconfig<2", "anyio<4"]
+        other = ["anyio>4"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                { group = "test" },
+                { group = "magic" },
+            ],
+            [
+                { group = "other" },
+                { group = "magic" },
+            ],
+        ]"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Audited 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("test"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Audited 4 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("magic"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    error: Groups `dev` and `magic` are incompatible with the transitively inferred conflicts: {`example:dev`, `example:magic`}
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-dev").arg("--group").arg("intermediate").arg("--group").arg("magic"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    error: Groups `intermediate` and `magic` are incompatible with the transitively inferred conflicts: {`example:intermediate`, `example:magic`}
+    ");
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/11232>
+#[test]
+fn transitive_group_conflicts_siblings() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = [
+            { include-group = "test" },
+        ]
+        dev2 = [
+            { include-group = "magic" },
+        ]
+        test = ["anyio>4"]
+        magic = ["anyio<4"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                { group = "test" },
+                { group = "magic" },
+            ],
+        ]"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Audited 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-dev").arg("--group").arg("dev2"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.3.0
+     + anyio==3.7.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev2"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    error: Groups `dev` (enabled by default) and `dev2` are incompatible with the transitively inferred conflicts: {`example:dev`, `example:dev2`}
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("dev2"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    error: Groups `dev` and `dev2` are incompatible with the transitively inferred conflicts: {`example:dev`, `example:dev2`}
+    ");
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/11232>
+#[test]
+fn transitive_group_conflicts_cycle() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = [
+            { include-group = "test" },
+        ]
+        test = [
+            "anyio>4",
+            { include-group = "dev" },
+        ]
+        magic = ["anyio<4"]
+
+        [tool.uv]
+        conflicts = [
+            [
+                { group = "test" },
+                { group = "magic" },
+            ],
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `example @ file://[TEMP_DIR]/`
+      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `example @ file://[TEMP_DIR]/`
+      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("test"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `example @ file://[TEMP_DIR]/`
+      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("test").arg("--group").arg("magic"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `example @ file://[TEMP_DIR]/`
+      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("magic"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `example @ file://[TEMP_DIR]/`
+      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    ");
 
     Ok(())
 }

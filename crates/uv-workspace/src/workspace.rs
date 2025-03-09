@@ -1500,8 +1500,9 @@ mod tests {
     use insta::{assert_json_snapshot, assert_snapshot};
 
     use uv_normalize::GroupName;
+    use uv_pypi_types::DependencyGroupSpecifier;
 
-    use crate::pyproject::{DependencyGroupSpecifier, PyProjectToml};
+    use crate::pyproject::PyProjectToml;
     use crate::workspace::{DiscoveryOptions, ProjectWorkspace};
     use crate::WorkspaceError;
 

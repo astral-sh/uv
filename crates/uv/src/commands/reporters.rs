@@ -52,7 +52,7 @@ struct BarState {
     /// A map of progress bars, by ID.
     bars: FxHashMap<usize, ProgressBar>,
     /// The download size, if known, by ID.
-    download_size: FxHashMap<usize, Option<u64>>,
+    size: FxHashMap<usize, Option<u64>>,
     /// A monotonic counter for bar IDs.
     id: usize,
 }
@@ -63,6 +63,12 @@ impl BarState {
         self.id += 1;
         self.id
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Direction {
+    Upload,
+    Download,
 }
 
 impl ProgressReporter {
@@ -145,7 +151,7 @@ impl ProgressReporter {
         progress.finish_with_message(message);
     }
 
-    fn on_download_start(&self, name: String, size: Option<u64>) -> usize {
+    fn on_request_start(&self, direction: Direction, name: String, size: Option<u64>) -> usize {
         let ProgressMode::Multi {
             multi_progress,
             state,
@@ -175,14 +181,19 @@ impl ProgressReporter {
                 .unwrap()
                 .progress_chars("--"),
             );
-            // If the download is larger than 1MB, show a message to indicate that this may take
+            // If the file is larger than 1MB, show a message to indicate that this may take
             // a while keeping the log concise.
             if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS && size > 1024 * 1024 {
                 let (bytes, unit) = human_readable_bytes(size);
                 let _ = writeln!(
                     self.printer.stderr(),
                     "{} {} {}",
-                    "Downloading".bold().cyan(),
+                    match direction {
+                        Direction::Download => "Downloading",
+                        Direction::Upload => "Uploading",
+                    }
+                    .bold()
+                    .cyan(),
                     name,
                     format!("({bytes:.1}{unit})").dimmed()
                 );
@@ -194,7 +205,12 @@ impl ProgressReporter {
                 let _ = writeln!(
                     self.printer.stderr(),
                     "{} {}",
-                    "Downloading".bold().cyan(),
+                    match direction {
+                        Direction::Download => "Downloading",
+                        Direction::Upload => "Uploading",
+                    }
+                    .bold()
+                    .cyan(),
                     name
                 );
             }
@@ -204,11 +220,11 @@ impl ProgressReporter {
 
         let id = state.id();
         state.bars.insert(id, progress);
-        state.download_size.insert(id, size);
+        state.size.insert(id, size);
         id
     }
 
-    fn on_download_progress(&self, id: usize, bytes: u64) {
+    fn on_request_progress(&self, id: usize, bytes: u64) {
         let ProgressMode::Multi { state, .. } = &self.mode else {
             return;
         };
@@ -216,7 +232,7 @@ impl ProgressReporter {
         state.lock().unwrap().bars[&id].inc(bytes);
     }
 
-    fn on_download_complete(&self, id: usize) {
+    fn on_request_complete(&self, direction: Direction, id: usize) {
         let ProgressMode::Multi {
             state,
             multi_progress,
@@ -227,7 +243,7 @@ impl ProgressReporter {
 
         let mut state = state.lock().unwrap();
         let progress = state.bars.remove(&id).unwrap();
-        let size = state.download_size[&id];
+        let size = state.size[&id];
         if multi_progress.is_hidden()
             && !*HAS_UV_TEST_NO_CLI_PROGRESS
             && size.is_none_or(|size| size > 1024 * 1024)
@@ -235,12 +251,41 @@ impl ProgressReporter {
             let _ = writeln!(
                 self.printer.stderr(),
                 " {} {}",
-                "Downloaded".bold().green(),
+                match direction {
+                    Direction::Download => "Downloaded",
+                    Direction::Upload => "Uploaded",
+                }
+                .bold()
+                .green(),
                 progress.message()
             );
         }
 
         progress.finish_and_clear();
+    }
+
+    fn on_download_progress(&self, id: usize, bytes: u64) {
+        self.on_request_progress(id, bytes);
+    }
+
+    fn on_download_complete(&self, id: usize) {
+        self.on_request_complete(Direction::Download, id);
+    }
+
+    fn on_download_start(&self, name: String, size: Option<u64>) -> usize {
+        self.on_request_start(Direction::Download, name, size)
+    }
+
+    fn on_upload_progress(&self, id: usize, bytes: u64) {
+        self.on_request_progress(id, bytes);
+    }
+
+    fn on_upload_complete(&self, id: usize) {
+        self.on_request_complete(Direction::Upload, id);
+    }
+
+    fn on_upload_start(&self, name: String, size: Option<u64>) -> usize {
+        self.on_request_start(Direction::Upload, name, size)
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
@@ -584,16 +629,16 @@ impl uv_publish::Reporter for PublishReporter {
         self.reporter.on_download_complete(id);
     }
 
-    fn on_download_start(&self, name: &str, size: Option<u64>) -> usize {
-        self.reporter.on_download_start(name.to_string(), size)
+    fn on_upload_start(&self, name: &str, size: Option<u64>) -> usize {
+        self.reporter.on_upload_start(name.to_string(), size)
     }
 
-    fn on_download_progress(&self, id: usize, inc: u64) {
-        self.reporter.on_download_progress(id, inc);
+    fn on_upload_progress(&self, id: usize, inc: u64) {
+        self.reporter.on_upload_progress(id, inc);
     }
 
-    fn on_download_complete(&self, id: usize) {
-        self.reporter.on_download_complete(id);
+    fn on_upload_complete(&self, id: usize) {
+        self.reporter.on_upload_complete(id);
     }
 }
 

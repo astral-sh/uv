@@ -39,7 +39,7 @@ def call(
 
     warn_config_settings(config_settings)
     # Unlike `find_uv_bin`, this mechanism must work according to PEP 517
-    uv_bin = shutil.which("uv")
+    uv_bin = shutil.which("uv-build")
     if uv_bin is None:
         raise RuntimeError("uv was not properly installed")
     # Forward stderr, capture stdout for the filename
@@ -60,7 +60,7 @@ def build_sdist(
     sdist_directory: str, config_settings: "Mapping[Any, Any] | None" = None
 ) -> str:
     """PEP 517 hook `build_sdist`."""
-    args = ["build-backend", "build-sdist", sdist_directory]
+    args = ["build-sdist", sdist_directory]
     return call(args, config_settings)
 
 
@@ -70,9 +70,9 @@ def build_wheel(
     metadata_directory: "str | None" = None,
 ) -> str:
     """PEP 517 hook `build_wheel`."""
-    args = ["build-backend", "build-wheel", wheel_directory]
+    args = ["build-wheel", wheel_directory]
     if metadata_directory:
-        args.extend(["--metadata-directory", metadata_directory])
+        args.extend([metadata_directory])
     return call(args, config_settings)
 
 
@@ -96,7 +96,7 @@ def prepare_metadata_for_build_wheel(
     metadata_directory: str, config_settings: "Mapping[Any, Any] | None" = None
 ) -> str:
     """PEP 517 hook `prepare_metadata_for_build_wheel`."""
-    args = ["build-backend", "prepare-metadata-for-build-wheel", metadata_directory]
+    args = ["prepare-metadata-for-build-wheel", metadata_directory]
     return call(args, config_settings)
 
 
@@ -106,9 +106,9 @@ def build_editable(
     metadata_directory: "str | None" = None,
 ) -> str:
     """PEP 660 hook `build_editable`."""
-    args = ["build-backend", "build-editable", wheel_directory]
+    args = ["build-editable", wheel_directory]
     if metadata_directory:
-        args.extend(["--metadata-directory", metadata_directory])
+        args.extend([metadata_directory])
     return call(args, config_settings)
 
 
@@ -124,5 +124,5 @@ def prepare_metadata_for_build_editable(
     metadata_directory: str, config_settings: "Mapping[Any, Any] | None" = None
 ) -> str:
     """PEP 660 hook `prepare_metadata_for_build_editable`."""
-    args = ["build-backend", "prepare-metadata-for-build-editable", metadata_directory]
+    args = ["prepare-metadata-for-build-editable", metadata_directory]
     return call(args, config_settings)
