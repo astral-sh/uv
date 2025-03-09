@@ -9183,3 +9183,94 @@ fn unsupported_git_scheme() {
     "###
     );
 }
+
+/// Modify a project to use a `src` layout.
+#[test]
+fn change_layout() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Installing should build the package.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-e").arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Reinstalling should have no effect.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-e").arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Replace the `src` layout with a flat layout.
+    fs_err::remove_dir_all(context.temp_dir.child("src").path())?;
+
+    context
+        .temp_dir
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Installing should rebuild the package.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-e").arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Reinstalling should have no effect.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-e").arg("."), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    Ok(())
+}
