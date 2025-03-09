@@ -569,6 +569,8 @@ uv init [OPTIONS] [PATH]
 
 <p>Implicitly sets <code>--package</code>.</p>
 
+<p>See <a href='../../concepts/projects/config/#build-systems'>Build systems</a> for details.</p>
+
 <p>Possible values:</p>
 
 <ul>

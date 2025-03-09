@@ -2606,6 +2606,8 @@ pub struct InitArgs {
     /// Initialize a build-backend of choice for the project.
     ///
     /// Implicitly sets `--package`.
+    ///
+    /// See [Build systems](../../concepts/projects/config/#build-systems) for details.
     #[arg(long, value_enum, conflicts_with_all=["script", "no_package"])]
     pub build_backend: Option<ProjectBuildBackend>,
 
