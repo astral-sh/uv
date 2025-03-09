@@ -489,6 +489,8 @@ pub enum Commands {
         ),
     )]
     Help(HelpArgs),
+    /// Manage uv's indexes
+    Index(IndexNamespace),
 }
 
 #[derive(Args, Debug)]
@@ -5596,4 +5598,123 @@ pub enum BuildBackendCommand {
     GetRequiresForBuildEditable,
     /// PEP 660 hook `prepare_metadata_for_build_editable`.
     PrepareMetadataForBuildEditable { wheel_directory: PathBuf },
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct IndexNamespace {
+    #[command(subcommand)]
+    pub command: IndexCommand,
+}
+
+#[derive(Subcommand)]
+pub enum IndexCommand {
+    // /// Set a new index. This will be added to your pyproject.toml
+    // #[command(
+    //     after_help = "Use `uv help index add` for more details.",
+    //     after_long_help = ""
+    // )]
+    // Set(IndexSourceArgs),
+    // /// List all indexes set in your pyproject.toml
+    // #[command(
+    //     after_help = "Use `uv help index list` for more details.",
+    //     after_long_help = ""
+    // )]
+    // List(IndexSourceArgs),
+    // /// Unset an existing index. This will be removed from your pyproject.toml
+    // #[command(
+    //     after_help = "Use `uv help index delete` for more details.",
+    //     after_long_help = ""
+    // )]
+    // Unset(IndexSourceArgs),
+    /// Manage credentials for the indexes configured in your pyproject.toml
+    #[command(subcommand)]
+    Credentials(IndexCredentialsCommand),
+}
+
+#[derive(Subcommand)]
+pub enum IndexCredentialsCommand {
+    /// Set credentials for an index
+    #[command(
+        after_help = "Use `uv help index credentials set` for more details.",
+        after_long_help = ""
+    )]
+    Set(IndexSetCredentialsArgs),
+
+    /// List credentials for each index (Only username is shown).
+    #[command(
+        after_help = "Use `uv help index credentials list` for more details.",
+        after_long_help = ""
+    )]
+    List(IndexListCredentialsArgs),
+
+    /// Unset the credentials for an index
+    #[command(
+        after_help = "Use `uv help index credentials unset` for more details.",
+        after_long_help = ""
+    )]
+    Unset(IndexUnsetCredentialsArgs),
+}
+
+#[derive(Args)]
+pub struct IndexSourceArgs {
+    /// The name of the index
+    #[arg(long)]
+    pub name: String,
+}
+
+#[derive(Args)]
+pub struct IndexSetCredentialsArgs {
+    /// The name of the index
+    #[arg(long)]
+    pub name: String,
+
+    /// The username that should be used for the index
+    #[arg(long, required(false))]
+    pub username: Option<String>,
+
+    /// The password that should be user for the index
+    #[arg(long, required(false))]
+    pub password: Option<String>,
+
+    /// Attempt to use `keyring` for authentication for remote requirements files.
+    ///
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to
+    /// use the `keyring` CLI to handle authentication.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
+    pub keyring_provider: Option<KeyringProviderType>,
+}
+
+#[derive(Args)]
+pub struct IndexListCredentialsArgs {
+    /// Attempt to use `keyring` for authentication for remote requirements files.
+    ///
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to
+    /// use the `keyring` CLI to handle authentication.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
+    pub keyring_provider: Option<KeyringProviderType>,
+}
+
+#[derive(Args)]
+pub struct IndexUnsetCredentialsArgs {
+    /// The name of the index
+    #[arg(long)]
+    pub name: String,
+
+    /// The username that should be used for the index
+    #[arg(long, required(false))]
+    pub username: Option<String>,
+
+    /// Attempt to use `keyring` for authentication for remote requirements files.
+    ///
+    /// At present, only `--keyring-provider subprocess` is supported, which configures uv to
+    /// use the `keyring` CLI to handle authentication.
+    ///
+    /// Defaults to `disabled`.
+    #[arg(long, value_enum, env = EnvVars::UV_KEYRING_PROVIDER)]
+    pub keyring_provider: Option<KeyringProviderType>,
 }
