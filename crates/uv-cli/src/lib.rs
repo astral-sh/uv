@@ -2607,10 +2607,7 @@ pub struct InitArgs {
     ///
     /// Implicitly sets `--package`.
     ///
-    /// If not passed, uv will use `hatch`. Omitting `--build-backend` and
-    /// passing `--build-backend hatch` currently result in slightly different
-    /// generated projects: Among others, `--build-backend hatch` will add a
-    /// `[build-system]` section to the generated `pyproject.toml` file.
+    /// See [Build systems](../../concepts/projects/config/#build-systems) for details.
     #[arg(long, value_enum, conflicts_with_all=["script", "no_package"])]
     pub build_backend: Option<ProjectBuildBackend>,
 
