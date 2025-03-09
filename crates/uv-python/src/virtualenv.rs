@@ -118,13 +118,13 @@ pub(crate) fn conda_environment_from_env(kind: CondaEnvironmentKind) -> Option<P
 
 /// Locate a virtual environment by searching the file system.
 ///
-/// Searches for a `.venv` directory in the current or any parent directory. If the current
+/// Searches for a `.venv` directory in the provided or any parent directory. If the provided
 /// directory is itself a virtual environment (or a subdirectory of a virtual environment), the
 /// containing virtual environment is returned.
-pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
-    let current_dir = crate::current_dir()?;
+pub(crate) fn virtualenv_from_dir(dir: impl AsRef<Path>) -> Result<Option<PathBuf>, Error> {
+    let dir = dir.as_ref();
 
-    for dir in current_dir.ancestors() {
+    for dir in dir.ancestors() {
         // If we're _within_ a virtualenv, return it.
         if dir.join("pyvenv.cfg").is_file() {
             return Ok(Some(dir.to_path_buf()));
