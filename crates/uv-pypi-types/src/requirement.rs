@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use thiserror::Error;
@@ -383,7 +383,7 @@ pub enum RequirementSource {
         location: Url,
         /// For source distributions, the path to the distribution if it is not in the archive
         /// root.
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<Box<Path>>,
         /// The file extension, e.g. `tar.gz`, `zip`, etc.
         ext: DistExtension,
         /// The PEP 508 style URL in the format
@@ -395,7 +395,7 @@ pub enum RequirementSource {
         /// The repository URL and reference to the commit to use.
         git: GitUrl,
         /// The path to the source distribution if it is not in the repository root.
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<Box<Path>>,
         /// The PEP 508 style url in the format
         /// `git+<scheme>://<domain>/<path>@<rev>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
@@ -405,7 +405,7 @@ pub enum RequirementSource {
     /// `.tar.gz` file).
     Path {
         /// The absolute path to the distribution which we use for installing.
-        install_path: PathBuf,
+        install_path: Box<Path>,
         /// The file extension, e.g. `tar.gz`, `zip`, etc.
         ext: DistExtension,
         /// The PEP 508 style URL in the format
@@ -416,7 +416,7 @@ pub enum RequirementSource {
     /// source distribution with only a setup.py but non pyproject.toml in it).
     Directory {
         /// The absolute path to the distribution which we use for installing.
-        install_path: PathBuf,
+        install_path: Box<Path>,
         /// For a source tree (a directory), whether to install as an editable.
         editable: bool,
         /// For a source tree (a directory), whether the project should be built and installed.
@@ -570,7 +570,8 @@ impl RequirementSource {
                 url,
             } => Ok(Self::Path {
                 install_path: relative_to(&install_path, path)
-                    .or_else(|_| std::path::absolute(install_path))?,
+                    .or_else(|_| std::path::absolute(install_path))?
+                    .into_boxed_path(),
                 ext,
                 url,
             }),
@@ -582,7 +583,8 @@ impl RequirementSource {
                 ..
             } => Ok(Self::Directory {
                 install_path: relative_to(&install_path, path)
-                    .or_else(|_| std::path::absolute(install_path))?,
+                    .or_else(|_| std::path::absolute(install_path))?
+                    .into_boxed_path(),
                 editable,
                 r#virtual,
                 url,
@@ -817,7 +819,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 
                 Ok(Self::Git {
                     git: GitUrl::from_fields(repository, reference, precise)?,
-                    subdirectory: subdirectory.map(PathBuf::from),
+                    subdirectory: subdirectory.map(Box::<Path>::from),
                     url,
                 })
             }
@@ -832,7 +834,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 
                 Ok(Self::Url {
                     location,
-                    subdirectory: subdirectory.map(PathBuf::from),
+                    subdirectory: subdirectory.map(Box::<Path>::from),
                     ext: DistExtension::from_path(url.path())
                         .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?,
                     url: VerbatimUrl::from_url(url.clone()),
@@ -843,18 +845,19 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             // sources in the lockfile, we replace the URL anyway. Ideally, we'd either remove the
             // URL field or make it optional.
             RequirementSourceWire::Path { path } => {
-                let path = PathBuf::from(path);
+                let path = Box::<Path>::from(path);
                 let url =
                     VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(CWD.join(&path)))?;
                 Ok(Self::Path {
-                    ext: DistExtension::from_path(path.as_path())
-                        .map_err(|err| ParsedUrlError::MissingExtensionPath(path.clone(), err))?,
+                    ext: DistExtension::from_path(&path).map_err(|err| {
+                        ParsedUrlError::MissingExtensionPath(path.to_path_buf(), err)
+                    })?,
                     install_path: path,
                     url,
                 })
             }
             RequirementSourceWire::Directory { directory } => {
-                let directory = PathBuf::from(directory);
+                let directory = Box::<Path>::from(directory);
                 let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
                     CWD.join(&directory),
                 ))?;
@@ -866,7 +869,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 })
             }
             RequirementSourceWire::Editable { editable } => {
-                let editable = PathBuf::from(editable);
+                let editable = Box::<Path>::from(editable);
                 let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
                     CWD.join(&editable),
                 ))?;
@@ -878,7 +881,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 })
             }
             RequirementSourceWire::Virtual { r#virtual } => {
-                let r#virtual = PathBuf::from(r#virtual);
+                let r#virtual = Box::<Path>::from(r#virtual);
                 let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
                     CWD.join(&r#virtual),
                 ))?;
@@ -943,7 +946,7 @@ mod tests {
             groups: vec![],
             marker: MarkerTree::TRUE,
             source: RequirementSource::Directory {
-                install_path: PathBuf::from(path),
+                install_path: PathBuf::from(path).into_boxed_path(),
                 editable: false,
                 r#virtual: false,
                 url: VerbatimUrl::from_absolute_path(path).unwrap(),

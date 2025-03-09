@@ -77,7 +77,7 @@ pub enum InstalledDist {
 pub struct InstalledRegistryDist {
     pub name: PackageName,
     pub version: Version,
-    pub path: PathBuf,
+    pub path: Box<Path>,
     pub cache_info: Option<CacheInfo>,
 }
 
@@ -88,7 +88,7 @@ pub struct InstalledDirectUrlDist {
     pub direct_url: Box<DirectUrl>,
     pub url: Url,
     pub editable: bool,
-    pub path: PathBuf,
+    pub path: Box<Path>,
     pub cache_info: Option<CacheInfo>,
 }
 
@@ -96,24 +96,24 @@ pub struct InstalledDirectUrlDist {
 pub struct InstalledEggInfoFile {
     pub name: PackageName,
     pub version: Version,
-    pub path: PathBuf,
+    pub path: Box<Path>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledEggInfoDirectory {
     pub name: PackageName,
     pub version: Version,
-    pub path: PathBuf,
+    pub path: Box<Path>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledLegacyEditable {
     pub name: PackageName,
     pub version: Version,
-    pub egg_link: PathBuf,
-    pub target: PathBuf,
+    pub egg_link: Box<Path>,
+    pub target: Box<Path>,
     pub target_url: Url,
-    pub egg_info: PathBuf,
+    pub egg_info: Box<Path>,
 }
 
 impl InstalledDist {
@@ -145,7 +145,7 @@ impl InstalledDist {
                         editable: matches!(&direct_url, DirectUrl::LocalDirectory { dir_info, .. } if dir_info.editable == Some(true)),
                         direct_url: Box::new(direct_url),
                         url,
-                        path: path.to_path_buf(),
+                        path: path.to_path_buf().into_boxed_path(),
                         cache_info,
                     }))),
                     Err(err) => {
@@ -153,7 +153,7 @@ impl InstalledDist {
                         Ok(Some(Self::Registry(InstalledRegistryDist {
                             name,
                             version,
-                            path: path.to_path_buf(),
+                            path: path.to_path_buf().into_boxed_path(),
                             cache_info,
                         })))
                     }
@@ -162,7 +162,7 @@ impl InstalledDist {
                 Ok(Some(Self::Registry(InstalledRegistryDist {
                     name,
                     version,
-                    path: path.to_path_buf(),
+                    path: path.to_path_buf().into_boxed_path(),
                     cache_info,
                 })))
             };
@@ -191,7 +191,7 @@ impl InstalledDist {
                     return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
                         name: file_name.name,
                         version,
-                        path: path.to_path_buf(),
+                        path: path.to_path_buf().into_boxed_path(),
                     })));
                 }
 
@@ -199,7 +199,7 @@ impl InstalledDist {
                     return Ok(Some(Self::EggInfoFile(InstalledEggInfoFile {
                         name: file_name.name,
                         version,
-                        path: path.to_path_buf(),
+                        path: path.to_path_buf().into_boxed_path(),
                     })));
                 }
             };
@@ -211,7 +211,7 @@ impl InstalledDist {
                 return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
                     name: file_name.name,
                     version: Version::from_str(&egg_metadata.version)?,
-                    path: path.to_path_buf(),
+                    path: path.to_path_buf().into_boxed_path(),
                 })));
             }
 
@@ -222,7 +222,7 @@ impl InstalledDist {
                 return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
                     name: file_name.name,
                     version: Version::from_str(&egg_metadata.version)?,
-                    path: path.to_path_buf(),
+                    path: path.to_path_buf().into_boxed_path(),
                 })));
             }
         }
@@ -270,10 +270,10 @@ impl InstalledDist {
             return Ok(Some(Self::LegacyEditable(InstalledLegacyEditable {
                 name: egg_metadata.name,
                 version: Version::from_str(&egg_metadata.version)?,
-                egg_link: path.to_path_buf(),
-                target,
+                egg_link: path.to_path_buf().into_boxed_path(),
+                target: target.into_boxed_path(),
                 target_url: url,
-                egg_info,
+                egg_info: egg_info.into_boxed_path(),
             })));
         }
 
@@ -344,7 +344,7 @@ impl InstalledDist {
             }
             Self::EggInfoFile(_) | Self::EggInfoDirectory(_) | Self::LegacyEditable(_) => {
                 let path = match self {
-                    Self::EggInfoFile(dist) => Cow::Borrowed(&dist.path),
+                    Self::EggInfoFile(dist) => Cow::Borrowed(&*dist.path),
                     Self::EggInfoDirectory(dist) => Cow::Owned(dist.path.join("PKG-INFO")),
                     Self::LegacyEditable(dist) => Cow::Owned(dist.egg_info.join("PKG-INFO")),
                     _ => unreachable!(),

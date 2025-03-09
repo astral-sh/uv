@@ -73,17 +73,19 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
         } else {
             verbatim_path.extension().is_none()
         };
+        let url = verbatim.to_url();
+        let install_path = verbatim.as_path()?.into_boxed_path();
         let parsed_url = if is_dir {
             ParsedUrl::Directory(ParsedDirectoryUrl {
-                url: verbatim.to_url(),
-                install_path: verbatim.as_path()?,
+                url,
+                install_path,
                 editable: false,
                 r#virtual: false,
             })
         } else {
             ParsedUrl::Path(ParsedPathUrl {
-                url: verbatim.to_url(),
-                install_path: verbatim.as_path()?,
+                url,
+                install_path,
                 ext: DistExtension::from_path(&path).map_err(|err| {
                     ParsedUrlError::MissingExtensionPath(path.as_ref().to_path_buf(), err)
                 })?,
@@ -103,17 +105,19 @@ impl UnnamedRequirementUrl for VerbatimParsedUrl {
         } else {
             verbatim_path.extension().is_none()
         };
+        let url = verbatim.to_url();
+        let install_path = verbatim.as_path()?.into_boxed_path();
         let parsed_url = if is_dir {
             ParsedUrl::Directory(ParsedDirectoryUrl {
-                url: verbatim.to_url(),
-                install_path: verbatim.as_path()?,
+                url,
+                install_path,
                 editable: false,
                 r#virtual: false,
             })
         } else {
             ParsedUrl::Path(ParsedPathUrl {
-                url: verbatim.to_url(),
-                install_path: verbatim.as_path()?,
+                url,
+                install_path,
                 ext: DistExtension::from_path(&path).map_err(|err| {
                     ParsedUrlError::MissingExtensionPath(path.as_ref().to_path_buf(), err)
                 })?,
@@ -190,14 +194,14 @@ impl ParsedUrl {
 pub struct ParsedPathUrl {
     pub url: Url,
     /// The absolute path to the distribution which we use for installing.
-    pub install_path: PathBuf,
+    pub install_path: Box<Path>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
     pub ext: DistExtension,
 }
 
 impl ParsedPathUrl {
     /// Construct a [`ParsedPathUrl`] from a path requirement source.
-    pub fn from_source(install_path: PathBuf, ext: DistExtension, url: Url) -> Self {
+    pub fn from_source(install_path: Box<Path>, ext: DistExtension, url: Url) -> Self {
         Self {
             url,
             install_path,
@@ -214,14 +218,14 @@ impl ParsedPathUrl {
 pub struct ParsedDirectoryUrl {
     pub url: Url,
     /// The absolute path to the distribution which we use for installing.
-    pub install_path: PathBuf,
+    pub install_path: Box<Path>,
     pub editable: bool,
     pub r#virtual: bool,
 }
 
 impl ParsedDirectoryUrl {
     /// Construct a [`ParsedDirectoryUrl`] from a path requirement source.
-    pub fn from_source(install_path: PathBuf, editable: bool, r#virtual: bool, url: Url) -> Self {
+    pub fn from_source(install_path: Box<Path>, editable: bool, r#virtual: bool, url: Url) -> Self {
         Self {
             url,
             install_path,
@@ -239,12 +243,12 @@ impl ParsedDirectoryUrl {
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]
 pub struct ParsedGitUrl {
     pub url: GitUrl,
-    pub subdirectory: Option<PathBuf>,
+    pub subdirectory: Option<Box<Path>>,
 }
 
 impl ParsedGitUrl {
     /// Construct a [`ParsedGitUrl`] from a Git requirement source.
-    pub fn from_source(url: GitUrl, subdirectory: Option<PathBuf>) -> Self {
+    pub fn from_source(url: GitUrl, subdirectory: Option<Box<Path>>) -> Self {
         Self { url, subdirectory }
     }
 }
@@ -257,7 +261,7 @@ impl TryFrom<Url> for ParsedGitUrl {
     /// When the URL includes a prefix, it's presumed to come from a PEP 508 requirement; when it's
     /// excluded, it's presumed to come from `tool.uv.sources`.
     fn try_from(url_in: Url) -> Result<Self, Self::Error> {
-        let subdirectory = get_subdirectory(&url_in);
+        let subdirectory = get_subdirectory(&url_in).map(PathBuf::into_boxed_path);
 
         let url = url_in
             .as_str()
@@ -278,13 +282,13 @@ impl TryFrom<Url> for ParsedGitUrl {
 #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct ParsedArchiveUrl {
     pub url: Url,
-    pub subdirectory: Option<PathBuf>,
+    pub subdirectory: Option<Box<Path>>,
     pub ext: DistExtension,
 }
 
 impl ParsedArchiveUrl {
     /// Construct a [`ParsedArchiveUrl`] from a URL requirement source.
-    pub fn from_source(location: Url, subdirectory: Option<PathBuf>, ext: DistExtension) -> Self {
+    pub fn from_source(location: Url, subdirectory: Option<Box<Path>>, ext: DistExtension) -> Self {
         Self {
             url: location,
             subdirectory,
@@ -298,7 +302,7 @@ impl TryFrom<Url> for ParsedArchiveUrl {
 
     fn try_from(mut url: Url) -> Result<Self, Self::Error> {
         // Extract the `#subdirectory` fragment, if present.
-        let subdirectory = get_subdirectory(&url);
+        let subdirectory = get_subdirectory(&url).map(PathBuf::into_boxed_path);
         url.set_fragment(None);
 
         // Infer the extension from the path.
@@ -377,7 +381,7 @@ impl TryFrom<Url> for ParsedUrl {
             if is_dir {
                 Ok(Self::Directory(ParsedDirectoryUrl {
                     url,
-                    install_path: path.clone(),
+                    install_path: path.into_boxed_path(),
                     editable: false,
                     r#virtual: false,
                 }))
@@ -386,7 +390,7 @@ impl TryFrom<Url> for ParsedUrl {
                     url,
                     ext: DistExtension::from_path(&path)
                         .map_err(|err| ParsedUrlError::MissingExtensionPath(path.clone(), err))?,
-                    install_path: path.clone(),
+                    install_path: path.into_boxed_path(),
                 }))
             }
         } else {
