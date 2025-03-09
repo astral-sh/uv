@@ -46,7 +46,8 @@ pub(crate) async fn publish(
 
     // * For the uploads themselves, we roll our own retries due to
     //   https://github.com/seanmonstar/reqwest/issues/2416, but for trusted publishing, we want
-    //   the default retries.
+    //   the default retries. We set the retries to 0 here and manually construct the retry policy
+    //   in the upload loop.
     // * We want to allow configuring TLS for the registry, while for trusted publishing we know the
     //   defaults are correct.
     // * For the uploads themselves, we know we need an authorization header and we can't nor

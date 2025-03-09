@@ -181,12 +181,18 @@ def get_latest_version(project_name: str, client: httpx.Client) -> Version:
                 break
             except httpx.HTTPError as err:
                 error = err
-                print(f"Error getting version, sleeping for 1s: {err}", file=sys.stderr)
+                print(
+                    f"Error getting version for {project_name}, sleeping for 1s: {err}",
+                    file=sys.stderr,
+                )
                 time.sleep(1)
             except InvalidSdistFilename as err:
                 # Sometimes there's a link that says "status page"
                 error = err
-                print(f"Invalid index page, sleeping for 1s: {err}", file=sys.stderr)
+                print(
+                    f"Invalid index page for {project_name}, sleeping for 1s: {err}",
+                    file=sys.stderr,
+                )
                 time.sleep(1)
         else:
             raise RuntimeError(f"Failed to fetch {url}") from error
