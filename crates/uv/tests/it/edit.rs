@@ -10211,7 +10211,7 @@ fn add_auth_policy_always_with_credentials() -> Result<()> {
         [[tool.uv.index]]
         name = "my-index"
         url = "https://pypi-proxy.fly.dev/basic-auth/simple"
-        auth-policy = "always"
+        authenticate = "always"
         default = true
         "#
     })?;
@@ -10254,7 +10254,7 @@ fn add_auth_policy_always_without_credentials() -> Result<()> {
         [[tool.uv.index]]
         name = "my-index"
         url = "https://pypi.org/simple"
-        auth-policy = "always"
+        authenticate = "always"
         default = true
         "#
     })?;
@@ -10289,7 +10289,7 @@ fn add_auth_policy_never_with_url_credentials() -> Result<()> {
         [[tool.uv.index]]
         name = "my-index"
         url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"
-        auth-policy = "never"
+        authenticate = "never"
         default = true
         "#
     })?;
@@ -10325,7 +10325,7 @@ fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
         [[tool.uv.index]]
         name = "my-index"
         url = "https://pypi-proxy.fly.dev/basic-auth/simple"
-        auth-policy = "never"
+        authenticate = "never"
         default = true
         "#
     })?;
@@ -10366,7 +10366,7 @@ fn add_auth_policy_never_without_credentials() -> Result<()> {
         [[tool.uv.index]]
         name = "my-index"
         url = "https://pypi.org/simple"
-        auth-policy = "never"
+        authenticate = "never"
         default = true
         "#
     })?;

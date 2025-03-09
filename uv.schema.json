@@ -734,8 +734,8 @@
         "url"
       ],
       "properties": {
-        "auth-policy": {
-          "description": "The authentication policy for the index.\n\nThere are three policies: \"auto\", \"always\", and \"never\".\n\n* \"auto\" will first attempt an unauthenticated request to the index. If that fails it will attempt an authenticated request. * \"always\" will always attempt to make an authenticated request and will fail if the authenticated request fails. * \"never\" will never attempt to make an authenticated request and will fail if an authenticated request fails.\n\nThe authentication policy will apply to requests made to URLs with this index URL as a prefix.\n\n```toml [[tool.uv.index]] name = \"my-index\" url = \"https://<omitted>/simple\" auth-policy = \"always\" ```",
+        "authenticate": {
+          "description": "The authentication policy for the index.\n\nThere are three policies: \"auto\", \"always\", and \"never\".\n\n* \"auto\" will first attempt an unauthenticated request to the index. If that fails it will attempt an authenticated request. * \"always\" will always attempt to make an authenticated request and will fail if the authenticated request fails. * \"never\" will never attempt to make an authenticated request and will fail if an authenticated request fails.\n\nThe authentication policy will apply to requests made to URLs with this index URL as a prefix.\n\n```toml [[tool.uv.index]] name = \"my-index\" url = \"https://<omitted>/simple\" authenticate = \"always\" ```",
           "default": "auto",
           "allOf": [
             {
