@@ -28,6 +28,7 @@ uv-python = { workspace = true, features = ["clap", "schemars"]}
 uv-resolver = { workspace = true, features = ["clap"] }
 uv-settings = { workspace = true, features = ["schemars"] }
 uv-static = { workspace = true }
+uv-torch = { workspace = true, features = ["clap"] }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 

@@ -63,6 +63,7 @@ uv-small-str = { path = "crates/uv-small-str" }
 uv-state = { path = "crates/uv-state" }
 uv-static = { path = "crates/uv-static" }
 uv-tool = { path = "crates/uv-tool" }
+uv-torch = { path = "crates/uv-torch" }
 uv-trampoline-builder = { path = "crates/uv-trampoline-builder" }
 uv-types = { path = "crates/uv-types" }
 uv-version = { path = "crates/uv-version" }
