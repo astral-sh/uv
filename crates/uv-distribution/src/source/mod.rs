@@ -487,8 +487,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(BuiltWheelMetadata {
-            path: cache_shard.join(&disk_filename),
-            target: cache_shard.join(wheel_filename.stem()),
+            path: cache_shard.join(&disk_filename).into_boxed_path(),
+            target: cache_shard.join(wheel_filename.stem()).into_boxed_path(),
             filename: wheel_filename,
             hashes: revision.into_hashes(),
             cache_info: CacheInfo::default(),
@@ -840,8 +840,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(BuiltWheelMetadata {
-            path: cache_shard.join(&disk_filename),
-            target: cache_shard.join(filename.stem()),
+            path: cache_shard.join(&disk_filename).into_boxed_path(),
+            target: cache_shard.join(filename.stem()).into_boxed_path(),
             filename,
             hashes: revision.into_hashes(),
             cache_info,
@@ -1137,8 +1137,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(BuiltWheelMetadata {
-            path: cache_shard.join(&disk_filename),
-            target: cache_shard.join(filename.stem()),
+            path: cache_shard.join(&disk_filename).into_boxed_path(),
+            target: cache_shard.join(filename.stem()).into_boxed_path(),
             filename,
             hashes: revision.into_hashes(),
             cache_info,
@@ -1527,8 +1527,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheWrite)?;
 
         Ok(BuiltWheelMetadata {
-            path: cache_shard.join(&disk_filename),
-            target: cache_shard.join(filename.stem()),
+            path: cache_shard.join(&disk_filename).into_boxed_path(),
+            target: cache_shard.join(filename.stem()).into_boxed_path(),
             filename,
             hashes: HashDigests::empty(),
             cache_info: CacheInfo::default(),

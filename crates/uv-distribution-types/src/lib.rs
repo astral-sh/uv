@@ -34,7 +34,7 @@
 //! Since we read this information from [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/), it doesn't match the information [`Dist`] exactly.
 use std::borrow::Cow;
 use std::path;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use url::Url;
@@ -266,7 +266,7 @@ pub struct DirectUrlBuiltDist {
 pub struct PathBuiltDist {
     pub filename: WheelFilename,
     /// The absolute path to the wheel which we use for installing.
-    pub install_path: PathBuf,
+    pub install_path: Box<Path>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -299,7 +299,7 @@ pub struct DirectUrlSourceDist {
     /// The URL without the subdirectory fragment.
     pub location: Box<Url>,
     /// The subdirectory within the archive in which the source distribution is located.
-    pub subdirectory: Option<PathBuf>,
+    pub subdirectory: Option<Box<Path>>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
     pub ext: SourceDistExtension,
     /// The URL as it was provided by the user, including the subdirectory fragment.
@@ -313,7 +313,7 @@ pub struct GitSourceDist {
     /// The URL without the revision and subdirectory fragment.
     pub git: Box<GitUrl>,
     /// The subdirectory within the Git repository in which the source distribution is located.
-    pub subdirectory: Option<PathBuf>,
+    pub subdirectory: Option<Box<Path>>,
     /// The URL as it was provided by the user, including the revision and subdirectory fragment.
     pub url: VerbatimUrl,
 }
@@ -324,7 +324,7 @@ pub struct PathSourceDist {
     pub name: PackageName,
     pub version: Option<Version>,
     /// The absolute path to the distribution which we use for installing.
-    pub install_path: PathBuf,
+    pub install_path: Box<Path>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
     pub ext: SourceDistExtension,
     /// The URL as it was provided by the user.
@@ -336,7 +336,7 @@ pub struct PathSourceDist {
 pub struct DirectorySourceDist {
     pub name: PackageName,
     /// The absolute path to the distribution which we use for installing.
-    pub install_path: PathBuf,
+    pub install_path: Box<Path>,
     /// Whether the package should be installed in editable mode.
     pub editable: bool,
     /// Whether the package should be built and installed.
@@ -352,7 +352,7 @@ impl Dist {
         name: PackageName,
         url: VerbatimUrl,
         location: Url,
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<Box<Path>>,
         ext: DistExtension,
     ) -> Result<Dist, Error> {
         match ext {
@@ -417,7 +417,7 @@ impl Dist {
                 }
                 Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
                     filename,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     url,
                 })))
             }
@@ -434,7 +434,7 @@ impl Dist {
                 Ok(Self::Source(SourceDist::Path(PathSourceDist {
                     name,
                     version,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     ext,
                     url,
                 })))
@@ -464,7 +464,7 @@ impl Dist {
         // Determine whether the path represents an archive or a directory.
         Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {
             name,
-            install_path,
+            install_path: install_path.into_boxed_path(),
             editable,
             r#virtual,
             url,
@@ -476,7 +476,7 @@ impl Dist {
         name: PackageName,
         url: VerbatimUrl,
         git: GitUrl,
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<Box<Path>>,
     ) -> Result<Dist, Error> {
         Ok(Self::Source(SourceDist::Git(GitSourceDist {
             name,

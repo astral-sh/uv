@@ -189,7 +189,7 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 };
 
-                if !(*requested_path == installed_path
+                if !(**requested_path == installed_path
                     || is_same_file(requested_path, &installed_path).unwrap_or(false))
                 {
                     trace!(
@@ -258,7 +258,7 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 };
 
-                if !(*requested_path == installed_path
+                if !(**requested_path == installed_path
                     || is_same_file(requested_path, &installed_path).unwrap_or(false))
                 {
                     trace!(

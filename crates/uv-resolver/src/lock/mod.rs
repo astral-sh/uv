@@ -680,7 +680,7 @@ impl Lock {
             let (Source::Editable(path) | Source::Virtual(path)) = &package.id.source else {
                 return false;
             };
-            path == Path::new("")
+            path.as_ref() == Path::new("")
         })
     }
 
@@ -1356,7 +1356,8 @@ impl Lock {
                         let path = url.to_file_path().ok()?;
                         let path = relative_to(&path, root)
                             .or_else(|_| std::path::absolute(path))
-                            .ok()?;
+                            .ok()?
+                            .into_boxed_path();
                         Some(path)
                     }
                 })
@@ -1698,7 +1699,7 @@ pub enum SatisfiesResult<'lock> {
     /// The lockfile referenced a remote index that was not provided
     MissingRemoteIndex(&'lock PackageName, &'lock Version, &'lock UrlString),
     /// The lockfile referenced a local index that was not provided
-    MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock PathBuf),
+    MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock Path),
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
     MismatchedPackageRequirements(
         &'lock PackageName,
@@ -2151,7 +2152,7 @@ impl Package {
                         let path_dist = PathBuiltDist {
                             filename,
                             url: verbatim_url(&install_path, &self.id)?,
-                            install_path: absolute_path(workspace_root, path)?,
+                            install_path: absolute_path(workspace_root, path)?.into_boxed_path(),
                         };
                         let built_dist = BuiltDist::Path(path_dist);
                         Ok(Dist::Built(built_dist))
@@ -2330,7 +2331,7 @@ impl Package {
                     name: self.id.name.clone(),
                     version: self.id.version.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     ext,
                 };
                 uv_distribution_types::SourceDist::Path(path_dist)
@@ -2340,7 +2341,7 @@ impl Package {
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     editable: false,
                     r#virtual: false,
                 };
@@ -2351,7 +2352,7 @@ impl Package {
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     editable: true,
                     r#virtual: false,
                 };
@@ -2362,7 +2363,7 @@ impl Package {
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     editable: false,
                     r#virtual: true,
                 };
@@ -2402,16 +2403,15 @@ impl Package {
                     return Ok(None);
                 };
                 let location = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
-                let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                 let url = Url::from(ParsedArchiveUrl {
                     url: location.clone(),
-                    subdirectory: subdirectory.clone(),
+                    subdirectory: direct.subdirectory.clone(),
                     ext: DistExtension::Source(ext),
                 });
                 let direct_dist = DirectUrlSourceDist {
                     name: self.id.name.clone(),
                     location: Box::new(location),
-                    subdirectory: subdirectory.clone(),
+                    subdirectory: direct.subdirectory.clone(),
                     ext,
                     url: VerbatimUrl::from_url(url),
                 };
@@ -3060,13 +3060,13 @@ enum Source {
     /// A direct HTTP(S) URL.
     Direct(UrlString, DirectSource),
     /// A path to a local source or built archive.
-    Path(PathBuf),
+    Path(Box<Path>),
     /// A path to a local directory.
-    Directory(PathBuf),
+    Directory(Box<Path>),
     /// A path to a local directory that should be installed as editable.
-    Editable(PathBuf),
+    Editable(Box<Path>),
     /// A path to a local directory that should not be built or installed.
-    Virtual(PathBuf),
+    Virtual(Box<Path>),
 }
 
 impl Source {
@@ -3152,14 +3152,14 @@ impl Source {
         let path = relative_to(&path_dist.install_path, root)
             .or_else(|_| std::path::absolute(&path_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
-        Ok(Source::Path(path))
+        Ok(Source::Path(path.into_boxed_path()))
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Source, LockError> {
         let path = relative_to(&path_dist.install_path, root)
             .or_else(|_| std::path::absolute(&path_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
-        Ok(Source::Path(path))
+        Ok(Source::Path(path.into_boxed_path()))
     }
 
     fn from_directory_source_dist(
@@ -3170,11 +3170,11 @@ impl Source {
             .or_else(|_| std::path::absolute(&directory_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
         if directory_dist.editable {
-            Ok(Source::Editable(path))
+            Ok(Source::Editable(path.into_boxed_path()))
         } else if directory_dist.r#virtual {
-            Ok(Source::Virtual(path))
+            Ok(Source::Virtual(path.into_boxed_path()))
         } else {
-            Ok(Source::Directory(path))
+            Ok(Source::Directory(path.into_boxed_path()))
         }
     }
 
@@ -3191,7 +3191,7 @@ impl Source {
                 let path = relative_to(&path, root)
                     .or_else(|_| std::path::absolute(&path))
                     .map_err(LockErrorKind::IndexRelativePath)?;
-                let source = RegistrySource::Path(path);
+                let source = RegistrySource::Path(path.into_boxed_path());
                 Ok(Source::Registry(source))
             }
         }
@@ -3418,7 +3418,7 @@ impl TryFrom<SourceWire> for Source {
             Direct { url, subdirectory } => Ok(Source::Direct(
                 url,
                 DirectSource {
-                    subdirectory: subdirectory.map(PathBuf::from),
+                    subdirectory: subdirectory.map(Box::<std::path::Path>::from),
                 },
             )),
             Path { path } => Ok(Source::Path(path.into())),
@@ -3435,7 +3435,7 @@ enum RegistrySource {
     /// Ex) `https://pypi.org/simple`
     Url(UrlString),
     /// Ex) `../path/to/local/index`
-    Path(PathBuf),
+    Path(Box<Path>),
 }
 
 impl Display for RegistrySource {
@@ -3506,7 +3506,7 @@ impl From<RegistrySourceWire> for RegistrySource {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 struct DirectSource {
-    subdirectory: Option<PathBuf>,
+    subdirectory: Option<Box<Path>>,
 }
 
 /// NOTE: Care should be taken when adding variants to this enum. Namely, new
@@ -3516,7 +3516,7 @@ struct DirectSource {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 struct GitSource {
     precise: GitOid,
-    subdirectory: Option<PathBuf>,
+    subdirectory: Option<Box<Path>>,
     kind: GitSourceKind,
 }
 
@@ -3585,7 +3585,7 @@ enum SourceDist {
         metadata: SourceDistMetadata,
     },
     Path {
-        path: PathBuf,
+        path: Box<Path>,
         #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
@@ -3733,7 +3733,8 @@ impl SourceDist {
                     .map_err(|()| LockErrorKind::UrlToPath)?;
                 let path = relative_to(&reg_dist_path, index_path)
                     .or_else(|_| std::path::absolute(&reg_dist_path))
-                    .map_err(LockErrorKind::DistributionRelativePath)?;
+                    .map_err(LockErrorKind::DistributionRelativePath)?
+                    .into_boxed_path();
                 let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = reg_dist.file.size;
                 Ok(Some(SourceDist::Path {
@@ -4036,7 +4037,8 @@ impl Wheel {
                     .map_err(|()| LockErrorKind::UrlToPath)?;
                 let path = relative_to(&wheel_path, index_path)
                     .or_else(|_| std::path::absolute(&wheel_path))
-                    .map_err(LockErrorKind::DistributionRelativePath)?;
+                    .map_err(LockErrorKind::DistributionRelativePath)?
+                    .into_boxed_path();
                 Ok(Wheel {
                     url: WheelWireSource::Path { path },
                     hash: None,
@@ -4174,7 +4176,7 @@ enum WheelWireSource {
     /// Used for wheels that come from local registries (like `--find-links`).
     Path {
         /// The path to the wheel, relative to the index.
-        path: PathBuf,
+        path: Box<Path>,
     },
     /// Used for path wheels.
     ///
@@ -4520,7 +4522,8 @@ fn normalize_requirement(
             ext,
             url: _,
         } => {
-            let install_path = uv_fs::normalize_path_buf(root.join(&install_path));
+            let install_path =
+                uv_fs::normalize_path_buf(root.join(&install_path)).into_boxed_path();
             let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
@@ -4543,7 +4546,8 @@ fn normalize_requirement(
             r#virtual,
             url: _,
         } => {
-            let install_path = uv_fs::normalize_path_buf(root.join(&install_path));
+            let install_path =
+                uv_fs::normalize_path_buf(root.join(&install_path)).into_boxed_path();
             let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
