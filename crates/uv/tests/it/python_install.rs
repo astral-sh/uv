@@ -661,6 +661,79 @@ fn python_install_freethreaded() {
 }
 
 #[test]
+fn python_install_debug() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // Install the latest version
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.13d"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No download found for request: cpython-3.13d-[PLATFORM]
+    ");
+
+    let bin_python = context
+        .bin_dir
+        .child(format!("python3.13d{}", std::env::consts::EXE_SUFFIX));
+
+    // The executable should be installed in the bin directory
+    bin_python.assert(predicate::path::exists());
+
+    // On Unix, it should be a link
+    #[cfg(unix)]
+    bin_python.assert(predicate::path::is_symlink());
+
+    // The executable should "work"
+    uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
+        .arg("-c").arg("import subprocess; print('hello world')"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    hello world
+
+    ----- stderr -----
+    "###);
+
+    // Should be distinct from 3.13
+    uv_snapshot!(context.filters(), context.python_install().arg("3.13"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.2 in [TIME]
+     + cpython-3.13.2-[PLATFORM]
+    "###);
+
+    // Should work with older Python versions too
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12d"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No download found for request: cpython-3.12d-[PLATFORM]
+    "###);
+
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python installations
+    Uninstalled 2 versions in [TIME]
+     - cpython-3.13.2-[PLATFORM]
+     - cpython-3.13.2+freethreaded-[PLATFORM] (python3.13t)
+    "###);
+}
+
+#[test]
 fn python_install_invalid_request() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()

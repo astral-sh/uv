@@ -388,7 +388,7 @@ impl fmt::Display for PythonInstallationKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let variant = match self.variant {
             PythonVariant::Default => String::new(),
-            PythonVariant::Freethreaded => format!("+{}", self.variant),
+            _ => format!("+{}", self.variant),
         };
         write!(
             f,
