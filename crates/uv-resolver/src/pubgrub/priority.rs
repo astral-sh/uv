@@ -236,6 +236,11 @@ impl PubGrubPriorities {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum PubGrubPriority {
+    /// Selected version of this package were often the culprit of rejecting another package, so
+    /// it's deprioritized behind `ConflictEarly`. It's still the higher than `Unspecified` to
+    /// conflict before selecting unrelated packages.
+    ConflictLate(Reverse<usize>),
+
     /// The package has no specific priority.
     ///
     /// As such, its priority is based on the order in which the packages were added (FIFO), such
@@ -244,11 +249,6 @@ pub(crate) enum PubGrubPriority {
     /// TODO(charlie): Prefer constrained over unconstrained packages, if they're at the same depth
     /// in the dependency graph.
     Unspecified(Reverse<usize>),
-
-    /// Selected version of this package were often the culprit of rejecting another package, so
-    /// it's deprioritized behind `ConflictEarly`. It's still the higher than `Unspecified` to
-    /// conflict before selecting unrelated packages.
-    ConflictLate(Reverse<usize>),
 
     /// Selected version of this package were often rejected, so it's prioritized over
     /// `ConflictLate`.

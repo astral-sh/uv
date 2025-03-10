@@ -1,10 +1,11 @@
 ---
 source: crates/uv/tests/it/ecosystem.rs
 expression: snapshot
+snapshot_kind: text
 ---
 success: true
 exit_code: 0
 ----- stdout -----
 
 ----- stderr -----
-Resolved 302 packages in [TIME]
+Resolved 288 packages in [TIME]
