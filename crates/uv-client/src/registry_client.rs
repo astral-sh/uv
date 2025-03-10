@@ -13,6 +13,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use tokio::sync::Semaphore;
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
+use uv_auth::UrlAuthPolicies;
 
 use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
 use crate::cached_client::CacheControl;
@@ -97,6 +98,14 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn native_tls(mut self, native_tls: bool) -> Self {
         self.base_client_builder = self.base_client_builder.native_tls(native_tls);
+        self
+    }
+
+    #[must_use]
+    pub fn url_auth_policies(mut self, url_auth_policies: UrlAuthPolicies) -> Self {
+        self.base_client_builder = self
+            .base_client_builder
+            .url_auth_policies(url_auth_policies);
         self
     }
 
