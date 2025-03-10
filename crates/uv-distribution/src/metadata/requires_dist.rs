@@ -58,6 +58,7 @@ impl RequiresDist {
                     .fetch_root
                     .parent()
                     .expect("git checkout has a parent")
+                    .to_path_buf()
             }),
             members: match sources {
                 SourceStrategy::Enabled => MemberDiscovery::default(),
@@ -493,7 +494,7 @@ mod test {
                 .context("metadata field project not found")?,
             &pyproject_toml,
             &DiscoveryOptions {
-                stop_discovery_at: Some(path),
+                stop_discovery_at: Some(path.to_path_buf()),
                 ..DiscoveryOptions::default()
             },
             &WorkspaceCache::default(),
