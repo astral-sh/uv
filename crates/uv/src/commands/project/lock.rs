@@ -991,7 +991,7 @@ impl ValidatedLock {
         } else {
             MarkerTree::TRUE
         };
-        // We respect requires-python in addition to the environments the user specified.
+        // When a user defines environments, they are implicitly constrained by requires-python.
         environments_union.and(requires_python.to_marker_tree());
         if !fork_markers_union.negate().is_disjoint(environments_union) {
             warn_user!(
