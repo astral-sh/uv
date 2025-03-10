@@ -4560,7 +4560,7 @@ fn run_windows_legacy_scripts() -> Result<()> {
     Audited 1 package in [TIME]
     "###);
 
-    // Test without explicit extension (.ps1 should be used)
+    // Test without explicit extension (.ps1 should be used) as there's no .exe available.
     uv_snapshot!(context.filters(), context.run().arg("custom_pydoc"), @r###"
     success: true
     exit_code: 0
