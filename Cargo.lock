@@ -4928,7 +4928,11 @@ dependencies = [
 name = "uv-dirs"
 version = "0.0.1"
 dependencies = [
+ "assert_fs",
  "etcetera",
+ "fs-err 3.1.0",
+ "indoc",
+ "tracing",
  "uv-static",
 ]
 
@@ -5614,11 +5618,8 @@ dependencies = [
 name = "uv-settings"
 version = "0.0.1"
 dependencies = [
- "assert_fs",
  "clap",
- "etcetera",
  "fs-err 3.1.0",
- "indoc",
  "schemars",
  "serde",
  "textwrap",
@@ -5628,6 +5629,7 @@ dependencies = [
  "url",
  "uv-cache-info",
  "uv-configuration",
+ "uv-dirs",
  "uv-distribution-types",
  "uv-fs",
  "uv-install-wheel",
