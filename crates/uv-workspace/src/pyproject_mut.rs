@@ -44,8 +44,11 @@ pub enum Error {
     MalformedWorkspace,
     #[error("Expected a dependency at index {0}")]
     MissingDependency(usize),
-    #[error("Cannot perform ambiguous update; found multiple entries with matching package names")]
-    Ambiguous,
+    #[error("Cannot perform ambiguous update; found multiple entries for `{}`:\n* `{}`", package_name, requirements.iter().join("`\n* `"))]
+    Ambiguous {
+        package_name: PackageName,
+        requirements: Vec<Requirement>,
+    },
 }
 
 /// The result of editing an array in a TOML document.
@@ -1124,7 +1127,13 @@ pub fn add_dependency(
             Ok(ArrayEdit::Update(i))
         }
         // Cannot perform ambiguous updates.
-        _ => Err(Error::Ambiguous),
+        _ => Err(Error::Ambiguous {
+            package_name: req.name.clone(),
+            requirements: to_replace
+                .into_iter()
+                .map(|(_, requirement)| requirement)
+                .collect(),
+        }),
     }
 }
 
