@@ -27,8 +27,8 @@ use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments};
 use uv_python::{
-    EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
-    PythonVersion, VersionRequest,
+    current_dir, EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference,
+    PythonRequest, PythonVersion, VersionRequest,
 };
 use uv_requirements::{
     upgrade::read_requirements_txt, RequirementsSource, RequirementsSpecification,
@@ -219,7 +219,14 @@ pub(crate) async fn pip_compile(
     let environment_preference = EnvironmentPreference::from_system_flag(system, false);
     let interpreter = if let Some(python) = python.as_ref() {
         let request = PythonRequest::parse(python);
-        PythonInstallation::find(&request, environment_preference, python_preference, &cache)
+        let root_directory = current_dir()?;
+        PythonInstallation::find(
+            &request,
+            environment_preference,
+            python_preference,
+            &cache,
+            root_directory.as_path(),
+        )
     } else {
         // TODO(zanieb): The split here hints at a problem with the request abstraction; we should
         // be able to use `PythonInstallation::find(...)` here.
