@@ -42,7 +42,7 @@ use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
 #[derive(Debug, Error)]
 enum Error {
@@ -240,7 +240,13 @@ async fn build_impl(
     };
 
     // Attempt to discover the workspace; on failure, save the error for later.
-    let workspace = Workspace::discover(src.directory(), &DiscoveryOptions::default()).await;
+    let workspace_cache = WorkspaceCache::default();
+    let workspace = Workspace::discover(
+        src.directory(),
+        &DiscoveryOptions::default(),
+        &workspace_cache,
+    )
+    .await;
 
     // If a `--package` or `--all-packages` was provided, adjust the source directory.
     let packages = if let Some(package) = package {
@@ -551,6 +557,7 @@ async fn build_package(
 
     // Initialize any shared state.
     let state = SharedState::default();
+    let workspace_cache = WorkspaceCache::default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -570,6 +577,7 @@ async fn build_package(
         &hasher,
         exclude_newer,
         sources,
+        workspace_cache,
         concurrency,
         preview,
     );

@@ -21,9 +21,9 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
-
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
@@ -86,6 +86,7 @@ pub(crate) async fn install(
 
     // Initialize any shared state.
     let state = PlatformState::default();
+    let workspace_cache = WorkspaceCache::default();
 
     let client_builder = BaseClientBuilder::new()
         .connectivity(network_settings.connectivity)
@@ -133,6 +134,7 @@ pub(crate) async fn install(
                 &state,
                 concurrency,
                 &cache,
+                &workspace_cache,
                 printer,
                 preview,
             )
@@ -245,6 +247,7 @@ pub(crate) async fn install(
                 &state,
                 concurrency,
                 &cache,
+                &workspace_cache,
                 printer,
                 preview,
             )
@@ -269,6 +272,7 @@ pub(crate) async fn install(
         &state,
         concurrency,
         &cache,
+        &workspace_cache,
         printer,
         preview,
     )
@@ -400,6 +404,7 @@ pub(crate) async fn install(
             installer_metadata,
             concurrency,
             &cache,
+            workspace_cache,
             DryRun::Disabled,
             printer,
             preview,

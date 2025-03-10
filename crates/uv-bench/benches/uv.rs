@@ -103,6 +103,7 @@ mod resolver {
         Resolver, ResolverEnvironment, ResolverOutput,
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
+    use uv_workspace::WorkspaceCache;
 
     static MARKERS: LazyLock<MarkerEnvironment> = LazyLock::new(|| {
         MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
@@ -161,6 +162,7 @@ mod resolver {
         let sources = SourceStrategy::default();
         let dependency_metadata = DependencyMetadata::default();
         let conflicts = Conflicts::empty();
+        let workspace_cache = WorkspaceCache::default();
 
         let python_requirement = if universal {
             PythonRequirement::from_requires_python(
@@ -188,6 +190,7 @@ mod resolver {
             &hashes,
             exclude_newer,
             sources,
+            workspace_cache,
             concurrency,
             PreviewMode::Enabled,
         );

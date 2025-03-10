@@ -4648,6 +4648,7 @@ dependencies = [
  "uv-python",
  "uv-resolver",
  "uv-types",
+ "uv-workspace",
 ]
 
 [[package]]
@@ -4724,6 +4725,7 @@ dependencies = [
  "uv-types",
  "uv-virtualenv",
  "uv-warnings",
+ "uv-workspace",
 ]
 
 [[package]]
@@ -4976,6 +4978,7 @@ dependencies = [
  "uv-resolver",
  "uv-types",
  "uv-version",
+ "uv-workspace",
 ]
 
 [[package]]
@@ -5757,6 +5760,7 @@ dependencies = [
  "uv-pep508",
  "uv-pypi-types",
  "uv-python",
+ "uv-workspace",
 ]
 
 [[package]]

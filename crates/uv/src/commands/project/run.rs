@@ -35,7 +35,7 @@ use uv_scripts::Pep723Item;
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
@@ -142,6 +142,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     // Initialize any shared state.
     let lock_state = UniversalState::default();
     let sync_state = lock_state.fork();
+    let workspace_cache = WorkspaceCache::default();
 
     // Read from the `.env` file, if necessary.
     if !no_env_file {
@@ -369,6 +370,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     installer_metadata,
                     concurrency,
                     cache,
+                    workspace_cache,
                     DryRun::Disabled,
                     printer,
                     preview,
@@ -425,6 +427,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     let mut lock: Option<(Lock, PathBuf)> = None;
 
     // Discover and sync the base environment.
+    let workspace_cache = WorkspaceCache::default();
     let temp_dir;
     let base_interpreter = if let Some(script_interpreter) = script_interpreter {
         // If we found a PEP 723 script and the user provided a project-only setting, warn.
@@ -466,13 +469,19 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             // We need a workspace, but we don't need to have a current package, we can be e.g. in
             // the root of a virtual workspace and then switch into the selected package.
             Some(VirtualProject::Project(
-                Workspace::discover(project_dir, &DiscoveryOptions::default())
+                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
                     .await?
                     .with_current_project(package.clone())
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             ))
         } else {
-            match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
+            match VirtualProject::discover(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &workspace_cache,
+            )
+            .await
+            {
                 Ok(project) => {
                     if no_project {
                         debug!("Ignoring discovered project due to `--no-project`");

@@ -18,6 +18,7 @@ use uv_python::{
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, SummaryResolveLogger, UpgradeInstallLogger,
@@ -281,6 +282,7 @@ async fn upgrade_tool(
 
     // Initialize any shared state.
     let state = PlatformState::default();
+    let workspace_cache = WorkspaceCache::default();
 
     // Check if we need to create a new environment — if so, resolve it first, then
     // install the requested tool
@@ -340,6 +342,7 @@ async fn upgrade_tool(
             installer_metadata,
             concurrency,
             cache,
+            workspace_cache,
             DryRun::Disabled,
             printer,
             preview,

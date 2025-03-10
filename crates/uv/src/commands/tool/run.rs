@@ -37,6 +37,7 @@ use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_static::EnvVars;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
@@ -625,6 +626,7 @@ async fn get_or_create_environment(
 
     // Initialize any shared state.
     let state = PlatformState::default();
+    let workspace_cache = WorkspaceCache::default();
 
     let from = if request.is_python() {
         ToolRequirement::Python
@@ -668,6 +670,7 @@ async fn get_or_create_environment(
                     &state,
                     concurrency,
                     cache,
+                    &workspace_cache,
                     printer,
                     preview,
                 )
@@ -760,6 +763,7 @@ async fn get_or_create_environment(
                 &state,
                 concurrency,
                 cache,
+                &workspace_cache,
                 printer,
                 preview,
             )
@@ -785,6 +789,7 @@ async fn get_or_create_environment(
         &state,
         concurrency,
         cache,
+        &workspace_cache,
         printer,
         preview,
     )

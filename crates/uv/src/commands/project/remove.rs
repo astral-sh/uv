@@ -21,7 +21,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
@@ -87,15 +87,25 @@ pub(crate) async fn remove(
         RemoveTarget::Script(script)
     } else {
         // Find the project in the workspace.
+        // No workspace caching since `uv remove` changes the workspace definition.
         let project = if let Some(package) = package {
             VirtualProject::Project(
-                Workspace::discover(project_dir, &DiscoveryOptions::default())
-                    .await?
-                    .with_current_project(package.clone())
-                    .with_context(|| format!("Package `{package}` not found in workspace"))?,
+                Workspace::discover(
+                    project_dir,
+                    &DiscoveryOptions::default(),
+                    &WorkspaceCache::default(),
+                )
+                .await?
+                .with_current_project(package.clone())
+                .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
+            VirtualProject::discover(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &WorkspaceCache::default(),
+            )
+            .await?
         };
 
         RemoveTarget::Project(project)

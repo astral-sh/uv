@@ -29,7 +29,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_shell::{shlex_posix, shlex_windows, Shell};
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_warnings::warn_user;
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
 use crate::commands::pip::operations::{report_interpreter, Changelog};
@@ -150,10 +150,13 @@ async fn venv_impl(
     relocatable: bool,
     preview: PreviewMode,
 ) -> miette::Result<ExitStatus> {
+    let workspace_cache = WorkspaceCache::default();
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+            .await
+        {
             Ok(project) => Some(project),
             Err(WorkspaceError::MissingProject(_)) => None,
             Err(WorkspaceError::MissingPyprojectToml) => None,
@@ -318,6 +321,7 @@ async fn venv_impl(
 
         // Initialize any shared state.
         let state = SharedState::default();
+        let workspace_cache = WorkspaceCache::default();
 
         // For seed packages, assume a bunch of default settings are sufficient.
         let build_constraints = Constraints::default();
@@ -346,6 +350,7 @@ async fn venv_impl(
             &build_hasher,
             exclude_newer,
             sources,
+            workspace_cache,
             concurrency,
             preview,
         );

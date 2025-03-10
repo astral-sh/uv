@@ -34,6 +34,7 @@ use uv_resolver::{
     ResolutionMode, ResolverEnvironment,
 };
 use uv_types::{BuildIsolation, HashStrategy};
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
@@ -400,6 +401,7 @@ pub(crate) async fn pip_install(
         &build_hasher,
         exclude_newer,
         sources,
+        WorkspaceCache::default(),
         concurrency,
         preview,
     );
