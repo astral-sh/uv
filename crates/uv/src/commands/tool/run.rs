@@ -34,6 +34,7 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
+use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
@@ -260,7 +261,12 @@ pub(crate) async fn run(
     let executable = from.executable();
 
     // Construct the command
-    let mut process = Command::new(executable);
+    let mut process = if cfg!(windows) {
+        WindowsRunnable::from_script_path(environment.scripts(), executable.as_ref()).into()
+    } else {
+        Command::new(executable)
+    };
+
     process.args(args);
 
     // Construct the `PATH` environment variable.

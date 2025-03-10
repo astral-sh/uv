@@ -264,6 +264,27 @@ $ uv tool upgrade --python 3.10 ruff
 For more details on requesting Python versions, see the
 [Python version](../concepts/python-versions.md#requesting-a-version) concept page..
 
+## Legacy Windows Scripts
+
+Tools also support running
+[legacy setuptools scripts](https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/#scripts).
+These scripts are available via `$(uv tool dir)\<tool-name>\Scripts` when installed.
+
+Currently only legacy scripts with the `.ps1`, `.cmd`, and `.bat` extensions are supported.
+
+For example, below is an example running a Command Prompt script.
+
+```console
+$ uv tool run --from nuitka==2.6.7 nuitka.cmd --version
+```
+
+In addition, you don't need to specify the extension. `uvx` will automatically look for files ending
+in `.ps1`, `.cmd`, and `.bat` in that order of execution on your behalf.
+
+```console
+$ uv tool run --from nuitka==2.6.7 nuitka --version
+```
+
 ## Next steps
 
 To learn more about managing tools with uv, see the [Tools concept](../concepts/tools.md) page and
