@@ -46,5 +46,3 @@ url = { workspace = true }
 ignored = ["uv-options-metadata", "clap"]
 
 [dev-dependencies]
-assert_fs = { version = "1.1.2" }
-indoc = { workspace = true }

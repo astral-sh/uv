@@ -16,7 +16,6 @@ doctest = false
 workspace = true
 
 [dependencies]
-uv-static = { workspace = true }
 
 dunce = { workspace = true }
 either = { workspace = true }
