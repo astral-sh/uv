@@ -13,7 +13,7 @@ use uv_normalize::PackageName;
 use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreference,
-    PythonRequest,
+    PythonRequest, PythonRequestSource,
 };
 use uv_requirements::RequirementsSpecification;
 use uv_settings::{Combine, PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -89,6 +89,9 @@ pub(crate) async fn upgrade(
         Some(
             PythonInstallation::find_or_download(
                 python_request.as_ref(),
+                python_request
+                    .as_ref()
+                    .map(|_| &PythonRequestSource::UserRequest),
                 EnvironmentPreference::OnlySystem,
                 python_preference,
                 python_downloads,

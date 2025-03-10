@@ -20,7 +20,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Requirement, VersionOrUrl};
 use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParsedUrl};
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
+use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest, PythonRequestSource};
 use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
 
 use crate::commands::pip::latest::LatestClient;
@@ -56,6 +56,7 @@ pub(crate) async fn pip_tree(
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
+        python.as_ref().map(|_| &PythonRequestSource::UserRequest),
         EnvironmentPreference::from_system_flag(system, false),
         cache,
     )?;

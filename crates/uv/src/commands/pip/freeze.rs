@@ -8,7 +8,7 @@ use owo_colors::OwoColorize;
 use uv_cache::Cache;
 use uv_distribution_types::{Diagnostic, InstalledDist, Name};
 use uv_installer::SitePackages;
-use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
+use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest, PythonRequestSource};
 
 use crate::commands::pip::operations::report_target_environment;
 use crate::commands::ExitStatus;
@@ -27,6 +27,7 @@ pub(crate) fn pip_freeze(
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
+        python.as_ref().map(|_| &PythonRequestSource::UserRequest),
         EnvironmentPreference::from_system_flag(system, false),
         cache,
     )?;

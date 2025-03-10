@@ -26,7 +26,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
+    PythonInstallation, PythonPreference, PythonRequest, PythonRequestSource, PythonVersionFile,
     VersionFileDiscoveryOptions,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
@@ -571,6 +571,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
                 let interpreter = PythonInstallation::find_or_download(
                     python_request.as_ref(),
+                    Some(&source),
                     EnvironmentPreference::Any,
                     python_preference,
                     python_downloads,
@@ -784,21 +785,37 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .native_tls(network_settings.native_tls)
                     .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
+                // TODO(zanieb): Refactor this to use shared logic
                 // (1) Explicit request from user
-                let python_request = if let Some(request) = python.as_deref() {
-                    Some(PythonRequest::parse(request))
+                let (python_request, request_source) = if let Some(request) = python.as_deref() {
+                    (
+                        Some(PythonRequest::parse(request)),
+                        Some(PythonRequestSource::UserRequest),
+                    )
                 // (2) Request from `.python-version`
                 } else {
-                    PythonVersionFile::discover(
+                    if let Some(version_file) = PythonVersionFile::discover(
                         &project_dir,
                         &VersionFileDiscoveryOptions::default().with_no_config(no_config),
                     )
                     .await?
-                    .and_then(PythonVersionFile::into_version)
+                    {
+                        if let Some(request) = version_file.version() {
+                            (
+                                Some(request.clone()),
+                                Some(PythonRequestSource::DotPythonVersion(version_file)),
+                            )
+                        } else {
+                            (None, None)
+                        }
+                    } else {
+                        (None, None)
+                    }
                 };
 
                 let python = PythonInstallation::find_or_download(
                     python_request.as_ref(),
+                    request_source.as_ref(),
                     // No opt-in is required for system environments, since we are not mutating it.
                     EnvironmentPreference::Any,
                     python_preference,

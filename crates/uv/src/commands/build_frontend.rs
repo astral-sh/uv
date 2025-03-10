@@ -439,6 +439,8 @@ async fn build_package(
         }
     };
 
+    // TODO(zanieb): Refactor this to avoid repeating `WorkspacePython` logic for Python sources?
+
     // (1) Explicit request from user
     let mut interpreter_request = python_request.map(PythonRequest::parse);
 
@@ -470,6 +472,7 @@ async fn build_package(
     // Locate the Python interpreter to use in the environment.
     let interpreter = PythonInstallation::find_or_download(
         interpreter_request.as_ref(),
+        None,
         EnvironmentPreference::Any,
         python_preference,
         python_downloads,

@@ -16,7 +16,7 @@ use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::platform::{Arch, Libc, Os};
 use crate::{
     downloads, Error, ImplementationName, Interpreter, PythonDownloads, PythonPreference,
-    PythonSource, PythonVariant, PythonVersion,
+    PythonRequestSource, PythonSource, PythonVariant, PythonVersion,
 };
 
 /// A Python interpreter and accompanying tools.
@@ -51,11 +51,13 @@ impl PythonInstallation {
     /// See [`find_installation`] for implementation details.
     pub fn find(
         request: &PythonRequest,
+        request_source: Option<&PythonRequestSource>,
         environments: EnvironmentPreference,
         preference: PythonPreference,
         cache: &Cache,
     ) -> Result<Self, Error> {
-        let installation = find_python_installation(request, environments, preference, cache)??;
+        let installation =
+            find_python_installation(request, request_source, environments, preference, cache)??;
         Ok(installation)
     }
 
@@ -63,12 +65,14 @@ impl PythonInstallation {
     /// be satisfied, fallback to the best available Python installation.
     pub fn find_best(
         request: &PythonRequest,
+        request_source: Option<&PythonRequestSource>,
         environments: EnvironmentPreference,
         preference: PythonPreference,
         cache: &Cache,
     ) -> Result<Self, Error> {
         Ok(find_best_python_installation(
             request,
+            request_source,
             environments,
             preference,
             cache,
@@ -80,6 +84,7 @@ impl PythonInstallation {
     /// Unlike [`PythonInstallation::find`], if the required Python is not installed it will be installed automatically.
     pub async fn find_or_download(
         request: Option<&PythonRequest>,
+        request_source: Option<&PythonRequestSource>,
         environments: EnvironmentPreference,
         preference: PythonPreference,
         python_downloads: PythonDownloads,
@@ -92,7 +97,7 @@ impl PythonInstallation {
         let request = request.unwrap_or(&PythonRequest::Default);
 
         // Search for the installation
-        let err = match Self::find(request, environments, preference, cache) {
+        let err = match Self::find(request, request_source, environments, preference, cache) {
             Ok(installation) => return Ok(installation),
             Err(err) => err,
         };
