@@ -42,7 +42,7 @@ impl Cache {
     /// Returns an absolute cache dir.
     pub fn from_settings(no_cache: bool, cache_dir: Option<PathBuf>) -> Result<Self, io::Error> {
         if no_cache {
-            Self::temp()
+            Self::temp(cache_dir)
         } else if let Some(cache_dir) = cache_dir {
             Ok(Self::from_path(cache_dir))
         } else if let Some(cache_dir) = uv_dirs::legacy_user_cache_dir().filter(|dir| dir.exists())
