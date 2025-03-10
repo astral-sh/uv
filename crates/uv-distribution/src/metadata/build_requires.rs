@@ -5,7 +5,9 @@ use uv_configuration::SourceStrategy;
 use uv_distribution_types::IndexLocations;
 use uv_normalize::PackageName;
 use uv_workspace::pyproject::ToolUvSources;
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, Workspace};
+use uv_workspace::{
+    DiscoveryOptions, MemberDiscovery, ProjectWorkspace, Workspace, WorkspaceCache,
+};
 
 use crate::metadata::{LoweredRequirement, MetadataError};
 
@@ -37,6 +39,7 @@ impl BuildRequires {
         install_path: &Path,
         locations: &IndexLocations,
         sources: SourceStrategy,
+        cache: &WorkspaceCache,
     ) -> Result<Self, MetadataError> {
         let discovery = match sources {
             SourceStrategy::Enabled => DiscoveryOptions::default(),
@@ -48,7 +51,7 @@ impl BuildRequires {
 
         // TODO(konsti): Cache workspace discovery.
         let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &discovery).await?
+            ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };

@@ -15,7 +15,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion}
 use uv_resolver::{PackageMap, TreeDisplay};
 use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
-use uv_workspace::{DiscoveryOptions, Workspace};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::DefaultResolveLogger;
@@ -60,11 +60,14 @@ pub(crate) async fn tree(
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
     // Find the project requirements.
+    let workspace_cache = WorkspaceCache::default();
     let workspace;
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
-        workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
+        workspace =
+            Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+                .await?;
         LockTarget::Workspace(&workspace)
     };
 

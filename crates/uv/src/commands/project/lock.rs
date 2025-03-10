@@ -37,7 +37,7 @@ use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceMember};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceMember};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
@@ -123,11 +123,14 @@ pub(crate) async fn lock(
     };
 
     // Find the project requirements.
+    let workspace_cache = WorkspaceCache::default();
     let workspace;
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
-        workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
+        workspace =
+            Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+                .await?;
         LockTarget::Workspace(&workspace)
     };
 
@@ -596,6 +599,8 @@ async fn do_lock(
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
+    let workspace_cache = WorkspaceCache::default();
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -614,6 +619,7 @@ async fn do_lock(
         &build_hasher,
         exclude_newer,
         sources,
+        workspace_cache,
         concurrency,
         preview,
     );

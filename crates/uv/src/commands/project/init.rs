@@ -26,7 +26,7 @@ use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
@@ -291,14 +291,16 @@ async fn init_project(
     printer: Printer,
 ) -> Result<()> {
     // Discover the current workspace, if it exists.
+    let workspace_cache = WorkspaceCache::default();
     let workspace = {
         let parent = path.parent().expect("Project path has no parent");
         match Workspace::discover(
             parent,
             &DiscoveryOptions {
-                members: MemberDiscovery::Ignore(std::iter::once(path).collect()),
+                members: MemberDiscovery::Ignore(std::iter::once(path.to_path_buf()).collect()),
                 ..DiscoveryOptions::default()
             },
+            &workspace_cache,
         )
         .await
         {

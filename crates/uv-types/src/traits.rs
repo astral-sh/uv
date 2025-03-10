@@ -17,6 +17,7 @@ use uv_git::GitResolver;
 use uv_pep508::PackageName;
 use uv_pypi_types::Requirement;
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_workspace::WorkspaceCache;
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -87,6 +88,9 @@ pub trait BuildContext {
 
     /// The index locations being searched.
     fn locations(&self) -> &IndexLocations;
+
+    /// Workspace discovery caching.
+    fn workspace_cache(&self) -> &WorkspaceCache;
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(
