@@ -1,4 +1,5 @@
 use std::fmt;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::Context;
@@ -31,6 +32,16 @@ pub(crate) enum Level {
     TraceAll,
 }
 
+/// Enum to set the log level for the file logs
+// Discuss if we need to separate trace or debug and the hierarchical layer or not into different args (based on what the use cases are)
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FileLogLevel {
+    /// Write debug messages to the log file.
+    #[default]
+    DebugUv,
+    TraceUv,
+    TraceAll,
+}
 struct UvFormat {
     display_timestamp: bool,
     display_level: bool,
@@ -116,6 +127,8 @@ pub(crate) fn setup_logging(
     level: Level,
     durations: impl Layer<Registry> + Send + Sync,
     color: ColorChoice,
+    log_path: Option<&PathBuf>,
+    file_log_level: FileLogLevel,
 ) -> anyhow::Result<()> {
     // We use directives here to ensure `RUST_LOG` can override them
     let default_directive = match level {
@@ -143,6 +156,11 @@ pub(crate) fn setup_logging(
             .with_target("", tracing::level_filters::LevelFilter::INFO),
     );
 
+    let subscriber = tracing_subscriber::registry().with(durations_layer);
+
+    // Building the layers for logging sort of like a builder pattern
+    let mut layers = Vec::new();
+
     let filter = EnvFilter::builder()
         .with_default_directive(default_directive)
         .from_env()
@@ -167,19 +185,18 @@ pub(crate) fn setup_logging(
     let writer = std::sync::Mutex::new(anstream::AutoStream::new(std::io::stderr(), color_choice));
 
     let detailed_logging = std::env::var(EnvVars::UV_LOG_CONTEXT).is_ok();
+
     if detailed_logging {
         // Regardless of the tracing level, include the uptime and target for each message.
-        tracing_subscriber::registry()
-            .with(durations_layer)
-            .with(
-                HierarchicalLayer::default()
-                    .with_targets(true)
-                    .with_timer(Uptime::default())
-                    .with_writer(writer)
-                    .with_ansi(ansi)
-                    .with_filter(filter),
-            )
-            .init();
+        layers.push(
+            HierarchicalLayer::default()
+                .with_targets(true)
+                .with_timer(Uptime::default())
+                .with_writer(writer)
+                .with_ansi(ansi)
+                .with_filter(filter)
+                .boxed(),
+        );
     } else {
         // Regardless of the tracing level, show messages without any adornment.
         let format = UvFormat {
@@ -187,18 +204,78 @@ pub(crate) fn setup_logging(
             display_level: true,
             show_spans: false,
         };
-
-        tracing_subscriber::registry()
-            .with(durations_layer)
-            .with(
-                tracing_subscriber::fmt::layer()
-                    .event_format(format)
-                    .with_writer(writer)
-                    .with_ansi(ansi)
-                    .with_filter(filter),
-            )
-            .init();
+        layers.push(
+            tracing_subscriber::fmt::layer()
+                .event_format(format)
+                .with_writer(writer)
+                .with_ansi(ansi)
+                .with_filter(filter)
+                .boxed(),
+        );
     }
+
+    // If log path is provided the setup for persistent file logging is done
+    if let Some(path) = log_path {
+        // file_filter sets the level of logs by default debug logs are written to the file
+        let file_directive = match file_log_level {
+            FileLogLevel::DebugUv => "uv=debug",
+            FileLogLevel::TraceUv => "uv=trace",
+            FileLogLevel::TraceAll => "trace",
+        };
+        let file_filter =
+            EnvFilter::try_new(file_directive).unwrap_or_else(|_| EnvFilter::new("uv=debug"));
+
+        let mut new_path = path.clone();
+        new_path.set_extension("log");
+
+        // Discuss if previous content should be overwritten or appended.
+        // Should it panic or gracefully exit just without logging in case of failure to open or create the file.
+        let log_file = fs_err::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&new_path)
+            .with_context(|| format!("{} {}", uv_static::LOG_FILE_ERROR, new_path.display()))?;
+
+        // Forcing no anstream in file logs, I don't like the idea of using the same env variable NO_COLOR or cli flag to control both console and file logs
+        // If there is a case to introduce color for file logs we can introduce a new env variable or cli flag for it.
+        // fs_err doesn't implement RawStream so we Box it and then cast it to the trait std::io::Write, and Send is needed to be explicitly specified as Mutex needs to be shared between threads.
+        let file_writer = std::sync::Mutex::new(anstream::AutoStream::new(
+            Box::new(log_file) as Box<dyn std::io::Write + Send>,
+            anstream::ColorChoice::Never,
+        ));
+
+        let detailed_file_logging = std::env::var(EnvVars::UV_FILE_LOG_CONTEXT).is_ok();
+
+        // Depending on the log level, different layers are added to the subscriber.
+        // An equivalent of `RUST_LOG` for file logs might be needed to be implemented.
+        if detailed_file_logging {
+            layers.push(
+                HierarchicalLayer::default()
+                    .with_targets(true)
+                    .with_timer(Uptime::default())
+                    .with_writer(file_writer)
+                    .with_filter(file_filter)
+                    .boxed(),
+            );
+        } else {
+            let file_format = UvFormat {
+                // Setting timestamp display as false as to mimic the behavior of the console logs
+                // however wanted to discuss: the case where user might want to know when they wrote the logs
+                display_timestamp: false,
+                display_level: true,
+                show_spans: false,
+            };
+            layers.push(
+                tracing_subscriber::fmt::layer()
+                    .event_format(file_format)
+                    .with_writer(file_writer)
+                    .with_filter(file_filter)
+                    .boxed(),
+            );
+        }
+    };
+
+    subscriber.with(layers).init();
 
     Ok(())
 }
