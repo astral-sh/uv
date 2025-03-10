@@ -59,10 +59,11 @@ pub struct Options {
     ///
     /// Cache keys enable you to specify the files or directories that should trigger a rebuild when
     /// modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`,
-    /// or `setup.cfg` files in the project directory are modified, i.e.:
+    /// or `setup.cfg` files in the project directory are modified, or if a `src` directory is
+    /// added or removed, i.e.:
     ///
     /// ```toml
-    /// cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]
+    /// cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }, { dir = "src" }]
     /// ```
     ///
     /// As an example: if a project uses dynamic metadata to read its dependencies from a

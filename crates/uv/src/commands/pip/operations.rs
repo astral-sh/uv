@@ -261,6 +261,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     let overrides = Overrides::from_requirements(overrides);
     let preferences = Preferences::from_iter(preferences, &resolver_env);
 
+    // Treat any source paths provided on the CLI as requiring `--reinstall`.
+
     // Determine any lookahead requirements.
     let lookaheads = match options.dependency_mode {
         DependencyMode::Transitive => {
