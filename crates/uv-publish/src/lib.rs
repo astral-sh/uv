@@ -119,9 +119,9 @@ pub enum PublishSendError {
 
 pub trait Reporter: Send + Sync + 'static {
     fn on_progress(&self, name: &str, id: usize);
-    fn on_download_start(&self, name: &str, size: Option<u64>) -> usize;
-    fn on_download_progress(&self, id: usize, inc: u64);
-    fn on_download_complete(&self, id: usize);
+    fn on_upload_start(&self, name: &str, size: Option<u64>) -> usize;
+    fn on_upload_progress(&self, id: usize, inc: u64);
+    fn on_upload_complete(&self, id: usize);
 }
 
 /// Context for using a fresh registry client for check URL requests.
@@ -403,7 +403,7 @@ pub async fn upload(
             let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
             if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
                 warn_user!("Transient failure while handling response for {registry}; retrying...");
-                reporter.on_download_complete(idx);
+                reporter.on_upload_complete(idx);
                 let duration = execute_after
                     .duration_since(SystemTime::now())
                     .unwrap_or_else(|_| Duration::default());
@@ -754,9 +754,9 @@ async fn build_request(
     }
 
     let file = File::open(file).await?;
-    let idx = reporter.on_download_start(&filename.to_string(), Some(file.metadata().await?.len()));
+    let idx = reporter.on_upload_start(&filename.to_string(), Some(file.metadata().await?.len()));
     let reader = ProgressReader::new(file, move |read| {
-        reporter.on_download_progress(idx, read as u64);
+        reporter.on_upload_progress(idx, read as u64);
     });
     // Stream wrapping puts a static lifetime requirement on the reader (so the request doesn't have
     // a lifetime) -> callback needs to be static -> reporter reference needs to be Arc'd.
@@ -880,11 +880,11 @@ mod tests {
 
     impl Reporter for DummyReporter {
         fn on_progress(&self, _name: &str, _id: usize) {}
-        fn on_download_start(&self, _name: &str, _size: Option<u64>) -> usize {
+        fn on_upload_start(&self, _name: &str, _size: Option<u64>) -> usize {
             0
         }
-        fn on_download_progress(&self, _id: usize, _inc: u64) {}
-        fn on_download_complete(&self, _id: usize) {}
+        fn on_upload_progress(&self, _id: usize, _inc: u64) {}
+        fn on_upload_complete(&self, _id: usize) {}
     }
 
     /// Snapshot the data we send for an upload request for a source distribution.

@@ -29,10 +29,12 @@ indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
 jiff = { workspace = true, features = ["serde"] }
 mailparse = { workspace = true }
+petgraph = { workspace = true }
 regex = { workspace = true }
 rkyv = { workspace = true }
+rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 serde-untagged = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
@@ -42,6 +44,7 @@ url = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+insta = { version = "1.40.0" }
 
 [features]
 schemars = ["dep:schemars", "uv-normalize/schemars"]

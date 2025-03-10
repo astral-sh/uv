@@ -300,9 +300,14 @@ impl std::fmt::Display for ConflictError {
             .iter()
             .all(|conflict| matches!(conflict, ConflictPackage::Group(..)))
         {
+            let conflict_source = if self.set.is_inferred_conflict() {
+                "transitively inferred"
+            } else {
+                "declared"
+            };
             write!(
                 f,
-                "Groups {} are incompatible with the declared conflicts: {{{set}}}",
+                "Groups {} are incompatible with the {conflict_source} conflicts: {{{set}}}",
                 conjunction(
                     self.conflicts
                         .iter()

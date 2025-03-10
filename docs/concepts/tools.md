@@ -109,7 +109,7 @@ $ uv tool install ruff@latest
 $ uv tool install ruff@0.6.0
 ```
 
-### Tools directory
+## Tools directory
 
 By default, the uv tools directory is named `tools` and is in the uv application state directory,
 e.g., `~/.local/share/uv/tools`. The location may be customized with the `UV_TOOL_DIR` environment
@@ -124,10 +124,12 @@ $ uv tool dir
 Tool environments are placed in a directory with the same name as the tool package, e.g.,
 `.../tools/<name>`.
 
-### Mutating tool environments
+!!! important
 
-Tool environments are _not_ intended to be mutated directly. It is strongly recommended never to
-mutate a tool environment manually with a `pip` operation.
+    Tool environments are _not_ intended to be mutated directly. It is strongly recommended never to
+    mutate a tool environment manually, e.g., with a `pip` operation.
+
+## Upgrading tools
 
 Tool environments may be upgraded via `uv tool upgrade`, or re-created entirely via subsequent
 `uv tool install` operations.
@@ -144,18 +146,6 @@ To upgrade a single package in a tool environment:
 $ uv tool upgrade black --upgrade-package click
 ```
 
-To reinstall all packages in a tool environment
-
-```console
-$ uv tool upgrade black --reinstall
-```
-
-To reinstall a single package in a tool environment:
-
-```console
-$ uv tool upgrade black --reinstall-package click
-```
-
 Tool upgrades will respect the version constraints provided when installing the tool. For example,
 `uv tool install black >=23,<24` followed by `uv tool upgrade black` will upgrade Black to the
 latest version in the range `>=23,<24`.
@@ -170,9 +160,25 @@ Similarly, tool upgrades will retain the settings provided when installing the t
 `uv tool install black --prerelease allow` followed by `uv tool upgrade black` will retain the
 `--prerelease allow` setting.
 
-Tool upgrades will reinstall the tool executables, even if they have not changed.
+!!! note
 
-### Including additional dependencies
+    Tool upgrades will reinstall the tool executables, even if they have not changed.
+
+To reinstall packages during upgrade, use the `--reinstall` and `--reinstall-package` options.
+
+To reinstall all packages in a tool environment
+
+```console
+$ uv tool upgrade black --reinstall
+```
+
+To reinstall a single package in a tool environment:
+
+```console
+$ uv tool upgrade black --reinstall-package click
+```
+
+## Including additional dependencies
 
 Additional packages can be included during tool execution:
 

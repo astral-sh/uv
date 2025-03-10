@@ -17,7 +17,7 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
     ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement, VersionOrUrl,
 };
-use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
+use uv_pypi_types::{Identifier, Metadata23, VerbatimParsedUrl};
 
 use crate::serde_verbatim::SerdeVerbatim;
 use crate::Error;
@@ -803,7 +803,7 @@ pub(crate) struct ToolUv {
 /// When building the source distribution, the following files and directories are included:
 /// * `pyproject.toml`
 /// * The module under `tool.uv.build-backend.module-root`, by default
-///   `src/<project_name_with_underscores>/**`.
+///   `src/<module-name or project_name_with_underscores>/**`.
 /// * `project.license-files` and `project.readme`.
 /// * All directories under `tool.uv.build-backend.data`.
 /// * All patterns from `tool.uv.build-backend.source-include`.
@@ -812,7 +812,7 @@ pub(crate) struct ToolUv {
 ///
 /// When building the wheel, the following files and directories are included:
 /// * The module under `tool.uv.build-backend.module-root`, by default
-///   `src/<project_name_with_underscores>/**`.
+///   `src/<module-name or project_name_with_underscores>/**`.
 /// * `project.license-files` and `project.readme`, as part of the project metadata.
 /// * Each directory under `tool.uv.build-backend.data`, as data directories.
 ///
@@ -846,6 +846,15 @@ pub(crate) struct BuildBackendSettings {
     /// using the flat layout over the src layout.
     pub(crate) module_root: PathBuf,
 
+    /// The name of the module directory inside `module-root`.
+    ///
+    /// The default module name is the package name with dots and dashes replaced by underscores.
+    ///
+    /// Note that using this option runs the risk of creating two packages with different names but
+    /// the same module names. Installing such packages together leads to unspecified behavior,
+    /// often with corrupted files or directory trees.
+    pub(crate) module_name: Option<Identifier>,
+
     /// Glob expressions which files and directories to additionally include in the source
     /// distribution.
     ///
@@ -877,6 +886,7 @@ impl Default for BuildBackendSettings {
     fn default() -> Self {
         Self {
             module_root: PathBuf::from("src"),
+            module_name: None,
             source_include: Vec::new(),
             default_excludes: true,
             source_exclude: Vec::new(),

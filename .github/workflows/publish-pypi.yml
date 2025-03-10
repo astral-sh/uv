@@ -28,7 +28,7 @@ jobs:
           pattern: wheels_uv-*
           path: wheels_uv
           merge-multiple: true
-      - name: Publish to PyPi
+      - name: Publish to PyPI
         run: uv publish -v wheels_uv/*
 
   pypi-publish-uv-build:
@@ -47,5 +47,5 @@ jobs:
           pattern: wheels_uv_build-*
           path: wheels_uv_build
           merge-multiple: true
-      - name: Publish to PyPi
+      - name: Publish to PyPI
         run: uv publish -v wheels_uv_build/*
