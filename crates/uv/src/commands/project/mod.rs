@@ -45,7 +45,7 @@ use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::pyproject::PyProjectToml;
-use uv_workspace::Workspace;
+use uv_workspace::{Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::{Changelog, Modifications};
@@ -1481,6 +1481,7 @@ pub(crate) async fn resolve_names(
     state: &SharedState,
     concurrency: Concurrency,
     cache: &Cache,
+    workspace_cache: &WorkspaceCache,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<Vec<Requirement>, uv_requirements::Error> {
@@ -1581,6 +1582,7 @@ pub(crate) async fn resolve_names(
         &build_hasher,
         *exclude_newer,
         *sources,
+        workspace_cache.clone(),
         concurrency,
         preview,
     );
@@ -1751,6 +1753,8 @@ pub(crate) async fn resolve_environment(
         FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
     };
 
+    let workspace_cache = WorkspaceCache::default();
+
     // Create a build dispatch.
     let resolve_dispatch = BuildDispatch::new(
         &client,
@@ -1769,6 +1773,7 @@ pub(crate) async fn resolve_environment(
         &build_hasher,
         exclude_newer,
         sources,
+        workspace_cache,
         concurrency,
         preview,
     );
@@ -1879,6 +1884,7 @@ pub(crate) async fn sync_environment(
     let build_hasher = HashStrategy::default();
     let dry_run = DryRun::default();
     let hasher = HashStrategy::default();
+    let workspace_cache = WorkspaceCache::default();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
@@ -1907,6 +1913,7 @@ pub(crate) async fn sync_environment(
         &build_hasher,
         exclude_newer,
         sources,
+        workspace_cache,
         concurrency,
         preview,
     );
@@ -1972,6 +1979,7 @@ pub(crate) async fn update_environment(
     installer_metadata: bool,
     concurrency: Concurrency,
     cache: &Cache,
+    workspace_cache: WorkspaceCache,
     dry_run: DryRun,
     printer: Printer,
     preview: PreviewMode,
@@ -2124,6 +2132,7 @@ pub(crate) async fn update_environment(
         &build_hasher,
         *exclude_newer,
         *sources,
+        workspace_cache,
         concurrency,
         preview,
     );

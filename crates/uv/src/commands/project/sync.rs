@@ -29,7 +29,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations;
@@ -75,6 +75,7 @@ pub(crate) async fn sync(
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
     // Identify the target.
+    let workspace_cache = WorkspaceCache::default();
     let target = if let Some(script) = script {
         SyncTarget::Script(script)
     } else {
@@ -86,17 +87,19 @@ pub(crate) async fn sync(
                     members: MemberDiscovery::None,
                     ..DiscoveryOptions::default()
                 },
+                &workspace_cache,
             )
             .await?
         } else if let Some(package) = package.as_ref() {
             VirtualProject::Project(
-                Workspace::discover(project_dir, &DiscoveryOptions::default())
+                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
                     .await?
                     .with_current_project(package.clone())
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+                .await?
         };
 
         // TODO(lucab): improve warning content
@@ -285,6 +288,7 @@ pub(crate) async fn sync(
                 installer_metadata,
                 concurrency,
                 cache,
+                workspace_cache,
                 dry_run,
                 printer,
                 preview,
@@ -674,6 +678,7 @@ pub(super) async fn do_sync(
         &build_hasher,
         exclude_newer,
         sources,
+        WorkspaceCache::default(),
         concurrency,
         preview,
     );

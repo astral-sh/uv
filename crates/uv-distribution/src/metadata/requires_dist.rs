@@ -10,7 +10,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep508::MarkerTree;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, WorkspaceCache};
 
 use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 use crate::Metadata;
@@ -49,6 +49,7 @@ impl RequiresDist {
         git_member: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
+        cache: &WorkspaceCache,
     ) -> Result<Self, MetadataError> {
         // TODO(konsti): Cache workspace discovery.
         let discovery_options = DiscoveryOptions {
@@ -64,7 +65,8 @@ impl RequiresDist {
             },
         };
         let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &discovery_options).await?
+            ProjectWorkspace::from_maybe_project_root(install_path, &discovery_options, cache)
+                .await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };
@@ -475,7 +477,7 @@ mod test {
     use uv_normalize::PackageName;
     use uv_pep508::Requirement;
     use uv_workspace::pyproject::PyProjectToml;
-    use uv_workspace::{DiscoveryOptions, ProjectWorkspace};
+    use uv_workspace::{DiscoveryOptions, ProjectWorkspace, WorkspaceCache};
 
     use crate::metadata::requires_dist::FlatRequiresDist;
     use crate::RequiresDist;
@@ -494,6 +496,7 @@ mod test {
                 stop_discovery_at: Some(path),
                 ..DiscoveryOptions::default()
             },
+            &WorkspaceCache::default(),
         )
         .await?;
         let requires_dist = uv_pypi_types::RequiresDist::parse_pyproject_toml(contents)?;
