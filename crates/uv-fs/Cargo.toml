@@ -16,6 +16,8 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-static = { workspace = true }
+
 dunce = { workspace = true }
 either = { workspace = true }
 encoding_rs_io = { workspace = true }

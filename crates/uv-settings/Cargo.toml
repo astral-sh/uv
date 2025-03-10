@@ -18,6 +18,7 @@ workspace = true
 [dependencies]
 uv-cache-info = { workspace = true, features = ["schemars"] }
 uv-configuration = { workspace = true, features = ["schemars", "clap"] }
+uv-dirs = { workspace = true }
 uv-distribution-types = { workspace = true, features = ["schemars"] }
 uv-fs = { workspace = true }
 uv-install-wheel = { workspace = true, features = ["schemars", "clap"] }
@@ -32,7 +33,6 @@ uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 
 clap = { workspace = true }
-etcetera = { workspace = true }
 fs-err = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
