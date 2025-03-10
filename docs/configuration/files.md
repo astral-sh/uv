@@ -43,21 +43,23 @@ default = true
     `[tool.uv]` section in the accompanying `pyproject.toml` will be ignored.
 
 uv will also discover user-level configuration at `~/.config/uv/uv.toml` (or
-`$XDG_CONFIG_HOME/uv/uv.toml`) on macOS and Linux, or `%APPDATA%\uv\uv.toml` on Windows; and
-system-level configuration at `/etc/uv/uv.toml` (or `$XDG_CONFIG_DIRS/uv/uv.toml`) on macOS and
-Linux, or `%SYSTEMDRIVE%\ProgramData\uv\uv.toml` on Windows.
+`$XDG_CONFIG_HOME/uv/uv.toml`) on macOS and Linux, or `%APPDATA%\uv\uv.toml` on Windows; venv-level
+configuration at within the virtual environment directory; and system-level configuration at
+`/etc/uv/uv.toml` (or `$XDG_CONFIG_DIRS/uv/uv.toml`) on macOS and Linux, or
+`%SYSTEMDRIVE%\ProgramData\uv\uv.toml` on Windows.
 
-User-and system-level configuration must use the `uv.toml` format, rather than the `pyproject.toml`
-format, as a `pyproject.toml` is intended to define a Python _project_.
+User-, venv-, and system-level configuration must use the `uv.toml` format, rather than the
+`pyproject.toml` format, as a `pyproject.toml` is intended to define a Python _project_.
 
-If project-, user-, and system-level configuration files are found, the settings will be merged,
-with project-level configuration taking precedence over the user-level configuration, and user-level
-configuration taking precedence over the system-level configuration. (If multiple system-level
-configuration files are found, e.g., at both `/etc/uv/uv.toml` and `$XDG_CONFIG_DIRS/uv/uv.toml`,
-only the first-discovered file will be used, with XDG taking priority.)
+If project-, venv-, user-, and system-level configuration files are found, the settings will be
+merged, with project-level configuration taking precedence over venv-level configuration, venv-level
+configuration taking precedence over user-level configuration, and user-level configuration taking
+precedence over system-level configuration. (If multiple system-level configuration files are found,
+e.g., at both `/etc/uv/uv.toml` and `$XDG_CONFIG_DIRS/uv/uv.toml`, only the first-discovered file
+will be used, with XDG taking priority.)
 
-For example, if a string, number, or boolean is present in both the project- and user-level
-configuration tables, the project-level value will be used, and the user-level value will be
+For example, if a string, number, or boolean is present in both the project- and venv-level
+configuration tables, the project-level value will be used, and the venv-level value will be
 ignored. If an array is present in both tables, the arrays will be concatenated, with the
 project-level settings appearing earlier in the merged array.
 

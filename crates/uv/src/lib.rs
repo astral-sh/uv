@@ -125,15 +125,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     } else if let Ok(workspace) =
         Workspace::discover(&project_dir, &DiscoveryOptions::default()).await
     {
+        // Combine in order of precedence: project -> venv -> user -> system
         let project = FilesystemOptions::find(workspace.install_path())?;
         let system = FilesystemOptions::system()?;
+        let venv = FilesystemOptions::venv()?;
         let user = FilesystemOptions::user()?;
-        project.combine(user).combine(system)
+        project.combine(venv).combine(user).combine(system)
     } else {
+        // Same precedence for non-workspace projects
         let project = FilesystemOptions::find(&project_dir)?;
         let system = FilesystemOptions::system()?;
+        let venv = FilesystemOptions::venv()?;
         let user = FilesystemOptions::user()?;
-        project.combine(user).combine(system)
+        project.combine(venv).combine(user).combine(system)
     };
 
     // Parse the external command, if necessary.

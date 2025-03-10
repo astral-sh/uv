@@ -56,7 +56,7 @@ pub enum Error {
 /// Locate an active virtual environment by inspecting environment variables.
 ///
 /// Supports `VIRTUAL_ENV`.
-pub(crate) fn virtualenv_from_env() -> Option<PathBuf> {
+pub fn virtualenv_from_env() -> Option<PathBuf> {
     if let Some(dir) = env::var_os(EnvVars::VIRTUAL_ENV).filter(|value| !value.is_empty()) {
         return Some(PathBuf::from(dir));
     }
@@ -121,7 +121,7 @@ pub(crate) fn conda_environment_from_env(kind: CondaEnvironmentKind) -> Option<P
 /// Searches for a `.venv` directory in the current or any parent directory. If the current
 /// directory is itself a virtual environment (or a subdirectory of a virtual environment), the
 /// containing virtual environment is returned.
-pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
+pub fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
     let current_dir = crate::current_dir()?;
 
     for dir in current_dir.ancestors() {
