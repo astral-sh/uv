@@ -5,11 +5,17 @@ use base64::write::EncoderWriter;
 use netrc::Netrc;
 use reqwest::header::HeaderValue;
 use reqwest::Request;
+
 use std::io::Read;
 use std::io::Write;
+use tracing::{debug, error, warn};
+
 use url::Url;
 
 use uv_static::EnvVars;
+
+use crate::keyring_config::AuthConfig;
+use crate::keyring_config::ConfigFile;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Credentials {
@@ -122,7 +128,25 @@ impl Credentials {
     /// Returns [`None`] if both [`Url::username`] and [`Url::password`] are not populated.
     pub fn from_url(url: &Url) -> Option<Self> {
         if url.username().is_empty() && url.password().is_none() {
-            return None;
+            debug!("Trying to read username for url {url}");
+
+            let auth_config = match AuthConfig::load() {
+                Ok(auth_config) => auth_config,
+                Err(e) => {
+                    error!("Error loading auth config: {e}");
+                    return None;
+                }
+            };
+
+            let Some(index) = auth_config.find_entry(url) else {
+                warn!("Could not find entry for {url}");
+                return None;
+            };
+
+            return Some(Self {
+                username: Username::new(Some(index.username.clone())),
+                password: None,
+            });
         }
         Some(Self {
             // Remove percent-encoding from URL credentials
@@ -253,7 +277,11 @@ impl Credentials {
 
 #[cfg(test)]
 mod tests {
+
     use insta::assert_debug_snapshot;
+    use tempfile::tempdir;
+
+    use crate::keyring_config::{reset_config_path, set_test_config_path};
 
     use super::*;
 
@@ -292,6 +320,27 @@ mod tests {
         let credentials = Credentials::from_url(&auth_url).unwrap();
         assert_eq!(credentials.username(), Some("user"));
         assert_eq!(credentials.password(), None);
+    }
+
+    #[test]
+    fn from_url_with_configured_user() {
+        let url = &Url::parse("https://example.com/simple/first/").unwrap();
+        let username = "user";
+
+        let temp_dir = tempdir().unwrap();
+        let auth_config_path = temp_dir.into_path().join("test_auth.toml");
+
+        set_test_config_path(auth_config_path);
+
+        let mut auth_config = AuthConfig::load().unwrap();
+        auth_config.add_entry(url, username.to_string());
+        auth_config.store().unwrap();
+
+        let credentials = Credentials::from_url(url).unwrap();
+        assert_eq!(credentials.username(), Some(username));
+        assert_eq!(credentials.password(), None);
+
+        reset_config_path();
     }
 
     #[test]

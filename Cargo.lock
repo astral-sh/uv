@@ -979,9 +979,9 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
 name = "dyn-clone"
-version = "1.0.17"
+version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d6ef0072f8a535281e4876be788938b528e9a1d43900b82c2569af7da799125"
+checksum = "feeef44e73baff3a26d371801df019877a9866a8c493d315ab00177843314f35"
 
 [[package]]
 name = "either"
@@ -2695,9 +2695,9 @@ dependencies = [
 
 [[package]]
 name = "priority-queue"
-version = "2.1.1"
+version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "714c75db297bc88a63783ffc6ab9f830698a6705aa0201416931759ef4c8183d"
+checksum = "090ded312ed32a928fb49cb91ab4db6523ae3767225e61fbf6ceaaec3664ed26"
 dependencies = [
  "autocfg",
  "equivalent",
@@ -4604,6 +4604,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
+ "fs-err 3.1.0",
  "futures",
  "http",
  "insta",
@@ -4612,11 +4613,15 @@ dependencies = [
  "reqwest-middleware",
  "rust-netrc",
  "rustc-hash",
+ "serde",
  "tempfile",
  "test-log",
+ "thiserror 2.0.11",
  "tokio",
+ "toml",
  "tracing",
  "url",
+ "uv-dirs",
  "uv-once-map",
  "uv-small-str",
  "uv-static",
