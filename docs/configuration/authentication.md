@@ -50,13 +50,22 @@ argument to uv, or set `UV_KEYRING_PROVIDER=subprocess`.
 
 Authentication may be used for hosts specified in the following contexts:
 
+- `[index]`
 - `index-url`
 - `extra-index-url`
 - `find-links`
 - `package @ https://...`
 
+See the [index authentication documentation](./indexes.md#authentication) for details on
+authenticating index URLs.
+
 See the [`pip` compatibility guide](../pip/compatibility.md#registry-authentication) for details on
 differences from `pip`.
+
+## Authentication with alternative package indexes
+
+See the [alternative indexes integration guide](../guides/integration/alternative-indexes.md) for
+details on authentication with popular alternative Python package indexes.
 
 ## Custom CA certificates
 
@@ -93,14 +102,3 @@ insecure.
 
 Use `allow-insecure-host` with caution and only in trusted environments, as it can expose you to
 security risks due to the lack of certificate verification.
-
-## Authentication with alternative package indexes
-
-See the [alternative indexes integration guide](../guides/integration/alternative-indexes.md) for
-details on authentication with popular alternative Python package indexes.
-
-## Configuring authentication for indexes
-
-It is possible to configure how uv will handle authentication for requests to indexes. See
-[configuring authentication for indexes](indexes.md#configuring-authentication-for-indexes) for more
-details.

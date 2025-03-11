@@ -82,19 +82,7 @@ pub struct Index {
     /// publish-url = "https://upload.pypi.org/legacy/"
     /// ```
     pub publish_url: Option<Url>,
-    /// The authentication policy for the index.
-    ///
-    /// There are three policies: "auto", "always", and "never".
-    ///
-    /// * "auto" will first attempt an unauthenticated request to the index.
-    ///   If that fails it will attempt an authenticated request.
-    /// * "always" will always attempt to make an authenticated request and will
-    ///   fail if the authenticated request fails.
-    /// * "never" will never attempt to make an authenticated request and will
-    ///   fail if an authenticated request fails.
-    ///
-    /// The authentication policy will apply to requests made to URLs with
-    /// this index URL as a prefix.
+    /// When uv should use authentication for requests to the index.
     ///
     /// ```toml
     /// [[tool.uv.index]]

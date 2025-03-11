@@ -1,18 +1,28 @@
 use rustc_hash::FxHashMap;
 use url::Url;
 
+/// When to use authentication.
 #[derive(
     Copy, Clone, Debug, Default, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize,
 )]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub enum AuthPolicy {
-    /// Try unauthenticated request. Fallback to authenticated request.
+    /// Authenticate when necessary.
+    ///
+    /// If credentials are provided, they will be used. Otherwise, an unauthenticated request will
+    /// be attempted first. If the request fails, uv will search for credentials. If credentials are
+    /// found, an authenticated request will be attempted.
     #[default]
     Auto,
     /// Always authenticate.
+    ///
+    /// If credentials are not provided, uv will eagerly search for credentials. If credentials
+    /// cannot be found, uv will error instead of attempting an unauthenticated request.
     Always,
     /// Never authenticate.
+    ///
+    /// If credentials are provided, uv will error. uv will not search for credentials.
     Never,
 }
 
