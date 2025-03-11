@@ -758,6 +758,9 @@ jobs:
 
       - name: "Smoke test"
         run: |
+          # Overwrite the 3.13.0 pin from the project, there are not functional
+          # musl distributions for it
+          ./uv python pin 3.13
           ./uv venv -v
           ./uv pip install ruff -v
           ./uvx -v ruff --version
