@@ -35,6 +35,7 @@ See the [`python-build-standalone` release notes](https://github.com/astral-sh/p
 - Avoid considering `PATH` updated when the `export` is commented in the shellrc ([#12043](https://github.com/astral-sh/uv/pull/12043))
 - Fix `uv publish` retry on network failures ([#12041](https://github.com/astral-sh/uv/pull/12041))
 - Use a sized stream in `uv publish` to comply with WSGI PyPI server constraints ([#12111](https://github.com/astral-sh/uv/pull/12111))
+- Fix `uv python install --reinstall` when the version was not previously installed ([#12124](https://github.com/astral-sh/uv/pull/12124))
 
 ### Preview features
 
