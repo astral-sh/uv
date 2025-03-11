@@ -737,6 +737,35 @@ jobs:
           eval "$(./uv generate-shell-completion bash)"
           eval "$(./uvx --generate-shell-completion bash)"
 
+  smoke-test-linux-musl:
+    timeout-minutes: 10
+    needs: build-binary-linux-musl
+    name: "check system | alpine"
+    runs-on: ubuntu-latest
+    container: alpine:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Download binary"
+        uses: actions/download-artifact@v4
+        with:
+          name: uv-linux-musl-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: |
+          chmod +x ./uv
+          chmod +x ./uvx
+
+      - name: "Smoke test"
+        run: |
+          ./uv venv -v
+          ./uv pip install ruff -v
+          ./uvx -v ruff --version
+          ./uv pip install numpy -v
+          ./uv run python -c "import numpy; print(numpy.__version__)"
+          eval "$(./uv generate-shell-completion bash)"
+          eval "$(./uvx --generate-shell-completion bash)"
+
   smoke-test-macos:
     timeout-minutes: 10
     needs: build-binary-macos-x86_64
