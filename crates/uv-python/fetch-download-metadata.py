@@ -432,6 +432,7 @@ class CPythonFinder(Finder):
             (
                 "lto" in build_options,
                 "pgo" in build_options,
+                "static" not in build_options,
             )
         )
 
