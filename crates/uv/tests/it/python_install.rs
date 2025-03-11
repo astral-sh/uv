@@ -132,6 +132,15 @@ fn python_reinstall() {
      ~ cpython-3.12.9-[PLATFORM]
      ~ cpython-3.13.2-[PLATFORM]
     "###);
+
+    // Reinstalling a version that is not installed should also work
+    uv_snapshot!(context.filters(), context.python_install().arg("3.11").arg("--reinstall"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
 }
 
 #[test]
