@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -9,9 +9,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, DryRun,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy,
-    Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification,
+    HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -88,7 +87,7 @@ pub(crate) async fn pip_sync(
     // Initialize a few defaults.
     let overrides = &[];
     let extras = ExtrasSpecification::default();
-    let groups = DependencyGroups::default();
+    let groups = BTreeMap::default();
     let upgrade = Upgrade::default();
     let resolution_mode = ResolutionMode::default();
     let prerelease_mode = PrereleaseMode::default();
@@ -101,6 +100,7 @@ pub(crate) async fn pip_sync(
         constraints,
         overrides,
         source_trees,
+        groups,
         index_url,
         extra_index_urls,
         no_index,
@@ -113,7 +113,7 @@ pub(crate) async fn pip_sync(
         constraints,
         overrides,
         &extras,
-        &groups,
+        groups,
         &client_builder,
     )
     .await?;

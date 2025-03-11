@@ -107,6 +107,18 @@ Install from a `pyproject.toml` file with all optional dependencies enabled:
 $ uv pip install -r pyproject.toml --all-extras
 ```
 
+To install dependency groups in the current project directory's pyproject.toml:
+
+```console
+$ uv pip install --group foo
+```
+
+To install dependency groups for an arbitrary pyproject.toml:
+
+```console
+$ uv pip install --group some/path/pyproject.toml:foo
+```
+
 ## Uninstalling a package
 
 To uninstall a package, e.g., Flask:
