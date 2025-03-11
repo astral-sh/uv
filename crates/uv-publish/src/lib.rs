@@ -754,7 +754,8 @@ async fn build_request(
     }
 
     let file = File::open(file).await?;
-    let idx = reporter.on_upload_start(&filename.to_string(), Some(file.metadata().await?.len()));
+    let file_size = file.metadata().await?.len();
+    let idx = reporter.on_upload_start(&filename.to_string(), Some(file_size));
     let reader = ProgressReader::new(file, move |read| {
         reporter.on_upload_progress(idx, read as u64);
     });
@@ -762,7 +763,7 @@ async fn build_request(
     // a lifetime) -> callback needs to be static -> reporter reference needs to be Arc'd.
     let file_reader = Body::wrap_stream(ReaderStream::new(reader));
     // See [`files_for_publishing`] on `raw_filename`
-    let part = Part::stream(file_reader).file_name(raw_filename.to_string());
+    let part = Part::stream_with_length(file_reader, file_size).file_name(raw_filename.to_string());
     form = form.part("content", part);
 
     let url = if let Some(username) = username {
@@ -988,6 +989,7 @@ mod tests {
                 },
                 headers: {
                     "content-type": "multipart/form-data; boundary=[...]",
+                    "content-length": "6803",
                     "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
                     "authorization": "Basic ZmVycmlzOkYzUlIhUw==",
                 },
@@ -1138,6 +1140,7 @@ mod tests {
                 },
                 headers: {
                     "content-type": "multipart/form-data; boundary=[...]",
+                    "content-length": "19330",
                     "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
                     "authorization": "Basic ZmVycmlzOkYzUlIhUw==",
                 },
