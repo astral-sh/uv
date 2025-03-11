@@ -26,7 +26,7 @@ use uv_fs::Simplified;
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
 use uv_normalize::{PackageName, DEV_DEPENDENCIES};
-use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
+use uv_pep508::{ExtraName, MarkerTree, Requirement, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
@@ -64,6 +64,7 @@ pub(crate) async fn add(
     active: Option<bool>,
     no_sync: bool,
     requirements: Vec<RequirementsSource>,
+    marker: Option<MarkerTree>,
     editable: Option<bool>,
     dependency_type: DependencyType,
     raw_sources: bool,
@@ -274,6 +275,7 @@ pub(crate) async fn add(
                     rev.as_deref(),
                     tag.as_deref(),
                     branch.as_deref(),
+                    marker,
                 )
             })
             .partition_map(|requirement| match requirement {
@@ -896,10 +898,17 @@ fn augment_requirement(
     rev: Option<&str>,
     tag: Option<&str>,
     branch: Option<&str>,
+    marker: Option<MarkerTree>,
 ) -> UnresolvedRequirement {
     match requirement {
-        UnresolvedRequirement::Named(requirement) => {
+        UnresolvedRequirement::Named(mut requirement) => {
             UnresolvedRequirement::Named(uv_pypi_types::Requirement {
+                marker: marker
+                    .map(|marker| {
+                        requirement.marker.and(marker);
+                        requirement.marker
+                    })
+                    .unwrap_or(requirement.marker),
                 source: match requirement.source {
                     RequirementSource::Git {
                         git,
@@ -926,8 +935,14 @@ fn augment_requirement(
                 ..requirement
             })
         }
-        UnresolvedRequirement::Unnamed(requirement) => {
+        UnresolvedRequirement::Unnamed(mut requirement) => {
             UnresolvedRequirement::Unnamed(UnnamedRequirement {
+                marker: marker
+                    .map(|marker| {
+                        requirement.marker.and(marker);
+                        requirement.marker
+                    })
+                    .unwrap_or(requirement.marker),
                 url: match requirement.url.parsed_url {
                     ParsedUrl::Git(mut git) => {
                         let reference = if let Some(rev) = rev {

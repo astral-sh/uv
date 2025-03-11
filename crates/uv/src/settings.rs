@@ -31,7 +31,7 @@ use uv_configuration::{
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
-use uv_pep508::{ExtraName, RequirementOrigin};
+use uv_pep508::{ExtraName, MarkerTree, RequirementOrigin};
 use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_resolver::{
@@ -1167,6 +1167,7 @@ pub(crate) struct AddSettings {
     pub(crate) no_sync: bool,
     pub(crate) packages: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
+    pub(crate) marker: Option<MarkerTree>,
     pub(crate) dependency_type: DependencyType,
     pub(crate) editable: Option<bool>,
     pub(crate) extras: Vec<ExtraName>,
@@ -1190,6 +1191,7 @@ impl AddSettings {
         let AddArgs {
             packages,
             requirements,
+            marker,
             dev,
             optional,
             group,
@@ -1280,6 +1282,7 @@ impl AddSettings {
             no_sync,
             packages,
             requirements,
+            marker,
             dependency_type,
             raw_sources,
             rev,

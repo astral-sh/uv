@@ -4736,6 +4736,95 @@ fn add_requirements_file() -> Result<()> {
     Ok(())
 }
 
+/// Add requirements from a file with a marker flag.
+///
+/// We test that:
+/// * Adding requirements from a file applies the marker to all of them
+/// * We combine the marker with existing markers
+/// * We only sync the packages applicable under this marker
+#[test]
+fn add_requirements_file_with_marker_flag() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_win_txt = context.temp_dir.child("requirements.win.txt");
+    requirements_win_txt.write_str("anyio>=2.31.0\niniconfig>=2; sys_platform != 'fantasy_os'\nnumpy>1.9; sys_platform == 'fantasy_os'")?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    let base_pyproject_toml = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#};
+    pyproject_toml.write_str(base_pyproject_toml)?;
+
+    // Add dependencies with a marker that does not apply for the current target.
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.win.txt").arg("-m").arg("python_version == '3.11'"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+    let edited_pyproject_toml = context.read("pyproject.toml");
+
+    // TODO(konsti): We should output `python_version == '3.12'` instead of lowering to
+    // `python_full_version`.
+    assert_snapshot!(
+        edited_pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio>=2.31.0 ; python_full_version == '3.11.*'",
+        "iniconfig>=2 ; python_full_version == '3.11.*' and sys_platform != 'fantasy_os'",
+        "numpy>1.9 ; python_full_version == '3.11.*' and sys_platform == 'fantasy_os'",
+    ]
+    "#
+    );
+
+    // Reset the project.
+    pyproject_toml.write_str(base_pyproject_toml)?;
+    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
+
+    // Add dependencies with a marker that applies for the current target.
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.win.txt").arg("-m").arg("python_version == '3.12'"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    ");
+    let edited_pyproject_toml = context.read("pyproject.toml");
+
+    assert_snapshot!(
+        edited_pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio>=2.31.0 ; python_full_version == '3.12.*'",
+        "iniconfig>=2 ; python_full_version == '3.12.*' and sys_platform != 'fantasy_os'",
+        "numpy>1.9 ; python_full_version == '3.12.*' and sys_platform == 'fantasy_os'",
+    ]
+    "#
+    );
+
+    Ok(())
+}
+
 /// Add a requirement to a dependency group.
 #[test]
 fn add_group() -> Result<()> {

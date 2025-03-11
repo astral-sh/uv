@@ -1647,6 +1647,7 @@ async fn run_project(
                 args.active,
                 args.no_sync,
                 requirements,
+                args.marker,
                 args.editable,
                 args.dependency_type,
                 args.raw_sources,
