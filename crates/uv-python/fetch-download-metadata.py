@@ -258,7 +258,10 @@ class CPythonFinder(Finder):
                     download = self._parse_download_url(url)
                     if download is None:
                         continue
-                    if download.release < CPYTHON_MUSL_STATIC_RELEASE_END and download.triple.libc == "musl":
+                    if (
+                        download.release < CPYTHON_MUSL_STATIC_RELEASE_END
+                        and download.triple.libc == "musl"
+                    ):
                         continue
                     logging.debug("Found %s (%s)", download.key(), download.filename)
                     downloads_by_version.setdefault(download.version, []).append(
