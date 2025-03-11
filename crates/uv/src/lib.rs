@@ -1,3 +1,10 @@
+use anstream::eprintln;
+use anyhow::{bail, Context, Result};
+use clap::error::{ContextKind, ContextValue};
+use clap::{CommandFactory, Parser};
+use futures::FutureExt;
+use owo_colors::OwoColorize;
+use settings::PipTreeSettings;
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::fmt::Write;
@@ -6,14 +13,6 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
-
-use anstream::eprintln;
-use anyhow::{bail, Context, Result};
-use clap::error::{ContextKind, ContextValue};
-use clap::{CommandFactory, Parser};
-use futures::FutureExt;
-use owo_colors::OwoColorize;
-use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument};
 use uv_cache::{Cache, Refresh};
@@ -33,7 +32,7 @@ use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
-use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
+use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand, UvError};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
@@ -286,6 +285,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         },
         duration_layer,
         globals.color,
+        globals.log.as_ref(),
+        match globals.log_verbose {
+            0 => logging::FileLogLevel::DebugUv,
+            1 => logging::FileLogLevel::TraceUv,
+            2.. => logging::FileLogLevel::TraceAll,
+        },
     )?;
 
     // Configure the `Printer`, which controls user-facing output in the CLI.
@@ -1892,6 +1897,15 @@ where
         }
     };
 
+    // Cloning log path before moving cli to the main2 thread.
+    let log_set: bool = cli.top_level.global_args.log.is_some();
+    let log_path = if let Some(path) = cli.top_level.global_args.log.as_ref() {
+        let mut log_file_path = path.to_owned();
+        log_file_path.set_extension("log");
+        log_file_path
+    } else {
+        std::path::PathBuf::default()
+    };
     // Running out of stack has been an issue for us. We box types and futures in various places
     // to mitigate this, with this being an especially important case.
     //
@@ -1938,8 +1952,19 @@ where
         .join()
         .expect("Tokio executor failed, was there a panic?");
 
+    // Prepending current dir to log path, and this is done after run to account for commands that change directory.
+    let log_path = std::env::current_dir().unwrap_or_default().join(log_path);
+    // Discuss if pointing to log file should only be done on error or always.
+    // Incase the cli logs are more verbose than the log file, should the message still say See <path> for detailed logs?
     match result {
-        Ok(code) => code.into(),
+        Ok(code) => {
+            if let ExitStatus::Error | ExitStatus::Failure = code {
+                if log_set {
+                    eprintln!("See {} for detailed logs", log_path.display().cyan().bold());
+                }
+            }
+            code.into()
+        }
         Err(err) => {
             let mut causes = err.chain();
             eprintln!(
@@ -1947,8 +1972,21 @@ where
                 "error".red().bold(),
                 causes.next().unwrap().to_string().trim()
             );
-            for err in causes {
-                eprintln!("  {}: {}", "Caused by".red().bold(), err.to_string().trim());
+            for cause in causes {
+                eprintln!(
+                    "  {}: {}",
+                    "Caused by".red().bold(),
+                    cause.to_string().trim()
+                );
+            }
+            let err_uv: UvError = err.into();
+            match err_uv {
+                UvError::Other => {
+                    if log_set {
+                        eprintln!("See {} for detailed logs", log_path.display().cyan().bold());
+                    }
+                }
+                UvError::LogSetupError => {}
             }
             ExitStatus::Error.into()
         }
