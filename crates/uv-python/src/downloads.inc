@@ -2159,24 +2159,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.13.1%2B20250115-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("15566e568211fa087c048ca5ef73692674f7136ed36c2b27aa5973c07e6dcfa4")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 1,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -2185,24 +2167,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.13.1%2B20250115-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("905dbd718c24fad56be24454c26a15f4c7acc162d0f7e1c8c19791cefaa14f3c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 1,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.13.1%2B20250115-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("420b3286ea909db207f510447b76e51310ba131e7231e247a6ba72a487ff20d5")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2231,24 +2195,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.13.1%2B20250115-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("dfdfd8ccd40e9c02d6b19d40cbf15f3371fa5aa1b211a8f3ec5f457e0e7a36c1")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 1,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -2257,24 +2203,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.13.1%2B20250115-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("777c72f0de3a155b1333fb8f4bb06b035c51e05c3e5ccf229ad5dbe277338a30")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 1,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.13.1%2B20250115-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("fec2a7fc1a245eaa2f2b0fb90290cb1c02b4e2eba0e1be500a247751dc03c1f7")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2717,24 +2645,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("10978500ab6589760716c644aeadffa0f2c0bf31ea10f0c6160fee933933a567")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -2743,24 +2653,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("5c10c0b05c66bc6fc9a87f456ac1606057fe1865cc525eb7ecd9a5640f15426a")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("6797067b7da58c29384cd32cb77f62dc18e813e6c72f6b0baf39672d84431bf2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -2789,24 +2681,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("0572fbf46e49adaa5a418eeb92daeb624a080466a46d87d48e4a80f1ba9e408a")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -2815,24 +2689,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("36bd61970dc1d3a7034f2645aa14b47b6aa1669819fb7803650b5a7919afddbf")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.13.0%2B20241016-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("a846556bdd4d61b3f96aa8b096c86db031d7f5b5ef50f9e614c9259527afc9de")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3257,24 +3113,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("4df6b7665c735a728d72e6f49034f1a6b7d9a54b0fbc472dc2ca525eb3dd513f")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::Rc, number: 3 }),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -3283,24 +3121,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("ae477db35ccec397a19c9d61271455adf4917ab35993dbcacae8d126890f6b12")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::Rc, number: 3 }),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("8c73e28a683b7e826ed5bda4cf119ec8270238fdf936e3a2b3ca0938cfcde8c9")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3329,24 +3149,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("27a93fc7678782b392e5ee8e654635bc29409939318bbc341df3d29386f2166f")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::Rc, number: 3 }),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -3355,24 +3157,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("8c1424f2501419b88560951497df095c82e856af9b8f817f96beedeb4d8bc32d")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::Rc, number: 3 }),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241002/cpython-3.13.0rc3%2B20241002-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("8c318b2a79d75ca7ce3b76f8799a1db0337ba1278601bf0ec4433d64313d1aca")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3563,24 +3347,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("6f09aa5ba6aab8bf21955dbc3d6bab19125130ef0ebe29242b0e5ac1eebb3161")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::Rc, number: 2 }),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -3589,24 +3355,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("e60fc176fad636bbd287e92f9e9954b8b10d164984e98f51e4dc3d47314fa8a5")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::Rc, number: 2 }),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("16f23e539336fb45895b3c4fac981365b53fbbd86115feb9516b50a0716394b1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3635,24 +3383,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("df60f51c87da60af67453e5d7c5673f1534c2772d92a4885ae51add3cd32848e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::Rc, number: 2 }),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -3661,24 +3391,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("fb8d87e21bd0cb83bfbb5325f2db170365726a9cac58dd5b552fbd084671b785")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 13,
-            patch: 0,
-            prerelease: Some(Prerelease { kind: PrereleaseKind::Rc, number: 2 }),
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240909/cpython-3.13.0rc2%2B20240909-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("eafb931d1a0e6f7237486d2967d0ccacd49791bef27f233895b5d18581ae939a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4211,24 +3923,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.12.8%2B20250115-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("8121b6e4a2f719546f91be348e72bf6190727d891bbbd7acc7d06becd5a182fe")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 8,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -4237,24 +3931,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.12.8%2B20250115-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("9000f65bb17fe1afbed1a07cc603fffd1474b362da80d9a4f926ca49d28e3a24")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 8,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.12.8%2B20250115-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("12c53712d9728e7f320e102c6cfb48ad03e0daede8bafd2ea05d97c0c43a9649")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4283,24 +3959,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.12.8%2B20250115-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("8e936b03797abdc60211b8b89431fb4fd55f660cc7c8eb263423b3f9382c058e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 8,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -4309,24 +3967,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.12.8%2B20250115-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("41b5902edeef93cb256b62389bda81741502f7e0aee4e2e94c2e60b9d2df37fb")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 8,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250115/cpython-3.12.8%2B20250115-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("5d51a685e0e7b3c7babc8f1a5c8db41b4282f318161618e2b4a0603c464a3bc5")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4517,24 +4157,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("9314cb4d5aa525f2dc9f8d6ac204bebcfdfa8eb0dd4d3788af68769184355484")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -4543,24 +4165,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("205395841e6e7cbd33d504b78ac81792364831911866416da7a34d9b4a06d7d1")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("bfdd008fb669ddd023a8c36c16987c98b0d2bdfb99c9d45e2c9a792d87710b72")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4589,24 +4193,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("2c11efdb7df78ed787ac67c094c58a75f6549a78660888d99a861fc08e88ebe2")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -4615,24 +4201,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("172c0ab8ac018a0b44a47f03a7a78cd583bdc1e60cd5cfbf7d05b269c5d73f5c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("4576e092f2eaa6f5685be048b50671f9df0fff2b261ee001f604fb983bc9bb71")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4823,24 +4391,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("661e2a4b03d6eccbb5b15f5bd2869fbdd39132513394d758287e46115e48d4ef")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 6,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -4849,24 +4399,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("3ce9eb5d974dc2109c3e2c3986f4883ec5403b3479259ea781475a319f9a6787")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 6,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("6dab95cdd6d3f165aaaa7dcd7cb263add390d97c7b57eb62d2d1ca9a304353da")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -4895,24 +4427,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("f2a295a6e400c16d6b3fe51c63c5b017e6c20a0a9e21a664170ecb6b9a104d8e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 6,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -4921,24 +4435,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("debba8985df38a492e8fc4b7b8d2261567f56eae716aa7630b836523625c6a96")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 6,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240909/cpython-3.12.6%2B20240909-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("03c0ac05d6027b603ea0f5f9f2c463bd58f942706ae78dca27922b25dca8f16a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5129,24 +4625,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("e61b1274e1195f227cb30ba5d89ea32d743796d992adcaffad4819e4b0405d24")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 5,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -5155,24 +4633,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("c0064dcd97e5a09b5ff9529fc65cf6fd7a8a20f71a7050f584ecaa0cc8c33f2d")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 5,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("35ffd76881bef5ce09a123175f4f3419eb250802e60a6bb78649585325b8409f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5201,24 +4661,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("302a26f5d35e1c9e9d82765aa7dbf5ceb609c402431ec97d7fa0e85d8247c023")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 5,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -5227,24 +4669,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("d7e82fcf72ec5faedfbabf1084ca55f850971a559ba54350de312663570f4782")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 5,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.12.5%2B20240814-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("46771e859224aa128150160d568d5d19a69e0f9a8f27d110ea26c031b588c734")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5435,24 +4859,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("de4983ffa610ff2c3b9bcb62882366f017d94bf11b194c1fce17ad9e502acce6")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 4,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -5461,24 +4867,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("798e562eb68b8d825c25c747b9995046b700c5bafbe8f7e558f41a3d8a57ceb7")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 4,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("762dc23608111f49729f02c19fa8459219ac886e8694b79f541ef01141bf58c5")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5507,24 +4895,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("304bdcdf495529a6edcac34646e4f065f0963e4c3061cef9093b76bb0e8cca90")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 4,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -5533,24 +4903,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("507fce8676d23af12f97b1f66efa876360d19fbe89675163a0c7c5d631763c84")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 4,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.12.4%2B20240726-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("8989f75d70f6c874f3031ba1841efd96089f589f04d445fbacd478a1f866c118")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5741,24 +5093,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("eb70814dc254f02714c77305de01b8ed2250c146320e22d0ed14b39021f89a8a")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 3,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -5767,24 +5101,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("b9b91f486e2a52b6cc392101245705d6ab5dd6ad4a4e2b3492baec8e4b96508b")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 3,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("e47a8d25c2348bf9b0e818642e4dae90700fc3fbd96ffd7f4ad9518a7206d369")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5813,24 +5129,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("9685fc300be464a9338e94e48fc7315ee0563999833f8c830f2a2dee2d750b7e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 3,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -5839,24 +5137,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("790e70e565b3efc5f1d14294f7cc083d1fb2aa4c15074d547e8e6bb9d2adb70a")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 3,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240415/cpython-3.12.3%2B20240415-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("c4d399923625ff5b5c20eceba0d8580c858768eff73dd9380aa8265030788850")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6011,24 +5291,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("b428b4151c70b85339ac2659e5f69f7e47142d34a506e05ecd095efe2e3dec81")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 2,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -6037,24 +5299,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("adfe5c1a6039b8806b3dee0aed5fe860540d55231be87df48891a7844279d76a")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 2,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("e5c0adb646defd55791bbdd217f64d08a51855e818ee67e3ea6207521f92abee")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6083,24 +5327,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("bcf21a4105fe82cbefbd8bdf76dfc7eb98297b51ad02f0fc0a92929bcc95d6e9")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 2,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -6109,24 +5335,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("32ec4268b4d16a428deb642ddd875ae6e738b85558bfbdc4628018ff2e5b9e95")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 2,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.12.2%2B20240224-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("3b0e8c27c3a1dd339d8e6b53b3fc7faee379a70755093917d6ddca00253621c9")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6281,24 +5489,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("876389f071d62ee9a4bdd7ce31e69c3cdd256fe498e4dd6bb2b80e674e7351fe")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 1,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -6307,24 +5497,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("9dd6fc5a1326985896493d475e7eae0d07f6de0d932faef3c4b04bdd81b88c0c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 1,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("db45fc29b4c0389b23af6ccd2d1427c3200ed7db4a81e5fd3bfbd9a4fd011c41")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6353,24 +5525,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("2585d13ac6b3e18a24d31f4baea23a810f4c7eb37306c348eeee4dfb87f84866")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 1,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -6379,24 +5533,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("510f3f3e1841bb0e236dfac8dbd6680a4990d60a060b6972978cbc89524d4736")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 1,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("6f34607bafc6104d294ae16be240856af6217555015665c34ff7e94ad33dfe29")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6551,24 +5687,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("922f9404f39dc4edb8558a93cef5c3330895a4c87acb1de2a2cf662ab942dbe5")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -6577,24 +5695,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("6d7710c9a74f624d1fe60a5a01ed6db874659d906220b1d98a0a79a36bbcb2e6")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("927de631f2f37b950c2ea8ca53dc36ce8389026f34c31add31c5f730e7227bae")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6623,24 +5723,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("28aa3b88cacb908ab57c4202010eebe4a18fad65b5c289d061aec841a0fbbdfb")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -6649,24 +5731,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("13f4c20d3277d0bff7b14125d4904bbf5c498fe14d550d31fd584b5beabe6e0f")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 12,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20231002/cpython-3.12.0%2B20231002-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("8c20230e3679d5b2d765c6cae2afead81207762c3a9c725249e7ba644f61d4f5")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -7181,24 +6245,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("5b33f0ff29552f15daacf81c426ed585fae24987b47d614142a7906eae6f2b04")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 10,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -7207,24 +6253,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("64aefc042352e6bd10c4f600f1962af7dfec4586385f723c218b6369d3f211a2")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 10,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("3714fec489d93c1ea458788a348d3380f98de22679a40a063e761753e7a48e71")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -7253,24 +6281,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("a2778c2e5c8c48b555f935b4a7ff64f77f6ba0d1bdfb81b12d32905ddf7179cb")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 10,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -7279,24 +6289,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("56ed6aeed4795235b4f4349c4c0bf4ee81fdd00ad854eaedcccd5c43388d7545")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 10,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.11.10%2B20241016-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("c8e8f7a3fa9d797ec0957562f82eaba4dcadf04ef304ac616bdb6332c725a609")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -7487,24 +6479,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("b3e94cbf19bd08bf02f6e6945f6c2211453f601c7c6f79721da63a06bf99b1f9")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 9,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -7513,24 +6487,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("6f579d9b2ec635b7cc4eb983719ae8b4ee34248f2054939cc3b1b23b44c65c60")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 9,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("d776c6bfd09719f0a18fe23e25b314fed8e32c0c0474c21524020d5481bdcda1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -7559,24 +6515,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("e8ed1a00acd996590056c8e00351038fd1ecf9910428f592989410f06a765eef")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 9,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -7585,24 +6523,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("92247f338ba132e9ff6e4b0dffc2eacfab6958552b0354e623f5016c5e83bafd")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 9,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.11.9%2B20240814-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("adb10e3c2eb598560c14a375b34776d80bc83656e571f8ddc2b882630db8cd4d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -7757,24 +6677,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("08e1ebf51b5965e23f8e68664d17274c1cdabb5b2d7509a2003920e5d58172c7")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 8,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -7783,24 +6685,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("e4f70dcb40acc2342d63103808a19f728a1c1dc9e0fad5344061daaab03a4ce5")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 8,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("a3f12605552d5450cfc8fe6c8fc468f99a42b2ae33f1ef42d5f49356d66ad305")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -7829,24 +6713,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("417890e151d07f9242d0b7ed2e16b7fee59b6606cd133105bba234f14823f8ce")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 8,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -7855,24 +6721,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("e363cc041a4464bd729771d6d223f3ec13c1e76dacdedc207ad1f6fb777bcb71")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 8,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.11.8%2B20240224-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("9d430c32970e6b0f7cf030ed69dc63ee7b198543ef1e818c5a074c34052fa9e4")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8027,24 +6875,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("1a919a35172eb9419eba841eeb0ec9879dbc2b006b284ee5c454c08197b50f74")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -8053,24 +6883,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("2cdd399100e647aa9d381e197e6a8c98e822ecb8fc1b6bda4b1eb554dbfb8177")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("e9387d628e6f49587206655e61295cdbfea43944c4259c24566fa19e0596ba4e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8099,24 +6911,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("eec99f0614e8250027e8f72b535776b44e0ad74e24cba9716942cd4c6e08844c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -8125,24 +6919,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("28590cf568f192dbc5c91814321bca8bfe749cdf5e60a2aad968a0ae74d6bb4a")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.11.7%2B20240107-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("3e3b2d4831c6353ae68808a517d59425addd857dbf925958db11b3280f46ed1e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8297,24 +7073,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("c929e5fe676ad20afcf6807a797d21261ae0827e84ec18742031a9582aed0d46")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 6,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -8323,24 +7081,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("d93961f7d6df53f5e888ce070b92d19a7fce588bb03abfac2b6f3c5bf2923c80")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 6,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("3bb96293951e613fc3f36e7132dcfc34190e5ed634448b12dd1e496723bedbd0")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8369,24 +7109,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("99afdac2a24966c828faf6f13c8c100c6c432d1c888450cfadb39dbc7a7562f1")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 6,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -8395,24 +7117,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("ea850efb2de01c9389580ea0a6f55c7271dd3028b31fe0cca3ff9716fb580879")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 6,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20231002/cpython-3.11.6%2B20231002-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("ebd862470d4f66da160f9a65fc058d4feff3822a97318ccc5c3765a99e0ba439")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8585,24 +7289,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("fe09ecd87f69a724acf26ca508d7ead91a951abb2da18dfb98fe22c284454121")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 5,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -8611,24 +7297,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("6f25769f73827cfc9f80114dbbc04fa959e96f82bf1b1297bc56ae08afaa6a90")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 5,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("f442249bea0a61dfec2911d86aa49f4c047eabfa2322914d040f2377c1228b48")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8657,24 +7325,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("41e2068884c86fc6a51670b12de140e12d6eb849bb450a970c77798f568aef72")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 5,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -8683,24 +7333,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("9759ce08bb96716f26aedd4e4d5879f810d9ca1e6f185d9881910837ae66cd29")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 5,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230826/cpython-3.11.5%2B20230826-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("568e7a24d390fcd91b7524869c76c4e03dac9940692b381c29ae005651c5f1d7")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8873,24 +7505,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("1218ca44595aeaf34271508db64a2abc581c3ee1eb307c1b0537ea746922b806")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 4,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -8899,24 +7513,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("dd1530d8a2e002f68e3d7ed1aa568a0e9278a5c87ba1f2ec4b9bae75777a6bc2")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 4,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("9bea574e0f01eda7154ab1972a3d413c462a731568b5923ed2ae30174167a408")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8945,24 +7541,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("d8a4a5d572e163eca53f83c91fca78955a92ec5cd2c9713e0e51ad7901add798")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 4,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -8971,24 +7549,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("3802bf8c6f305b7b841dbbf1b091d9820d9bd65e9f5b246d2d071c42baa80fec")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 4,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.11.4%2B20230726-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("c50912dce8107bd06c93cd73f96c4bfec0714fc63ba9246c8726b253443e21a7")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9143,24 +7703,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("82eed5ae1ca9e60ed9b9cac97e910927ffe2e80e91161c74b2d70e44d5227de0")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 3,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -9169,24 +7711,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("d0191c35051ade259d3324f437c6f2422743ccb79197af6dc64c161b06eddca9")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 3,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("9715fc26b9a6de09ebc29c978ce1bea81c0a64f730125f1230743c18f536de27")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9215,24 +7739,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("9ea67df4e6cafabb6cee6adcc5f863708b1e717caad47be105eb4eb7170eca11")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 3,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -9241,24 +7747,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("5bc5eb3892957c0a9eae87fc3ce97f2b0b31406fd6ef1d20bfa8074a44121cb4")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 3,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.11.3%2B20230507-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("7b7645a773cb0660b0f0c807af580b9b4a49d49de39b89d10ccfb01372e5a573")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9395,24 +7883,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("7f0425d3e9b2283aba205493e9fe431bc2c2d67cc369bc922825b827a1b06b82")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 1,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -9421,24 +7891,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("cc322d17b9ead6aeee4ac116fa2f802d525b4d97343fac8b8ada458810b47b40")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 1,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("0e7dae505cdb31bee4095f7c004a9f89d78263d6f24fe32eb225bfbc34d7f6ab")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -9467,24 +7919,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("ae7add6ad69f9a1852fed17ca04ebe3412bf5f190e008d8cfbe94bfe21445c48")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 1,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -9493,24 +7927,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("dcee403d2f3416c0a7beae2fe58d9ca5646bb73ae47c0431d43911a0a8581a62")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 11,
-            patch: 1,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230116/cpython-3.11.1%2B20230116-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("257d4ca1a7167f0b1d65900ca27d0d0f747e1e10bd27fbadeaa4a8bf0bf5b5e3")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -10025,24 +8441,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("a169bdcd98f62421062fb9066763495913f4a86ee88c7d36e51df86d5d3cbe62")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 15,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -10051,24 +8449,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("a85f3481c8117a11b5aa4fda0a6eb174b54e97b122cc8f83cf773a876751785b")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 15,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("3f78660fd377d6073fa0ab642c20729c16fbc74fd67f8f35688e648fee014f4a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -10097,24 +8477,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("75df2a6b3845ce3e4aa556276d65288e509b17bc35ebb462a60230a8eff5039c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 15,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -10123,24 +8485,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("7d616298bffd2e4ffd0e72ab3786f2e4b9759dcd59a8cf7ac00f74a8642d5537")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 15,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.10.15%2B20241016-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("b343dff67fc9a6a03943b2bb2d6eb7d15f693533c706cc31f887d7db2625a70d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -10331,24 +8675,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("8803a748f2197ec2360af6feebe9c936f4f6beabcae1db5557fdd98fc922982c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 14,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -10357,24 +8683,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("327049baeb8319f0a31a14d28fce5608af546c27fb09994f56e3c0e17efb48c3")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 14,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("cc2ed06f898466616c6534de1fd3b00d02fae415274ecb7210f5199b2550c38c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -10403,24 +8711,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("c3177e9c8a9b339f33fa18ca896d59dbe22853cb88be3d844ac7859c543b5913")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 14,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -10429,24 +8719,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("5f0b093b83d5dad323463269d2cd53516e51ef0f5e965001ac8947450c3fc917")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 14,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.10.14%2B20240814-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("845008e1afab23633b1f8f49323d8de15f24cdda523974df2bab2d080af5bfbf")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -10619,24 +8891,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("48365ea10aa1b0768a153bfff50d1515a757d42409b02a4af4db354803f2d180")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 13,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -10645,24 +8899,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("ee43e708b6c4c1ffb5b17b41c51305672e3af2fd686960e4e024a86f969c1a1e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 13,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("779be1530f099b4ce0b87fe03f4621e6edca926393c7c857d581f50ffc4df66b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -10691,24 +8927,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("13d11d53372a058a9df956057d75e14ac229cce8daae6c42d97e742fed63f978")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 13,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -10717,24 +8935,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("c1cdc034c483794a4792571b44318f7608769b5b2d116635723e4bd702b5ea69")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 13,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.10.13%2B20240224-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("c1e61caff30433105aad15ea47ddc20b5ced4ccafd8e3666fa85667777354584")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -10907,24 +9107,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("9080014bee2d4bd1f96bcbebf447d40c35ae9354382246add1160bd0d433ebf7")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 12,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -10933,24 +9115,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("843504ad0f655f19614f2edb689808ed5fd2712bbf5a0eb0331ff1ebf871d457")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 12,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("d5d33effa6d64c83392f12b63fdf122843d943c7cfaa05ab734677699241cf93")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -10979,24 +9143,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("bc17cb3b279a031cbcb2427238254758e89ac44541a95a5ddec968bc13ff0181")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 12,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -11005,24 +9151,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("7cc21bad92259bf08d60cbe0650133d55f461f102a8ac9908dbd23400d9b35fa")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 12,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.10.12%2B20230726-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("1eef14ac488ab43ccf54144697d6892645414fc4926cd1456136cd427a8ae454")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11177,24 +9305,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("c5dde3276541a8ad000ba631ec70012aa2261926c13f54d2b1de83dad61d59c1")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 11,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -11203,24 +9313,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("7e6281f9ff93ac54c38abfffe874907591ae6db431df7633b73fa5e62066582c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 11,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("bc168048359070be77bf7cf03af1e4cf8c9144d348e59bd5849ebf046694462c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11249,24 +9341,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("862119d9b37def3cba4ceaf10b7415594bc171b4aa6c057e70433349ecb33474")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 11,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -11275,24 +9349,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("488df9d6af3baca3fd2b26005e5b1a0e29b53c602bc6ecfa4f21d20715107fba")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 11,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.10.11%2B20230507-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("35db9299916982e0b9fbf483ae15b7a4b90a418c857ded61be241d81acbc9779")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11429,24 +9485,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("cf17e6d042777170e423c6b80e096ad8273d9848708875db0d23dd45bdb3d516")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 9,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -11455,24 +9493,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("e69b2e48696f1e19231bed30616aa4ac6ef0fb4b3760e9e525e2c9c4c30ddb61")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 9,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("89d13b06e73bd347e46b1424f8c56823e13920cc3cdb32a75c247852cbc84f76")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11501,24 +9521,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("e7c53f1fe15ecba006276b41c3e1947c19ae3af4d53b6fae35f86b210db4e4df")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 9,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -11527,24 +9529,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("2c40f64d283d05755b531247eaeb6172cde6d31ba6c46cfa106b97b4669cea88")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 9,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230116/cpython-3.10.9%2B20230116-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("8dae0e8c598003e84351a2559d87b44335d02317eb82c75ea13c51aac5891a3f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11681,24 +9665,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("9f035bbe53f55fb406f95cb68459ba245b386084eeb5760f1660f416b730328d")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 8,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -11707,24 +9673,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("81eaeef0c63349f296d6c9fed6bb6ff3f2f29db649f0725351e6af147413cc90")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 8,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("efe550859e00a15325b6c4fff0d5df23ae08017ba8f74616bc0e9e73f899871d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11753,24 +9701,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("51ebd0a996a750d9101791d5b7789237f7262e4381c21ee5b87e3a2dd88b7628")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 8,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -11779,24 +9709,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("b2617ece01070eeaa37fd5feaf1b5835435bd5151386218e6383cf9ee57bb4d2")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 8,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221106/cpython-3.10.8%2B20221106-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("c641d68243082094f4afbda99eee7da5226906aa7bfca5859044c217e7133db6")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11933,24 +9845,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("3e0cab6e49ad5ef95851049463797ec713eee6e1f2fa1d99e30516d37797c3f0")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -11959,24 +9853,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("ae5ad8fe84d8b1fd2e6fe2f47a632c9a1244686c12ce98cdd4a553be1fda2f9e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("4af5e7eb30ae33db0729c019cbca4d76c973dac27167ad4131902078531eb05b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -12005,24 +9881,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("1cd4072435039557c0b6f528f18865b4d4d36c807d51abd69a6a43c73c26e9af")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -12031,24 +9889,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("f7c803a2ecd63dfc89210e1b6dffb0c509f2680ec9484e824c2d3a14f91a7803")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221002/cpython-3.10.7%2B20221002-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("2bef222e2469cbb4e8cac98a7b31f92b7dcd9672ec4db714fe6fe0090806ad53")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -12185,24 +10025,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("8cafe6409e9d192b288b84a21bc0c309f1d3f6b809a471b2858c7bf1bb09f3a7")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 6,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -12211,24 +10033,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("e5478adc739ecd6f7b770e613fa0e5757f13fe9cbeb34f7990e5522b0593d6db")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 6,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("6097200a90aa57ad5fe8d4446f4f09d6653b3db6dd1fec80f96cbeafcf76de12")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -12257,24 +10061,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("9d36dcbd9b47b3205dc5b1371a3839a5ad5317e7ba5fa353bac326635717a3a0")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 6,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -12283,24 +10069,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("327533dae8332ee61ed87dd5b7cfee3188a25a9fde65c3e27865185cb3e79b2b")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 6,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220802/cpython-3.10.6%2B20220802-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("c09bd9d306cd1eae99ed1de66313b0b2617b63a9cafec5e9fa3c5dd82e2d43ca")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -12437,24 +10205,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("6aad42c7b03989173dd0e4d066e8c1e9f176f4b31d5bde26dbb5297f38f656d0")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 5,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -12463,24 +10213,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("81e0c857175472f62641c49186f637cd1a391e4741b43afff5f55688512de1f1")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 5,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("febb7ebb1df876145be4f25a1caabbb8ec05758950e7efdebc33587f7ad3ca3c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -12509,24 +10241,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("f28cfb4da443626267792c81b1ac4919765782d38757b0e90daf2db525502615")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 5,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -12535,24 +10249,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("cab2739ef27fcb7920dfbc99e57f2aec1256146a4646cf01488c60a267ed9ea3")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 5,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220630/cpython-3.10.5%2B20220630-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("5864ccaefdb3f6372f0b59f9c823e5925526c4064a94afad2bcdc9cf919e9365")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -12689,24 +10385,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("74c8da0aa24233c76bdd984d3c9e44442eca316be8a2cb4972d9264fedb0d5e8")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 4,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -12715,24 +10393,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("a94db687c197ac8fd9ade2695fe93ce9da392818ed52980459c25c7d39bcd73f")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 4,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("c2bfbee97c9a4c4f5f5722ea68ea1a4d9f0e2510d02919af0f989d3061c66b3f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -12761,24 +10421,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("a750ac0ba4c23de6ab3ce494fd23e9b0e47dbf961e1fd29cb543ca60e200ba44")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 4,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -12787,24 +10429,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("12b5c2f325e99499fa6d79fb9cef3562f8a7635917353f2a79d4c30ac529e7a0")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 4,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220528/cpython-3.10.4%2B20220528-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("70bcf588b9f9b7a6aca236ff8214f17b123caa5da039ecc00ddee4828e9cc1bb")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -12941,24 +10565,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("a60b589176879bdd465659660b87e954f969bed072c03c578ec828d6134f4ae1")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 3,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -12967,24 +10573,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("56b36066cda53fb371d92e769b7dc4b18df2d857930871946052d6be724febce")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 3,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("f2cd3e6824d768603d6adc911aeb31de87f12bff9d3dc93624e944c6312acbdf")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -13013,24 +10601,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("e8ff9e1db06889cc65324a878b3d1e49de1213766a0401345b486761721ea125")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 3,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -13039,24 +10609,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("04df195d33f88ce2e1160416951eb772e9c61528aad1d15c508d9fd11041fc59")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 3,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220318/cpython-3.10.3%2B20220318-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("7ad8fdc6f0d26156bc350533a9af7bf582230be8ad6935934911fd8afd184085")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -13193,24 +10745,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("c4f398f6f7f9bbf0df98407ad66bc5760f3afc2cd8ba33a99cf4dcc8c90fd9ae")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 2,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -13219,24 +10753,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("1cbd17424d858fbb37e6184bf355f72830a47d2e33a4b8de872fa87aaa49a15e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 2,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("1067c4c6fc40bbd2d8b747177296bbeb4abfcb54e700226f2f211c3a2b90be46")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -13265,24 +10781,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("dddc62de5f796dbb33cbc81ebdb496758ea653c918a840d12574373aa4835165")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 2,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -13291,24 +10789,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("0493e89aae5b95b17f3092402cd7b6516494cad817aff68cc2988a4c065ae1ab")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 2,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220227/cpython-3.10.2%2B20220227-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("7dd9634e06daf56e58dfab4f71bea2d4d9b5c808fc30a40eb6208e76dfe24b14")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -13434,24 +10914,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             variant: PythonVariant::Default
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-unknown-linux-gnu-pgo%2Blto-20211017T1616.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 10,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-x86_64-unknown-linux-musl-lto-20211017T1616.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -13967,24 +11429,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("332ce515daa15173f73d0ecebc988fadfac5583af8355d8895b3eb8086dac813")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 20,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -13993,24 +11437,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("1461b5364d07a56f1879390eaec72542fe0dd48fa369ce4507c555677bfe07ea")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 20,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("237ec3d144e488130476c1d2c70d8ca7f2b36f423eb0ead348a78c6fc1fb7abb")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -14039,24 +11465,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("0f99bd0d5b0d1afb207f3e6d4fb36be303bf277ac7c327dd07b7d1e6ba90f9ea")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 20,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -14065,24 +11473,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("693a3f129a86c48c176b35db81eae0bf54faec893fe8386ec5116070638c4712")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 20,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.9.20%2B20241016-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("0d8f9e08f4eb14575574728b174591736ceaada37a03c1bdec17184475ffabe8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -14273,24 +11663,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("5c6605b1cfa6a952420f2267d10bed9ae20a02858a769b7275d8805f6b9fe40b")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 19,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -14299,24 +11671,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("1d8179bde4db3e6cffac45f5c6a105e342a50a854b316b26760c17ba32bb164a")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 19,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("2f9eac6ff7bc42a06b0f04cc28f5f24e851dcbb5d4a025a170e036ac1511a226")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -14345,24 +11699,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("3c79c2c628d9412658e2fe21864439f53d22fa2dd8bc4f355564e73115715e37")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 19,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -14371,24 +11707,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
         sha256: Some("7098fa8e0dac6a689d5289e761b85f713b607c476bfb1c1da13b3f86edce8461")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 19,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.9.19%2B20240814-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("1c6c6d2113fd3965d29b2fc70621ff81a1f7165a9dd660de980b805ba61a5c39")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -14561,24 +11879,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("cb47455810ae63d98501b3bb4fcdfdb9924633fb2e86e62d77e523a3bdee44ba")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 18,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -14587,24 +11887,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("ff8e33905d114a590cd13f5e17590efd6ad56c4eb841c9820863da2f55b13860")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 18,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("2ab7781e0d14d92272d7bcfb1383328ded38213fa9ad9ca00d1d08dae1ada26e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -14633,24 +11915,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("20c45210b2ef110ce6f01038e2861435cc6b9ccf94e7f015dcb111c3f5d0b629")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 18,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -14659,24 +11923,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("31b1548bd8e259b6b4a84d69d6ddcd27397af5971e3ffadd162f3a38eb623f6a")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 18,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.9.18%2B20240224-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("61db6789f2974b6cf85fefc0e06950e43898e4a468d3c643cc35427d8ebf4fc0")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -14849,24 +12095,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("194316e9cc7add1dd12be3e3eea2908fd4d623799edd7df69e360c6a446b750d")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 17,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -14875,24 +12103,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("3d9275e70d39030030f7e9db5f05fc07e2be6fb4964af0053f4a461bac9ba1bd")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 17,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("cdfe58799d017947c414bc8513ddb51bc7f4c25b2e603faa8dfcfd931a47392f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -14921,24 +12131,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("4a541fb47184505c165adcb88490fa9df11e7d34fd9bd0117f70b42c50dcc7e1")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 17,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -14947,24 +12139,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("114573e1c4919116e5ecf4c6425f44e09b03527fcddffe3d53f73fe1ce9df7d8")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 17,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.9.17%2B20230726-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("53a1b8cd550e803e258ba04192a18ccfe2ce4cbca2dc776cec47b2eba2507305")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -15119,24 +12293,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("5d9b13e8d5ee7a26fd0cf6e6d7e5a1ea90ddddd1f30ed2400bda60506f7dcea3")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 16,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -15145,24 +12301,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("08acda6031601b35291fa54f98888dc17d36c9ff35bdb2adea4631df81e24271")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 16,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("b78dbd216e23a8f4adda881fbe11f6749371c09b4235dd519a4b4be761dd1504")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -15191,24 +12329,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("675b7d77d653f47561536eae8fcd1ffaedd467ffcf43afdd9c96d2d32e8e84c4")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 16,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -15217,24 +12337,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("fc289e674fb61ca4e39a4676ee11971e3f87bab607951898336b5df53b6ca328")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 16,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230507/cpython-3.9.16%2B20230507-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("9bdb07f9e9dc429553d12b434293f270c9e281ea7c7ffe5be4f6e8b2cc151e03")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -15371,24 +12473,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("81b1c76ac789521fcececdcdc643f6de6fc282083b1a36a9973d835fc8a39391")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 15,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -15397,24 +12481,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("436c35bd809abdd028f386cc623ae020c77e6b544eaaca405098387c4daa444c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 15,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("52e774f1ccbbc61a30da2a95286348700ee7d7707412ef10035420f43469c39f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -15443,24 +12509,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("a7c4dcff34014b01de397ffe6497787935575f604f489d01cdd843b41dd320e6")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 15,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -15469,24 +12517,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("65350987640f33876d072a44d03e6e397dcf5d2512819bd8765c892ec5c0f153")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 15,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221106/cpython-3.9.15%2B20221106-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("33b227fdde7a236e69635dafc0cfbfcee76594b9892092357ffd35a0dcb303e7")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -15623,24 +12653,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("ceb26ef5f5a9b7b47fa95225fffce9c8ef0c9c1fbeca69fbda236a0c10de7ad8")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 14,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -15649,24 +12661,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("3b858cd4a187db8cd1eaedddd5ff80a077783092ca4d84970097127220f55cd4")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 14,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("d912966b120f5406046bf5a5252a6585cfb7620fe5d570a265cd221dfd8fbeb3")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -15695,24 +12689,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("46cd2e2b988bb5f6e12b184f2130d678ee781f84520dee1d8c487f2e0d1e3371")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 14,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -15721,24 +12697,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("f14391bc3b71dadc8855577325e3a49b17f351d428cc4caad8b1216b90f3ad80")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 14,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221002/cpython-3.9.14%2B20221002-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("355b1b5c3098b45f9b3dd1602321787c6731a70e574846efe29d96aef31d1e5b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -15875,24 +12833,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("766ed7e805e8c7abc4e50f1c94814575e7978ed7bd1f9e9ccec82d66b47b567f")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 13,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -15901,24 +12841,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("1e1b522a91ed805287793427013762bc8f6c02440147e9fa5306316369307e58")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 13,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("e3142427ed091bfe0986cf49954fa3fcbe7754f42d66e4fd0ce68f41a513c3c1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -15947,24 +12869,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("40be6728331395abce574e080e5411e781c0a8a3a5d5175ae10534cee8d83ae2")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 13,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -15973,24 +12877,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("b4c5a9908a77e4cae37901f8df2655380186d0e10723902672ef5e5296093071")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 13,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220802/cpython-3.9.13%2B20220802-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("3b21780f0eba88519f0c00032cfb8ddb959b31a76cf21611a26da5d8296a9200")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -16127,24 +13013,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("dd0eaf7ef64008d4a51a73243f368e0311b7936b0ac18f8d1305fffb0dfb76e6")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 12,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -16153,24 +13021,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("72085205843949f783c9245ad42902a63a00dd35367f1e5ea6f4aa709b2029ce")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 12,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("140ea77e2924fc312ecd266337f1add09e560084422843673b08ff847259a93f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -16199,24 +13049,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("afceda37726445a1472b023ca7e6fb1b169557c7fc26a2ffa53e2b59247e1c6c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 12,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -16225,24 +13057,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("7a5fcad095ad183049b2f975cd55efd8a2ce3e4d894ee67cb5fa01186f50203e")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 12,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220502/cpython-3.9.12%2B20220502-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("81138b9b65bc01ed441bf0ab0fa2225c3d131a3b13838cc698c9e4aaef4cab11")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -16379,24 +13193,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("ae8f55d90ae173f96e81f376daa5a9969a77531a6f7b8eacbe8ad90b41bbca1d")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 11,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -16405,24 +13201,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("bd9d808283eef69882e8e0c2529fe400c8605b7c08ef64e679d1766c1a87ef95")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 11,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("69439fb7c2e8f8bda28f2d5f4c71634116800d71a06f7cbeeb8f21ebca829fd2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -16451,24 +13229,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("190cb2cc081d0d6ffca9232e877a959915452f6fd3808cfe128f6ebc392fcfb2")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 11,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -16477,24 +13237,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("8d7eee9c085e08f3cc6cdf56be7cc0dc8a3e25e053856c1a933efb3529c087de")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 11,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220318/cpython-3.9.11%2B20220318-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("0455c95330532edf5c30d4a30873140e7e6c715fbca921ac127769865382050b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -16631,24 +13373,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("30add63ec16e07ad13e19f6d7061f7e4c7b971962354f48ab3e85656ce3b393d")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 10,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V2),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -16657,24 +13381,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64_v2-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("f9c6b0412c0773e604a1f95d5db97f79f98d960bcf0e85215e533ea573721216")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 10,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V2),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64_v2-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("5e4bde1751608e7f3ae2d9029c8866d0325db24c5a3b8441b62bef14fb8484be")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -16703,24 +13409,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
                 family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V3),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64_v3-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("649371a944665efa5b286d530c76808fb4f6ae4694f59c2ced8596fbe65d5164")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 10,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
                 variant: Some(ArchVariant::V4),
             },
             os: Os(target_lexicon::OperatingSystem::Linux),
@@ -16729,24 +13417,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64_v4-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("e97477ab9d30b52faf7de9e364ff50acf4490a28f7bf6fa11887f5a26e56ec93")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 10,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: Some(ArchVariant::V4),
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220227/cpython-3.9.10%2B20220227-x86_64_v4-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("6bcba95a5d6f1378821ba16c5d5b8a2e02bb365c1314d0492f66545973459ae4")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -16872,24 +13542,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             variant: PythonVariant::Default
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-unknown-linux-gnu-pgo%2Blto-20211017T1616.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.9.7-x86_64-unknown-linux-musl-lto-20211017T1616.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -17026,24 +13678,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.9.6-x86_64-unknown-linux-musl-lto-20210724T1424.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 6,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -17142,24 +13776,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             variant: PythonVariant::Default
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.9.5-x86_64-unknown-linux-gnu-pgo%2Blto-20210506T0943.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 5,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.9.5-x86_64-unknown-linux-musl-lto-20210506T0943.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -17278,24 +13894,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.9.4-x86_64-unknown-linux-musl-lto-20210414T1515.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 4,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -17376,24 +13974,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             variant: PythonVariant::Default
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210414/cpython-3.9.3-x86_64-unknown-linux-gnu-pgo%2Blto-20210413T2055.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 3,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210414/cpython-3.9.3-x86_64-unknown-linux-musl-lto-20210413T2055.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -17512,24 +14092,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.9.2-x86_64-unknown-linux-musl-lto-20210327T1202.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 2,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -17602,24 +14164,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.9.1-x86_64-unknown-linux-musl-noopt-20210103T1125.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 1,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -17682,24 +14226,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             variant: PythonVariant::Default
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.9.0-x86_64-unknown-linux-gnu-pgo-20201020T0627.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 9,
-            patch: 0,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.9.0-x86_64-unknown-linux-musl-noopt-20201020T0627.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -17818,24 +14344,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20241002/cpython-3.8.20%2B20241002-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("fcddfd3f1090833e1f3106be021809630008b53026bc96dcaab2986625db27fa")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 20,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -17944,24 +14452,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240814/cpython-3.8.19%2B20240814-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("6ee6c7469c9d2c7078beb95a9a3a261c42502e0b1603722a0689bdb2e789060c")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 19,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -18061,24 +14551,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.8.18%2B20240224-x86_64-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("5ae36825492372554c02708bdd26b8dcd57e3dbf34b3d6d599ad91d93540b2b7")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 18,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20240224/cpython-3.8.18%2B20240224-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("e591d3925f88f78a5dffb765fd10b9dab6e497d35cf58169da83eab521c86a37")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -18214,24 +14686,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230826/cpython-3.8.17%2B20230826-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("322b7837cfd8282c62ae3d2f0e98f0843cbe287e4b8c4852b786123f2e13b307")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 17,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -18349,24 +14803,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.8.16%2B20230726-x86_64-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("b1f1502c3a13b899724dbd32bd77a973fa9733b932c5700d747fe33d5de9ac4f")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 16,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20230726/cpython-3.8.16%2B20230726-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("840aefa3b03b66b6561360735dc0ac4e0a36a3ebb4d1f85d92f5b5f6638953cc")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -18502,24 +14938,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221106/cpython-3.8.15%2B20221106-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("f767d0438eca5b18c1267c5121055a5808a1412ea7668ef17da3dc9bdd24a55f")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 15,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -18637,24 +15055,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221002/cpython-3.8.14%2B20221002-x86_64-unknown-linux-gnu-install_only.tar.gz",
         sha256: Some("4eb53bce831bf52682067579c09ccaccb6524dd44bd4b8047454c69b4817f4f0")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 14,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20221002/cpython-3.8.14%2B20221002-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("72c08b1c1d8cc14cb8d22eab18b463bb514ea160472fdc7400bd69ae375cf9c4")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -18790,24 +15190,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220802/cpython-3.8.13%2B20220802-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("2c90a0d048caf146d4c33560d6eead1428a225219018d364b1af77f23c492984")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 13,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -18916,24 +15298,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20220227/cpython-3.8.12%2B20220227-x86_64-unknown-linux-musl-install_only.tar.gz",
-        sha256: Some("27faf8aa62de2cd4e59b75a6edce4cab549eba81f0f9cc21df0e370a8a2f3a25")
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 12,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -19014,24 +15378,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             variant: PythonVariant::Default
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.8.11-x86_64-unknown-linux-gnu-pgo%2Blto-20210724T1424.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 11,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210724/cpython-3.8.11-x86_64-unknown-linux-musl-lto-20210724T1424.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -19132,24 +15478,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210506/cpython-3.8.10-x86_64-unknown-linux-musl-lto-20210506T0943.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 10,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -19230,24 +15558,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             variant: PythonVariant::Default
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.8.9-x86_64-unknown-linux-gnu-pgo%2Blto-20210414T1515.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 9,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210415/cpython-3.8.9-x86_64-unknown-linux-musl-lto-20210414T1515.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -19348,24 +15658,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210327/cpython-3.8.8-x86_64-unknown-linux-musl-lto-20210327T1202.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 8,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -19428,24 +15720,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             variant: PythonVariant::Default
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-unknown-linux-gnu-pgo-20210103T1125.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20210103/cpython-3.8.7-x86_64-unknown-linux-musl-noopt-20210103T1125.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -19528,24 +15802,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20201020/cpython-3.8.6-x86_64-unknown-linux-musl-noopt-20201020T0627.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 6,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -19608,24 +15864,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             variant: PythonVariant::Default
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20200822/cpython-3.8.5-x86_64-unknown-linux-gnu-pgo-20200823T0036.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 5,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20200822/cpython-3.8.5-x86_64-unknown-linux-musl-noopt-20200823T0036.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -19708,24 +15946,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20200517/cpython-3.8.3-x86_64-unknown-linux-musl-noopt-20200518T0040.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 3,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -19788,24 +16008,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             variant: PythonVariant::Default
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-unknown-linux-gnu-pgo-20200418T2243.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 8,
-            patch: 2,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20200418/cpython-3.8.2-x86_64-unknown-linux-musl-noopt-20200418T2309.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {
@@ -19888,24 +16090,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             prerelease: None,
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20200822/cpython-3.7.9-x86_64-unknown-linux-musl-noopt-20200823T0036.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 7,
-            patch: 9,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
                 family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
                 variant: None,
             },
@@ -19968,24 +16152,6 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             variant: PythonVariant::Default
         },
         url: "https://github.com/astral-sh/python-build-standalone/releases/download/20200517/cpython-3.7.7-x86_64-unknown-linux-gnu-pgo-20200518T0040.tar.zst",
-        sha256: None
-    },
-    ManagedPythonDownload {
-        key: PythonInstallationKey {
-            major: 3,
-            minor: 7,
-            patch: 7,
-            prerelease: None,
-            implementation: LenientImplementationName::Known(ImplementationName::CPython),
-            arch: Arch{
-                family: target_lexicon::Architecture::X86_64,
-                variant: None,
-            },
-            os: Os(target_lexicon::OperatingSystem::Linux),
-            libc: Libc::Some(target_lexicon::Environment::Musl),
-            variant: PythonVariant::Default
-        },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20200517/cpython-3.7.7-x86_64-unknown-linux-musl-noopt-20200518T0040.tar.zst",
         sha256: None
     },
     ManagedPythonDownload {

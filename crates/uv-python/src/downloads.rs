@@ -466,11 +466,7 @@ impl ManagedPythonDownload {
 
     /// Iterate over all [`ManagedPythonDownload`]s.
     pub fn iter_all() -> impl Iterator<Item = &'static ManagedPythonDownload> {
-        PYTHON_DOWNLOADS
-            .iter()
-            // TODO(konsti): musl python-build-standalone builds are currently broken (statically
-            // linked), so we pretend they don't exist. https://github.com/astral-sh/uv/issues/4242
-            .filter(|download| download.key.libc != Libc::Some(target_lexicon::Environment::Musl))
+        PYTHON_DOWNLOADS.iter()
     }
 
     pub fn url(&self) -> &'static str {

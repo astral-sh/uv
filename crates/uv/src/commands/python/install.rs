@@ -17,7 +17,7 @@ use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDo
 use uv_python::managed::{
     python_executable_dir, ManagedPythonInstallation, ManagedPythonInstallations,
 };
-use uv_python::platform::Libc;
+use uv_python::platform::{Arch, Libc};
 use uv_python::{
     PythonDownloads, PythonInstallationKey, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionFilePreference,
@@ -58,10 +58,11 @@ impl InstallRequest {
         let download = match ManagedPythonDownload::from_request(&download_request) {
             Ok(download) => download,
             Err(downloads::Error::NoDownloadFound(request))
-                if request.libc().is_some_and(Libc::is_musl) =>
+                if request.libc().is_some_and(Libc::is_musl)
+                    && request.arch().is_some_and(Arch::is_arm) =>
             {
                 return Err(anyhow::anyhow!(
-                    "uv does not yet provide musl Python distributions. See https://github.com/astral-sh/uv/issues/6890 to track support."
+                    "uv does not yet provide musl Python distributions on aarch64."
                 ));
             }
             Err(err) => return Err(err.into()),
