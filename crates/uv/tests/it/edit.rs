@@ -4736,128 +4736,91 @@ fn add_requirements_file() -> Result<()> {
     Ok(())
 }
 
-/// Add from requirement file, passing a marker flag that is applied to all packages in the file.
+/// Add requirements from a file with a marker flag.
+///
+/// We test that:
+/// * Adding requirements from a file applies the marker to all of them
+/// * We combine the marker with existing markers
+/// * We only sync the packages applicable under this marker
 #[test]
 fn add_requirements_file_with_marker_flag() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
+    let context = TestContext::new("3.12");
+
+    let requirements_win_txt = context.temp_dir.child("requirements.win.txt");
+    requirements_win_txt.write_str("anyio>=2.31.0\niniconfig>=2; sys_platform != 'fantasy_os'\nnumpy>1.9; sys_platform == 'fantasy_os'")?;
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
+    let base_pyproject_toml = indoc! {r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = []
+    "#};
+    pyproject_toml.write_str(base_pyproject_toml)?;
 
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-    "#})?;
-
-    let requirements_win_txt = context.temp_dir.child("requirements.win.txt");
-    requirements_win_txt.write_str("requests>=2.31.0\nrich>=12")?;
-
-    if cfg!(windows) {
-        // TODO(thejchap) windows stderr
-    } else {
-        uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.win.txt").arg("-m").arg("sys_platform == 'win32'"), @r###"
+    // Add dependencies with a marker that does not apply for the current target.
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.win.txt").arg("-m").arg("python_version == '3.11'"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
-        let pyproject_toml = context.read("pyproject.toml");
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+    let edited_pyproject_toml = context.read("pyproject.toml");
 
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(
-                pyproject_toml, @r###"
-            [project]
-            name = "project"
-            version = "0.1.0"
-            requires-python = ">=3.12"
-            dependencies = [
-                "requests>=2.31.0 ; sys_platform == 'win32'",
-                "rich>=12 ; sys_platform == 'win32'",
-            ]
+    // TODO(konsti): We should output `python_version == '3.12'` instead of lowering to
+    // `python_full_version`.
+    assert_snapshot!(
+        edited_pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio>=2.31.0 ; python_full_version == '3.11.*'",
+        "iniconfig>=2 ; python_full_version == '3.11.*' and sys_platform != 'fantasy_os'",
+        "numpy>1.9 ; python_full_version == '3.11.*' and sys_platform == 'fantasy_os'",
+    ]
+    "#
+    );
 
-            [build-system]
-            requires = ["setuptools>=42"]
-            build-backend = "setuptools.build_meta"
-            "###
-            );
-        });
-    }
+    // Reset the project.
+    pyproject_toml.write_str(base_pyproject_toml)?;
+    fs_err::remove_file(context.temp_dir.join("uv.lock"))?;
 
-    Ok(())
-}
-
-/// Add from requirement file, passing a marker flag that is applied to all packages in the file.
-/// If markers are included on individual packages, they are AND-ed with the flag.
-#[test]
-fn add_requirements_file_with_marker_flag_merges_markers() -> Result<()> {
-    let context = TestContext::new("3.12").with_filtered_counts();
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! {r#"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = []
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-    "#})?;
-
-    let requirements_win_txt = context.temp_dir.child("requirements.win.txt");
-    requirements_win_txt.write_str("requests>=2.31.0; python_version >= '3.12'\nrich>=12")?;
-
-    if cfg!(windows) {
-        // TODO(thejchap) windows stderr
-    } else {
-        uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.win.txt").arg("-m").arg("sys_platform == 'win32'"), @r###"
+    // Add dependencies with a marker that applies for the current target.
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("requirements.win.txt").arg("-m").arg("python_version == '3.12'"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + project==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    Resolved 6 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    ");
+    let edited_pyproject_toml = context.read("pyproject.toml");
 
-        let pyproject_toml = context.read("pyproject.toml");
-
-        insta::with_settings!({
-            filters => context.filters(),
-        }, {
-            assert_snapshot!(
-                pyproject_toml, @r###"
-        [project]
-        name = "project"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = [
-            "requests>=2.31.0 ; python_full_version >= '3.12' and sys_platform == 'win32'",
-            "rich>=12 ; sys_platform == 'win32'",
-        ]
-
-        [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
-        "###
-            );
-        });
-    }
+    assert_snapshot!(
+        edited_pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio>=2.31.0 ; python_full_version == '3.12.*'",
+        "iniconfig>=2 ; python_full_version == '3.12.*' and sys_platform != 'fantasy_os'",
+        "numpy>1.9 ; python_full_version == '3.12.*' and sys_platform == 'fantasy_os'",
+    ]
+    "#
+    );
 
     Ok(())
 }
