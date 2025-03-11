@@ -3272,7 +3272,7 @@ pub struct AddArgs {
     #[arg(long, short, alias = "requirement", group = "sources", value_parser = parse_file_path)]
     pub requirements: Vec<PathBuf>,
 
-    /// Apply markers to all added packages.
+    /// Apply this marker to all added packages.
     #[arg(long, short, value_parser = MarkerTree::from_str)]
     pub marker: Option<MarkerTree>,
 
