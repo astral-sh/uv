@@ -205,15 +205,17 @@ pub(crate) async fn install(
             Vec::with_capacity(existing_installations.len() + requests.len());
 
         for request in &requests {
-            if existing_installations.is_empty() {
+            let mut matching_installations = existing_installations
+                .iter()
+                .filter(|installation| request.matches_installation(installation))
+                .peekable();
+
+            if matching_installations.peek().is_none() {
                 debug!("No installation found for request `{}`", request.cyan());
                 unsatisfied.push(Cow::Borrowed(request));
             }
 
-            for installation in existing_installations
-                .iter()
-                .filter(|installation| request.matches_installation(installation))
-            {
+            for installation in matching_installations {
                 changelog.existing.insert(installation.key().clone());
                 if matches!(&request.request, &PythonRequest::Any) {
                     // Construct a install request matching the existing installation
@@ -300,6 +302,7 @@ pub(crate) async fn install(
         .build();
     let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
     let mut tasks = FuturesUnordered::new();
+
     for download in &downloads {
         tasks.push(async {
             (
