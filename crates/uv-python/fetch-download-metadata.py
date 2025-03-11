@@ -61,6 +61,10 @@ import httpx
 SELF_DIR = Path(__file__).parent
 VERSIONS_FILE = SELF_DIR / "download-metadata.json"
 
+# The date at which the default CPython musl builds became dynamically linked
+# instead of statically.
+CPYTHON_MUSL_STATIC_RELEASE_END = 20250311
+
 
 def batched(iterable: Iterable, n: int) -> Generator[tuple, None, None]:
     """Batch data into tuples of length n. The last batch may be shorter."""
@@ -142,6 +146,7 @@ class Variant(StrEnum):
 
 @dataclass
 class PythonDownload:
+    release: int
     version: Version
     triple: PlatformTriple
     flavor: str
@@ -253,6 +258,8 @@ class CPythonFinder(Finder):
                     download = self._parse_download_url(url)
                     if download is None:
                         continue
+                    if download.release < CPYTHON_MUSL_STATIC_RELEASE_END and download.triple.libc == "musl":
+                        continue
                     logging.debug("Found %s (%s)", download.key(), download.filename)
                     downloads_by_version.setdefault(download.version, []).append(
                         download
@@ -341,6 +348,7 @@ class CPythonFinder(Finder):
         if url.endswith(".sha256"):
             return None
         filename = unquote(url.rsplit("/", maxsplit=1)[-1])
+        release = int(url.rsplit("/")[-2])
 
         match = self._filename_re.match(filename) or self._legacy_filename_re.match(
             filename
@@ -370,6 +378,7 @@ class CPythonFinder(Finder):
             return None
 
         return PythonDownload(
+            release=release,
             version=version,
             triple=triple,
             flavor=flavor,
@@ -490,6 +499,7 @@ class PyPyFinder(Finder):
                 platform = self._normalize_os(file["platform"])
                 libc = "gnu" if platform == "linux" else "none"
                 download = PythonDownload(
+                    release=0,
                     version=python_version,
                     triple=PlatformTriple(
                         platform=platform,
