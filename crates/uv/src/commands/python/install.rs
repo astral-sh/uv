@@ -346,8 +346,6 @@ pub(crate) async fn install(
         }
     }
 
-    dbg!(&errors);
-
     let bin = if preview.is_enabled() {
         Some(python_executable_dir()?)
     } else {
