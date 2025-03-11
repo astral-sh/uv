@@ -15194,7 +15194,7 @@ fn lock_explicit_default_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--verbose"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--verbose"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15202,7 +15202,7 @@ fn lock_explicit_default_index() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Found workspace root: `[TEMP_DIR]/`
-    DEBUG Adding current workspace member: `[TEMP_DIR]/`
+    DEBUG Adding root workspace member: `[TEMP_DIR]/`
     DEBUG Using Python request `>=3.12` from `requires-python` metadata
     DEBUG Checking for Python environment at `.venv`
     DEBUG The virtual environment's Python version satisfies `>=3.12`
@@ -15226,7 +15226,7 @@ fn lock_explicit_default_index() -> Result<()> {
       ╰─▶ Because anyio was not found in the provided package locations and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
 
           hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
-    "###);
+    "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 

@@ -4,7 +4,7 @@ use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
-use uv_auth::Credentials;
+use uv_auth::{AuthPolicy, Credentials};
 
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
@@ -82,6 +82,28 @@ pub struct Index {
     /// publish-url = "https://upload.pypi.org/legacy/"
     /// ```
     pub publish_url: Option<Url>,
+    /// The authentication policy for the index.
+    ///
+    /// There are three policies: "auto", "always", and "never".
+    ///
+    /// * "auto" will first attempt an unauthenticated request to the index.
+    ///   If that fails it will attempt an authenticated request.
+    /// * "always" will always attempt to make an authenticated request and will
+    ///   fail if the authenticated request fails.
+    /// * "never" will never attempt to make an authenticated request and will
+    ///   fail if an authenticated request fails.
+    ///
+    /// The authentication policy will apply to requests made to URLs with
+    /// this index URL as a prefix.
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "my-index"
+    /// url = "https://<omitted>/simple"
+    /// authenticate = "always"
+    /// ```
+    #[serde(default)]
+    pub authenticate: AuthPolicy,
 }
 
 // #[derive(
@@ -106,6 +128,7 @@ impl Index {
             default: true,
             origin: None,
             publish_url: None,
+            authenticate: AuthPolicy::default(),
         }
     }
 
@@ -118,6 +141,7 @@ impl Index {
             default: false,
             origin: None,
             publish_url: None,
+            authenticate: AuthPolicy::default(),
         }
     }
 
@@ -130,6 +154,7 @@ impl Index {
             default: false,
             origin: None,
             publish_url: None,
+            authenticate: AuthPolicy::default(),
         }
     }
 
@@ -160,20 +185,7 @@ impl Index {
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
     pub fn root_url(&self) -> Option<Url> {
-        let mut segments = self.raw_url().path_segments()?;
-        let last = match segments.next_back()? {
-            // If the last segment is empty due to a trailing `/`, skip it (as in `pop_if_empty`)
-            "" => segments.next_back()?,
-            segment => segment,
-        };
-
-        if !last.eq_ignore_ascii_case("simple") {
-            return None;
-        }
-
-        let mut url = self.raw_url().clone();
-        url.path_segments_mut().ok()?.pop_if_empty().pop();
-        Some(url)
+        self.url.root()
     }
 
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
@@ -216,6 +228,7 @@ impl FromStr for Index {
                     default: false,
                     origin: None,
                     publish_url: None,
+                    authenticate: AuthPolicy::default(),
                 });
             }
         }
@@ -229,6 +242,7 @@ impl FromStr for Index {
             default: false,
             origin: None,
             publish_url: None,
+            authenticate: AuthPolicy::default(),
         })
     }
 }

@@ -44,7 +44,7 @@ pub enum Error {
     MalformedWorkspace,
     #[error("Expected a dependency at index {0}")]
     MissingDependency(usize),
-    #[error("Cannot perform ambiguous update; found multiple entries for `{}`:\n* `{}`", package_name, requirements.iter().join("`\n* `"))]
+    #[error("Cannot perform ambiguous update; found multiple entries for `{}`:\n{}", package_name, requirements.iter().map(|requirement| format!("- `{requirement}`")).join("\n"))]
     Ambiguous {
         package_name: PackageName,
         requirements: Vec<Requirement>,

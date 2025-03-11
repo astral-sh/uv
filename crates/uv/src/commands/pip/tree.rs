@@ -88,10 +88,10 @@ pub(crate) async fn pip_tree(
             RegistryClientBuilder::new(cache.clone().with_refresh(Refresh::All(Timestamp::now())))
                 .native_tls(network_settings.native_tls)
                 .connectivity(network_settings.connectivity)
+                .allow_insecure_host(network_settings.allow_insecure_host.clone())
                 .index_urls(index_locations.index_urls())
                 .index_strategy(index_strategy)
                 .keyring(keyring_provider)
-                .allow_insecure_host(network_settings.allow_insecure_host.clone())
                 .markers(environment.interpreter().markers())
                 .platform(environment.interpreter().platform())
                 .build();

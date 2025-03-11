@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::instrument;
+use uv_auth::UrlAuthPolicies;
 
 use crate::commands::pip::operations;
 use crate::commands::project::{find_requires_python, ProjectError};
@@ -42,7 +43,7 @@ use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
 #[derive(Debug, Error)]
 enum Error {
@@ -240,7 +241,13 @@ async fn build_impl(
     };
 
     // Attempt to discover the workspace; on failure, save the error for later.
-    let workspace = Workspace::discover(src.directory(), &DiscoveryOptions::default()).await;
+    let workspace_cache = WorkspaceCache::default();
+    let workspace = Workspace::discover(
+        src.directory(),
+        &DiscoveryOptions::default(),
+        &workspace_cache,
+    )
+    .await;
 
     // If a `--package` or `--all-packages` was provided, adjust the source directory.
     let packages = if let Some(package) = package {
@@ -520,10 +527,11 @@ async fn build_package(
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(network_settings.native_tls)
         .connectivity(network_settings.connectivity)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        .url_auth_policies(UrlAuthPolicies::from(index_locations))
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -551,6 +559,7 @@ async fn build_package(
 
     // Initialize any shared state.
     let state = SharedState::default();
+    let workspace_cache = WorkspaceCache::default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -570,6 +579,7 @@ async fn build_package(
         &hasher,
         exclude_newer,
         sources,
+        workspace_cache,
         concurrency,
         preview,
     );

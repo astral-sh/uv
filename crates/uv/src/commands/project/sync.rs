@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
+use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -29,7 +30,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::Source;
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations;
@@ -75,6 +76,7 @@ pub(crate) async fn sync(
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
     // Identify the target.
+    let workspace_cache = WorkspaceCache::default();
     let target = if let Some(script) = script {
         SyncTarget::Script(script)
     } else {
@@ -86,17 +88,19 @@ pub(crate) async fn sync(
                     members: MemberDiscovery::None,
                     ..DiscoveryOptions::default()
                 },
+                &workspace_cache,
             )
             .await?
         } else if let Some(package) = package.as_ref() {
             VirtualProject::Project(
-                Workspace::discover(project_dir, &DiscoveryOptions::default())
+                Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
                     .await?
                     .with_current_project(package.clone())
                     .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
+            VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+                .await?
         };
 
         // TODO(lucab): improve warning content
@@ -285,6 +289,7 @@ pub(crate) async fn sync(
                 installer_metadata,
                 concurrency,
                 cache,
+                workspace_cache,
                 dry_run,
                 printer,
                 preview,
@@ -622,10 +627,11 @@ pub(super) async fn do_sync(
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(network_settings.native_tls)
         .connectivity(network_settings.connectivity)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        .url_auth_policies(UrlAuthPolicies::from(index_locations))
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
         .build();
@@ -674,6 +680,7 @@ pub(super) async fn do_sync(
         &build_hasher,
         exclude_newer,
         sources,
+        WorkspaceCache::default(),
         concurrency,
         preview,
     );
