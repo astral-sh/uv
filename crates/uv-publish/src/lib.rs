@@ -989,6 +989,7 @@ mod tests {
                 },
                 headers: {
                     "content-type": "multipart/form-data; boundary=[...]",
+                    "content-length": "19330",
                     "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
                     "authorization": "Basic ZmVycmlzOkYzUlIhUw==",
                 },
@@ -1139,6 +1140,7 @@ mod tests {
                 },
                 headers: {
                     "content-type": "multipart/form-data; boundary=[...]",
+                    "content-length": "19330",
                     "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
                     "authorization": "Basic ZmVycmlzOkYzUlIhUw==",
                 },
