@@ -3,6 +3,50 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.6.6
+
+### Python
+
+- Add support for dynamic musl Python distributions on x86-64 Linux ([#12121](https://github.com/astral-sh/uv/pull/12121))
+- Allow the experimental JIT to be enabled at runtime on Python 3.13 and 3.14 on Linux
+- Upgrade the build toolchain to LLVM 20, improving performance
+
+See the [`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250311) for more details.
+
+### Enhancements
+
+- Add `--marker` flag to `uv add` ([#12012](https://github.com/astral-sh/uv/pull/12012))
+- Allow overriding module name for uv build backend ([#11884](https://github.com/astral-sh/uv/pull/11884))
+- Sync latest Python releases ([#12120](https://github.com/astral-sh/uv/pull/12120))
+- Use 'Upload' instead of 'Download' in publish reporter ([#12029](https://github.com/astral-sh/uv/pull/12029))
+- Add `[index].authenticate` allowing authentication to be required on an index ([#11896](https://github.com/astral-sh/uv/pull/11896))
+- Add support for Windows legacy scripts in `uv tool run` ([#12079](https://github.com/astral-sh/uv/pull/12079))
+- Propagate conflicting dependency groups when using `include-group` ([#12005](https://github.com/astral-sh/uv/pull/12005))
+- Show ambiguous requirements when `uv add` failed ([#12106](https://github.com/astral-sh/uv/pull/12106))
+
+### Performance
+
+- Cache workspace discovery ([#12096](https://github.com/astral-sh/uv/pull/12096))
+- Insert dependencies into fork state prior to fetching metadata ([#12057](https://github.com/astral-sh/uv/pull/12057))
+- Remove some allocations from `uv-auth` ([#12077](https://github.com/astral-sh/uv/pull/12077))
+
+### Bug fixes
+
+- Avoid considering `PATH` updated when the `export` is commented in the shellrc ([#12043](https://github.com/astral-sh/uv/pull/12043))
+- Fix `uv publish` retry on network failures ([#12041](https://github.com/astral-sh/uv/pull/12041))
+- Use a sized stream in `uv publish` to comply with WSGI PyPI server constraints ([#12111](https://github.com/astral-sh/uv/pull/12111))
+
+### Preview features
+
+- Fix `uv_build` invocation ([#12058](https://github.com/astral-sh/uv/pull/12058))
+
+### Documentation
+
+- Quote versions string in `python-versions.md` ([#12112](https://github.com/astral-sh/uv/pull/12112))
+- Fix tool concept page headings ([#12053](https://github.com/astral-sh/uv/pull/12053))
+- Update the `[index].authenticate` docs ([#12102](https://github.com/astral-sh/uv/pull/12102))
+- Update versioning policy ([#11666](https://github.com/astral-sh/uv/pull/11666))
+
 ## 0.6.5
 
 ### Enhancements
@@ -32,7 +76,7 @@
 - Fix PyPy Python version label ([#11965](https://github.com/astral-sh/uv/pull/11965))
 - Fix error message suggesting `--user` instead of `--username` ([#11947](https://github.com/astral-sh/uv/pull/11947))
 
-### Preview 
+### Preview
 
 - Move the uv build backend into a separate, minimal `uv_build` package ([#11446](https://github.com/astral-sh/uv/pull/11446))
 
