@@ -766,8 +766,6 @@ jobs:
           ./uvx -v ruff --version
           ./uv pip install numpy -v
           ./uv run python -c "import numpy; print(numpy.__version__)"
-          eval "$(./uv generate-shell-completion bash)"
-          eval "$(./uvx --generate-shell-completion bash)"
 
   smoke-test-macos:
     timeout-minutes: 10
