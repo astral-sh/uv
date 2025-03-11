@@ -9,6 +9,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
+use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -36,7 +37,7 @@ use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceMember};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceMember};
 
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
@@ -122,11 +123,14 @@ pub(crate) async fn lock(
     };
 
     // Find the project requirements.
+    let workspace_cache = WorkspaceCache::default();
     let workspace;
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
-        workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
+        workspace =
+            Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+                .await?;
         LockTarget::Workspace(&workspace)
     };
 
@@ -396,7 +400,14 @@ async fn do_lock(
         .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;
 
     // Collect the conflicts.
-    let conflicts = target.conflicts();
+    let mut conflicts = target.conflicts();
+    if let LockTarget::Workspace(workspace) = target {
+        if let Some(groups) = &workspace.pyproject_toml().dependency_groups {
+            if let Some(project) = &workspace.pyproject_toml().project {
+                conflicts.expand_transitive_group_includes(&project.name, groups);
+            }
+        }
+    }
 
     // Collect the list of supported environments.
     let environments = {
@@ -539,10 +550,11 @@ async fn do_lock(
     let client = RegistryClientBuilder::new(cache.clone())
         .native_tls(network_settings.native_tls)
         .connectivity(network_settings.connectivity)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+        .url_auth_policies(UrlAuthPolicies::from(index_locations))
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -587,6 +599,8 @@ async fn do_lock(
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
+    let workspace_cache = WorkspaceCache::default();
+
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -605,6 +619,7 @@ async fn do_lock(
         &build_hasher,
         exclude_newer,
         sources,
+        workspace_cache,
         concurrency,
         preview,
     );
@@ -756,7 +771,7 @@ async fn do_lock(
                 None,
                 resolver_env,
                 python_requirement,
-                conflicts,
+                conflicts.clone(),
                 &client,
                 &flat_index,
                 state.index(),
@@ -787,7 +802,7 @@ async fn do_lock(
             let previous = existing_lock.map(ValidatedLock::into_lock);
             let lock = Lock::from_resolution(&resolution, target.install_path())?
                 .with_manifest(manifest)
-                .with_conflicts(target.conflicts())
+                .with_conflicts(conflicts)
                 .with_supported_environments(
                     environments
                         .cloned()

@@ -38,6 +38,7 @@ use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
 use uv_warnings::warn_user_once;
+use uv_workspace::WorkspaceCache;
 
 pub use crate::error::{Error, MissingHeaderCause};
 
@@ -269,6 +270,7 @@ impl SourceBuild {
         version_id: Option<&str>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        workspace_cache: &WorkspaceCache,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
         build_stack: &BuildStack,
@@ -294,6 +296,7 @@ impl SourceBuild {
             fallback_package_name,
             locations,
             source_strategy,
+            workspace_cache,
             &default_backend,
         )
         .await
@@ -396,6 +399,7 @@ impl SourceBuild {
                 version_id,
                 locations,
                 source_strategy,
+                workspace_cache,
                 build_stack,
                 build_kind,
                 level,
@@ -466,6 +470,7 @@ impl SourceBuild {
         package_name: Option<&PackageName>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        workspace_cache: &WorkspaceCache,
         default_backend: &Pep517Backend,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
@@ -496,6 +501,7 @@ impl SourceBuild {
                                     install_path,
                                     locations,
                                     source_strategy,
+                                    workspace_cache,
                                 )
                                 .await
                                 .map_err(Error::Lowering)?;
@@ -857,6 +863,7 @@ async fn create_pep517_build_environment(
     version_id: Option<&str>,
     locations: &IndexLocations,
     source_strategy: SourceStrategy,
+    workspace_cache: &WorkspaceCache,
     build_stack: &BuildStack,
     build_kind: BuildKind,
     level: BuildOutput,
@@ -957,6 +964,7 @@ async fn create_pep517_build_environment(
                 install_path,
                 locations,
                 source_strategy,
+                workspace_cache,
             )
             .await
             .map_err(Error::Lowering)?;

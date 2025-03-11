@@ -11,6 +11,7 @@ workspace = true
 
 [dependencies]
 uv-once-map = { workspace = true }
+uv-small-str = { workspace = true }
 uv-static = { workspace = true }
 
 anyhow = { workspace = true }
@@ -23,6 +24,8 @@ reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 rust-netrc = { workspace = true }
 rustc-hash = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }

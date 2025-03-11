@@ -46,7 +46,8 @@ pub(crate) async fn publish(
 
     // * For the uploads themselves, we roll our own retries due to
     //   https://github.com/seanmonstar/reqwest/issues/2416, but for trusted publishing, we want
-    //   the default retries.
+    //   the default retries. We set the retries to 0 here and manually construct the retry policy
+    //   in the upload loop.
     // * We want to allow configuring TLS for the registry, while for trusted publishing we know the
     //   defaults are correct.
     // * For the uploads themselves, we know we need an authorization header and we can't nor
@@ -94,9 +95,9 @@ pub(crate) async fn publish(
         let registry_client_builder = RegistryClientBuilder::new(cache.clone())
             .native_tls(network_settings.native_tls)
             .connectivity(network_settings.connectivity)
+            .allow_insecure_host(network_settings.allow_insecure_host.clone())
             .index_urls(index_urls)
-            .keyring(keyring_provider)
-            .allow_insecure_host(network_settings.allow_insecure_host.clone());
+            .keyring(keyring_provider);
         Some(CheckUrlClient {
             index_url: index_url.clone(),
             registry_client_builder,

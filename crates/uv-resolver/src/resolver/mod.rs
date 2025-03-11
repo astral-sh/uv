@@ -616,29 +616,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             ));
                     }
                     ForkedDependencies::Unforked(dependencies) => {
-                        // Emit a request to fetch the metadata for each registry package.
-                        for dependency in &dependencies {
-                            let PubGrubDependency {
-                                package,
-                                version: _,
-                                url: _,
-                            } = dependency;
-                            let url = package.name().and_then(|name| state.fork_urls.get(name));
-                            let index =
-                                package.name().and_then(|name| state.fork_indexes.get(name));
-                            self.visit_package(package, url, index, &request_sink)?;
-                        }
-
-                        state.add_package_version_dependencies(
+                        // Enrich the state with any URLs, etc.
+                        state.visit_package_version_dependencies(
                             next_id,
                             &version,
                             &self.urls,
                             &self.indexes,
-                            dependencies,
+                            &dependencies,
                             &self.git,
                             &self.workspace_members,
                             self.selector.resolution_strategy(),
                         )?;
+
+                        // Emit a request to fetch the metadata for each registry package.
+                        self.visit_dependencies(&dependencies, &state, &request_sink)?;
+
+                        // Add the dependencies to the state.
+                        state.add_package_version_dependencies(next_id, &version, dependencies);
                     }
                     ForkedDependencies::Forked {
                         mut forks,
@@ -857,31 +851,24 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 (fork, forked_state.with_env(env))
             })
             .map(move |(fork, mut forked_state)| {
-                forked_state.add_package_version_dependencies(
+                // Enrich the state with any URLs, etc.
+                forked_state.visit_package_version_dependencies(
                     package,
                     version,
                     &self.urls,
                     &self.indexes,
-                    fork.dependencies.clone(),
+                    &fork.dependencies,
                     &self.git,
                     &self.workspace_members,
                     self.selector.resolution_strategy(),
                 )?;
+
                 // Emit a request to fetch the metadata for each registry package.
-                for dependency in &fork.dependencies {
-                    let PubGrubDependency {
-                        package,
-                        version: _,
-                        url: _,
-                    } = dependency;
-                    let url = package
-                        .name()
-                        .and_then(|name| forked_state.fork_urls.get(name));
-                    let index = package
-                        .name()
-                        .and_then(|name| forked_state.fork_indexes.get(name));
-                    self.visit_package(package, url, index, request_sink)?;
-                }
+                self.visit_dependencies(&fork.dependencies, &forked_state, request_sink)?;
+
+                // Add the dependencies to the state.
+                forked_state.add_package_version_dependencies(package, version, fork.dependencies);
+
                 Ok(forked_state)
             })
     }
@@ -912,6 +899,26 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         })
     }
 
+    /// Visit a set of [`PubGrubDependency`] entities prior to selection.
+    fn visit_dependencies(
+        &self,
+        dependencies: &[PubGrubDependency],
+        state: &ForkState,
+        request_sink: &Sender<Request>,
+    ) -> Result<(), ResolveError> {
+        for dependency in dependencies {
+            let PubGrubDependency {
+                package,
+                version: _,
+                url: _,
+            } = dependency;
+            let url = package.name().and_then(|name| state.fork_urls.get(name));
+            let index = package.name().and_then(|name| state.fork_indexes.get(name));
+            self.visit_package(package, url, index, request_sink)?;
+        }
+        Ok(())
+    }
+
     /// Visit a [`PubGrubPackage`] prior to selection. This should be called on a [`PubGrubPackage`]
     /// before it is selected, to allow metadata to be fetched in parallel.
     fn visit_package(
@@ -921,7 +928,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         index: Option<&IndexUrl>,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
-        // Ignore unresolved URL packages.
+        // Ignore unresolved URL packages, i.e., packages that use a direct URL in some forks.
         if url.is_none()
             && package
                 .name()
@@ -941,7 +948,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         index: Option<&IndexUrl>,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
-        // Only request real package
+        // Only request real packages.
         let Some(name) = package.name_no_root() else {
             return Ok(());
         };
@@ -2619,20 +2626,20 @@ impl ForkState {
         }
     }
 
-    /// Add the dependencies for the selected version of the current package, checking for
-    /// self-dependencies and handling URLs.
-    fn add_package_version_dependencies(
+    /// Visit the dependencies for the selected version of the current package, incorporating any
+    /// relevant URLs and pinned indexes into the [`ForkState`].
+    fn visit_package_version_dependencies(
         &mut self,
         for_package: Id<PubGrubPackage>,
         for_version: &Version,
         urls: &Urls,
         indexes: &Indexes,
-        dependencies: Vec<PubGrubDependency>,
+        dependencies: &[PubGrubDependency],
         git: &GitResolver,
         workspace_members: &BTreeSet<PackageName>,
         resolution_strategy: &ResolutionStrategy,
     ) -> Result<(), ResolveError> {
-        for dependency in &dependencies {
+        for dependency in dependencies {
             let PubGrubDependency {
                 package,
                 version,
@@ -2690,6 +2697,16 @@ impl ForkState {
             self.priorities.insert(package, version, &self.fork_urls);
         }
 
+        Ok(())
+    }
+
+    /// Add the dependencies for the selected version of the current package.
+    fn add_package_version_dependencies(
+        &mut self,
+        for_package: Id<PubGrubPackage>,
+        for_version: &Version,
+        dependencies: Vec<PubGrubDependency>,
+    ) {
         let conflict = self.pubgrub.add_package_version_dependencies(
             self.next,
             for_version.clone(),
@@ -2708,7 +2725,6 @@ impl ForkState {
         if let Some(incompatibility) = conflict {
             self.record_conflict(for_package, Some(for_version), incompatibility);
         }
-        Ok(())
     }
 
     fn record_conflict(

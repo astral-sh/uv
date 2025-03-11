@@ -16,7 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
-uv-auth = { workspace = true }
+uv-auth = { workspace = true, features = ["schemars"] }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-distribution-filename = { workspace = true }

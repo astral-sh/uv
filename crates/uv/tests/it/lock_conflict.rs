@@ -2090,13 +2090,13 @@ fn mixed() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = ">=3.12"
         conflicts = [[
-            { package = "project", group = "group1" },
             { package = "project", extra = "extra1" },
+            { package = "project", group = "group1" },
         ]]
 
         [options]
@@ -2141,7 +2141,7 @@ fn mixed() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
         ]
-        "###
+        "#
         );
     });
 
@@ -2189,14 +2189,14 @@ fn mixed() -> Result<()> {
      + sortedcontainers==2.4.0
     "###);
     // And finally, installing both the group and the extra should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--extra=extra1"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--group=group1").arg("--extra=extra1"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `group1` and extra `extra1` are incompatible with the declared conflicts: {`project:group1`, `project[extra1]`}
-    "###);
+    error: Extra `extra1` and group `group1` are incompatible with the declared conflicts: {`project[extra1]`, `project:group1`}
+    ");
 
     Ok(())
 }
@@ -3054,13 +3054,13 @@ fn shared_optional_dependency_extra1() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = ">=3.12"
         conflicts = [[
-            { package = "project", extra = "foo" },
             { package = "project", extra = "bar" },
+            { package = "project", extra = "foo" },
         ]]
 
         [options]
@@ -3130,7 +3130,7 @@ fn shared_optional_dependency_extra1() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3194,13 +3194,13 @@ fn shared_optional_dependency_group1() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = ">=3.12"
         conflicts = [[
-            { package = "project", group = "foo" },
             { package = "project", group = "bar" },
+            { package = "project", group = "foo" },
         ]]
 
         [options]
@@ -3269,7 +3269,7 @@ fn shared_optional_dependency_group1() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3480,13 +3480,13 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = "==3.11.*"
         conflicts = [[
-            { package = "project", extra = "foo" },
             { package = "project", extra = "bar" },
+            { package = "project", extra = "foo" },
         ]]
 
         [options]
@@ -3556,7 +3556,7 @@ fn shared_optional_dependency_extra2() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3621,13 +3621,13 @@ fn shared_optional_dependency_group2() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = "==3.11.*"
         conflicts = [[
-            { package = "project", group = "foo" },
             { package = "project", group = "bar" },
+            { package = "project", group = "foo" },
         ]]
 
         [options]
@@ -3700,7 +3700,7 @@ fn shared_optional_dependency_group2() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -3911,13 +3911,13 @@ fn shared_dependency_extra() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = ">=3.12"
         conflicts = [[
-            { package = "project", extra = "foo" },
             { package = "project", extra = "bar" },
+            { package = "project", extra = "foo" },
         ]]
 
         [options]
@@ -3987,7 +3987,7 @@ fn shared_dependency_extra() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -4086,13 +4086,13 @@ fn shared_dependency_group() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = ">=3.12"
         conflicts = [[
-            { package = "project", group = "foo" },
             { package = "project", group = "bar" },
+            { package = "project", group = "foo" },
         ]]
 
         [options]
@@ -4161,7 +4161,7 @@ fn shared_dependency_group() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
         ]
-        "###
+        "#
         );
     });
 
@@ -4988,13 +4988,13 @@ fn collision_extra() -> Result<()> {
     }, {
         assert_snapshot!(
             lock,
-            @r###"
+            @r#"
         version = 1
         revision = 1
         requires-python = ">=3.12"
         conflicts = [[
-            { package = "pkg", extra = "foo" },
             { package = "pkg", extra = "bar" },
+            { package = "pkg", extra = "foo" },
         ]]
 
         [options]
@@ -5077,7 +5077,7 @@ fn collision_extra() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
         ]
-        "###
+        "#
         );
     });
 
@@ -10167,14 +10167,14 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 133 packages in [TIME]
-    "###);
+    Resolved 132 packages in [TIME]
+    ");
 
     let lock = context.read("uv.lock");
     insta::with_settings!({
@@ -10182,20 +10182,11 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
     }, {
         assert_snapshot!(
             lock,
-            @r###"
+            @r#"
         version = 1
         revision = 1
         requires-python = ">=3.10"
         resolution-markers = [
-            "python_full_version >= '3.12' and sys_platform == 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform == 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform == 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
             "python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
             "python_full_version >= '3.12' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
             "python_full_version == '3.11.*' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
@@ -10208,6 +10199,15 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             "python_full_version == '3.11.*' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
             "python_full_version < '3.11' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
             "python_full_version < '3.11' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version >= '3.12' and sys_platform == 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version >= '3.12' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and sys_platform == 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and sys_platform == 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version >= '3.12' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
             "python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
             "python_full_version >= '3.12' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
             "python_full_version == '3.11.*' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
@@ -10225,14 +10225,14 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             "python_full_version < '3.11' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
         ]
         conflicts = [[
-            { package = "test", extra = "chgnet" },
             { package = "test", extra = "alignn" },
+            { package = "test", extra = "chgnet" },
         ], [
             { package = "test", extra = "chgnet" },
             { package = "test", extra = "m3gnet" },
         ], [
-            { package = "test", extra = "all" },
             { package = "test", extra = "alignn" },
+            { package = "test", extra = "all" },
         ], [
             { package = "test", extra = "all" },
             { package = "test", extra = "m3gnet" },
@@ -10368,7 +10368,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             { name = "pydantic" },
             { name = "pydantic-settings" },
             { name = "pydocstyle" },
-            { name = "pyparsing" },
+            { name = "pyparsing", version = "2.4.7", source = { registry = "https://pypi.org/simple" } },
             { name = "scikit-learn" },
             { name = "scipy" },
             { name = "spglib" },
@@ -10629,8 +10629,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             { name = "numpy" },
             { name = "opt-einsum" },
             { name = "scipy" },
-            { name = "sympy", version = "1.13.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
-            { name = "sympy", version = "1.13.3", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
+            { name = "sympy" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/70/91/c37b2ad1c8534b183eeacb97d2096f50cd2d0a180d1830f235c06aa94bbd/cuequivariance-0.2.0.tar.gz", hash = "sha256:e75999ef436f281e3f5cded9f1353055a599fedae55eea861bdc840cffaf63eb", size = 76738 }
         wheels = [
@@ -10733,8 +10732,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         dependencies = [
             { name = "opt-einsum-fx" },
             { name = "scipy" },
-            { name = "sympy", version = "1.13.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
-            { name = "sympy", version = "1.13.3", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
+            { name = "sympy" },
             { name = "torch", version = "2.2.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
             { name = "torch", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
         ]
@@ -11269,7 +11267,8 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             { name = "numpy" },
             { name = "packaging" },
             { name = "pillow" },
-            { name = "pyparsing" },
+            { name = "pyparsing", version = "2.4.7", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-alignn' or (extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "pyparsing", version = "3.2.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or extra != 'extra-4-test-alignn'" },
             { name = "python-dateutil" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/68/dd/fa2e1a45fce2d09f4aea3cee169760e672c8262325aa5796c49d543dc7e6/matplotlib-3.10.0.tar.gz", hash = "sha256:b886d02a581b96704c9d1ffe55709e49b4d2d52709ccebc4be42db856e511278", size = 36686418 }
@@ -11754,7 +11753,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             "python_full_version < '3.11' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
         ]
         dependencies = [
-            { name = "nvidia-nvjitlink-cu12", version = "12.4.127", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
+            { name = "nvidia-nvjitlink-cu12", marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/7a/8a/0e728f749baca3fbeffad762738276e5df60851958be7783af121a7221e7/nvidia_cufft_cu12-11.2.1.3-py3-none-manylinux2014_aarch64.whl", hash = "sha256:5dad8008fc7f92f5ddfa2101430917ce2ffacd86824914c82e28990ad7f00399", size = 211422548 },
@@ -11824,7 +11823,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         dependencies = [
             { name = "nvidia-cublas-cu12", version = "12.1.3.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
             { name = "nvidia-cusparse-cu12", version = "12.1.0.106", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
-            { name = "nvidia-nvjitlink-cu12", version = "12.8.61", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
+            { name = "nvidia-nvjitlink-cu12", marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/bc/1d/8de1e5c67099015c834315e333911273a8c6aaba78923dd1d1e25fc5f217/nvidia_cusolver_cu12-11.4.5.107-py3-none-manylinux1_x86_64.whl", hash = "sha256:8a7ec542f0412294b15072fa7dab71d31334014a69f953004ea7a118206fe0dd", size = 124161928 },
@@ -11852,7 +11851,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         dependencies = [
             { name = "nvidia-cublas-cu12", version = "12.4.5.8", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
             { name = "nvidia-cusparse-cu12", version = "12.3.1.170", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
-            { name = "nvidia-nvjitlink-cu12", version = "12.4.127", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
+            { name = "nvidia-nvjitlink-cu12", marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/46/6b/a5c33cf16af09166845345275c34ad2190944bcc6026797a39f8e0a282e0/nvidia_cusolver_cu12-11.6.1.9-py3-none-manylinux2014_aarch64.whl", hash = "sha256:d338f155f174f90724bbde3758b7ac375a70ce8e706d70b018dd3375545fc84e", size = 127634111 },
@@ -11876,7 +11875,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             "python_full_version < '3.11' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
         ]
         dependencies = [
-            { name = "nvidia-nvjitlink-cu12", version = "12.8.61", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
+            { name = "nvidia-nvjitlink-cu12", marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/65/5b/cfaeebf25cd9fdec14338ccb16f6b2c4c7fa9163aefcf057d86b9cc248bb/nvidia_cusparse_cu12-12.1.0.106-py3-none-manylinux1_x86_64.whl", hash = "sha256:f3b50f42cf363f86ab21f720998517a659a48131e8d538dc02f8768237bd884c", size = 195958278 },
@@ -11902,7 +11901,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             "python_full_version < '3.11' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
         ]
         dependencies = [
-            { name = "nvidia-nvjitlink-cu12", version = "12.4.127", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
+            { name = "nvidia-nvjitlink-cu12", marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/96/a9/c0d2f83a53d40a4a41be14cea6a0bf9e668ffcf8b004bd65633f433050c0/nvidia_cusparse_cu12-12.3.1.170-py3-none-manylinux2014_aarch64.whl", hash = "sha256:9d32f62896231ebe0480efd8a7f702e143c98cfaa0e8a76df3386c1ba2b54df3", size = 207381987 },
@@ -11961,45 +11960,10 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         name = "nvidia-nvjitlink-cu12"
         version = "12.4.127"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.12' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-        ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/02/45/239d52c05074898a80a900f49b1615d81c07fceadd5ad6c4f86a987c0bc4/nvidia_nvjitlink_cu12-12.4.127-py3-none-manylinux2014_aarch64.whl", hash = "sha256:4abe7fef64914ccfa909bc2ba39739670ecc9e820c83ccc7a6ed414122599b83", size = 20552510 },
             { url = "https://files.pythonhosted.org/packages/ff/ff/847841bacfbefc97a00036e0fce5a0f086b640756dc38caea5e1bb002655/nvidia_nvjitlink_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl", hash = "sha256:06b3b9b25bf3f8af351d664978ca26a16d2c5127dbd53c0497e28d1fb9611d57", size = 21066810 },
             { url = "https://files.pythonhosted.org/packages/81/19/0babc919031bee42620257b9a911c528f05fb2688520dcd9ca59159ffea8/nvidia_nvjitlink_cu12-12.4.127-py3-none-win_amd64.whl", hash = "sha256:fd9020c501d27d135f983c6d3e244b197a7ccad769e34df53a42e276b0e25fa1", size = 95336325 },
-        ]
-
-        [[package]]
-        name = "nvidia-nvjitlink-cu12"
-        version = "12.8.61"
-        source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.12' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-        ]
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/03/f8/9d85593582bd99b8d7c65634d2304780aefade049b2b94d96e44084be90b/nvidia_nvjitlink_cu12-12.8.61-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", hash = "sha256:45fd79f2ae20bd67e8bc411055939049873bfd8fac70ff13bd4865e0b9bdab17", size = 39243473 },
-            { url = "https://files.pythonhosted.org/packages/af/53/698f3758f48c5fcb1112721e40cc6714da3980d3c7e93bae5b29dafa9857/nvidia_nvjitlink_cu12-12.8.61-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:9b80ecab31085dda3ce3b41d043be0ec739216c3fc633b8abe212d5a30026df0", size = 38374634 },
-            { url = "https://files.pythonhosted.org/packages/7f/c6/0d1b2bfeb2ef42c06db0570c4d081e5cde4450b54c09e43165126cfe6ff6/nvidia_nvjitlink_cu12-12.8.61-py3-none-win_amd64.whl", hash = "sha256:1166a964d25fdc0eae497574d38824305195a5283324a21ccb0ce0c802cbf41c", size = 268514099 },
         ]
 
         [[package]]
@@ -12480,8 +12444,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             { name = "ruamel-yaml" },
             { name = "scipy" },
             { name = "spglib" },
-            { name = "sympy", version = "1.13.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet'" },
-            { name = "sympy", version = "1.13.3", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (extra != 'extra-4-test-alignn' and extra == 'extra-4-test-m3gnet') or (extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "sympy" },
             { name = "tabulate" },
             { name = "tqdm" },
             { name = "uncertainties" },
@@ -12509,9 +12472,58 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         name = "pyparsing"
         version = "2.4.7"
         source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "python_full_version >= '3.12' and sys_platform == 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version >= '3.12' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and sys_platform == 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and sys_platform == 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version >= '3.12' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+        ]
         sdist = { url = "https://files.pythonhosted.org/packages/c1/47/dfc9c342c9842bbe0036c7f763d2d6686bcf5eb1808ba3e170afdb282210/pyparsing-2.4.7.tar.gz", hash = "sha256:c203ec8783bf771a155b207279b9bccb8dea02d8f0c9e5f8ead507bc3246ecc1", size = 649718 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/8a/bb/488841f56197b13700afd5658fc279a2025a39e22449b7cf29864669b15d/pyparsing-2.4.7-py2.py3-none-any.whl", hash = "sha256:ef9d7589ef3c200abe66653d3f1ab1033c3c419ae9b9bdb1240a85b024efc88b", size = 67842 },
+        ]
+
+        [[package]]
+        name = "pyparsing"
+        version = "3.2.1"
+        source = { registry = "https://pypi.org/simple" }
+        resolution-markers = [
+            "python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version >= '3.12' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version >= '3.12' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version >= '3.12' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
+            "python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version >= '3.12' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version >= '3.12' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version == '3.11.*' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+            "python_full_version < '3.11' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/8b/1a/3544f4f299a47911c2ab3710f534e52fea62a633c96806995da5d25be4b2/pyparsing-3.2.1.tar.gz", hash = "sha256:61980854fd66de3a90028d679a954d5f2623e83144b5afe5ee86f43d762e5f0a", size = 1067694 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/1c/a7/c8a2d361bf89c0d9577c934ebb7421b25dc84bf3a8e3ac0a40aed9acc547/pyparsing-3.2.1-py3-none-any.whl", hash = "sha256:506ff4f4386c4cec0590ec19e6302d3aedb992fdc02c761e90416f158dacf8e1", size = 107716 },
         ]
 
         [[package]]
@@ -12858,64 +12870,12 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
         name = "sympy"
         version = "1.13.1"
         source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra == 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra == 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-        ]
         dependencies = [
-            { name = "mpmath", marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
+            { name = "mpmath" },
         ]
         sdist = { url = "https://files.pythonhosted.org/packages/ca/99/5a5b6f19ff9f083671ddf7b9632028436167cd3d33e11015754e41b249a4/sympy-1.13.1.tar.gz", hash = "sha256:9cebf7e04ff162015ce31c9c6c9144daa34a93bd082f54fd8f12deca4f47515f", size = 7533040 }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/b2/fe/81695a1aa331a842b582453b605175f419fe8540355886031328089d840a/sympy-1.13.1-py3-none-any.whl", hash = "sha256:db36cdc64bf61b9b24578b6f7bab1ecdd2452cf008f34faa33776680c26d66f8", size = 6189177 },
-        ]
-
-        [[package]]
-        name = "sympy"
-        version = "1.13.3"
-        source = { registry = "https://pypi.org/simple" }
-        resolution-markers = [
-            "python_full_version >= '3.12' and sys_platform == 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform == 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform == 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform != 'win32' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and extra == 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra != 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version >= '3.12' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version == '3.11.*' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform == 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-            "python_full_version < '3.11' and sys_platform != 'win32' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-all' and extra != 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet'",
-        ]
-        dependencies = [
-            { name = "mpmath", marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
-        ]
-        sdist = { url = "https://files.pythonhosted.org/packages/11/8a/5a7fd6284fa8caac23a26c9ddf9c30485a48169344b4bd3b0f02fef1890f/sympy-1.13.3.tar.gz", hash = "sha256:b27fd2c6530e0ab39e275fc9b683895367e51d5da91baa8d3d64db2565fec4d9", size = 7533196 }
-        wheels = [
-            { url = "https://files.pythonhosted.org/packages/99/ff/c87e0622b1dadea79d2fb0b25ade9ed98954c9033722eb707053d310d4f3/sympy-1.13.3-py3-none-any.whl", hash = "sha256:54612cf55a62755ee71824ce692986f23c88ffa77207b30c1368eda4a7060f73", size = 6189483 },
         ]
 
         [[package]]
@@ -13028,7 +12988,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             { name = "nvidia-cusparse-cu12", version = "12.1.0.106", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-alignn') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (platform_machine != 'x86_64' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (sys_platform != 'linux' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (sys_platform != 'linux' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
             { name = "nvidia-nccl-cu12", version = "2.19.3", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-alignn') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (platform_machine != 'x86_64' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (sys_platform != 'linux' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (sys_platform != 'linux' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
             { name = "nvidia-nvtx-cu12", version = "12.1.105", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-alignn') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (platform_machine != 'x86_64' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (sys_platform != 'linux' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (sys_platform != 'linux' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
-            { name = "sympy", version = "1.13.3", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
+            { name = "sympy", marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
             { name = "triton", version = "2.2.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-alignn') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (platform_machine != 'x86_64' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (sys_platform != 'linux' and extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet') or (sys_platform != 'linux' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
             { name = "typing-extensions", marker = "extra == 'extra-4-test-alignn' or extra == 'extra-4-test-m3gnet'" },
         ]
@@ -13092,10 +13052,10 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             { name = "nvidia-cusolver-cu12", version = "11.6.1.9", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-all') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-chgnet') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet')" },
             { name = "nvidia-cusparse-cu12", version = "12.3.1.170", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-all') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-chgnet') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet')" },
             { name = "nvidia-nccl-cu12", version = "2.21.5", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-all') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-chgnet') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet')" },
-            { name = "nvidia-nvjitlink-cu12", version = "12.4.127", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-all') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-chgnet') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet')" },
+            { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-all') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-chgnet') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet')" },
             { name = "nvidia-nvtx-cu12", version = "12.4.127", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-all') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-chgnet') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet')" },
             { name = "setuptools", marker = "(python_full_version >= '3.12' and extra == 'extra-4-test-all') or (python_full_version >= '3.12' and extra == 'extra-4-test-chgnet') or (python_full_version >= '3.12' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet') or (extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet')" },
-            { name = "sympy", version = "1.13.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
+            { name = "sympy", marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
             { name = "triton", version = "3.1.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-all') or (python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'extra-4-test-chgnet') or (python_full_version < '3.13' and platform_machine == 'x86_64' and sys_platform == 'linux' and extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet') or (python_full_version >= '3.13' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (python_full_version >= '3.13' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (platform_machine != 'x86_64' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (sys_platform != 'linux' and extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-all') or (extra == 'extra-4-test-alignn' and extra == 'extra-4-test-chgnet')" },
             { name = "typing-extensions", marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or (extra != 'extra-4-test-alignn' and extra != 'extra-4-test-m3gnet')" },
         ]
@@ -13138,7 +13098,8 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             { name = "jinja2" },
             { name = "numpy" },
             { name = "psutil" },
-            { name = "pyparsing" },
+            { name = "pyparsing", version = "2.4.7", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-alignn' or (extra == 'extra-4-test-all' and extra == 'extra-4-test-m3gnet') or (extra == 'extra-4-test-chgnet' and extra == 'extra-4-test-m3gnet')" },
+            { name = "pyparsing", version = "3.2.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-test-all' or extra == 'extra-4-test-chgnet' or extra != 'extra-4-test-alignn'" },
             { name = "requests" },
             { name = "tqdm" },
         ]
@@ -13378,7 +13339,7 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/f5/d5/688db678e987c3e0fb17867970700b92603cadf36c56e5fb08f23e822a0c/yarl-1.18.3-cp313-cp313-win_amd64.whl", hash = "sha256:578e281c393af575879990861823ef19d66e2b1d0098414855dd367e234f5b3c", size = 315723 },
             { url = "https://files.pythonhosted.org/packages/f5/4b/a06e0ec3d155924f77835ed2d167ebd3b211a7b0853da1cf8d8414d784ef/yarl-1.18.3-py3-none-any.whl", hash = "sha256:b57f4f58099328dfb26c6a771d09fb20dbbae81d20cfb66141251ea063bd101b", size = 45109 },
         ]
-        "###
+        "#
         );
     });
 

@@ -2474,23 +2474,24 @@ impl ResolverSettings {
 
 impl From<ResolverOptions> for ResolverSettings {
     fn from(value: ResolverOptions) -> Self {
+        let index_locations = IndexLocations::new(
+            value
+                .index
+                .into_iter()
+                .flatten()
+                .chain(value.extra_index_url.into_iter().flatten().map(Index::from))
+                .chain(value.index_url.into_iter().map(Index::from))
+                .collect(),
+            value
+                .find_links
+                .into_iter()
+                .flatten()
+                .map(Index::from)
+                .collect(),
+            value.no_index.unwrap_or_default(),
+        );
         Self {
-            index_locations: IndexLocations::new(
-                value
-                    .index
-                    .into_iter()
-                    .flatten()
-                    .chain(value.extra_index_url.into_iter().flatten().map(Index::from))
-                    .chain(value.index_url.into_iter().map(Index::from))
-                    .collect(),
-                value
-                    .find_links
-                    .into_iter()
-                    .flatten()
-                    .map(Index::from)
-                    .collect(),
-                value.no_index.unwrap_or_default(),
-            ),
+            index_locations,
             resolution: value.resolution.unwrap_or_default(),
             prerelease: value.prerelease.unwrap_or_default(),
             fork_strategy: value.fork_strategy.unwrap_or_default(),
@@ -2611,23 +2612,24 @@ impl ResolverInstallerSettings {
 
 impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
     fn from(value: ResolverInstallerOptions) -> Self {
+        let index_locations = IndexLocations::new(
+            value
+                .index
+                .into_iter()
+                .flatten()
+                .chain(value.extra_index_url.into_iter().flatten().map(Index::from))
+                .chain(value.index_url.into_iter().map(Index::from))
+                .collect(),
+            value
+                .find_links
+                .into_iter()
+                .flatten()
+                .map(Index::from)
+                .collect(),
+            value.no_index.unwrap_or_default(),
+        );
         Self {
-            index_locations: IndexLocations::new(
-                value
-                    .index
-                    .into_iter()
-                    .flatten()
-                    .chain(value.extra_index_url.into_iter().flatten().map(Index::from))
-                    .chain(value.index_url.into_iter().map(Index::from))
-                    .collect(),
-                value
-                    .find_links
-                    .into_iter()
-                    .flatten()
-                    .map(Index::from)
-                    .collect(),
-                value.no_index.unwrap_or_default(),
-            ),
+            index_locations,
             resolution: value.resolution.unwrap_or_default(),
             prerelease: value.prerelease.unwrap_or_default(),
             fork_strategy: value.fork_strategy.unwrap_or_default(),

@@ -31,7 +31,7 @@ use uv_scripts::{Pep723Error, Pep723Item, Pep723ItemRef, Pep723Metadata, Pep723S
 use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, Workspace};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
 use crate::printer::Printer;
@@ -109,6 +109,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     //    If found, this file is combined with the user configuration file.
     // 3. The nearest configuration file (`uv.toml` or `pyproject.toml`) in the directory tree,
     //    starting from the current directory.
+    let workspace_cache = WorkspaceCache::default();
     let filesystem = if let Some(config_file) = cli.top_level.config_file.as_ref() {
         if config_file
             .file_name()
@@ -123,7 +124,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         // For commands that operate at the user-level, ignore local configuration.
         FilesystemOptions::user()?.combine(FilesystemOptions::system()?)
     } else if let Ok(workspace) =
-        Workspace::discover(&project_dir, &DiscoveryOptions::default()).await
+        Workspace::discover(&project_dir, &DiscoveryOptions::default(), &workspace_cache).await
     {
         let project = FilesystemOptions::find(workspace.install_path())?;
         let system = FilesystemOptions::system()?;

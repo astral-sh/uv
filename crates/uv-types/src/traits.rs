@@ -17,6 +17,7 @@ use uv_git::GitResolver;
 use uv_pep508::PackageName;
 use uv_pypi_types::Requirement;
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_workspace::WorkspaceCache;
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -87,6 +88,9 @@ pub trait BuildContext {
 
     /// The index locations being searched.
     fn locations(&self) -> &IndexLocations;
+
+    /// Workspace discovery caching.
+    fn workspace_cache(&self) -> &WorkspaceCache;
 
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(
@@ -186,18 +190,18 @@ impl InstalledPackagesProvider for EmptyInstalledPackages {
     }
 }
 
-/// `anyhow::Error`-like wrapper type for [`BuildDispatch`] method return values, that also makes
-/// `IsBuildBackendError` work as `thiserror` `#[source]`.
+/// [`anyhow::Error`]-like wrapper type for [`BuildDispatch`] method return values, that also makes
+/// [`IsBuildBackendError`] work as [`thiserror`] `#[source]`.
 ///
 /// The errors types have the same problem as [`BuildDispatch`] generally: The `uv-resolver`,
 /// `uv-installer` and `uv-build-frontend` error types all reference each other:
 /// Resolution and installation may need to build packages, while the build frontend needs to
 /// resolve and install for the PEP 517 build environment.
 ///
-/// Usually, `anyhow::Error` is opaque error type of choice. In this case though, we error type
+/// Usually, [`anyhow::Error`] is opaque error type of choice. In this case though, we error type
 /// that we can inspect on whether it's a build backend error with [`IsBuildBackendError`], and
-/// `anyhow::Error` does not allow attaching more traits. The next choice would be
-/// `Box<dyn std::error::Error + IsBuildFrontendError + Send + Sync + 'static>`, but `thiserror`
+/// [`anyhow::Error`] does not allow attaching more traits. The next choice would be
+/// `Box<dyn std::error::Error + IsBuildFrontendError + Send + Sync + 'static>`, but [`thiserror`]
 /// complains about the internal `AsDynError` not being implemented when being used as `#[source]`.
 /// This struct is an otherwise transparent error wrapper that thiserror recognizes.
 pub struct AnyErrorBuild(Box<dyn IsBuildBackendError>);
