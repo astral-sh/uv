@@ -206,7 +206,7 @@ This interface also supports many [request formats](#requesting-a-version), e.g.
 executable that has a version of 3.11 or newer:
 
 ```console
-$ uv python find >=3.11
+$ uv python find '>=3.11'
 ```
 
 By default, `uv python find` will include Python versions from virtual environments. If a `.venv`
