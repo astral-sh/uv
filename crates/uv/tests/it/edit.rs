@@ -10389,3 +10389,50 @@ fn add_auth_policy_never_without_credentials() -> Result<()> {
     context.assert_command("import anyio").success();
     Ok(())
 }
+
+/// Test the error message when adding a package with multiple existing references in
+/// `pyproject.toml`.
+#[test]
+fn add_ambiguous() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+        dependencies = [
+            "anyio>=4.0.0",
+            "anyio>=4.1.0",
+        ]
+        [dependency-groups]
+        bar = ["anyio>=4.1.0", "anyio>=4.2.0"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot perform ambiguous update; found multiple entries for `anyio`:
+    - `anyio>=4.0.0`
+    - `anyio>=4.1.0`
+    "###);
+
+    uv_snapshot!(context.filters(), context.add().arg("--group").arg("bar").arg("anyio"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Cannot perform ambiguous update; found multiple entries for `anyio`:
+    - `anyio>=4.1.0`
+    - `anyio>=4.2.0`
+    "###);
+
+    Ok(())
+}
