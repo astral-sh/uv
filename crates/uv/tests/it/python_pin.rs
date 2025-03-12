@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::common::{uv_snapshot, TestContext};
 use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
@@ -263,6 +265,17 @@ fn python_pin_global_use_local_if_available() -> Result<()> {
     ----- stderr -----
     "###);
 
+    let mut global_version_path = PathBuf::from(uv.path());
+    global_version_path.push(PYTHON_VERSION_FILENAME);
+    let global_python_version = context.read(&global_version_path);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(global_python_version, @r###"
+        3.12
+        "###);
+    });
+
     // Request Python 3.11 for local .python-version
     uv_snapshot!(context.filters(), context.python_pin().arg("3.11"), @r###"
     success: true
@@ -292,6 +305,22 @@ fn python_pin_global_use_local_if_available() -> Result<()> {
 
     ----- stderr -----
     "###);
+
+    // Local .python-version exists and has the right version.
+    let local_python_version = context.read(PYTHON_VERSION_FILENAME);
+    assert_snapshot!(local_python_version, @r###"
+    3.11
+    "###);
+
+    // Global .python-version still exists and has the right version.
+    let global_python_version = context.read(&global_version_path);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(global_python_version, @r###"
+        3.12
+        "###);
+    });
 
     Ok(())
 }
