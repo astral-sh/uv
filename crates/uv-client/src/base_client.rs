@@ -50,7 +50,6 @@ pub struct BaseClientBuilder<'a> {
     native_tls: bool,
     retries: u32,
     pub connectivity: Connectivity,
-    client: Option<Client>,
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
@@ -85,7 +84,6 @@ impl BaseClientBuilder<'_> {
             native_tls: false,
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
-            client: None,
             markers: None,
             platform: None,
             auth_integration: AuthIntegration::default(),
@@ -124,12 +122,6 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn native_tls(mut self, native_tls: bool) -> Self {
         self.native_tls = native_tls;
-        self
-    }
-
-    #[must_use]
-    pub fn client(mut self, client: Client) -> Self {
-        self.client = Some(client);
         self
     }
 
