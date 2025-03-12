@@ -2,18 +2,21 @@ import os
 import pathlib
 import subprocess
 import sys
-from typing import Generator
 
 SELF_FILE = pathlib.Path(__file__)
+COMMANDS_FILE = SELF_FILE.parent / "commands.sh"
 
 
-def find_test_scripts() -> Generator[pathlib.Path, None, None]:
-    for child in SELF_FILE.parent.iterdir():
-        if child.suffix == ".sh":
-            yield child
+def read_commands() -> list[list[str]]:
+    return [
+        line.split()
+        for line in COMMANDS_FILE.read_text().splitlines()
+        # Skip empty lines and comments
+        if line.strip() and not line.strip().startswith("#")
+    ]
 
 
-def run_script(script: pathlib.Path) -> subprocess.CompletedProcess:
+def run_command(command: list[str]) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     # Prepend either the parent uv path to the PATH or the current directory
     env = {
@@ -24,14 +27,12 @@ def run_script(script: pathlib.Path) -> subprocess.CompletedProcess:
         + os.pathsep
         + env.get("PATH"),
     }
-    return subprocess.run(
-        ["sh", str(script.absolute())], capture_output=True, text=True, env=env
-    )
+    return subprocess.run(command, capture_output=True, text=True, env=env)
 
 
 def report_result(result: subprocess.CompletedProcess):
     print("=============================================")
-    print(f"script: {result.args[-1].rsplit(os.path.sep, 1)[-1]}")
+    print(f"command: {' '.join(result.args)}")
     print(f"exit code: {result.returncode}")
     print()
     print("------- stdout -------")
@@ -42,17 +43,17 @@ def report_result(result: subprocess.CompletedProcess):
 
 
 def main():
-    results = [run_script(script) for script in find_test_scripts()]
+    results = [run_command(command) for command in read_commands()]
     failed = sum(result.returncode != 0 for result in results)
     for result in results:
         report_result(result)
 
     print("=============================================")
     if failed:
-        print(f"FAILURE - {failed}/{len(results)} scripts failed")
+        print(f"FAILURE - {failed}/{len(results)} commands failed")
         sys.exit(1)
     else:
-        print(f"SUCCESS - {len(results)}/{len(results)} scripts succeeded")
+        print(f"SUCCESS - {len(results)}/{len(results)} commands succeeded")
 
 
 main()
