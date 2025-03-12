@@ -99,7 +99,7 @@ impl CachedEnvironment {
             venv,
             &resolution,
             Modifications::Exact,
-            settings.as_ref().into(),
+            settings.into(),
             network_settings,
             state,
             install,

@@ -288,7 +288,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 editable,
                 install_options,
                 modifications,
-                settings.as_ref().into(),
+                (&settings).into(),
                 &network_settings,
                 &sync_state,
                 if show_resolution {
@@ -751,7 +751,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     editable,
                     install_options,
                     modifications,
-                    settings.as_ref().into(),
+                    (&settings).into(),
                     &network_settings,
                     &sync_state,
                     if show_resolution {

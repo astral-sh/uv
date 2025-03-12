@@ -454,7 +454,7 @@ pub(crate) async fn sync(
         editable,
         install_options,
         modifications,
-        settings.as_ref().into(),
+        (&settings).into(),
         &network_settings,
         &state,
         Box::new(DefaultInstallLogger),

@@ -2483,23 +2483,6 @@ impl From<ResolverOptions> for ResolverSettings {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct ResolverInstallerSettingsRef<'a> {
-    pub(crate) index_locations: &'a IndexLocations,
-    pub(crate) index_strategy: IndexStrategy,
-    pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) dependency_metadata: &'a DependencyMetadata,
-    pub(crate) config_setting: &'a ConfigSettings,
-    pub(crate) no_build_isolation: bool,
-    pub(crate) no_build_isolation_package: &'a [PackageName],
-    pub(crate) exclude_newer: Option<ExcludeNewer>,
-    pub(crate) link_mode: LinkMode,
-    pub(crate) compile_bytecode: bool,
-    pub(crate) sources: SourceStrategy,
-    pub(crate) reinstall: &'a Reinstall,
-    pub(crate) build_options: &'a BuildOptions,
-}
-
 /// The resolved settings to use for an invocation of the uv CLI with both resolver and installer
 /// capabilities.
 ///
@@ -2527,24 +2510,6 @@ impl ResolverInstallerSettings {
         );
 
         Self::from(options)
-    }
-
-    pub(crate) fn as_ref(&self) -> ResolverInstallerSettingsRef {
-        ResolverInstallerSettingsRef {
-            build_options: &self.resolver_settings.build_options,
-            compile_bytecode: self.compile_bytecode,
-            config_setting: &self.resolver_settings.config_setting,
-            dependency_metadata: &self.resolver_settings.dependency_metadata,
-            exclude_newer: self.resolver_settings.exclude_newer,
-            index_locations: &self.resolver_settings.index_locations,
-            index_strategy: self.resolver_settings.index_strategy,
-            keyring_provider: self.resolver_settings.keyring_provider,
-            link_mode: self.resolver_settings.link_mode,
-            no_build_isolation: self.resolver_settings.no_build_isolation,
-            no_build_isolation_package: &self.resolver_settings.no_build_isolation_package,
-            reinstall: &self.reinstall,
-            sources: self.resolver_settings.sources,
-        }
     }
 }
 
@@ -2969,22 +2934,22 @@ impl PipSettings {
     }
 }
 
-impl<'a> From<ResolverInstallerSettingsRef<'a>> for InstallerSettingsRef<'a> {
-    fn from(settings: ResolverInstallerSettingsRef<'a>) -> Self {
+impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
+    fn from(settings: &'a ResolverInstallerSettings) -> Self {
         Self {
-            index_locations: settings.index_locations,
-            index_strategy: settings.index_strategy,
-            keyring_provider: settings.keyring_provider,
-            dependency_metadata: settings.dependency_metadata,
-            config_setting: settings.config_setting,
-            no_build_isolation: settings.no_build_isolation,
-            no_build_isolation_package: settings.no_build_isolation_package,
-            exclude_newer: settings.exclude_newer,
-            link_mode: settings.link_mode,
+            index_locations: &settings.resolver_settings.index_locations,
+            index_strategy: settings.resolver_settings.index_strategy,
+            keyring_provider: settings.resolver_settings.keyring_provider,
+            dependency_metadata: &settings.resolver_settings.dependency_metadata,
+            config_setting: &settings.resolver_settings.config_setting,
+            no_build_isolation: settings.resolver_settings.no_build_isolation,
+            no_build_isolation_package: &settings.resolver_settings.no_build_isolation_package,
+            exclude_newer: settings.resolver_settings.exclude_newer,
+            link_mode: settings.resolver_settings.link_mode,
             compile_bytecode: settings.compile_bytecode,
-            reinstall: settings.reinstall,
-            build_options: settings.build_options,
-            sources: settings.sources,
+            reinstall: &settings.reinstall,
+            build_options: &settings.resolver_settings.build_options,
+            sources: settings.resolver_settings.sources,
         }
     }
 }

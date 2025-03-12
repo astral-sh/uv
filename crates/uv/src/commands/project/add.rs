@@ -891,7 +891,7 @@ async fn lock_and_sync(
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,
-        settings.as_ref().into(),
+        settings.into(),
         network_settings,
         &sync_state,
         Box::new(DefaultInstallLogger),

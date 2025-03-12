@@ -340,7 +340,7 @@ pub(crate) async fn remove(
         EditableMode::Editable,
         install_options,
         Modifications::Exact,
-        settings.as_ref().into(),
+        (&settings).into(),
         &network_settings,
         &state,
         Box::new(DefaultInstallLogger),

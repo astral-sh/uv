@@ -310,7 +310,7 @@ async fn upgrade_tool(
             environment,
             &resolution.into(),
             Modifications::Exact,
-            settings.as_ref().into(),
+            (&settings).into(),
             network_settings,
             &state,
             Box::new(DefaultInstallLogger),
