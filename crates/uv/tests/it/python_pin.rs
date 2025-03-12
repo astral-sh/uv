@@ -6,7 +6,6 @@ use uv_python::{
     platform::{Arch, Os},
     PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME,
 };
-use uv_static::EnvVars;
 
 #[test]
 fn python_pin() {
@@ -200,14 +199,13 @@ fn python_pin() {
 }
 
 #[test]
-fn python_pin_use_global_if_no_local() -> Result<()> {
+fn python_pin_global_if_no_local() -> Result<()> {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let uv = context.user_config_dir.child("uv");
+    uv.create_dir_all()?;
 
-    let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
-    let uv = xdg.child("uv");
-
-    // Without arguments, we attempt to read the current pin (which does not exist yet)
-    uv_snapshot!(context.filters(), context.python_pin().env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    // // Without arguments, we attempt to read the current pin (which does not exist yet)
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -216,11 +214,18 @@ fn python_pin_use_global_if_no_local() -> Result<()> {
     error: No pinned Python version found
     "###);
 
-    let versions = uv.child(".python-version");
-    versions.write_str("3.11")?;
+    // Given an argument, we globally pin to that version
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.11").arg("--global"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `[UV_USER_CONFIG_DIR]/.python-version` to `3.11`
+
+    ----- stderr -----
+    ");
 
     // If no local pin, use global.
-    uv_snapshot!(context.filters(), context.python_pin().env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -233,56 +238,23 @@ fn python_pin_use_global_if_no_local() -> Result<()> {
 }
 
 #[test]
-fn python_pin_global() -> Result<()> {
-    let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
-    let uv = xdg.child("uv");
+fn python_pin_global_use_local_if_available() -> Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let uv = context.user_config_dir.child("uv");
     uv.create_dir_all()?;
 
-    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
-        .with_filtered_path(uv.as_ref(), "USER_CONFIG_PATH");
-
-    // Without arguments, we attempt to read the current pin (which does not exist yet)
-    uv_snapshot!(context.filters(), context.python_pin().env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: No pinned Python version found
-    "###);
-
     // Given an argument, we globally pin to that version
-    uv_snapshot!(context.filters(), context.python_pin().arg("any").arg("--global").env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r"
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").arg("--global"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Pinned `[USER_CONFIG_PATH]/.python-version` to `any`
+    Pinned `[UV_USER_CONFIG_DIR]/.python-version` to `3.12`
 
     ----- stderr -----
     ");
 
-    // Without arguments, we read the current pin
-    uv_snapshot!(context.filters(), context.python_pin().env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    any
-
-    ----- stderr -----
-    "###);
-
-    // Request Python 3.12 globally
-    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").arg("--global").env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Updated `[USER_CONFIG_PATH]/.python-version` from `any` -> `3.12`
-
-    ----- stderr -----
-    ");
-
-    // With no local, we get global
-    uv_snapshot!(context.filters(), context.python_pin().env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    // With no local, we get the global pin
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -292,7 +264,7 @@ fn python_pin_global() -> Result<()> {
     "###);
 
     // Request Python 3.11 for local .python-version
-    uv_snapshot!(context.filters(), context.python_pin().arg("3.11").env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.11"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -302,7 +274,7 @@ fn python_pin_global() -> Result<()> {
     "###);
 
     // Local should override global
-    uv_snapshot!(context.filters(), context.python_pin().env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -312,7 +284,7 @@ fn python_pin_global() -> Result<()> {
     "###);
 
     // We should still be able to check global pin
-    uv_snapshot!(context.filters(), context.python_pin().arg("--global").env(EnvVars::XDG_CONFIG_HOME, xdg.path()), @r###"
+    uv_snapshot!(context.filters(), context.python_pin().arg("--global"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----

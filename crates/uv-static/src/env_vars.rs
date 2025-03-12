@@ -347,6 +347,10 @@ impl EnvVars {
     /// Path to system-level configuration directory on Windows systems.
     pub const SYSTEMDRIVE: &'static str = "SYSTEMDRIVE";
 
+    /// Path to user-level configuration directory on Windows systems.
+    pub const APPDATA: &'static str = "APPDATA";
+    pub const USERPROFILE: &'static str = "USERPROFILE";
+
     /// Path to user-level configuration directory on Unix systems.
     pub const XDG_CONFIG_HOME: &'static str = "XDG_CONFIG_HOME";
 

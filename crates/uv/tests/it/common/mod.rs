@@ -358,7 +358,11 @@ impl TestContext {
         let home_dir = ChildPath::new(root.path()).child("home");
         fs_err::create_dir_all(&home_dir).expect("Failed to create test home directory");
 
-        let user_config_dir = ChildPath::new(home_dir.path()).child(".config");
+        let user_config_dir = if cfg!(windows) {
+            ChildPath::new(home_dir.path())
+        } else {
+            ChildPath::new(home_dir.path()).child(".config")
+        };
         fs_err::create_dir_all(&user_config_dir)
             .expect("Failed to create test user config directory");
 
@@ -477,15 +481,22 @@ impl TestContext {
                 .into_iter()
                 .map(|pattern| (pattern, "[PYTHON_DIR]/".to_string())),
         );
+        let mut uv_user_config_dir = PathBuf::from(user_config_dir.path());
+        uv_user_config_dir.push("uv");
         filters.extend(
-            Self::path_patterns(&home_dir)
+            Self::path_patterns(&uv_user_config_dir)
                 .into_iter()
-                .map(|pattern| (pattern, "[HOME]/".to_string())),
+                .map(|pattern| (pattern, "[UV_USER_CONFIG_DIR]/".to_string())),
         );
         filters.extend(
             Self::path_patterns(&user_config_dir)
                 .into_iter()
                 .map(|pattern| (pattern, "[USER_CONFIG_DIR]/".to_string())),
+        );
+        filters.extend(
+            Self::path_patterns(&home_dir)
+                .into_iter()
+                .map(|pattern| (pattern, "[HOME]/".to_string())),
         );
         filters.extend(
             Self::path_patterns(&workspace_root)
@@ -617,7 +628,8 @@ impl TestContext {
             .env(EnvVars::COLUMNS, "100")
             .env(EnvVars::PATH, path)
             .env(EnvVars::HOME, self.home_dir.as_os_str())
-            .env(EnvVars::XDG_CONFIG_HOME, self.user_config_dir.as_os_str())
+            .env(EnvVars::APPDATA, self.home_dir.as_os_str())
+            .env(EnvVars::USERPROFILE, self.home_dir.as_os_str())
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             // Installations are not allowed by default; see `Self::with_managed_python_dirs`
             .env(EnvVars::UV_PYTHON_DOWNLOADS, "never")
@@ -628,6 +640,7 @@ impl TestContext {
             .env(EnvVars::UV_TEST_NO_CLI_PROGRESS, "1")
             .env_remove(EnvVars::UV_CACHE_DIR)
             .env_remove(EnvVars::UV_TOOL_BIN_DIR)
+            .env_remove(EnvVars::XDG_CONFIG_HOME)
             .current_dir(self.temp_dir.path());
 
         for (key, value) in &self.extra_env {
