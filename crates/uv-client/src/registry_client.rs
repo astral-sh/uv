@@ -8,7 +8,7 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::HeaderMap;
 use itertools::Either;
-use reqwest::{Client, Response, StatusCode};
+use reqwest::{Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio::sync::Semaphore;
 use tracing::{info_span, instrument, trace, warn, Instrument};
@@ -112,12 +112,6 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn cache(mut self, cache: Cache) -> Self {
         self.cache = cache;
-        self
-    }
-
-    #[must_use]
-    pub fn client(mut self, client: Client) -> Self {
-        self.base_client_builder = self.base_client_builder.client(client);
         self
     }
 

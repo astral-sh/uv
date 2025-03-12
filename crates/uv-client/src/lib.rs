@@ -1,5 +1,5 @@
 pub use base_client::{
-    is_extended_transient_error, AuthIntegration, BaseClient, BaseClientBuilder,
+    is_extended_transient_error, AuthIntegration, BaseClient, BaseClientBuilder, ExtraMiddleware,
     UvRetryableStrategy, DEFAULT_RETRIES,
 };
 pub use cached_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
