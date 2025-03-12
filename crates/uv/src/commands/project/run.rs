@@ -245,7 +245,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             let lock = match project::lock::do_safe_lock(
                 mode,
                 target,
-                settings.as_ref().into(),
+                &settings.resolver_settings,
                 &network_settings,
                 &lock_state,
                 if show_resolution {
@@ -334,7 +334,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             }
 
             // Install the script requirements, if necessary. Otherwise, use an isolated environment.
-            if let Some(spec) = script_specification((&script).into(), settings.as_ref().into())? {
+            if let Some(spec) = script_specification((&script).into(), &settings.resolver_settings)?
+            {
                 let environment = ScriptEnvironment::get_or_init(
                     (&script).into(),
                     python.as_deref().map(PythonRequest::parse),
@@ -664,7 +665,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 let result = match project::lock::do_safe_lock(
                     mode,
                     project.workspace().into(),
-                    settings.as_ref().into(),
+                    &settings.resolver_settings,
                     &network_settings,
                     &lock_state,
                     if show_resolution {

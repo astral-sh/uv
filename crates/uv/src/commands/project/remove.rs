@@ -279,7 +279,7 @@ pub(crate) async fn remove(
     let lock = match project::lock::do_safe_lock(
         mode,
         (&target).into(),
-        settings.as_ref().into(),
+        &settings.resolver_settings,
         &network_settings,
         &state,
         Box::new(DefaultResolveLogger),

@@ -34,7 +34,7 @@ use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::ExitStatus;
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::{NetworkSettings, ResolverInstallerSettings, ResolverSettings};
 
 /// Install a tool.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -208,9 +208,13 @@ pub(crate) async fn install(
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
     let settings = if request.is_latest() {
         ResolverInstallerSettings {
-            upgrade: settings
-                .upgrade
-                .combine(Upgrade::package(from.name.clone())),
+            resolver_settings: ResolverSettings {
+                upgrade: settings
+                    .resolver_settings
+                    .upgrade
+                    .combine(Upgrade::package(from.name.clone())),
+                ..settings.resolver_settings
+            },
             ..settings
         }
     } else {
@@ -340,7 +344,9 @@ pub(crate) async fn install(
         .as_ref()
         .filter(|_| {
             // And the user didn't request a reinstall or upgrade...
-            !request.is_latest() && settings.reinstall.is_none() && settings.upgrade.is_none()
+            !request.is_latest()
+                && settings.reinstall.is_none()
+                && settings.resolver_settings.upgrade.is_none()
         })
         .is_some()
     {
@@ -435,7 +441,7 @@ pub(crate) async fn install(
         let resolution = resolve_environment(
             spec.clone(),
             &interpreter,
-            settings.as_ref().into(),
+            &settings.resolver_settings,
             &network_settings,
             &state,
             Box::new(DefaultResolveLogger),
@@ -487,7 +493,7 @@ pub(crate) async fn install(
                     match resolve_environment(
                         spec,
                         &interpreter,
-                        settings.as_ref().into(),
+                        &settings.resolver_settings,
                         &network_settings,
                         &state,
                         Box::new(DefaultResolveLogger),

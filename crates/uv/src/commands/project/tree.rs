@@ -135,7 +135,7 @@ pub(crate) async fn tree(
     let lock = match do_safe_lock(
         mode,
         target,
-        settings.as_ref(),
+        &settings,
         network_settings,
         &state,
         Box::new(DefaultResolveLogger),

@@ -2401,40 +2401,21 @@ pub(crate) struct InstallerSettingsRef<'a> {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ResolverSettings {
+    pub(crate) build_options: BuildOptions,
+    pub(crate) config_setting: ConfigSettings,
+    pub(crate) dependency_metadata: DependencyMetadata,
+    pub(crate) exclude_newer: Option<ExcludeNewer>,
+    pub(crate) fork_strategy: ForkStrategy,
     pub(crate) index_locations: IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) resolution: ResolutionMode,
-    pub(crate) prerelease: PrereleaseMode,
-    pub(crate) fork_strategy: ForkStrategy,
-    pub(crate) dependency_metadata: DependencyMetadata,
-    pub(crate) config_setting: ConfigSettings,
+    pub(crate) link_mode: LinkMode,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: Vec<PackageName>,
-    pub(crate) exclude_newer: Option<ExcludeNewer>,
-    pub(crate) link_mode: LinkMode,
-    pub(crate) upgrade: Upgrade,
-    pub(crate) build_options: BuildOptions,
-    pub(crate) sources: SourceStrategy,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct ResolverSettingsRef<'a> {
-    pub(crate) index_locations: &'a IndexLocations,
-    pub(crate) index_strategy: IndexStrategy,
-    pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) resolution: ResolutionMode,
     pub(crate) prerelease: PrereleaseMode,
-    pub(crate) fork_strategy: ForkStrategy,
-    pub(crate) dependency_metadata: &'a DependencyMetadata,
-    pub(crate) config_setting: &'a ConfigSettings,
-    pub(crate) no_build_isolation: bool,
-    pub(crate) no_build_isolation_package: &'a [PackageName],
-    pub(crate) exclude_newer: Option<ExcludeNewer>,
-    pub(crate) link_mode: LinkMode,
-    pub(crate) upgrade: &'a Upgrade,
-    pub(crate) build_options: &'a BuildOptions,
+    pub(crate) resolution: ResolutionMode,
     pub(crate) sources: SourceStrategy,
+    pub(crate) upgrade: Upgrade,
 }
 
 impl ResolverSettings {
@@ -2448,26 +2429,6 @@ impl ResolverSettings {
         ));
 
         Self::from(options)
-    }
-
-    pub(crate) fn as_ref(&self) -> ResolverSettingsRef {
-        ResolverSettingsRef {
-            index_locations: &self.index_locations,
-            index_strategy: self.index_strategy,
-            keyring_provider: self.keyring_provider,
-            resolution: self.resolution,
-            prerelease: self.prerelease,
-            fork_strategy: self.fork_strategy,
-            dependency_metadata: &self.dependency_metadata,
-            config_setting: &self.config_setting,
-            no_build_isolation: self.no_build_isolation,
-            no_build_isolation_package: &self.no_build_isolation_package,
-            exclude_newer: self.exclude_newer,
-            link_mode: self.link_mode,
-            upgrade: &self.upgrade,
-            build_options: &self.build_options,
-            sources: self.sources,
-        }
     }
 }
 
@@ -2527,9 +2488,6 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) index_locations: &'a IndexLocations,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) resolution: ResolutionMode,
-    pub(crate) prerelease: PrereleaseMode,
-    pub(crate) fork_strategy: ForkStrategy,
     pub(crate) dependency_metadata: &'a DependencyMetadata,
     pub(crate) config_setting: &'a ConfigSettings,
     pub(crate) no_build_isolation: bool,
@@ -2538,7 +2496,6 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
     pub(crate) link_mode: LinkMode,
     pub(crate) compile_bytecode: bool,
     pub(crate) sources: SourceStrategy,
-    pub(crate) upgrade: &'a Upgrade,
     pub(crate) reinstall: &'a Reinstall,
     pub(crate) build_options: &'a BuildOptions,
 }
@@ -2551,23 +2508,9 @@ pub(crate) struct ResolverInstallerSettingsRef<'a> {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ResolverInstallerSettings {
-    pub(crate) index_locations: IndexLocations,
-    pub(crate) index_strategy: IndexStrategy,
-    pub(crate) keyring_provider: KeyringProviderType,
-    pub(crate) resolution: ResolutionMode,
-    pub(crate) prerelease: PrereleaseMode,
-    pub(crate) fork_strategy: ForkStrategy,
-    pub(crate) dependency_metadata: DependencyMetadata,
-    pub(crate) config_setting: ConfigSettings,
-    pub(crate) no_build_isolation: bool,
-    pub(crate) no_build_isolation_package: Vec<PackageName>,
-    pub(crate) exclude_newer: Option<ExcludeNewer>,
-    pub(crate) link_mode: LinkMode,
+    pub(crate) resolver_settings: ResolverSettings,
     pub(crate) compile_bytecode: bool,
-    pub(crate) sources: SourceStrategy,
-    pub(crate) upgrade: Upgrade,
     pub(crate) reinstall: Reinstall,
-    pub(crate) build_options: BuildOptions,
 }
 
 impl ResolverInstallerSettings {
@@ -2588,23 +2531,19 @@ impl ResolverInstallerSettings {
 
     pub(crate) fn as_ref(&self) -> ResolverInstallerSettingsRef {
         ResolverInstallerSettingsRef {
-            index_locations: &self.index_locations,
-            index_strategy: self.index_strategy,
-            keyring_provider: self.keyring_provider,
-            resolution: self.resolution,
-            prerelease: self.prerelease,
-            fork_strategy: self.fork_strategy,
-            dependency_metadata: &self.dependency_metadata,
-            config_setting: &self.config_setting,
-            no_build_isolation: self.no_build_isolation,
-            no_build_isolation_package: &self.no_build_isolation_package,
-            exclude_newer: self.exclude_newer,
-            link_mode: self.link_mode,
+            build_options: &self.resolver_settings.build_options,
             compile_bytecode: self.compile_bytecode,
-            sources: self.sources,
-            upgrade: &self.upgrade,
+            config_setting: &self.resolver_settings.config_setting,
+            dependency_metadata: &self.resolver_settings.dependency_metadata,
+            exclude_newer: self.resolver_settings.exclude_newer,
+            index_locations: &self.resolver_settings.index_locations,
+            index_strategy: self.resolver_settings.index_strategy,
+            keyring_provider: self.resolver_settings.keyring_provider,
+            link_mode: self.resolver_settings.link_mode,
+            no_build_isolation: self.resolver_settings.no_build_isolation,
+            no_build_isolation_package: &self.resolver_settings.no_build_isolation_package,
             reinstall: &self.reinstall,
-            build_options: &self.build_options,
+            sources: self.resolver_settings.sources,
         }
     }
 }
@@ -2628,38 +2567,43 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
             value.no_index.unwrap_or_default(),
         );
         Self {
-            index_locations,
-            resolution: value.resolution.unwrap_or_default(),
-            prerelease: value.prerelease.unwrap_or_default(),
-            fork_strategy: value.fork_strategy.unwrap_or_default(),
-            dependency_metadata: DependencyMetadata::from_entries(
-                value.dependency_metadata.into_iter().flatten(),
-            ),
-            index_strategy: value.index_strategy.unwrap_or_default(),
-            keyring_provider: value.keyring_provider.unwrap_or_default(),
-            config_setting: value.config_settings.unwrap_or_default(),
-            no_build_isolation: value.no_build_isolation.unwrap_or_default(),
-            no_build_isolation_package: value.no_build_isolation_package.unwrap_or_default(),
-            exclude_newer: value.exclude_newer,
-            link_mode: value.link_mode.unwrap_or_default(),
-            sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
+            resolver_settings: ResolverSettings {
+                build_options: BuildOptions::new(
+                    NoBinary::from_args(
+                        value.no_binary,
+                        value.no_binary_package.unwrap_or_default(),
+                    ),
+                    NoBuild::from_args(value.no_build, value.no_build_package.unwrap_or_default()),
+                ),
+                config_setting: value.config_settings.unwrap_or_default(),
+                dependency_metadata: DependencyMetadata::from_entries(
+                    value.dependency_metadata.into_iter().flatten(),
+                ),
+                exclude_newer: value.exclude_newer,
+                fork_strategy: value.fork_strategy.unwrap_or_default(),
+                index_locations,
+                index_strategy: value.index_strategy.unwrap_or_default(),
+                keyring_provider: value.keyring_provider.unwrap_or_default(),
+                link_mode: value.link_mode.unwrap_or_default(),
+                no_build_isolation: value.no_build_isolation.unwrap_or_default(),
+                no_build_isolation_package: value.no_build_isolation_package.unwrap_or_default(),
+                prerelease: value.prerelease.unwrap_or_default(),
+                resolution: value.resolution.unwrap_or_default(),
+                sources: SourceStrategy::from_args(value.no_sources.unwrap_or_default()),
+                upgrade: Upgrade::from_args(
+                    value.upgrade,
+                    value
+                        .upgrade_package
+                        .into_iter()
+                        .flatten()
+                        .map(Requirement::from)
+                        .collect(),
+                ),
+            },
             compile_bytecode: value.compile_bytecode.unwrap_or_default(),
-            upgrade: Upgrade::from_args(
-                value.upgrade,
-                value
-                    .upgrade_package
-                    .into_iter()
-                    .flatten()
-                    .map(Requirement::from)
-                    .collect(),
-            ),
             reinstall: Reinstall::from_args(
                 value.reinstall,
                 value.reinstall_package.unwrap_or_default(),
-            ),
-            build_options: BuildOptions::new(
-                NoBinary::from_args(value.no_binary, value.no_binary_package.unwrap_or_default()),
-                NoBuild::from_args(value.no_build, value.no_build_package.unwrap_or_default()),
             ),
         }
     }
@@ -3021,28 +2965,6 @@ impl PipSettings {
                 )),
             ),
             install_mirrors,
-        }
-    }
-}
-
-impl<'a> From<ResolverInstallerSettingsRef<'a>> for ResolverSettingsRef<'a> {
-    fn from(settings: ResolverInstallerSettingsRef<'a>) -> Self {
-        Self {
-            index_locations: settings.index_locations,
-            index_strategy: settings.index_strategy,
-            keyring_provider: settings.keyring_provider,
-            resolution: settings.resolution,
-            prerelease: settings.prerelease,
-            fork_strategy: settings.fork_strategy,
-            dependency_metadata: settings.dependency_metadata,
-            config_setting: settings.config_setting,
-            no_build_isolation: settings.no_build_isolation,
-            no_build_isolation_package: settings.no_build_isolation_package,
-            exclude_newer: settings.exclude_newer,
-            link_mode: settings.link_mode,
-            upgrade: settings.upgrade,
-            build_options: settings.build_options,
-            sources: settings.sources,
         }
     }
 }
