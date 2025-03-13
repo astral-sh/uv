@@ -573,7 +573,7 @@ Use to create the tracing durations file via the `tracing-durations-export` feat
 
 ### `USERPROFILE`
 
-
+Path to root directory of user's profile on Windows systems.
 
 ### `UV`
 

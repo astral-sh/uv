@@ -200,13 +200,14 @@ fn python_pin() {
     }
 }
 
+// If there is no project-level `.python-version` file, respect the global pin.
 #[test]
 fn python_pin_global_if_no_local() -> Result<()> {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
     let uv = context.user_config_dir.child("uv");
     uv.create_dir_all()?;
 
-    // // Without arguments, we attempt to read the current pin (which does not exist yet)
+    // Without arguments, we attempt to read the current pin (which does not exist yet)
     uv_snapshot!(context.filters(), context.python_pin(), @r###"
     success: false
     exit_code: 2
@@ -239,6 +240,8 @@ fn python_pin_global_if_no_local() -> Result<()> {
     Ok(())
 }
 
+// If there is a project-level `.python-version` file, it takes precedence over
+// the global pin.
 #[test]
 fn python_pin_global_use_local_if_available() -> Result<()> {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);

@@ -349,6 +349,8 @@ impl EnvVars {
 
     /// Path to user-level configuration directory on Windows systems.
     pub const APPDATA: &'static str = "APPDATA";
+
+    /// Path to root directory of user's profile on Windows systems.
     pub const USERPROFILE: &'static str = "USERPROFILE";
 
     /// Path to user-level configuration directory on Unix systems.

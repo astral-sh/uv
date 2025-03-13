@@ -226,56 +226,56 @@ fn tool_install_with_global_python() -> Result<()> {
     ----- stderr -----
     "###);
 
-    // FIXME: Do we want reinstall of a tool to respect the changed global pin?
-    // // Change global version
-    // uv_snapshot!(context.filters(), context.python_pin().arg("3.12").arg("--global"),
-    //     @r"
-    // success: true
-    // exit_code: 0
-    // ----- stdout -----
-    // Updated `[USER_CONFIG_DIR]/uv/.python-version` from `3.11` -> `3.12`
+    // Change global version
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").arg("--global"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `[UV_USER_CONFIG_DIR]/.python-version` from `3.11` -> `3.12`
 
-    // ----- stderr -----
-    // "
-    // );
+    ----- stderr -----
+    "
+    );
 
-    // // Install flask again
-    // uv_snapshot!(context.filters(), context.tool_install()
-    //     .arg("flask")
-    //     .arg("--reinstall")
-    //     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    //     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-    //     .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
-    // success: true
-    // exit_code: 0
-    // ----- stdout -----
+    // Install flask again
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("flask")
+        .arg("--reinstall")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
-    // ----- stderr -----
-    // Resolved [N] packages in [TIME]
-    // Prepared [N] packages in [TIME]
-    // Uninstalled [N] packages in [TIME]
-    // Installed [N] packages in [TIME]
-    //  ~ blinker==1.7.0
-    //  ~ click==8.1.7
-    //  ~ flask==3.0.2
-    //  ~ itsdangerous==2.1.2
-    //  ~ jinja2==3.1.3
-    //  ~ markupsafe==2.1.5
-    //  ~ werkzeug==3.0.1
-    // Installed 1 executable: flask
-    // ");
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ blinker==1.7.0
+     ~ click==8.1.7
+     ~ flask==3.0.2
+     ~ itsdangerous==2.1.2
+     ~ jinja2==3.1.3
+     ~ markupsafe==2.1.5
+     ~ werkzeug==3.0.1
+    Installed 1 executable: flask
+    ");
 
-    // // Check new global version is respected
-    // uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
-    // success: true
-    // exit_code: 0
-    // ----- stdout -----
-    // Python 3.12.[X]
-    // Flask 3.0.2
-    // Werkzeug 3.0.1
+    // Currently, when reinstalling a tool we use the original version the tool
+    // was installed with, not the most up-to-date global version
+    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
 
-    // ----- stderr -----
-    // "###);
+    ----- stderr -----
+    "###);
 
     Ok(())
 }
@@ -1598,7 +1598,7 @@ fn tool_install_uninstallable() {
           We are sorry, but this package is not installable with pip.
 
           Please read the installation instructions at:
-     
+
           https://github.com/pyenv/pyenv#installation
           #
 

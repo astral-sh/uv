@@ -4677,16 +4677,16 @@ pub struct PythonPinArgs {
     #[arg(long, alias = "no-workspace")]
     pub no_project: bool,
 
-    /// Pin to a specific Python version.
+    /// Update the global Python version pin.
     ///
-    /// Writes the pinned Python version to a .python-version file in the uv user configuration
+    /// Writes the pinned Python version to a `.python-version` file in the uv user configuration
     /// directory: `XDG_CONFIG_HOME/uv` on Linux/macOS and `%APPDATA%/uv` on Windows.
     ///
     /// When a local Python version pin is not found in the working directory or an ancestor
     /// directory, this version will be used instead.
     ///
     /// Unlike local version pins, this version is used as the default for commands that mutate
-    /// global state, like uv tool install.
+    /// global state, like `uv tool install`.
     #[arg(long)]
     pub global: bool,
 }
