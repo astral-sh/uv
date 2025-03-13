@@ -48,7 +48,7 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, pip, ExitStatus, ScriptPath};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings, ResolverSettingsRef};
+use crate::settings::{NetworkSettings, ResolverSettings};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
@@ -187,7 +187,7 @@ pub(crate) async fn lock(
     match do_safe_lock(
         mode,
         target,
-        settings.as_ref(),
+        &settings,
         &network_settings,
         &state,
         Box::new(DefaultResolveLogger),
@@ -251,7 +251,7 @@ pub(super) enum LockMode<'env> {
 pub(super) async fn do_safe_lock(
     mode: LockMode<'_>,
     target: LockTarget<'_>,
-    settings: ResolverSettingsRef<'_>,
+    settings: &ResolverSettings,
     network_settings: &NetworkSettings,
     state: &UniversalState,
     logger: Box<dyn ResolveLogger>,
@@ -346,7 +346,7 @@ async fn do_lock(
     target: LockTarget<'_>,
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
-    settings: ResolverSettingsRef<'_>,
+    settings: &ResolverSettings,
     network_settings: &NetworkSettings,
     state: &UniversalState,
     logger: Box<dyn ResolveLogger>,
@@ -358,7 +358,7 @@ async fn do_lock(
     let start = std::time::Instant::now();
 
     // Extract the project settings.
-    let ResolverSettingsRef {
+    let ResolverSettings {
         index_locations,
         index_strategy,
         keyring_provider,
@@ -387,14 +387,14 @@ async fn do_lock(
     let source_trees = vec![];
 
     // If necessary, lower the overrides and constraints.
-    let requirements = target.lower(requirements, index_locations, sources)?;
-    let overrides = target.lower(overrides, index_locations, sources)?;
-    let constraints = target.lower(constraints, index_locations, sources)?;
-    let build_constraints = target.lower(build_constraints, index_locations, sources)?;
+    let requirements = target.lower(requirements, index_locations, *sources)?;
+    let overrides = target.lower(overrides, index_locations, *sources)?;
+    let constraints = target.lower(constraints, index_locations, *sources)?;
+    let build_constraints = target.lower(build_constraints, index_locations, *sources)?;
     let dependency_groups = dependency_groups
         .into_iter()
         .map(|(name, requirements)| {
-            let requirements = target.lower(requirements, index_locations, sources)?;
+            let requirements = target.lower(requirements, index_locations, *sources)?;
             Ok((name, requirements))
         })
         .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;
@@ -553,15 +553,15 @@ async fn do_lock(
         .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .url_auth_policies(UrlAuthPolicies::from(index_locations))
         .index_urls(index_locations.index_urls())
-        .index_strategy(index_strategy)
-        .keyring(keyring_provider)
+        .index_strategy(*index_strategy)
+        .keyring(*keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if no_build_isolation {
+    let build_isolation = if *no_build_isolation {
         environment = PythonEnvironment::from_interpreter(interpreter.clone());
         BuildIsolation::Shared(&environment)
     } else if no_build_isolation_package.is_empty() {
@@ -572,11 +572,11 @@ async fn do_lock(
     };
 
     let options = OptionsBuilder::new()
-        .resolution_mode(resolution)
-        .prerelease_mode(prerelease)
-        .fork_strategy(fork_strategy)
-        .exclude_newer(exclude_newer)
-        .index_strategy(index_strategy)
+        .resolution_mode(*resolution)
+        .prerelease_mode(*prerelease)
+        .fork_strategy(*fork_strategy)
+        .exclude_newer(*exclude_newer)
+        .index_strategy(*index_strategy)
         .build_options(build_options.clone())
         .required_environments(required_environments.cloned().unwrap_or_default())
         .build();
@@ -611,14 +611,14 @@ async fn do_lock(
         &flat_index,
         dependency_metadata,
         state.fork().into_inner(),
-        index_strategy,
+        *index_strategy,
         config_setting,
         build_isolation,
-        link_mode,
+        *link_mode,
         build_options,
         &build_hasher,
-        exclude_newer,
-        sources,
+        *exclude_newer,
+        *sources,
         workspace_cache,
         concurrency,
         preview,

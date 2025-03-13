@@ -279,7 +279,7 @@ pub(crate) async fn remove(
     let lock = match project::lock::do_safe_lock(
         mode,
         (&target).into(),
-        settings.as_ref().into(),
+        &settings.resolver,
         &network_settings,
         &state,
         Box::new(DefaultResolveLogger),
@@ -340,7 +340,7 @@ pub(crate) async fn remove(
         EditableMode::Editable,
         install_options,
         Modifications::Exact,
-        settings.as_ref().into(),
+        (&settings).into(),
         &network_settings,
         &state,
         Box::new(DefaultInstallLogger),

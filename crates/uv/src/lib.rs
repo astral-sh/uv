@@ -816,7 +816,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.hash_checking,
                 args.python,
                 args.install_mirrors,
-                args.settings,
+                &args.settings,
                 &globals.network_settings,
                 cli.top_level.no_config,
                 globals.python_preference,
@@ -966,7 +966,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
             let requirements = {
@@ -1034,7 +1034,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
             let mut requirements = Vec::with_capacity(
@@ -1456,7 +1456,7 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
             let mut requirements = Vec::with_capacity(
@@ -1521,7 +1521,7 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
             // Unwrap the script.
@@ -1613,7 +1613,7 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
             // If the script already exists, use it; otherwise, propagate the file path and we'll
@@ -1682,7 +1682,7 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
             // Unwrap the script.

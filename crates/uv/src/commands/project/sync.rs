@@ -274,9 +274,8 @@ pub(crate) async fn sync(
                 ));
             }
 
-            let spec =
-                script_specification(Pep723ItemRef::Script(script), settings.as_ref().into())?
-                    .unwrap_or_default();
+            let spec = script_specification(Pep723ItemRef::Script(script), &settings.resolver)?
+                .unwrap_or_default();
             match update_environment(
                 Deref::deref(&environment).clone(),
                 spec,
@@ -331,7 +330,7 @@ pub(crate) async fn sync(
     let lock = match do_safe_lock(
         mode,
         lock_target,
-        settings.as_ref().into(),
+        &settings.resolver,
         &network_settings,
         &state,
         Box::new(DefaultResolveLogger),
@@ -454,7 +453,7 @@ pub(crate) async fn sync(
         editable,
         install_options,
         modifications,
-        settings.as_ref().into(),
+        (&settings).into(),
         &network_settings,
         &state,
         Box::new(DefaultInstallLogger),

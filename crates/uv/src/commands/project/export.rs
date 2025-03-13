@@ -172,7 +172,7 @@ pub(crate) async fn export(
     let lock = match do_safe_lock(
         mode,
         (&target).into(),
-        settings.as_ref(),
+        &settings,
         &network_settings,
         &state,
         Box::new(DefaultResolveLogger),

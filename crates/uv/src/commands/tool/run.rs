@@ -166,6 +166,7 @@ pub(crate) async fn run(
         && invocation_source == ToolRunCommand::Uvx
         && target == "run"
         && settings
+            .resolver
             .index_locations
             .indexes()
             .all(|index| matches!(index.url, IndexUrl::Pypi(..)))

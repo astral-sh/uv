@@ -54,7 +54,7 @@ use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
 use crate::settings::{
-    InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings, ResolverSettingsRef,
+    InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings, ResolverSettings,
 };
 
 pub(crate) mod add;
@@ -1504,23 +1504,26 @@ pub(crate) async fn resolve_names(
 
     // Extract the project settings.
     let ResolverInstallerSettings {
-        index_locations,
-        index_strategy,
-        keyring_provider,
-        resolution: _,
-        prerelease: _,
-        fork_strategy: _,
-        dependency_metadata,
-        config_setting,
-        no_build_isolation,
-        no_build_isolation_package,
-        exclude_newer,
-        link_mode,
+        resolver:
+            ResolverSettings {
+                build_options,
+                config_setting,
+                dependency_metadata,
+                exclude_newer,
+                fork_strategy: _,
+                index_locations,
+                index_strategy,
+                keyring_provider,
+                link_mode,
+                no_build_isolation,
+                no_build_isolation_package,
+                prerelease: _,
+                resolution: _,
+                sources,
+                upgrade: _,
+            },
         compile_bytecode: _,
-        sources,
-        upgrade: _,
         reinstall: _,
-        build_options,
     } = settings;
 
     // Add all authenticated sources to the cache.
@@ -1632,7 +1635,7 @@ impl<'lock> EnvironmentSpecification<'lock> {
 pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
-    settings: ResolverSettingsRef<'_>,
+    settings: &ResolverSettings,
     network_settings: &NetworkSettings,
     state: &PlatformState,
     logger: Box<dyn ResolveLogger>,
@@ -1643,7 +1646,7 @@ pub(crate) async fn resolve_environment(
 ) -> Result<ResolverOutput, ProjectError> {
     warn_on_requirements_txt_setting(&spec.requirements, settings);
 
-    let ResolverSettingsRef {
+    let ResolverSettings {
         index_locations,
         index_strategy,
         keyring_provider,
@@ -1694,15 +1697,15 @@ pub(crate) async fn resolve_environment(
         .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .url_auth_policies(UrlAuthPolicies::from(index_locations))
         .index_urls(index_locations.index_urls())
-        .index_strategy(index_strategy)
-        .keyring(keyring_provider)
+        .index_strategy(*index_strategy)
+        .keyring(*keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if no_build_isolation {
+    let build_isolation = if *no_build_isolation {
         environment = PythonEnvironment::from_interpreter(interpreter.clone());
         BuildIsolation::Shared(&environment)
     } else if no_build_isolation_package.is_empty() {
@@ -1713,11 +1716,11 @@ pub(crate) async fn resolve_environment(
     };
 
     let options = OptionsBuilder::new()
-        .resolution_mode(resolution)
-        .prerelease_mode(prerelease)
-        .fork_strategy(fork_strategy)
-        .exclude_newer(exclude_newer)
-        .index_strategy(index_strategy)
+        .resolution_mode(*resolution)
+        .prerelease_mode(*prerelease)
+        .fork_strategy(*fork_strategy)
+        .exclude_newer(*exclude_newer)
+        .index_strategy(*index_strategy)
         .build_options(build_options.clone())
         .build();
 
@@ -1768,14 +1771,14 @@ pub(crate) async fn resolve_environment(
         &flat_index,
         dependency_metadata,
         state.clone().into_inner(),
-        index_strategy,
+        *index_strategy,
         config_setting,
         build_isolation,
-        link_mode,
+        *link_mode,
         build_options,
         &build_hasher,
-        exclude_newer,
-        sources,
+        *exclude_newer,
+        *sources,
         workspace_cache,
         concurrency,
         preview,
@@ -1988,26 +1991,29 @@ pub(crate) async fn update_environment(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<EnvironmentUpdate, ProjectError> {
-    warn_on_requirements_txt_setting(&spec, settings.as_ref().into());
+    warn_on_requirements_txt_setting(&spec, &settings.resolver);
 
     let ResolverInstallerSettings {
-        index_locations,
-        index_strategy,
-        keyring_provider,
-        resolution,
-        prerelease,
-        fork_strategy,
-        dependency_metadata,
-        config_setting,
-        no_build_isolation,
-        no_build_isolation_package,
-        exclude_newer,
-        link_mode,
+        resolver:
+            ResolverSettings {
+                build_options,
+                config_setting,
+                dependency_metadata,
+                exclude_newer,
+                fork_strategy,
+                index_locations,
+                index_strategy,
+                keyring_provider,
+                link_mode,
+                no_build_isolation,
+                no_build_isolation_package,
+                prerelease,
+                resolution,
+                sources,
+                upgrade,
+            },
         compile_bytecode,
-        sources,
-        upgrade,
         reinstall,
-        build_options,
     } = settings;
 
     // Respect all requirements from the provided sources.
@@ -2333,7 +2339,7 @@ pub(crate) fn detect_conflicts(
 #[allow(clippy::result_large_err)]
 pub(crate) fn script_specification(
     script: Pep723ItemRef<'_>,
-    settings: ResolverSettingsRef,
+    settings: &ResolverSettings,
 ) -> Result<Option<RequirementsSpecification>, ProjectError> {
     let Some(dependencies) = script.metadata().dependencies.as_ref() else {
         return Ok(None);
@@ -2383,7 +2389,7 @@ pub(crate) fn script_specification(
                 script_dir.as_ref(),
                 script_sources,
                 script_indexes,
-                settings.index_locations,
+                &settings.index_locations,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2403,7 +2409,7 @@ pub(crate) fn script_specification(
                 script_dir.as_ref(),
                 script_sources,
                 script_indexes,
-                settings.index_locations,
+                &settings.index_locations,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2423,7 +2429,7 @@ pub(crate) fn script_specification(
                 script_dir.as_ref(),
                 script_sources,
                 script_indexes,
-                settings.index_locations,
+                &settings.index_locations,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2437,10 +2443,7 @@ pub(crate) fn script_specification(
 }
 
 /// Warn if the user provides (e.g.) an `--index-url` in a requirements file.
-fn warn_on_requirements_txt_setting(
-    spec: &RequirementsSpecification,
-    settings: ResolverSettingsRef<'_>,
-) {
+fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: &ResolverSettings) {
     let RequirementsSpecification {
         index_url,
         extra_index_urls,
