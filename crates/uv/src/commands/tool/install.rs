@@ -208,12 +208,12 @@ pub(crate) async fn install(
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
     let settings = if request.is_latest() {
         ResolverInstallerSettings {
-            resolver_settings: ResolverSettings {
+            resolver: ResolverSettings {
                 upgrade: settings
-                    .resolver_settings
+                    .resolver
                     .upgrade
                     .combine(Upgrade::package(from.name.clone())),
-                ..settings.resolver_settings
+                ..settings.resolver
             },
             ..settings
         }
@@ -346,7 +346,7 @@ pub(crate) async fn install(
             // And the user didn't request a reinstall or upgrade...
             !request.is_latest()
                 && settings.reinstall.is_none()
-                && settings.resolver_settings.upgrade.is_none()
+                && settings.resolver.upgrade.is_none()
         })
         .is_some()
     {
@@ -441,7 +441,7 @@ pub(crate) async fn install(
         let resolution = resolve_environment(
             spec.clone(),
             &interpreter,
-            &settings.resolver_settings,
+            &settings.resolver,
             &network_settings,
             &state,
             Box::new(DefaultResolveLogger),
@@ -493,7 +493,7 @@ pub(crate) async fn install(
                     match resolve_environment(
                         spec,
                         &interpreter,
-                        &settings.resolver_settings,
+                        &settings.resolver,
                         &network_settings,
                         &state,
                         Box::new(DefaultResolveLogger),

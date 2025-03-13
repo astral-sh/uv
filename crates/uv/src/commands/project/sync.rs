@@ -275,7 +275,7 @@ pub(crate) async fn sync(
             }
 
             let spec =
-                script_specification(Pep723ItemRef::Script(script), &settings.resolver_settings)?
+                script_specification(Pep723ItemRef::Script(script), &settings.resolver)?
                     .unwrap_or_default();
             match update_environment(
                 Deref::deref(&environment).clone(),
@@ -331,7 +331,7 @@ pub(crate) async fn sync(
     let lock = match do_safe_lock(
         mode,
         lock_target,
-        &settings.resolver_settings,
+        &settings.resolver,
         &network_settings,
         &state,
         Box::new(DefaultResolveLogger),

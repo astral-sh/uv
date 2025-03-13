@@ -1504,7 +1504,7 @@ pub(crate) async fn resolve_names(
 
     // Extract the project settings.
     let ResolverInstallerSettings {
-        resolver_settings:
+        resolver:
             ResolverSettings {
                 build_options,
                 config_setting,
@@ -1991,10 +1991,10 @@ pub(crate) async fn update_environment(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<EnvironmentUpdate, ProjectError> {
-    warn_on_requirements_txt_setting(&spec, &settings.resolver_settings);
+    warn_on_requirements_txt_setting(&spec, &settings.resolver);
 
     let ResolverInstallerSettings {
-        resolver_settings:
+        resolver:
             ResolverSettings {
                 build_options,
                 config_setting,

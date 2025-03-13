@@ -2491,7 +2491,7 @@ impl From<ResolverOptions> for ResolverSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ResolverInstallerSettings {
-    pub(crate) resolver_settings: ResolverSettings,
+    pub(crate) resolver: ResolverSettings,
     pub(crate) compile_bytecode: bool,
     pub(crate) reinstall: Reinstall,
 }
@@ -2532,7 +2532,7 @@ impl From<ResolverInstallerOptions> for ResolverInstallerSettings {
             value.no_index.unwrap_or_default(),
         );
         Self {
-            resolver_settings: ResolverSettings {
+            resolver: ResolverSettings {
                 build_options: BuildOptions::new(
                     NoBinary::from_args(
                         value.no_binary,
@@ -2937,19 +2937,19 @@ impl PipSettings {
 impl<'a> From<&'a ResolverInstallerSettings> for InstallerSettingsRef<'a> {
     fn from(settings: &'a ResolverInstallerSettings) -> Self {
         Self {
-            index_locations: &settings.resolver_settings.index_locations,
-            index_strategy: settings.resolver_settings.index_strategy,
-            keyring_provider: settings.resolver_settings.keyring_provider,
-            dependency_metadata: &settings.resolver_settings.dependency_metadata,
-            config_setting: &settings.resolver_settings.config_setting,
-            no_build_isolation: settings.resolver_settings.no_build_isolation,
-            no_build_isolation_package: &settings.resolver_settings.no_build_isolation_package,
-            exclude_newer: settings.resolver_settings.exclude_newer,
-            link_mode: settings.resolver_settings.link_mode,
+            index_locations: &settings.resolver.index_locations,
+            index_strategy: settings.resolver.index_strategy,
+            keyring_provider: settings.resolver.keyring_provider,
+            dependency_metadata: &settings.resolver.dependency_metadata,
+            config_setting: &settings.resolver.config_setting,
+            no_build_isolation: settings.resolver.no_build_isolation,
+            no_build_isolation_package: &settings.resolver.no_build_isolation_package,
+            exclude_newer: settings.resolver.exclude_newer,
+            link_mode: settings.resolver.link_mode,
             compile_bytecode: settings.compile_bytecode,
             reinstall: &settings.reinstall,
-            build_options: &settings.resolver_settings.build_options,
-            sources: settings.resolver_settings.sources,
+            build_options: &settings.resolver.build_options,
+            sources: settings.resolver.sources,
         }
     }
 }

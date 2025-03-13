@@ -253,7 +253,7 @@ pub(crate) async fn add(
     let client_builder = BaseClientBuilder::new()
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
-        .keyring(settings.resolver_settings.keyring_provider)
+        .keyring(settings.resolver.keyring_provider)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Read the requirements.
@@ -293,7 +293,7 @@ pub(crate) async fn add(
             let sources = SourceStrategy::Enabled;
 
             // Add all authenticated sources to the cache.
-            for index in settings.resolver_settings.index_locations.allowed_indexes() {
+            for index in settings.resolver.index_locations.allowed_indexes() {
                 if let Some(credentials) = index.credentials() {
                     let credentials = Arc::new(credentials);
                     uv_auth::store_credentials(index.raw_url(), credentials.clone());
@@ -305,19 +305,19 @@ pub(crate) async fn add(
 
             // Initialize the registry client.
             let client = RegistryClientBuilder::try_from(client_builder)?
-                .index_urls(settings.resolver_settings.index_locations.index_urls())
-                .index_strategy(settings.resolver_settings.index_strategy)
+                .index_urls(settings.resolver.index_locations.index_urls())
+                .index_strategy(settings.resolver.index_strategy)
                 .markers(target.interpreter().markers())
                 .platform(target.interpreter().platform())
                 .build();
 
             // Determine whether to enable build isolation.
             let environment;
-            let build_isolation = if settings.resolver_settings.no_build_isolation {
+            let build_isolation = if settings.resolver.no_build_isolation {
                 environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
                 BuildIsolation::Shared(&environment)
             } else if settings
-                .resolver_settings
+                .resolver
                 .no_build_isolation_package
                 .is_empty()
             {
@@ -326,7 +326,7 @@ pub(crate) async fn add(
                 environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
                 BuildIsolation::SharedPackage(
                     &environment,
-                    &settings.resolver_settings.no_build_isolation_package,
+                    &settings.resolver.no_build_isolation_package,
                 )
             };
 
@@ -336,7 +336,7 @@ pub(crate) async fn add(
                 let entries = client
                     .fetch(
                         settings
-                            .resolver_settings
+                            .resolver
                             .index_locations
                             .flat_indexes()
                             .map(Index::url),
@@ -346,7 +346,7 @@ pub(crate) async fn add(
                     entries,
                     None,
                     &hasher,
-                    &settings.resolver_settings.build_options,
+                    &settings.resolver.build_options,
                 )
             };
 
@@ -356,17 +356,17 @@ pub(crate) async fn add(
                 cache,
                 build_constraints,
                 target.interpreter(),
-                &settings.resolver_settings.index_locations,
+                &settings.resolver.index_locations,
                 &flat_index,
-                &settings.resolver_settings.dependency_metadata,
+                &settings.resolver.dependency_metadata,
                 state.clone().into_inner(),
-                settings.resolver_settings.index_strategy,
-                &settings.resolver_settings.config_setting,
+                settings.resolver.index_strategy,
+                &settings.resolver.config_setting,
                 build_isolation,
-                settings.resolver_settings.link_mode,
-                &settings.resolver_settings.build_options,
+                settings.resolver.link_mode,
+                &settings.resolver.build_options,
                 &build_hasher,
-                settings.resolver_settings.exclude_newer,
+                settings.resolver.exclude_newer,
                 sources,
                 // No workspace caching since `uv add` changes the workspace definition.
                 WorkspaceCache::default(),
@@ -704,7 +704,7 @@ async fn lock_and_sync(
             LockMode::Write(target.interpreter())
         },
         (&target).into(),
-        &settings.resolver_settings,
+        &settings.resolver,
         network_settings,
         &lock_state,
         Box::new(DefaultResolveLogger),
@@ -822,7 +822,7 @@ async fn lock_and_sync(
                     LockMode::Write(target.interpreter())
                 },
                 (&target).into(),
-                &settings.resolver_settings,
+                &settings.resolver,
                 network_settings,
                 &lock_state,
                 Box::new(SummaryResolveLogger),

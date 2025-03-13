@@ -47,7 +47,7 @@ impl CachedEnvironment {
             resolve_environment(
                 spec,
                 &interpreter,
-                &settings.resolver_settings,
+                &settings.resolver,
                 network_settings,
                 state,
                 resolve,

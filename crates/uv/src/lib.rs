@@ -816,7 +816,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.hash_checking,
                 args.python,
                 args.install_mirrors,
-                args.settings,
+                &args.settings,
                 &globals.network_settings,
                 cli.top_level.no_config,
                 globals.python_preference,
@@ -967,7 +967,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(
-                        args.settings.resolver_settings.upgrade.clone(),
+                        args.settings.resolver.upgrade.clone(),
                     )),
             );
 
@@ -1037,7 +1037,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(
-                        args.settings.resolver_settings.upgrade.clone(),
+                        args.settings.resolver.upgrade.clone(),
                     )),
             );
 
@@ -1461,7 +1461,7 @@ async fn run_project(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(
-                        args.settings.resolver_settings.upgrade.clone(),
+                        args.settings.resolver.upgrade.clone(),
                     )),
             );
 
@@ -1528,7 +1528,7 @@ async fn run_project(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(
-                        args.settings.resolver_settings.upgrade.clone(),
+                        args.settings.resolver.upgrade.clone(),
                     )),
             );
 
@@ -1622,7 +1622,7 @@ async fn run_project(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(
-                        args.settings.resolver_settings.upgrade.clone(),
+                        args.settings.resolver.upgrade.clone(),
                     )),
             );
 
@@ -1692,7 +1692,7 @@ async fn run_project(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
                     .combine(Refresh::from(
-                        args.settings.resolver_settings.upgrade.clone(),
+                        args.settings.resolver.upgrade.clone(),
                     )),
             );
 
