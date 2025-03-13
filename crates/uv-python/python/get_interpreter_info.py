@@ -34,8 +34,18 @@ if sys.version_info[0] < 3:
     sys.exit(0)
 
 if hasattr(sys, "implementation"):
-    implementation_version = format_full_version(sys.implementation.version)
     implementation_name = sys.implementation.name
+    if implementation_name == "graalpy":
+        # GraalPy reports the CPython version as sys.implementation.version,
+        # so we need to discover the GraalPy version from the cache_tag
+        import re
+        implementation_version = re.sub(
+            r"graalpy(\d)(\d+)-\d+",
+            r"\1.\2",
+            sys.implementation.cache_tag
+        )
+    else:
+        implementation_version = format_full_version(sys.implementation.version)
 else:
     implementation_version = "0"
     implementation_name = ""
