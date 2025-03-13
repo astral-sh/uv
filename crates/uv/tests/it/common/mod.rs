@@ -363,8 +363,6 @@ impl TestContext {
         } else {
             ChildPath::new(home_dir.path()).child(".config")
         };
-        fs_err::create_dir_all(&user_config_dir)
-            .expect("Failed to create test user config directory");
 
         // Canonicalize the temp dir for consistent snapshot behavior
         let canonical_temp_dir = temp_dir.canonicalize().unwrap();
