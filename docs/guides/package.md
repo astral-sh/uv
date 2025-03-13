@@ -82,6 +82,7 @@ If you're using a custom index through `[[tool.uv.index]]`, add `publish-url` an
 name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
+explicit = true
 ```
 
 !!! note
