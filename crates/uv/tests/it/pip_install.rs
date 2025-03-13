@@ -9183,3 +9183,151 @@ fn unsupported_git_scheme() {
     "###
     );
 }
+
+#[test]
+#[cfg(unix)]
+#[cfg(feature = "git")]
+fn test_git_submodule_relative_url() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let temp_dir = &context.temp_dir;
+    let utilities_dir = temp_dir.child("utilities");
+    utilities_dir.create_dir_all()?;
+
+    // Create and initialize the helper repository
+    let helpers_dir = utilities_dir.child("helpers");
+    helpers_dir.create_dir_all()?;
+
+    // Initialize helpers as a git repo
+    Command::new("git")
+        .args(["init"])
+        .current_dir(helpers_dir.path())
+        .output()?;
+
+    // Create a simple file in helpers
+    helpers_dir
+        .child("helper.py")
+        .write_str("def help():\n    return 'I am a helper'")?;
+
+    // Add and commit in helpers
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(helpers_dir.path())
+        .output()?;
+
+    Command::new("git")
+        .args(["commit", "-m", "Initial helpers commit"])
+        .current_dir(helpers_dir.path())
+        .env("GIT_AUTHOR_NAME", "Test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.com")
+        .env("GIT_COMMITTER_NAME", "Test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.com")
+        .output()?;
+
+    // Create and initialize the main repository
+    let mylib_dir = temp_dir.child("mylib");
+    mylib_dir.create_dir_all()?;
+
+    // Initialize mylib as a git repo
+    Command::new("git")
+        .args(["init"])
+        .current_dir(mylib_dir.path())
+        .output()?;
+
+    // Create a simple setup.py
+    mylib_dir.child("setup.py").write_str(
+        r#"
+from setuptools import setup, find_packages
+
+setup(
+    name="mylib",
+    version="0.1.0",
+    packages=find_packages(),
+)
+"#,
+    )?;
+
+    // Create a simple module file
+    let mylib_package = mylib_dir.child("mylib");
+    mylib_package.create_dir_all()?;
+    mylib_package.child("__init__.py").write_str(
+        r#"
+from .helpers import helper
+
+def main():
+    return f"Hello from mylib, {helper.help()}"
+"#,
+    )?;
+
+    // Add and commit in mylib
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(mylib_dir.path())
+        .output()?;
+
+    Command::new("git")
+        .args(["commit", "-m", "Initial mylib commit with submodule"])
+        .current_dir(mylib_dir.path())
+        .env("GIT_AUTHOR_NAME", "Test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.com")
+        .env("GIT_COMMITTER_NAME", "Test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.com")
+        .output()?;
+
+    // Attempt to install from the git repository with uv
+    // Create a simple file in helpers
+    helpers_dir
+        .child("second.py")
+        .write_str("def help():\n    return 'I am a helper'")?;
+
+    // Add and commit in helpers
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(helpers_dir.path())
+        .output()?;
+
+    Command::new("git")
+        .args(["commit", "-m", "submodule commit"])
+        .current_dir(helpers_dir.path())
+        .env("GIT_AUTHOR_NAME", "Test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.com")
+        .env("GIT_COMMITTER_NAME", "Test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.com")
+        .output()?;
+
+    let mut filters = context.filters();
+    filters.push((r"@[0-9a-f]{40}", "@COMMIT_HASH"));
+
+    uv_snapshot!(filters, context.pip_install()
+        .arg(format!("git+file://{}", mylib_dir.path().display())), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + mylib==0.1.0 (from git+file://[TEMP_DIR]/mylib@COMMIT_HASH)
+    ");
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "git")]
+fn test_remote_git_submodule_relative_url() {
+    let context = TestContext::new("3.13");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("git+https://github.com/Choudhry18/uv-test.git"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@62466a857b092f473ad4d406567fd272d819cbdc)
+    ");
+}
