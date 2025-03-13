@@ -3114,7 +3114,7 @@ fn resolve_tool() -> anyhow::Result<()> {
             no_binary_package: None,
         },
         settings: ResolverInstallerSettings {
-            resolver_settings: ResolverSettings {
+            resolver: ResolverSettings {
                 build_options: BuildOptions {
                     no_binary: None,
                     no_build: None,
