@@ -5186,6 +5186,14 @@ uv python pin [OPTIONS] [REQUEST]
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
+</dd><dt id="uv-python-pin--global"><a href="#uv-python-pin--global"><code>--global</code></a></dt><dd><p>Update the global Python version pin.</p>
+
+<p>Writes the pinned Python version to a <code>.python-version</code> file in the uv user configuration directory: <code>XDG_CONFIG_HOME/uv</code> on Linux/macOS and <code>%APPDATA%/uv</code> on Windows.</p>
+
+<p>When a local Python version pin is not found in the working directory or an ancestor directory, this version will be used instead.</p>
+
+<p>Unlike local version pins, this version is used as the default for commands that mutate global state, like <code>uv tool install</code>.</p>
+
 </dd><dt id="uv-python-pin--help"><a href="#uv-python-pin--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt id="uv-python-pin--native-tls"><a href="#uv-python-pin--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>

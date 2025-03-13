@@ -149,8 +149,6 @@ impl Conflicts {
         }
 
         let Ok(topo_nodes) = toposort(&graph, None) else {
-            // FIXME: If we hit a cycle, we are currently bailing and waiting for
-            // more detailed cycle detection downstream. Is this what we want?
             return;
         };
         // Propagate canonical items through the graph and populate substitutions.

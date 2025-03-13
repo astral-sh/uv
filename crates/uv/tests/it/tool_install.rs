@@ -176,6 +176,111 @@ fn tool_install() {
 }
 
 #[test]
+fn tool_install_with_global_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+    let uv = context.user_config_dir.child("uv");
+    let versions = uv.child(".python-version");
+    versions.write_str("3.11")?;
+
+    // Install a tool
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("flask")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    Installed 1 executable: flask
+    "###);
+
+    tool_dir.child("flask").assert(predicate::path::is_dir());
+    assert!(bin_dir
+        .child(format!("flask{}", std::env::consts::EXE_SUFFIX))
+        .exists());
+
+    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    "###);
+
+    // Change global version
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").arg("--global"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `[UV_USER_CONFIG_DIR]/.python-version` from `3.11` -> `3.12`
+
+    ----- stderr -----
+    "
+    );
+
+    // Install flask again
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("flask")
+        .arg("--reinstall")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Uninstalled [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     ~ blinker==1.7.0
+     ~ click==8.1.7
+     ~ flask==3.0.2
+     ~ itsdangerous==2.1.2
+     ~ jinja2==3.1.3
+     ~ markupsafe==2.1.5
+     ~ werkzeug==3.0.1
+    Installed 1 executable: flask
+    ");
+
+    // Currently, when reinstalling a tool we use the original version the tool
+    // was installed with, not the most up-to-date global version
+    uv_snapshot!(context.filters(), Command::new("flask").arg("--version").env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn tool_install_with_editable() -> Result<()> {
     let context = TestContext::new("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")
@@ -1471,7 +1576,7 @@ fn tool_install_uninstallable() {
         .arg("pyenv")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1499,7 +1604,7 @@ fn tool_install_uninstallable() {
 
 
           hint: This usually indicates a problem with the package or the build environment.
-    "###);
+    ");
 
     // Ensure the tool environment is not created.
     tool_dir.child("pyenv").assert(predicate::path::missing());

@@ -52,16 +52,20 @@ This behavior can be
 ### Python version files
 
 The `.python-version` file can be used to create a default Python version request. uv searches for a
-`.python-version` file in the working directory and each of its parents. Any of the request formats
-described above can be used, though use of a version number is recommended for interoperability with
-other tools.
+`.python-version` file in the working directory and each of its parents. If none is found, uv will
+check the user-level configuration directory. Any of the request formats described above can be
+used, though use of a version number is recommended for interoperability with other tools.
 
 A `.python-version` file can be created in the current directory with the
 [`uv python pin`](../reference/cli.md/#uv-python-pin) command.
 
+A global `.python-version` file can be created in the user configuration directory with the
+[`uv python pin --global`](../reference/cli.md/#uv-python-pin) command.
+
 Discovery of `.python-version` files can be disabled with `--no-config`.
 
-uv will not search for `.python-version` files beyond project or workspace boundaries.
+uv will not search for `.python-version` files beyond project or workspace boundaries (with the
+exception of the user configuration directory).
 
 ## Installing a Python version
 

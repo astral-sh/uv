@@ -1,6 +1,8 @@
+use std::path::PathBuf;
+
 use crate::common::{uv_snapshot, TestContext};
 use anyhow::Result;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use insta::assert_snapshot;
 use uv_python::{
     platform::{Arch, Os},
@@ -196,6 +198,134 @@ fn python_pin() {
     3.7
     "###);
     }
+}
+
+// If there is no project-level `.python-version` file, respect the global pin.
+#[test]
+fn python_pin_global_if_no_local() -> Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let uv = context.user_config_dir.child("uv");
+    uv.create_dir_all()?;
+
+    // Without arguments, we attempt to read the current pin (which does not exist yet)
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No pinned Python version found
+    "###);
+
+    // Given an argument, we globally pin to that version
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.11").arg("--global"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `[UV_USER_CONFIG_DIR]/.python-version` to `3.11`
+
+    ----- stderr -----
+    ");
+
+    // If no local pin, use global.
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+// If there is a project-level `.python-version` file, it takes precedence over
+// the global pin.
+#[test]
+fn python_pin_global_use_local_if_available() -> Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let uv = context.user_config_dir.child("uv");
+    uv.create_dir_all()?;
+
+    // Given an argument, we globally pin to that version
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").arg("--global"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `[UV_USER_CONFIG_DIR]/.python-version` to `3.12`
+
+    ----- stderr -----
+    ");
+
+    // With no local, we get the global pin
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    "###);
+
+    let mut global_version_path = PathBuf::from(uv.path());
+    global_version_path.push(PYTHON_VERSION_FILENAME);
+    let global_python_version = context.read(&global_version_path);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(global_python_version, @r###"
+        3.12
+        "###);
+    });
+
+    // Request Python 3.11 for local .python-version
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.11"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.11`
+
+    ----- stderr -----
+    "###);
+
+    // Local should override global
+    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11
+
+    ----- stderr -----
+    "###);
+
+    // We should still be able to check global pin
+    uv_snapshot!(context.filters(), context.python_pin().arg("--global"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12
+
+    ----- stderr -----
+    "###);
+
+    // Local .python-version exists and has the right version.
+    let local_python_version = context.read(PYTHON_VERSION_FILENAME);
+    assert_snapshot!(local_python_version, @r###"
+    3.11
+    "###);
+
+    // Global .python-version still exists and has the right version.
+    let global_python_version = context.read(&global_version_path);
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(global_python_version, @r###"
+        3.12
+        "###);
+    });
+
+    Ok(())
 }
 
 /// We do not need a Python interpreter to pin without `--resolved`
