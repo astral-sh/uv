@@ -480,6 +480,8 @@ impl GitCheckout {
     /// *doesn't* exist, and then once we're done we create the file.
     ///
     /// [`.ok`]: CHECKOUT_READY_LOCK
+    /// `git reset --hard [<commit>]` can break relative submodule URLs. Prime submodules before
+    /// the reset so subsequent updates use resolved URLs.
     fn reset(&self, with_lfs: Option<bool>) -> Result<Option<bool>> {
         let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
         let _ = paths::remove_file(&ok_file);
@@ -488,6 +490,17 @@ impl GitCheckout {
         // as smudge filters can trigger on a reset even if lfs artifacts
         // were not originally "fetched".
         let lfs_skip_smudge = if with_lfs == Some(true) { "0" } else { "1" };
+
+        // Update submodules (`git submodule update --recursive --init`) before reset.
+        ProcessBuilder::new(GIT.as_ref()?)
+            .arg("submodule")
+            .arg("update")
+            .arg("--recursive")
+            .arg("--init")
+            .env(EnvVars::GIT_LFS_SKIP_SMUDGE, lfs_skip_smudge)
+            .cwd(&self.repo.path)
+            .exec_with_output()
+            .map(drop)?;
         debug!("Reset {} to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
