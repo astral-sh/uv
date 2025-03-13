@@ -316,11 +316,7 @@ pub(crate) async fn add(
             let build_isolation = if settings.resolver.no_build_isolation {
                 environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
                 BuildIsolation::Shared(&environment)
-            } else if settings
-                .resolver
-                .no_build_isolation_package
-                .is_empty()
-            {
+            } else if settings.resolver.no_build_isolation_package.is_empty() {
                 BuildIsolation::Isolated
             } else {
                 environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
@@ -342,12 +338,7 @@ pub(crate) async fn add(
                             .map(Index::url),
                     )
                     .await?;
-                FlatIndex::from_entries(
-                    entries,
-                    None,
-                    &hasher,
-                    &settings.resolver.build_options,
-                )
+                FlatIndex::from_entries(entries, None, &hasher, &settings.resolver.build_options)
             };
 
             // Create a build dispatch.

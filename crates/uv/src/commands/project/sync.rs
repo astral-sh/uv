@@ -274,9 +274,8 @@ pub(crate) async fn sync(
                 ));
             }
 
-            let spec =
-                script_specification(Pep723ItemRef::Script(script), &settings.resolver)?
-                    .unwrap_or_default();
+            let spec = script_specification(Pep723ItemRef::Script(script), &settings.resolver)?
+                .unwrap_or_default();
             match update_environment(
                 Deref::deref(&environment).clone(),
                 spec,
