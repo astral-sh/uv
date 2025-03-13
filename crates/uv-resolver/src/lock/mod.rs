@@ -723,8 +723,43 @@ impl Lock {
         self.fork_markers.as_slice()
     }
 
+    /// Checks whether the fork markers cover the entire supported marker space.
+    ///
+    /// Returns the actually covered and the expected marker space on validation error.
+    pub fn check_marker_coverage(&self) -> Result<(), (MarkerTree, MarkerTree)> {
+        let fork_markers_union = if self.fork_markers().is_empty() {
+            self.requires_python.to_marker_tree()
+        } else {
+            let mut fork_markers_union = MarkerTree::FALSE;
+            for fork_marker in self.fork_markers() {
+                fork_markers_union.or(fork_marker.pep508());
+            }
+            fork_markers_union
+        };
+        let mut environments_union = if !self.supported_environments.is_empty() {
+            let mut environments_union = MarkerTree::FALSE;
+            for fork_marker in &self.supported_environments {
+                environments_union.or(*fork_marker);
+            }
+            environments_union
+        } else {
+            MarkerTree::TRUE
+        };
+        // When a user defines environments, they are implicitly constrained by requires-python.
+        environments_union.and(self.requires_python.to_marker_tree());
+        if fork_markers_union.negate().is_disjoint(environments_union) {
+            Ok(())
+        } else {
+            Err((fork_markers_union, environments_union))
+        }
+    }
+
     /// Returns the TOML representation of this lockfile.
     pub fn to_toml(&self) -> Result<String, toml_edit::ser::Error> {
+        // Catch a lockfile where the union of fork markers doesn't cover the supported
+        // environments.
+        debug_assert!(self.check_marker_coverage().is_ok());
+
         // We construct a TOML document manually instead of going through Serde to enable
         // the use of inline tables.
         let mut doc = toml_edit::DocumentMut::new();

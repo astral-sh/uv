@@ -965,6 +965,15 @@ impl ValidatedLock {
             return Ok(Self::Versions(lock));
         }
 
+        if let Err((fork_markers_union, environments_union)) = lock.check_marker_coverage() {
+            warn_user!(
+                "Ignoring existing lockfile due to fork markers not covering the supported environments: `{}` vs `{}`",
+                fork_markers_union.try_to_string().unwrap_or("true".to_string()),
+                environments_union.try_to_string().unwrap_or("true".to_string()),
+            );
+            return Ok(Self::Versions(lock));
+        }
+
         // If the set of required platforms has changed, we have to perform a clean resolution.
         let expected = lock.simplified_required_environments();
         let actual = required_environments
