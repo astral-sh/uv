@@ -50,7 +50,7 @@ To install multiple Python versions:
 $ uv python install 3.11 3.12
 ```
 
-To install an alternative Python implementation, e.g. PyPy:
+To install an alternative Python implementation, e.g., PyPy:
 
 ```console
 $ uv python install pypy@3.10

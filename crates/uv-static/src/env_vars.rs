@@ -665,6 +665,6 @@ impl EnvVars {
 
     /// Overrides terminal width used for wrapping. This variable is not read by uv directly.
     ///
-    /// This is a quasi-standard variable, described e.g. in `ncurses(3x)`.
+    /// This is a quasi-standard variable, described, e.g., in `ncurses(3x)`.
     pub const COLUMNS: &'static str = "COLUMNS";
 }

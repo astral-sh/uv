@@ -7,8 +7,8 @@ with private repositories.
 
 Using SSH:
 
-- `git+ssh://git@<hostname>/...` (e.g. `git+ssh://git@github.com/astral-sh/uv`)
-- `git+ssh://git@<host>/...` (e.g. `git+ssh://git@github.com-key-2/astral-sh/uv`)
+- `git+ssh://git@<hostname>/...` (e.g., `git+ssh://git@github.com/astral-sh/uv`)
+- `git+ssh://git@<host>/...` (e.g., `git+ssh://git@github.com-key-2/astral-sh/uv`)
 
 See the
 [GitHub SSH documentation](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/about-ssh)
@@ -16,10 +16,10 @@ for more details on how to configure SSH.
 
 Using a password or token:
 
-- `git+https://<user>:<token>@<hostname>/...` (e.g.
+- `git+https://<user>:<token>@<hostname>/...` (e.g.,
   `git+https://git:github_pat_asdf@github.com/astral-sh/uv`)
-- `git+https://<token>@<hostname>/...` (e.g. `git+https://github_pat_asdf@github.com/astral-sh/uv`)
-- `git+https://<user>@<hostname>/...` (e.g. `git+https://git@github.com/astral-sh/uv`)
+- `git+https://<token>@<hostname>/...` (e.g., `git+https://github_pat_asdf@github.com/astral-sh/uv`)
+- `git+https://<user>@<hostname>/...` (e.g., `git+https://git@github.com/astral-sh/uv`)
 
 When using a GitHub personal access token, the username is arbitrary. GitHub does not support
 logging in with password directly, although other hosts may. If a username is provided without
