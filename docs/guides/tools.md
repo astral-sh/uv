@@ -65,7 +65,7 @@ Tools are installed into temporary, isolated environments when using `uvx`.
 When `uvx ruff` is invoked, uv installs the `ruff` package which provides the `ruff` command.
 However, sometimes the package and command names differ.
 
-The `--from` option can be used to invoke a command from a specific package, e.g. `http` which is
+The `--from` option can be used to invoke a command from a specific package, e.g., `http` which is
 provided by `httpie`:
 
 ```console

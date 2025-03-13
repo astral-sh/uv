@@ -87,7 +87,7 @@ explicit = true
 
 !!! note
 
-    When using `uv publish --index <name>`, the `pyproject.toml` must be present, i.e. you need to
+    When using `uv publish --index <name>`, the `pyproject.toml` must be present, i.e., you need to
     have a checkout step in a publish CI job.
 
 Even though `uv publish` retries failed uploads, it can happen that publishing fails in the middle,

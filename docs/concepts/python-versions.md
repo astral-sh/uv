@@ -31,19 +31,19 @@ create the virtual environment with it.
 
 The following Python version request formats are supported:
 
-- `<version>` e.g. `3`, `3.12`, `3.12.3`
-- `<version-specifier>` e.g. `>=3.12,<3.13`
-- `<implementation>` e.g. `cpython` or `cp`
-- `<implementation>@<version>` e.g. `cpython@3.12`
-- `<implementation><version>` e.g. `cpython3.12` or `cp312`
-- `<implementation><version-specifier>` e.g. `cpython>=3.12,<3.13`
-- `<implementation>-<version>-<os>-<arch>-<libc>` e.g. `cpython-3.12.3-macos-aarch64-none`
+- `<version>` (e.g., `3`, `3.12`, `3.12.3`)
+- `<version-specifier>` (e.g., `>=3.12,<3.13`)
+- `<implementation>` (e.g., `cpython` or `cp`)
+- `<implementation>@<version>` (e.g., `cpython@3.12`)
+- `<implementation><version>` (e.g., `cpython3.12` or `cp312`)
+- `<implementation><version-specifier>` (e.g., `cpython>=3.12,<3.13`)
+- `<implementation>-<version>-<os>-<arch>-<libc>` (e.g., `cpython-3.12.3-macos-aarch64-none`)
 
 Additionally, a specific system Python interpreter can be requested with:
 
-- `<executable-path>` e.g. `/opt/homebrew/bin/python3`
-- `<executable-name>` e.g. `mypython3`
-- `<install-dir>` e.g. `/some/environment/`
+- `<executable-path>` (e.g., `/opt/homebrew/bin/python3`)
+- `<executable-name>` (e.g., `mypython3`)
+- `<install-dir>` (e.g., `/some/environment/`)
 
 By default, uv will automatically download Python versions if they cannot be found on the system.
 This behavior can be

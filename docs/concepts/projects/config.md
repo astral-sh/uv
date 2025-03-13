@@ -165,7 +165,7 @@ The `UV_PROJECT_ENVIRONMENT` environment variable can be used to configure the p
 environment path (`.venv` by default).
 
 If a relative path is provided, it will be resolved relative to the workspace root. If an absolute
-path is provided, it will be used as-is, i.e. a child directory will not be created for the
+path is provided, it will be used as-is, i.e., a child directory will not be created for the
 environment. If an environment is not present at the provided path, uv will create it.
 
 This option can be used to write to the system Python environment, though it is not recommended.

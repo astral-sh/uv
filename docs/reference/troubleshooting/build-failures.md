@@ -259,7 +259,7 @@ dependencies of the package, e.g, `setuptools`.
 
 If a package fails to build during resolution and the version that failed to build is older than the
 version you want to use, try adding a [constraint](../settings.md#constraint-dependencies) with a
-lower bound (e.g. `numpy>=1.17`). Sometimes, due to algorithmic limitations, the uv resolver tries
+lower bound (e.g., `numpy>=1.17`). Sometimes, due to algorithmic limitations, the uv resolver tries
 to find a fitting version using unreasonably old packages, which can be prevented by using lower
 bounds.
 
