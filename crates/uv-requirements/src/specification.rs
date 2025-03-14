@@ -89,24 +89,18 @@ impl RequirementsSpecification {
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         Ok(match source {
-            RequirementsSource::Package(name) => {
-                let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
-                    .with_context(|| format!("Failed to parse: `{name}`"))?;
-                Self {
-                    requirements: vec![UnresolvedRequirementSpecification::from(requirement)],
-                    ..Self::default()
-                }
-            }
-            RequirementsSource::Editable(name) => {
-                let requirement = RequirementsTxtRequirement::parse(name, &*CWD, true)
-                    .with_context(|| format!("Failed to parse: `{name}`"))?;
-                Self {
-                    requirements: vec![UnresolvedRequirementSpecification::from(
-                        requirement.into_editable()?,
-                    )],
-                    ..Self::default()
-                }
-            }
+            RequirementsSource::Package(requirement) => Self {
+                requirements: vec![UnresolvedRequirementSpecification::from(
+                    requirement.clone(),
+                )],
+                ..Self::default()
+            },
+            RequirementsSource::Editable(requirement) => Self {
+                requirements: vec![UnresolvedRequirementSpecification::from(
+                    requirement.clone().into_editable()?,
+                )],
+                ..Self::default()
+            },
             RequirementsSource::RequirementsTxt(path) => {
                 if !(path == Path::new("-")
                     || path.starts_with("http://")

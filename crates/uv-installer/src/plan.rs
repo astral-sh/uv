@@ -66,9 +66,23 @@ impl<'a> Planner<'a> {
         let mut reinstalls = vec![];
         let mut extraneous = vec![];
 
+        // TODO(charlie): There are a few assumptions here that are hard to spot:
+        //
+        // 1. Apparently, we never return direct URL distributions as [`ResolvedDist::Installed`].
+        //    If you trace the resolver, we only ever return [`ResolvedDist::Installed`] if you go
+        //    through the [`CandidateSelector`], and we only go through the [`CandidateSelector`]
+        //    for registry distributions.
+        //
+        // 2. We expect any distribution returned as [`ResolvedDist::Installed`] to hit the
+        //    "Requirement already installed" path (hence the `unreachable!`) a few lines below it.
+        //    So, e.g., if a package is marked as `--reinstall`, we _expect_ that it's not passed in
+        //    as [`ResolvedDist::Installed`] here.
         for dist in self.resolution.distributions() {
             // Check if the package should be reinstalled.
-            let reinstall = reinstall.contains(dist.name());
+            let reinstall = reinstall.contains_package(dist.name())
+                || dist
+                    .source_tree()
+                    .is_some_and(|source_tree| reinstall.contains_path(source_tree));
 
             // Check if installation of a binary version of the package should be allowed.
             let no_binary = build_options.no_binary_package(dist.name());
@@ -108,7 +122,11 @@ impl<'a> Planner<'a> {
                 unreachable!("Installed distribution could not be found in site-packages: {dist}");
             };
 
-            if cache.must_revalidate(dist.name()) {
+            if cache.must_revalidate_package(dist.name())
+                || dist
+                    .source_tree()
+                    .is_some_and(|source_tree| cache.must_revalidate_path(source_tree))
+            {
                 debug!("Must revalidate requirement: {}", dist.name());
                 remote.push(dist.clone());
                 continue;

@@ -690,7 +690,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Connectivity::Online => CacheControl::from(
                 self.build_context
                     .cache()
-                    .freshness(&cache_entry, source.name())
+                    .freshness(&cache_entry, source.name(), source.source_tree())
                     .map_err(Error::CacheRead)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,
@@ -1359,7 +1359,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if self
             .build_context
             .cache()
-            .freshness(&entry, source.name())
+            .freshness(&entry, source.name(), source.source_tree())
             .map_err(Error::CacheRead)?
             .is_fresh()
         {
@@ -1671,7 +1671,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if self
             .build_context
             .cache()
-            .freshness(&metadata_entry, source.name())
+            .freshness(&metadata_entry, source.name(), source.source_tree())
             .map_err(Error::CacheRead)?
             .is_fresh()
         {

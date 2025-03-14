@@ -1,17 +1,18 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use console::Term;
 
-use uv_fs::Simplified;
+use uv_fs::{Simplified, CWD};
+use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_warnings::warn_user;
 
 #[derive(Debug, Clone)]
 pub enum RequirementsSource {
     /// A package was provided on the command line (e.g., `pip install flask`).
-    Package(String),
+    Package(RequirementsTxtRequirement),
     /// An editable path was provided on the command line (e.g., `pip install -e ../flask`).
-    Editable(String),
+    Editable(RequirementsTxtRequirement),
     /// Dependencies were provided via a `requirements.txt` file (e.g., `pip install -r requirements.txt`).
     RequirementsTxt(PathBuf),
     /// Dependencies were provided via a `pyproject.toml` file (e.g., `pip-compile pyproject.toml`).
@@ -86,7 +87,7 @@ impl RequirementsSource {
     ///
     /// If the user provided a value that appears to be a `requirements.txt` file or a local
     /// directory, prompt them to correct it (if the terminal is interactive).
-    pub fn from_package(name: String) -> Result<Self> {
+    pub fn from_package_argument(name: &str) -> Result<Self> {
         // If the user provided a `requirements.txt` file without `-r` (as in
         // `uv pip install requirements.txt`), prompt them to correct it.
         #[allow(clippy::case_sensitive_file_extension_comparisons)]
@@ -120,7 +121,10 @@ impl RequirementsSource {
             }
         }
 
-        Ok(Self::Package(name))
+        let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
+            .with_context(|| format!("Failed to parse: `{name}`"))?;
+
+        Ok(Self::Package(requirement))
     }
 
     /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a `--with`
@@ -128,7 +132,7 @@ impl RequirementsSource {
     ///
     /// If the user provided a value that appears to be a `requirements.txt` file or a local
     /// directory, prompt them to correct it (if the terminal is interactive).
-    pub fn from_with_package(name: String) -> Result<Self> {
+    pub fn from_with_package_argument(name: &str) -> Result<Self> {
         // If the user provided a `requirements.txt` file without `--with-requirements` (as in
         // `uvx --with requirements.txt ruff`), prompt them to correct it.
         #[allow(clippy::case_sensitive_file_extension_comparisons)]
@@ -162,7 +166,26 @@ impl RequirementsSource {
             }
         }
 
-        Ok(Self::Package(name))
+        let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
+            .with_context(|| format!("Failed to parse: `{name}`"))?;
+
+        Ok(Self::Package(requirement))
+    }
+
+    /// Parse an editable [`RequirementsSource`] (e.g., `uv pip install -e .`).
+    pub fn from_editable(name: &str) -> Result<Self> {
+        let requirement = RequirementsTxtRequirement::parse(name, &*CWD, true)
+            .with_context(|| format!("Failed to parse: `{name}`"))?;
+
+        Ok(Self::Editable(requirement))
+    }
+
+    /// Parse a package [`RequirementsSource`] (e.g., `uv pip install ruff`).
+    pub fn from_package(name: &str) -> Result<Self> {
+        let requirement = RequirementsTxtRequirement::parse(name, &*CWD, false)
+            .with_context(|| format!("Failed to parse: `{name}`"))?;
+
+        Ok(Self::Package(requirement))
     }
 
     /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a path to a source
@@ -188,8 +211,8 @@ impl RequirementsSource {
 impl std::fmt::Display for RequirementsSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Package(package) => write!(f, "{package}"),
-            Self::Editable(path) => write!(f, "-e {path}"),
+            Self::Package(package) => write!(f, "{package:?}"),
+            Self::Editable(path) => write!(f, "-e {path:?}"),
             Self::RequirementsTxt(path)
             | Self::PyprojectToml(path)
             | Self::SetupPy(path)

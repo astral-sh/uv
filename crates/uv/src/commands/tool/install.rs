@@ -109,9 +109,9 @@ pub(crate) async fn install(
         // Ex) `ruff`
         Target::Unspecified(from) => {
             let source = if editable {
-                RequirementsSource::Editable((*from).to_string())
+                RequirementsSource::from_editable(from)?
             } else {
-                RequirementsSource::Package((*from).to_string())
+                RequirementsSource::from_package(from)?
             };
             let requirement = RequirementsSpecification::from_source(&source, &client_builder)
                 .await?

@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::path::Path;
 use std::sync::Arc;
 
 use uv_pep440::Version;
@@ -90,6 +91,14 @@ impl ResolvedDist {
         match self {
             Self::Installable { version, dist } => dist.version().or(version.as_ref()),
             Self::Installed { dist } => Some(dist.version()),
+        }
+    }
+
+    /// Return the source tree of the distribution, if available.
+    pub fn source_tree(&self) -> Option<&Path> {
+        match self {
+            Self::Installable { dist, .. } => dist.source_tree(),
+            Self::Installed { .. } => None,
         }
     }
 }
