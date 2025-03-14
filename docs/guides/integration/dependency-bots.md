@@ -82,5 +82,5 @@ updates:
 ```
 
 Refer to
-[Dependabot's documentation](`https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference`)
+[Dependabot's documentation](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference)
 for more configuration options.
