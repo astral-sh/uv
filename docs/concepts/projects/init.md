@@ -140,7 +140,7 @@ build-backend = "hatchling.build"
 The command can be executed with `uv run`:
 
 ```console
-$ uv run --directory example-pkg example-pkg
+$ uv run --directory src/example_pkg example-pkg
 Hello from example-pkg!
 ```
 
@@ -213,7 +213,7 @@ def hello() -> str:
 And you can import and execute it using `uv run`:
 
 ```console
-$ uv run --directory example-lib python -c "import example_lib; print(example_lib.hello())"
+$ uv run --directory src/example_lib python -c "import example_lib; print(example_lib.hello())"
 Hello from example-lib!
 ```
 
@@ -291,7 +291,7 @@ def main() -> None:
 The command can be executed with `uv run`:
 
 ```console
-$ uv run --directory example-ext example-ext
+$ uv run --directory src/example_ext example-ext
 Hello from example-ext!
 ```
 
