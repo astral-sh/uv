@@ -12441,14 +12441,14 @@ fn compile_index_url_first_match_marker() -> Result<()> {
 
 /// Install a package via `--extra-index-url`.
 ///
-/// If the package exists on the "extra" index, but at an incompatible version, the resolution
+/// If the package "exists" on the "extra" index, but without any versions, the resolution
 /// should fail by default (even though a compatible version exists on the "primary" index).
 #[test]
 fn compile_index_url_first_match_all_versions() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let requirements_in = context.temp_dir.child("requirements.in");
-    requirements_in.write_str("some-package-not-on-the-index")?;
+    requirements_in.write_str("pandas")?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
         .arg("--index-url")
@@ -12463,7 +12463,7 @@ fn compile_index_url_first_match_all_versions() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because some-package-not-on-the-index was not found in the package registry and you require some-package-not-on-the-index, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because there are no versions of pandas and you require pandas, we can conclude that your requirements are unsatisfiable.
     "###
     );
 
