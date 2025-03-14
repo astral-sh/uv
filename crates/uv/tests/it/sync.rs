@@ -3962,6 +3962,8 @@ fn sync_active_script_environment() -> Result<()> {
 
     ----- stderr -----
     Using script environment at: foo
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
     "###);
 
     // Requesting another Python version will invalidate the environment
@@ -7598,13 +7600,12 @@ fn sync_script() -> Result<()> {
      + iniconfig==2.0.0
     ");
 
-    // Modify the `requires-python`.
+    // Remove a dependency.
     script.write_str(indoc! { r#"
         # /// script
-        # requires-python = ">=3.8, <3.11"
+        # requires-python = ">=3.11"
         # dependencies = [
         #   "anyio",
-        #   "iniconfig",
         # ]
         # ///
 
@@ -7612,23 +7613,47 @@ fn sync_script() -> Result<()> {
        "#
     })?;
 
-    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r"
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Resolved 3 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    "###);
+
+    // Modify the `requires-python`.
+    script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.8, <3.11"
+        # dependencies = [
+        #   "anyio",
+        # ]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Recreating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
-    Resolved 6 packages in [TIME]
+    Resolved 5 packages in [TIME]
     Prepared 2 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Installed 5 packages in [TIME]
      + anyio==4.3.0
      + exceptiongroup==1.2.0
      + idna==3.6
-     + iniconfig==2.0.0
      + sniffio==1.3.1
      + typing-extensions==4.10.0
-    ");
+    "###);
 
     // `--locked` and `--frozen` should fail with helpful error messages.
     uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").arg("--locked"), @r"

@@ -563,6 +563,8 @@ fn tool_install_editable() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
     Installed 1 executable: black
     "###);
 
@@ -2201,6 +2203,8 @@ fn tool_install_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Audited [N] packages in [TIME]
     Installed 2 executables: black, blackd
     "###);
 
@@ -3190,6 +3194,8 @@ fn tool_install_at_latest_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Audited [N] packages in [TIME]
     Installed 2 executables: black, blackd
     "###);
 
