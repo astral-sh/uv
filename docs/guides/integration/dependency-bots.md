@@ -66,8 +66,10 @@ need to be explicitly defined using
 
 ## Dependabot
 
-Support for uv is now available. To configure Dependabot, create a `.github/dependabot.yml` file in
-the root of your repository and copy the following configuration into it:
+Support for uv is now
+[available](https://github.blog/changelog/2025-03-13-dependabot-version-updates-now-support-uv-in-general-availability/).
+To configure Dependabot, create a `.github/dependabot.yml` file in the root of your repository and
+copy the following configuration into it:
 
 ```yaml
 version: 2
@@ -80,3 +82,6 @@ updates:
     schedule:
       interval: "daily"
 ```
+
+For more information on how to configure Dependabot, refer to the
+[Dependabot documentation](https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuring-dependabot-version-updates).
