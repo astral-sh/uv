@@ -16,6 +16,7 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::{Requirement, RequirementSource};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
+    PythonRequestSource,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -72,6 +73,9 @@ pub(crate) async fn install(
     // requirements, even if we end up using a different interpreter for the tool install itself.
     let interpreter = PythonInstallation::find_or_download(
         python_request.as_ref(),
+        python_request
+            .as_ref()
+            .map(|_| &PythonRequestSource::UserRequest),
         EnvironmentPreference::OnlySystem,
         python_preference,
         python_downloads,

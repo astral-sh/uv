@@ -10,8 +10,8 @@ use uv_cache::Cache;
 use uv_dirs::user_uv_config_dir;
 use uv_fs::Simplified;
 use uv_python::{
-    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions, PYTHON_VERSION_FILENAME,
+    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest,
+    PythonRequestSource, PythonVersionFile, VersionFileDiscoveryOptions, PYTHON_VERSION_FILENAME,
 };
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
@@ -78,6 +78,7 @@ pub(crate) async fn pin(
 
     let python = match PythonInstallation::find(
         &request,
+        Some(&PythonRequestSource::UserRequest),
         EnvironmentPreference::OnlySystem,
         python_preference,
         cache,
@@ -228,6 +229,7 @@ fn warn_if_existing_pin_incompatible_with_project(
     // interpreter to check for compatibility on the current system.
     match PythonInstallation::find(
         pin,
+        None,
         EnvironmentPreference::OnlySystem,
         python_preference,
         cache,

@@ -18,8 +18,8 @@ use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions,
-    VersionRequest,
+    PythonPreference, PythonRequest, PythonRequestSource, PythonVariant, PythonVersionFile,
+    VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_resolver::RequiresPython;
 use uv_scripts::{Pep723Script, ScriptTag};
@@ -424,6 +424,7 @@ async fn init_project(
                 let python_request = if pin_python {
                     let interpreter = PythonInstallation::find_or_download(
                         Some(python_request),
+                        None,
                         EnvironmentPreference::OnlySystem,
                         python_preference,
                         python_downloads,
@@ -450,6 +451,7 @@ async fn init_project(
             python_request => {
                 let interpreter = PythonInstallation::find_or_download(
                     Some(&python_request),
+                    None,
                     EnvironmentPreference::OnlySystem,
                     python_preference,
                     python_downloads,
@@ -515,6 +517,7 @@ async fn init_project(
         let python_request = if pin_python {
             let interpreter = PythonInstallation::find_or_download(
                 Some(&python_request),
+                Some(&PythonRequestSource::RequiresPython),
                 EnvironmentPreference::OnlySystem,
                 python_preference,
                 python_downloads,
@@ -540,6 +543,7 @@ async fn init_project(
     } else {
         // (4) Default to the system Python
         let interpreter = PythonInstallation::find_or_download(
+            None,
             None,
             EnvironmentPreference::OnlySystem,
             python_preference,
