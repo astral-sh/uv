@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.5.4"
+version = "0.6.6"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -16,6 +16,7 @@ workspace = true
 [dependencies]
 uv-auth = { workspace = true }
 uv-build-backend = { workspace = true }
+uv-build-frontend = { workspace = true }
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
@@ -23,6 +24,7 @@ uv-cli = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }
 uv-console = { workspace = true }
+uv-dirs = { workspace = true }
 uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
 uv-distribution-filename = { workspace = true }
@@ -30,12 +32,12 @@ uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-git = { workspace = true }
+uv-git-types = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
 uv-installer = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
-uv-performance-flate2-backend = { path = "../uv-performance-flate2-backend", optional = true }
 uv-performance-memory-allocator = { path = "../uv-performance-memory-allocator", optional = true }
 uv-platform-tags = { workspace = true }
 uv-publish = { workspace = true }
@@ -76,7 +78,6 @@ jiff = { workspace = true }
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
-rayon = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 rkyv = { workspace = true }
@@ -88,6 +89,7 @@ textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
+toml_edit = { workspace = true }
 tracing = { workspace = true }
 tracing-durations-export = { workspace = true, features = ["plot"], optional = true }
 tracing-subscriber = { workspace = true, features = ["json"] }
@@ -99,16 +101,19 @@ walkdir = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+self-replace = { workspace = true }
+
 [dev-dependencies]
 assert_cmd = { version = "2.0.16" }
 assert_fs = { version = "1.1.2" }
-base64 = { version = "0.22.1" }
+base64 = { workspace = true }
 byteorder = { version = "1.5.0" }
 etcetera = { workspace = true }
 filetime = { version = "0.2.25" }
 flate2 = { workspace = true, default-features = false }
 ignore = { version = "0.4.23" }
-indoc = { version = "2.0.5" }
+indoc = { workspace = true }
 insta = { version = "1.40.0", features = ["filters", "json"] }
 predicates = { version = "3.1.2" }
 regex = { workspace = true }
@@ -125,19 +130,17 @@ nix = { workspace = true }
 ignored = [
     "flate2",
     "uv-performance-memory-allocator",
-    "uv-performance-flate2-backend",
 ]
 
 [features]
-default = ["python", "python-managed", "pypi", "git", "performance", "crates-io"]
-# Use better memory allocators, etc. — also turns-on self-update.
+default = ["python", "python-managed", "pypi", "git", "performance", "crates-io", "slow-tests", "test-ecosystem"]
+# Use better memory allocators, etc.
 performance = [
     "performance-memory-allocator",
-    "performance-flate2-backend",
     "uv-distribution/performance",
 ]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
-performance-flate2-backend = ["dep:uv-performance-flate2-backend"]
+tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing-durations-export"]
 
 # Introduces a dependency on a local Python installation.
 python = []
@@ -151,5 +154,9 @@ pypi = []
 git = []
 # Introduces a dependency on crates.io.
 crates-io = []
+# Include "slow" test cases.
+slow-tests = []
+# Includes test cases that require ecosystem packages
+test-ecosystem = []
 # Adds self-update functionality.
 self-update = ["axoupdater", "uv-cli/self-update"]

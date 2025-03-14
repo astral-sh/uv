@@ -1,14 +1,15 @@
 ---
-source: crates/uv/tests/workflow.rs
+source: crates/uv/tests/it/workflow.rs
 expression: lock
 ---
 version = 1
+revision = 1
 requires-python = ">=3.9.0"
 resolution-markers = [
-    "python_full_version < '3.10'",
-    "python_full_version == '3.10.*'",
-    "python_full_version == '3.11.*'",
     "python_full_version >= '3.12'",
+    "python_full_version == '3.11.*'",
+    "python_full_version == '3.10.*'",
+    "python_full_version < '3.10'",
 ]
 
 [options]

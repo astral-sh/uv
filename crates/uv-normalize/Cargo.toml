@@ -11,6 +11,11 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-small-str = { workspace = true }
+
 rkyv = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
+
+[features]
+schemars = ["dep:schemars", "uv-small-str/schemars"]

@@ -1,4 +1,6 @@
 use std::borrow::Cow;
+use std::env::consts::ARCH;
+use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
@@ -6,10 +8,11 @@ use std::sync::OnceLock;
 
 use configparser::ini::Ini;
 use fs_err as fs;
+use owo_colors::OwoColorize;
 use same_file::is_same_file;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::{trace, warn};
+use tracing::{debug, trace, warn};
 
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
@@ -45,7 +48,7 @@ pub struct Interpreter {
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
-    sysconfig_prefix: Option<PathBuf>,
+    standalone: bool,
     tags: OnceLock<Tags>,
     target: Option<Target>,
     prefix: Option<Prefix>,
@@ -79,7 +82,7 @@ impl Interpreter {
             sys_executable: info.sys_executable,
             sys_path: info.sys_path,
             stdlib: info.stdlib,
-            sysconfig_prefix: info.sysconfig_prefix,
+            standalone: info.standalone,
             tags: OnceLock::new(),
             target: None,
             prefix: None,
@@ -91,6 +94,7 @@ impl Interpreter {
     pub fn with_virtualenv(self, virtualenv: VirtualEnvironment) -> Self {
         Self {
             scheme: virtualenv.scheme,
+            sys_base_executable: Some(virtualenv.base_executable),
             sys_executable: virtualenv.executable,
             sys_prefix: virtualenv.root,
             target: None,
@@ -117,23 +121,55 @@ impl Interpreter {
         })
     }
 
-    /// Return the [`Interpreter`] for the base executable, if it's available.
+    /// Return the base Python executable; that is, the Python executable that should be
+    /// considered the "base" for the virtual environment. This is typically the Python executable
+    /// from the [`Interpreter`]; however, if the interpreter is a virtual environment itself, then
+    /// the base Python executable is the Python executable of the interpreter's base interpreter.
     ///
-    /// If no such base executable is available, or if the base executable is the same as the
-    /// current executable, this method returns `None`.
-    pub fn to_base_interpreter(&self, cache: &Cache) -> Result<Option<Self>, Error> {
-        if let Some(base_executable) = self
-            .sys_base_executable()
-            .filter(|base_executable| *base_executable != self.sys_executable())
-        {
-            match Self::query(base_executable, cache) {
-                Ok(base_interpreter) => Ok(Some(base_interpreter)),
-                Err(Error::NotFound(_)) => Ok(None),
-                Err(err) => Err(err),
+    /// This routine relies on `sys._base_executable`, falling back to `sys.executable` if unset.
+    /// Broadly, this routine should be used when attempting to determine the "base Python
+    /// executable" in a way that is consistent with the CPython standard library, such as when
+    /// determining the `home` key for a virtual environment.
+    pub fn to_base_python(&self) -> Result<PathBuf, io::Error> {
+        let base_executable = self.sys_base_executable().unwrap_or(self.sys_executable());
+        let base_python = std::path::absolute(base_executable)?;
+        Ok(base_python)
+    }
+
+    /// Determine the base Python executable; that is, the Python executable that should be
+    /// considered the "base" for the virtual environment. This is typically the Python executable
+    /// from the [`Interpreter`]; however, if the interpreter is a virtual environment itself, then
+    /// the base Python executable is the Python executable of the interpreter's base interpreter.
+    ///
+    /// This routine mimics the CPython `getpath.py` logic in order to make a more robust assessment
+    /// of the appropriate base Python executable. Broadly, this routine should be used when
+    /// attempting to determine the "true" base executable for a Python interpreter by resolving
+    /// symlinks until a valid Python installation is found. In particular, we tend to use this
+    /// routine for our own managed (or standalone) Python installations.
+    pub fn find_base_python(&self) -> Result<PathBuf, io::Error> {
+        let base_executable = self.sys_base_executable().unwrap_or(self.sys_executable());
+        // In `python-build-standalone`, a symlinked interpreter will return its own executable path
+        // as `sys._base_executable`. Using the symlinked path as the base Python executable can be
+        // incorrect, since it could cause `home` to point to something that is _not_ a Python
+        // installation. Specifically, if the interpreter _itself_ is symlinked to an arbitrary
+        // location, we need to fully resolve it to the actual Python executable; however, if the
+        // entire standalone interpreter is symlinked, then we can use the symlinked path.
+        //
+        // We emulate CPython's `getpath.py` to ensure that the base executable results in a valid
+        // Python prefix when converted into the `home` key for `pyvenv.cfg`.
+        let base_python = match find_base_python(
+            base_executable,
+            self.python_major(),
+            self.python_minor(),
+            self.variant().suffix(),
+        ) {
+            Ok(path) => path,
+            Err(err) => {
+                warn!("Failed to find base Python executable: {err}");
+                uv_fs::canonicalize_executable(base_executable)?
             }
-        } else {
-            Ok(None)
-        }
+        };
+        Ok(base_python)
     }
 
     /// Returns the path to the Python virtual environment.
@@ -367,11 +403,6 @@ impl Interpreter {
         &self.stdlib
     }
 
-    /// Return the `prefix` path for this Python interpreter, as returned by `sysconfig.get_config_var("prefix")`.
-    pub fn sysconfig_prefix(&self) -> Option<&Path> {
-        self.sysconfig_prefix.as_deref()
-    }
-
     /// Return the `purelib` path for this Python interpreter, as returned by `sysconfig.get_paths()`.
     pub fn purelib(&self) -> &Path {
         &self.scheme.purelib
@@ -438,10 +469,9 @@ impl Interpreter {
     /// `python-build-standalone`; if it returns `false`, the interpreter is definitely _not_ from
     /// `python-build-standalone`.
     ///
-    /// See: <https://github.com/indygreg/python-build-standalone/issues/382>
+    /// See: <https://github.com/astral-sh/python-build-standalone/issues/382>
     pub fn is_standalone(&self) -> bool {
-        self.sysconfig_prefix()
-            .is_some_and(|prefix| prefix == Path::new("/install"))
+        self.standalone
     }
 
     /// Return the [`Layout`] environment used to install wheels into this interpreter.
@@ -556,6 +586,81 @@ impl ExternallyManaged {
 }
 
 #[derive(Debug, Error)]
+pub struct UnexpectedResponseError {
+    #[source]
+    pub(super) err: serde_json::Error,
+    pub(super) stdout: String,
+    pub(super) stderr: String,
+    pub(super) path: PathBuf,
+}
+
+impl Display for UnexpectedResponseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Querying Python at `{}` returned an invalid response: {}",
+            self.path.display(),
+            self.err
+        )?;
+
+        let mut non_empty = false;
+
+        if !self.stdout.trim().is_empty() {
+            write!(f, "\n\n{}\n{}", "[stdout]".red(), self.stdout)?;
+            non_empty = true;
+        }
+
+        if !self.stderr.trim().is_empty() {
+            write!(f, "\n\n{}\n{}", "[stderr]".red(), self.stderr)?;
+            non_empty = true;
+        }
+
+        if non_empty {
+            writeln!(f)?;
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
+pub struct StatusCodeError {
+    pub(super) code: ExitStatus,
+    pub(super) stdout: String,
+    pub(super) stderr: String,
+    pub(super) path: PathBuf,
+}
+
+impl Display for StatusCodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Querying Python at `{}` failed with exit status {}",
+            self.path.display(),
+            self.code
+        )?;
+
+        let mut non_empty = false;
+
+        if !self.stdout.trim().is_empty() {
+            write!(f, "\n\n{}\n{}", "[stdout]".red(), self.stdout)?;
+            non_empty = true;
+        }
+
+        if !self.stderr.trim().is_empty() {
+            write!(f, "\n\n{}\n{}", "[stderr]".red(), self.stderr)?;
+            non_empty = true;
+        }
+
+        if non_empty {
+            writeln!(f)?;
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
 pub enum Error {
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
@@ -567,20 +672,10 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
-    #[error("Querying Python at `{}` did not return the expected data\n{err}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---", path.display())]
-    UnexpectedResponse {
-        err: serde_json::Error,
-        stdout: String,
-        stderr: String,
-        path: PathBuf,
-    },
-    #[error("Querying Python at `{}` failed with exit status {code}\n--- stdout:\n{stdout}\n--- stderr:\n{stderr}\n---", path.display())]
-    StatusCode {
-        code: ExitStatus,
-        stdout: String,
-        stderr: String,
-        path: PathBuf,
-    },
+    #[error("{0}")]
+    UnexpectedResponse(UnexpectedResponseError),
+    #[error("{0}")]
+    StatusCode(StatusCodeError),
     #[error("Can't use Python at `{path}`")]
     QueryScript {
         #[source]
@@ -603,12 +698,19 @@ enum InterpreterInfoResult {
 pub enum InterpreterInfoError {
     #[error("Could not detect a glibc or a musl libc (while running on Linux)")]
     LibcNotFound,
-    #[error("Unknown operation system: `{operating_system}`")]
+    #[error("Broken Python installation, `platform.mac_ver()` returned an empty value, please reinstall Python")]
+    BrokenMacVer,
+    #[error("Unknown operating system: `{operating_system}`")]
     UnknownOperatingSystem { operating_system: String },
     #[error("Python {python_version} is not supported. Please use Python 3.8 or newer.")]
     UnsupportedPythonVersion { python_version: String },
     #[error("Python executable does not support `-I` flag. Please use Python 3.8 or newer.")]
     UnsupportedPython,
+    #[error("Python installation is missing `distutils`, which is required for packaging on older Python versions. Your system may package it separately, e.g., as `python{python_major}-distutils` or `python{python_major}.{python_minor}-distutils`.")]
+    MissingRequiredDistutils {
+        python_major: usize,
+        python_minor: usize,
+    },
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -625,7 +727,7 @@ struct InterpreterInfo {
     sys_executable: PathBuf,
     sys_path: Vec<PathBuf>,
     stdlib: PathBuf,
-    sysconfig_prefix: Option<PathBuf>,
+    standalone: bool,
     pointer_size: PointerSize,
     gil_disabled: bool,
 }
@@ -665,12 +767,12 @@ impl InterpreterInfo {
                 });
             }
 
-            return Err(Error::StatusCode {
+            return Err(Error::StatusCode(StatusCodeError {
                 code: output.status,
                 stderr,
                 stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                 path: interpreter.to_path_buf(),
-            });
+            }));
         }
 
         let result: InterpreterInfoResult =
@@ -684,12 +786,12 @@ impl InterpreterInfo {
                         path: interpreter.to_path_buf(),
                     }
                 } else {
-                    Error::UnexpectedResponse {
+                    Error::UnexpectedResponse(UnexpectedResponseError {
                         err,
                         stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
                         stderr,
                         path: interpreter.to_path_buf(),
-                    }
+                    })
                 }
             })?;
 
@@ -746,7 +848,13 @@ impl InterpreterInfo {
 
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
-            "",
+            // Shard interpreter metadata by host architecture, operating system, and version, to
+            // invalidate the cache (e.g.) on OS upgrades.
+            cache_digest(&(
+                ARCH,
+                sys_info::os_type().unwrap_or_default(),
+                sys_info::os_release().unwrap_or_default(),
+            )),
             // We use the absolute path for the cache entry to avoid cache collisions for relative
             // paths. But we don't to query the executable with symbolic links resolved.
             format!("{}.msgpack", cache_digest(&absolute)),
@@ -821,6 +929,96 @@ impl InterpreterInfo {
     }
 }
 
+/// Find the Python executable that should be considered the "base" for a virtual environment.
+///
+/// Assumes that the provided executable is that of a standalone Python interpreter.
+///
+/// The strategy here mimics that of `getpath.py`: we search up the ancestor path to determine
+/// whether a given executable will convert into a valid Python prefix; if not, we resolve the
+/// symlink and try again.
+///
+/// This ensures that:
+///
+/// 1. We avoid using symlinks to arbitrary locations as the base Python executable. For example,
+///    if a user symlinks a Python _executable_ to `/Users/user/foo`, we want to avoid using
+///    `/Users/user` as `home`, since it's not a Python installation, and so the relevant libraries
+///    and headers won't be found when it's used as the executable directory.
+///    See: <https://github.com/python/cpython/blob/a03efb533a58fd13fb0cc7f4a5c02c8406a407bd/Modules/getpath.py#L367-L400>
+///
+/// 2. We use the "first" resolved symlink that _is_ a valid Python prefix, and thereby preserve
+///    symlinks. For example, if a user symlinks a Python _installation_ to `/Users/user/foo`, such
+///    that `/Users/user/foo/bin/python` is the resulting executable, we want to use `/Users/user/foo`
+///    as `home`, rather than resolving to the symlink target. Concretely, this allows users to
+///    symlink patch versions (like `cpython-3.12.6-macos-aarch64-none`) to minor version aliases
+///    (like `cpython-3.12-macos-aarch64-none`) and preserve those aliases in the resulting virtual
+///    environments.
+///
+/// See: <https://github.com/python/cpython/blob/a03efb533a58fd13fb0cc7f4a5c02c8406a407bd/Modules/getpath.py#L591-L594>
+fn find_base_python(
+    executable: &Path,
+    major: u8,
+    minor: u8,
+    suffix: &str,
+) -> Result<PathBuf, io::Error> {
+    /// Returns `true` if `path` is the root directory.
+    fn is_root(path: &Path) -> bool {
+        let mut components = path.components();
+        components.next() == Some(std::path::Component::RootDir) && components.next().is_none()
+    }
+
+    /// Determining whether `dir` is a valid Python prefix by searching for a "landmark".
+    ///
+    /// See: <https://github.com/python/cpython/blob/a03efb533a58fd13fb0cc7f4a5c02c8406a407bd/Modules/getpath.py#L183>
+    fn is_prefix(dir: &Path, major: u8, minor: u8, suffix: &str) -> bool {
+        if cfg!(windows) {
+            dir.join("Lib").join("os.py").is_file()
+        } else {
+            dir.join("lib")
+                .join(format!("python{major}.{minor}{suffix}"))
+                .join("os.py")
+                .is_file()
+        }
+    }
+
+    let mut executable = Cow::Borrowed(executable);
+
+    loop {
+        debug!(
+            "Assessing Python executable as base candidate: {}",
+            executable.display()
+        );
+
+        // Determine whether this executable will produce a valid `home` for a virtual environment.
+        for prefix in executable.ancestors().take_while(|path| !is_root(path)) {
+            if is_prefix(prefix, major, minor, suffix) {
+                return Ok(executable.into_owned());
+            }
+        }
+
+        // If not, resolve the symlink.
+        let resolved = fs_err::read_link(&executable)?;
+
+        // If the symlink is relative, resolve it relative to the executable.
+        let resolved = if resolved.is_relative() {
+            if let Some(parent) = executable.parent() {
+                parent.join(resolved)
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "Symlink has no parent directory",
+                ));
+            }
+        } else {
+            resolved
+        };
+
+        // Normalize the resolved path.
+        let resolved = uv_fs::normalize_absolute_path(&resolved)?;
+
+        executable = Cow::Owned(resolved);
+    }
+}
+
 #[cfg(unix)]
 #[cfg(test)]
 mod tests {
@@ -851,6 +1049,7 @@ mod tests {
                 "arch": "x86_64"
             },
             "manylinux_compatible": false,
+            "standalone": false,
             "markers": {
                 "implementation_name": "cpython",
                 "implementation_version": "3.12.0",
@@ -896,10 +1095,10 @@ mod tests {
 
         fs::write(
             &mocked_interpreter,
-            formatdoc! {r##"
-        #!/bin/bash
+            formatdoc! {r"
+        #!/bin/sh
         echo '{json}'
-        "##},
+        "},
         )
         .unwrap();
 
@@ -915,10 +1114,10 @@ mod tests {
         );
         fs::write(
             &mocked_interpreter,
-            formatdoc! {r##"
-        #!/bin/bash
+            formatdoc! {r"
+        #!/bin/sh
         echo '{}'
-        "##, json.replace("3.12", "3.13")},
+        ", json.replace("3.12", "3.13")},
         )
         .unwrap();
         let interpreter = Interpreter::query(&mocked_interpreter, &cache).unwrap();

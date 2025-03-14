@@ -1,3 +1,10 @@
+---
+title: Using uv with Jupyter
+description:
+  A complete guide to using uv with Jupyter notebooks for interactive computing, data analysis, and
+  visualization, including kernel management and virtual environment integration.
+---
+
 # Using uv with Jupyter
 
 The [Jupyter](https://jupyter.org/) notebook is a popular tool for interactive computing, data
@@ -44,7 +51,7 @@ $ uv add --dev ipykernel
 Then, you can create the kernel for `project` with:
 
 ```console
-$ uv run ipython kernel install --user --name=project
+$ uv run ipython kernel install --user --env VIRTUAL_ENV $(pwd)/.venv --name=project
 ```
 
 From there, start the server with:
@@ -99,12 +106,23 @@ If you need to run Jupyter in a virtual environment that isn't associated with a
 [project](../../concepts/projects/index.md) (e.g., has no `pyproject.toml` or `uv.lock`), you can do
 so by adding Jupyter to the environment directly. For example:
 
-```console
-$ uv venv --seed
-$ uv pip install pydantic
-$ uv pip install jupyterlab
-$ .venv/bin/jupyter lab
-```
+=== "macOS and Linux"
+
+    ```console
+    $ uv venv --seed
+    $ uv pip install pydantic
+    $ uv pip install jupyterlab
+    $ .venv/bin/jupyter lab
+    ```
+
+=== "Windows"
+
+    ```powershell
+    uv venv --seed
+    uv pip install pydantic
+    uv pip install jupyterlab
+    .venv\Scripts\jupyter lab
+    ```
 
 From here, `import pydantic` will work within the notebook, and you can install additional packages
 via `!uv pip install`, or even `!pip install`.
@@ -118,10 +136,13 @@ project, as in the following:
 ```console
 # Create a project.
 $ uv init project
+
 # Move into the project directory.
 $ cd project
+
 # Add ipykernel as a dev dependency.
 $ uv add --dev ipykernel
+
 # Open the project in VS Code.
 $ code .
 ```
@@ -129,7 +150,7 @@ $ code .
 Once the project directory is open in VS Code, you can create a new Jupyter notebook by selecting
 "Create: New Jupyter Notebook" from the command palette. When prompted to select a kernel, choose
 "Python Environments" and select the virtual environment you created earlier (e.g.,
-`.venv/bin/python`).
+`.venv/bin/python` on macOS and Linux, or `.venv\Scripts\python` on Windows).
 
 !!! note
 

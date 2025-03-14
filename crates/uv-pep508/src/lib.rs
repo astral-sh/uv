@@ -16,7 +16,6 @@
 
 #![warn(missing_docs)]
 
-use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
@@ -28,6 +27,7 @@ use url::Url;
 
 use cursor::Cursor;
 pub use marker::{
+    CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
     ContainsMarkerTree, ExtraMarkerTree, ExtraOperator, InMarkerTree, MarkerEnvironment,
     MarkerEnvironmentBuilder, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeContents,
     MarkerTreeKind, MarkerValue, MarkerValueExtra, MarkerValueString, MarkerValueVersion,
@@ -40,9 +40,10 @@ pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 /// Version and version specifiers used in requirements (reexport).
 // https://github.com/konstin/pep508_rs/issues/19
 pub use uv_pep440;
-use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 pub use verbatim_url::{
-    expand_env_vars, split_scheme, strip_host, Scheme, VerbatimUrl, VerbatimUrlError,
+    expand_env_vars, looks_like_git_repository, split_scheme, strip_host, Scheme, VerbatimUrl,
+    VerbatimUrlError,
 };
 
 mod cursor;
@@ -185,8 +186,24 @@ impl<'de, T: Pep508Url> Deserialize<'de> for Requirement<T> {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
+        struct RequirementVisitor<T>(std::marker::PhantomData<T>);
+
+        impl<T: Pep508Url> serde::de::Visitor<'_> for RequirementVisitor<T> {
+            type Value = Requirement<T>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a string containing a PEP 508 requirement")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                FromStr::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(RequirementVisitor(std::marker::PhantomData))
     }
 }
 
@@ -200,36 +217,10 @@ impl<T: Pep508Url> Serialize for Requirement<T> {
     }
 }
 
-type MarkerWarning = (MarkerWarningKind, String);
-
 impl<T: Pep508Url> Requirement<T> {
     /// Returns whether the markers apply for the given environment
     pub fn evaluate_markers(&self, env: &MarkerEnvironment, extras: &[ExtraName]) -> bool {
         self.marker.evaluate(env, extras)
-    }
-
-    /// Returns whether the requirement would be satisfied, independent of environment markers, i.e.
-    /// if there is potentially an environment that could activate this requirement.
-    ///
-    /// Note that unlike [`Self::evaluate_markers`] this does not perform any checks for bogus
-    /// expressions but will simply return true. As caller you should separately perform a check
-    /// with an environment and forward all warnings.
-    pub fn evaluate_extras_and_python_version(
-        &self,
-        extras: &HashSet<ExtraName>,
-        python_versions: &[Version],
-    ) -> bool {
-        self.marker
-            .evaluate_extras_and_python_version(extras, python_versions)
-    }
-
-    /// Returns whether the markers apply for the given environment.
-    pub fn evaluate_markers_and_report(
-        &self,
-        env: &MarkerEnvironment,
-        extras: &[ExtraName],
-    ) -> (bool, Vec<MarkerWarning>) {
-        self.marker.evaluate_collect_warnings(env, extras)
     }
 
     /// Return the requirement with an additional marker added, to require the given extra.
@@ -257,12 +248,12 @@ impl<T: Pep508Url> Requirement<T> {
     }
 }
 
-/// Type to parse URLs from `name @ <url>` into. Defaults to [`url::Url`].
+/// Type to parse URLs from `name @ <url>` into. Defaults to [`Url`].
 pub trait Pep508Url: Display + Debug + Sized {
     /// String to URL parsing error
     type Err: Error + Debug;
 
-    /// Parse a url from `name @ <url>`. Defaults to [`url::Url::parse_url`].
+    /// Parse a url from `name @ <url>`. Defaults to [`Url::parse_url`].
     fn parse_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err>;
 }
 
@@ -308,7 +299,7 @@ impl<T: Pep508Url> schemars::JsonSchema for Requirement<T> {
         "Requirement".to_string()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
             metadata: Some(Box::new(schemars::schema::Metadata {
@@ -419,12 +410,9 @@ fn parse_name<T: Pep508Url>(cursor: &mut Cursor) -> Result<PackageName, Pep508Er
     // https://peps.python.org/pep-0508/#names
     // ^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$ with re.IGNORECASE
     let start = cursor.pos();
-    let mut name = String::new();
 
     if let Some((index, char)) = cursor.next() {
-        if matches!(char, 'A'..='Z' | 'a'..='z' | '0'..='9') {
-            name.push(char);
-        } else {
+        if !matches!(char, 'A'..='Z' | 'a'..='z' | '0'..='9') {
             // Check if the user added a filesystem path without a package name. pip supports this
             // in `requirements.txt`, but it doesn't adhere to the PEP 508 grammar.
             let mut clone = cursor.clone().at(start);
@@ -456,26 +444,24 @@ fn parse_name<T: Pep508Url>(cursor: &mut Cursor) -> Result<PackageName, Pep508Er
     }
 
     loop {
-        match cursor.peek() {
-            Some((index, char @ ('A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'))) => {
-                name.push(char);
-                cursor.next();
-                // [.-_] can't be the final character
-                if cursor.peek().is_none() && matches!(char, '.' | '-' | '_') {
-                    return Err(Pep508Error {
-                        message: Pep508ErrorSource::String(format!(
-                            "Package name must end with an alphanumeric character, not '{char}'"
-                        )),
-                        start: index,
-                        len: char.len_utf8(),
-                        input: cursor.to_string(),
-                    });
-                }
+        if let Some((index, char @ ('A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'))) =
+            cursor.peek()
+        {
+            cursor.next();
+            // [.-_] can't be the final character
+            if cursor.peek().is_none() && matches!(char, '.' | '-' | '_') {
+                return Err(Pep508Error {
+                    message: Pep508ErrorSource::String(format!(
+                        "Package name must end with an alphanumeric character, not `{char}`"
+                    )),
+                    start: index,
+                    len: char.len_utf8(),
+                    input: cursor.to_string(),
+                });
             }
-            Some(_) | None => {
-                return Ok(PackageName::new(name)
-                    .expect("`PackageName` validation should match PEP 508 parsing"));
-            }
+        } else {
+            let len = cursor.pos() - start;
+            return Ok(PackageName::from_str(cursor.slice(start, len)).unwrap());
         }
     }
 }
@@ -655,7 +641,8 @@ fn parse_extras_cursor<T: Pep508Url>(
 
         // Add the parsed extra
         extras.push(
-            ExtraName::new(buffer).expect("`ExtraName` validation should match PEP 508 parsing"),
+            ExtraName::from_str(&buffer)
+                .expect("`ExtraName` validation should match PEP 508 parsing"),
         );
         is_first_iteration = false;
     }
@@ -960,12 +947,12 @@ fn parse_pep508_requirement<T: Pep508Url>(
     if let Some((pos, char)) = cursor.next().filter(|(_, c)| *c != '#') {
         let message = if char == '#' {
             format!(
-                r#"Expected end of input or `;`, found `{char}`; comments must be preceded by a leading space"#
+                r"Expected end of input or `;`, found `{char}`; comments must be preceded by a leading space"
             )
         } else if marker.is_none() {
-            format!(r#"Expected end of input or `;`, found `{char}`"#)
+            format!(r"Expected end of input or `;`, found `{char}`")
         } else {
-            format!(r#"Expected end of input, found `{char}`"#)
+            format!(r"Expected end of input, found `{char}`")
         };
         return Err(Pep508Error {
             message: Pep508ErrorSource::String(message),
@@ -1058,7 +1045,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("name_"),
             @"
-        Package name must end with an alphanumeric character, not '_'
+        Package name must end with an alphanumeric character, not `_`
         name_
             ^"
         );
@@ -1094,7 +1081,7 @@ mod tests {
             marker: MarkerTree::expression(MarkerExpression::Version {
                 key: MarkerValueVersion::PythonFullVersion,
                 specifier: VersionSpecifier::from_pattern(
-                    uv_pep440::Operator::LessThan,
+                    Operator::LessThan,
                     "2.7".parse().unwrap(),
                 )
                 .unwrap(),
@@ -1358,26 +1345,23 @@ mod tests {
 
         let mut a = MarkerTree::expression(MarkerExpression::Version {
             key: MarkerValueVersion::PythonVersion,
-            specifier: VersionSpecifier::from_pattern(
-                uv_pep440::Operator::Equal,
-                "2.7".parse().unwrap(),
-            )
-            .unwrap(),
+            specifier: VersionSpecifier::from_pattern(Operator::Equal, "2.7".parse().unwrap())
+                .unwrap(),
         });
         let mut b = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::SysPlatform,
             operator: MarkerOperator::Equal,
-            value: "win32".to_string(),
+            value: arcstr::literal!("win32"),
         });
         let mut c = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::OsName,
             operator: MarkerOperator::Equal,
-            value: "linux".to_string(),
+            value: arcstr::literal!("linux"),
         });
         let d = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::ImplementationName,
             operator: MarkerOperator::Equal,
-            value: "cpython".to_string(),
+            value: arcstr::literal!("cpython"),
         });
 
         c.and(d);

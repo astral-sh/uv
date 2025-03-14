@@ -40,16 +40,16 @@ impl FlatIndex {
     ) -> Self {
         // Collect compatible distributions.
         let mut index = FxHashMap::default();
-        for (filename, file, url) in entries.entries {
-            let distributions = index.entry(filename.name().clone()).or_default();
+        for entry in entries.entries {
+            let distributions = index.entry(entry.filename.name().clone()).or_default();
             Self::add_file(
                 distributions,
-                file,
-                filename,
+                entry.file,
+                entry.filename,
                 tags,
                 hasher,
                 build_options,
-                url,
+                entry.index,
             );
         }
 
@@ -74,8 +74,13 @@ impl FlatIndex {
             DistFilename::WheelFilename(filename) => {
                 let version = filename.version.clone();
 
-                let compatibility =
-                    Self::wheel_compatibility(&filename, &file.hashes, tags, hasher, build_options);
+                let compatibility = Self::wheel_compatibility(
+                    &filename,
+                    file.hashes.as_slice(),
+                    tags,
+                    hasher,
+                    build_options,
+                );
                 let dist = RegistryBuiltWheel {
                     filename,
                     file: Box::new(file),
@@ -91,8 +96,12 @@ impl FlatIndex {
                 }
             }
             DistFilename::SourceDistFilename(filename) => {
-                let compatibility =
-                    Self::source_dist_compatibility(&filename, &file.hashes, hasher, build_options);
+                let compatibility = Self::source_dist_compatibility(
+                    &filename,
+                    file.hashes.as_slice(),
+                    hasher,
+                    build_options,
+                );
                 let dist = RegistrySourceDist {
                     name: filename.name.clone(),
                     version: filename.version.clone(),
@@ -181,7 +190,7 @@ impl FlatIndex {
         };
 
         // Break ties with the build tag.
-        let build_tag = filename.build_tag.clone();
+        let build_tag = filename.build_tag().cloned();
 
         WheelCompatibility::Compatible(hash, priority, build_tag)
     }

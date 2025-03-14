@@ -2,34 +2,52 @@ use std::collections::VecDeque;
 use std::fmt::Write;
 
 use anyhow::Result;
+use futures::StreamExt;
 use owo_colors::OwoColorize;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
 use petgraph::Direction;
 use rustc_hash::{FxHashMap, FxHashSet};
+use tokio::sync::Semaphore;
 
-use uv_cache::Cache;
-use uv_distribution_types::{Diagnostic, Name};
+use uv_cache::{Cache, Refresh};
+use uv_cache_info::Timestamp;
+use uv_client::RegistryClientBuilder;
+use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
+use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, Name};
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
+use uv_pep440::Version;
 use uv_pep508::{Requirement, VersionOrUrl};
 use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
+use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
 
+use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::operations::report_target_environment;
+use crate::commands::reporters::LatestVersionReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Display the installed packages in the current environment as a dependency tree.
 #[allow(clippy::fn_params_excessive_bools)]
-pub(crate) fn pip_tree(
+pub(crate) async fn pip_tree(
     show_version_specifiers: bool,
     depth: u8,
     prune: &[PackageName],
     package: &[PackageName],
     no_dedupe: bool,
     invert: bool,
+    outdated: bool,
+    prerelease: PrereleaseMode,
+    index_locations: IndexLocations,
+    index_strategy: IndexStrategy,
+    keyring_provider: KeyringProviderType,
+    network_settings: NetworkSettings,
+    concurrency: Concurrency,
     strict: bool,
+    exclude_newer: Option<ExcludeNewer>,
     python: Option<&str>,
     system: bool,
     cache: &Cache,
@@ -61,6 +79,70 @@ pub(crate) fn pip_tree(
     // Determine the markers to use for the resolution.
     let markers = environment.interpreter().resolver_marker_environment();
 
+    // Determine the latest version for each package.
+    let latest = if outdated && !packages.is_empty() {
+        let capabilities = IndexCapabilities::default();
+
+        // Initialize the registry client.
+        let client =
+            RegistryClientBuilder::new(cache.clone().with_refresh(Refresh::All(Timestamp::now())))
+                .native_tls(network_settings.native_tls)
+                .connectivity(network_settings.connectivity)
+                .allow_insecure_host(network_settings.allow_insecure_host.clone())
+                .index_urls(index_locations.index_urls())
+                .index_strategy(index_strategy)
+                .keyring(keyring_provider)
+                .markers(environment.interpreter().markers())
+                .platform(environment.interpreter().platform())
+                .build();
+        let download_concurrency = Semaphore::new(concurrency.downloads);
+
+        // Determine the platform tags.
+        let interpreter = environment.interpreter();
+        let tags = interpreter.tags()?;
+        let requires_python =
+            RequiresPython::greater_than_equal_version(interpreter.python_full_version());
+
+        // Initialize the client to fetch the latest version of each package.
+        let client = LatestClient {
+            client: &client,
+            capabilities: &capabilities,
+            prerelease,
+            exclude_newer,
+            tags: Some(tags),
+            requires_python: &requires_python,
+        };
+
+        let reporter = LatestVersionReporter::from(printer).with_length(packages.len() as u64);
+
+        // Fetch the latest version for each package.
+        let mut fetches = futures::stream::iter(&packages)
+            .map(|(name, ..)| async {
+                let Some(filename) = client
+                    .find_latest(name, None, &download_concurrency)
+                    .await?
+                else {
+                    return Ok(None);
+                };
+                Ok::<Option<_>, uv_client::Error>(Some((*name, filename.into_version())))
+            })
+            .buffer_unordered(concurrency.downloads);
+
+        let mut map = FxHashMap::default();
+        while let Some(entry) = fetches.next().await.transpose()? {
+            let Some((name, version)) = entry else {
+                reporter.on_fetch_progress();
+                continue;
+            };
+            reporter.on_fetch_version(name, &version);
+            map.insert(name, version);
+        }
+        reporter.on_fetch_complete();
+        map
+    } else {
+        FxHashMap::default()
+    };
+
     // Render the tree.
     let rendered_tree = DisplayDependencyGraph::new(
         depth.into(),
@@ -71,6 +153,7 @@ pub(crate) fn pip_tree(
         show_version_specifiers,
         &markers,
         &packages,
+        &latest,
     )
     .render()
     .join("\n");
@@ -112,6 +195,8 @@ pub(crate) struct DisplayDependencyGraph<'env> {
     >,
     /// The packages considered as roots of the dependency tree.
     roots: Vec<NodeIndex>,
+    /// The latest known version of each package.
+    latest: &'env FxHashMap<&'env PackageName, Version>,
     /// Maximum display depth of the dependency tree
     depth: usize,
     /// Whether to de-duplicate the displayed dependencies.
@@ -133,6 +218,7 @@ impl<'env> DisplayDependencyGraph<'env> {
         show_version_specifiers: bool,
         markers: &ResolverMarkerEnvironment,
         packages: &'env FxHashMap<&PackageName, Vec<ResolutionMetadata>>,
+        latest: &'env FxHashMap<&PackageName, Version>,
     ) -> Self {
         // Create a graph.
         let mut graph = petgraph::graph::Graph::<
@@ -258,6 +344,7 @@ impl<'env> DisplayDependencyGraph<'env> {
         Self {
             graph,
             roots,
+            latest,
             depth,
             no_dedupe,
             invert,
@@ -317,6 +404,17 @@ impl<'env> DisplayDependencyGraph<'env> {
                 };
             }
         }
+
+        // Incorporate the latest version of the package, if known.
+        let line = if let Some(version) = self
+            .latest
+            .get(package_name)
+            .filter(|&version| *version > metadata.version)
+        {
+            format!("{line} {}", format!("(latest: v{version})").bold().cyan())
+        } else {
+            line
+        };
 
         let mut dependencies = self
             .graph

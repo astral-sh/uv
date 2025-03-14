@@ -3,7 +3,7 @@ use anyhow::Context;
 use owo_colors::OwoColorize;
 use std::borrow::Cow;
 use std::io::stdout;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::{fmt::Display, fmt::Write, process::ExitCode};
 
@@ -47,14 +47,13 @@ pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 use uv_cache::Cache;
-use uv_distribution_types::{IndexCapabilities, InstalledMetadata};
-use uv_fs::Simplified;
-use uv_git::GitResolver;
+use uv_configuration::Concurrency;
+use uv_distribution_types::InstalledMetadata;
+use uv_fs::{Simplified, CWD};
 use uv_installer::compile_tree;
 use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
-use uv_resolver::InMemoryIndex;
-use uv_types::InFlight;
+use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
 pub(crate) use version::version;
 
@@ -72,6 +71,7 @@ mod project;
 mod publish;
 mod python;
 pub(crate) mod reporters;
+mod run;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod tool;
@@ -149,20 +149,27 @@ pub(super) struct DryRunEvent<T: Display> {
 /// See the `--compile` option on `pip sync` and `pip install`.
 pub(super) async fn compile_bytecode(
     venv: &PythonEnvironment,
+    concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<()> {
     let start = std::time::Instant::now();
     let mut files = 0;
     for site_packages in venv.site_packages() {
-        files += compile_tree(&site_packages, venv.python_executable(), cache.root())
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to bytecode-compile Python file in: {}",
-                    site_packages.user_display()
-                )
-            })?;
+        let site_packages = CWD.join(site_packages);
+        files += compile_tree(
+            &site_packages,
+            venv.python_executable(),
+            concurrency,
+            cache.root(),
+        )
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to bytecode-compile Python file in: {}",
+                site_packages.user_display()
+            )
+        })?;
     }
     let s = if files == 1 { "" } else { "s" };
     writeln!(
@@ -192,19 +199,6 @@ pub(super) fn human_readable_bytes(bytes: u64) -> (f32, &'static str) {
     let bytes = bytes as f32;
     let i = ((bytes.log2() / 10.0) as usize).min(UNITS.len() - 1);
     (bytes / 1024_f32.powi(i as i32), UNITS[i])
-}
-
-/// Shared state used during resolution and installation.
-#[derive(Default)]
-pub(crate) struct SharedState {
-    /// The resolved Git references.
-    pub(crate) git: GitResolver,
-    /// The fetched package versions and metadata.
-    pub(crate) index: InMemoryIndex,
-    /// The downloaded distributions.
-    pub(crate) in_flight: InFlight,
-    /// The discovered capabilities for each registry index.
-    pub(crate) capabilities: IndexCapabilities,
 }
 
 /// A multicasting writer that writes to both the standard output and an output file, if present.
@@ -247,6 +241,10 @@ impl<'a> OutputWriter<'a> {
     /// Commit the buffer to the output file.
     async fn commit(self) -> std::io::Result<()> {
         if let Some(output_file) = self.output_file {
+            if let Some(parent_dir) = output_file.parent() {
+                fs_err::create_dir_all(parent_dir)?;
+            }
+
             // If the output file is an existing symlink, write to the destination instead.
             let output_file = fs_err::read_link(output_file)
                 .map(Cow::Owned)
@@ -256,4 +254,49 @@ impl<'a> OutputWriter<'a> {
         }
         Ok(())
     }
+}
+
+/// Given a list of names, return a conjunction of the names (e.g., "Alice, Bob, and Charlie").
+pub(super) fn conjunction(names: Vec<String>) -> String {
+    let mut names = names.into_iter();
+    let first = names.next();
+    let last = names.next_back();
+    match (first, last) {
+        (Some(first), Some(last)) => {
+            let mut result = first;
+            let mut comma = false;
+            for name in names {
+                result.push_str(", ");
+                result.push_str(&name);
+                comma = true;
+            }
+            if comma {
+                result.push_str(", and ");
+            } else {
+                result.push_str(" and ");
+            }
+            result.push_str(&last);
+            result
+        }
+        (Some(first), None) => first,
+        _ => String::new(),
+    }
+}
+
+/// Capitalize the first letter of a string.
+pub(super) fn capitalize(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+    }
+}
+
+/// A Python file that may or may not include an existing PEP 723 script tag.
+#[derive(Debug)]
+pub(crate) enum ScriptPath {
+    /// The Python file already includes a PEP 723 script tag.
+    Script(Pep723Script),
+    /// The Python file does not include a PEP 723 script tag.
+    Path(PathBuf),
 }

@@ -56,12 +56,6 @@ fn transformers() -> Result<()> {
 // Source: https://github.com/konstin/warehouse/blob/baae127d90417104c8dee3fdd3855e2ba17aa428/pyproject.toml
 #[test]
 fn warehouse() -> Result<()> {
-    // This build requires running `pg_config`. We could
-    // probably stub it out, but for now, we just skip the
-    // test if we can't run `pg_config`.
-    if std::process::Command::new("pg_config").output().is_err() {
-        return Ok(());
-    }
     // Also, takes too long on non-Linux in CI.
     if !cfg!(target_os = "linux") && std::env::var_os(EnvVars::CI).is_some() {
         return Ok(());
@@ -110,18 +104,12 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
         .env(EnvVars::UV_EXCLUDE_NEWER, EXCLUDE_NEWER)
         .current_dir(context.temp_dir.path());
 
-    if cfg!(all(windows, debug_assertions)) {
-        // TODO(konstin): Reduce stack usage in debug mode enough that the tests pass with the
-        // default windows stack of 1MB
-        command.env(EnvVars::UV_STACK_SIZE, (4 * 1024 * 1024).to_string());
-    }
     let (snapshot, _) = common::run_and_format(
         &mut command,
         context.filters(),
         name,
         Some(common::WindowsFilters::Platform),
     );
-    assert_snapshot!(format!("{name}-uv-lock-output"), snapshot);
 
     let lock = context.read("uv.lock");
     insta::with_settings!({
@@ -129,6 +117,8 @@ fn lock_ecosystem_package(python_version: &str, name: &str) -> Result<()> {
     }, {
         assert_snapshot!(format!("{name}-lock-file"), lock);
     });
+
+    assert_snapshot!(format!("{name}-uv-lock-output"), snapshot);
 
     Ok(())
 }

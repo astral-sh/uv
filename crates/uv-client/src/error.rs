@@ -51,6 +51,11 @@ impl Error {
         matches!(err.kind(), std::io::ErrorKind::NotFound)
     }
 
+    /// Returns `true` if the error is due to an SSL error.
+    pub fn is_ssl(&self) -> bool {
+        matches!(&*self.kind, ErrorKind::WrappedReqwestError(.., err) if err.is_ssl())
+    }
+
     /// Returns `true` if the error is due to the server not supporting HTTP range requests.
     pub fn is_http_range_requests_unsupported(&self) -> bool {
         match &*self.kind {
@@ -91,6 +96,12 @@ impl Error {
                     // In some cases, registries (like PyPICloud) return a 403 for HEAD requests
                     // when they're not supported. Again, it's better to be lenient here.
                     if status == reqwest::StatusCode::FORBIDDEN {
+                        return true;
+                    }
+
+                    // In some cases, registries (like Alibaba Cloud) return a 400 for HEAD requests
+                    // when they're not supported. Again, it's better to be lenient here.
+                    if status == reqwest::StatusCode::BAD_REQUEST {
                         return true;
                     }
                 }
@@ -139,7 +150,7 @@ impl From<ErrorKind> for Error {
 #[derive(Debug, thiserror::Error)]
 pub enum ErrorKind {
     #[error(transparent)]
-    UrlParse(#[from] url::ParseError),
+    InvalidUrl(#[from] uv_distribution_types::ToUrlError),
 
     #[error(transparent)]
     JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
@@ -260,13 +271,9 @@ impl ErrorKind {
 pub struct WrappedReqwestError(reqwest_middleware::Error);
 
 impl WrappedReqwestError {
-    /// Check if the error chain contains a reqwest error that looks like this:
-    /// * error sending request for url (...)
-    /// * client error (Connect)
-    /// * dns error: failed to lookup address information: Name or service not known
-    /// * failed to lookup address information: Name or service not known
-    fn is_likely_offline(&self) -> bool {
-        let reqwest_err = match &self.0 {
+    /// Return the inner [`reqwest::Error`] from the error chain, if it exists.
+    fn inner(&self) -> Option<&reqwest::Error> {
+        match &self.0 {
             reqwest_middleware::Error::Reqwest(err) => Some(err),
             reqwest_middleware::Error::Middleware(err) => err.chain().find_map(|err| {
                 if let Some(err) = err.downcast_ref::<reqwest::Error>() {
@@ -279,9 +286,16 @@ impl WrappedReqwestError {
                     None
                 }
             }),
-        };
+        }
+    }
 
-        if let Some(reqwest_err) = reqwest_err {
+    /// Check if the error chain contains a `reqwest` error that looks like this:
+    /// * error sending request for url (...)
+    /// * client error (Connect)
+    /// * dns error: failed to lookup address information: Name or service not known
+    /// * failed to lookup address information: Name or service not known
+    fn is_likely_offline(&self) -> bool {
+        if let Some(reqwest_err) = self.inner() {
             if !reqwest_err.is_connect() {
                 return false;
             }
@@ -291,6 +305,26 @@ impl WrappedReqwestError {
             if std::error::Error::source(&reqwest_err)
                 .and_then(|err| err.source())
                 .is_some_and(|err| err.to_string().starts_with("dns error: "))
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Check if the error chain contains a `reqwest` error that looks like this:
+    /// * invalid peer certificate: `UnknownIssuer`
+    fn is_ssl(&self) -> bool {
+        if let Some(reqwest_err) = self.inner() {
+            if !reqwest_err.is_connect() {
+                return false;
+            }
+            // Self is "error sending request for url", the first source is "error trying to connect",
+            // the second source is "dns error". We have to check for the string because hyper errors
+            // are opaque.
+            if std::error::Error::source(&reqwest_err)
+                .and_then(|err| err.source())
+                .is_some_and(|err| err.to_string().starts_with("invalid peer certificate: "))
             {
                 return true;
             }

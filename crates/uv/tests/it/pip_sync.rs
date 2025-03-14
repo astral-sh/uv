@@ -51,12 +51,28 @@ fn missing_requirements_txt() {
 
 #[test]
 fn missing_venv() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
     let requirements = context.temp_dir.child("requirements.txt");
     requirements.write_str("anyio")?;
     fs::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
+      Caused by: Python interpreter not found at `[VENV]/[BIN]/python`
+    "###);
+
+    assert!(predicates::path::missing().eval(&context.venv));
+
+    // If not "active", we hint to create one
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove("VIRTUAL_ENV"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -360,7 +376,7 @@ fn pip_sync_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     No requirements found (hint: use `--allow-empty-requirements` to clear the environment)
     "###
     );
@@ -373,7 +389,7 @@ fn pip_sync_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     Resolved in [TIME]
     Audited in [TIME]
     "###
@@ -397,7 +413,7 @@ fn pip_sync_empty() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Requirements file requirements.txt does not contain any dependencies
+    warning: Requirements file `requirements.txt` does not contain any dependencies
     Resolved in [TIME]
     Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
@@ -700,13 +716,12 @@ fn install_git_subdirectories() -> Result<()> {
 /// Install a source distribution into a virtual environment.
 #[test]
 fn install_sdist() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source-distribution==0.0.1")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1263,7 +1278,7 @@ fn mismatched_name() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of foo was invalid:
+          hint: The structure of `foo` was invalid:
             The .dist-info directory tomli-2.0.1 does not start with the normalized package name: foo
     "###
     );
@@ -1402,14 +1417,18 @@ fn install_url_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.clean()
-        .arg("source_distribution"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("source_distribution"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 19 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
@@ -1533,13 +1552,12 @@ fn install_git_source_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, registry source distribution installs.
 #[test]
 fn install_registry_source_dist_cached() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source_distribution==0.0.1")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1562,7 +1580,6 @@ fn install_registry_source_dist_cached() -> Result<()> {
     context.reset_venv();
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1584,19 +1601,9 @@ fn install_registry_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    let filters: Vec<(&str, &str)> = if cfg!(windows) {
-        // On Windows, the number of files removed is different.
-        [("Removed 13 files", "Removed 14 files")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    } else {
-        // For some Linux distributions, like Gentoo, the number of files removed is different.
-        [("Removed 12 files", "Removed 14 files")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    };
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
     uv_snapshot!(filters, context.clean()
         .arg("source_distribution"), @r###"
     success: true
@@ -1604,12 +1611,11 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 20 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1694,14 +1700,18 @@ fn install_path_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.clean()
-        .arg("source-distribution"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("source-distribution"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 19 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
@@ -1784,23 +1794,18 @@ fn install_path_built_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    let filters = if cfg!(windows) {
-        // We do not display sizes on Windows
-        [("Removed 1 file", "Removed 1 file ([SIZE])")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    } else {
-        context.filters()
-    };
-    uv_snapshot!(filters, context.clean()
-        .arg("tomli"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("tomli"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 11 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
@@ -1833,15 +1838,15 @@ fn install_url_built_dist_cached() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl")?;
 
-    let filters = if cfg!(windows) {
-        [("warning: The package `tqdm` requires `colorama ; platform_system == 'Windows'`, but it's not installed\n", "")]
+    let context_filters = if cfg!(windows) {
+        [("warning: The package `tqdm` requires `colorama ; sys_platform == 'win32'`, but it's not installed\n", "")]
             .into_iter()
             .chain(context.filters())
             .collect()
     } else {
         context.filters()
     };
-    uv_snapshot!(filters, context.pip_sync()
+    uv_snapshot!(context_filters, context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1861,7 +1866,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     // Re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(filters, context.pip_sync()
+    uv_snapshot!(context_filters, context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1881,18 +1886,22 @@ fn install_url_built_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.clean()
-        .arg("tqdm"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context_filters.clone())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("tqdm"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 43 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
-    uv_snapshot!(filters, context.pip_sync()
+    uv_snapshot!(context_filters, context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -2247,9 +2256,7 @@ fn sync_editable() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
-        boltons==23.1.1
-        numpy==1.26.2
-            # via poetry-editable
+        anyio==3.7.0
         -e file://{poetry_editable}
         ",
         poetry_editable = poetry_editable.display()
@@ -2263,11 +2270,10 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + boltons==23.1.1
-     + numpy==1.26.2
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==3.7.0
      + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
     "###
     );
@@ -2280,8 +2286,8 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
     "###
     );
 
@@ -2295,7 +2301,7 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2345,8 +2351,8 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
     "###
     );
 
@@ -2366,7 +2372,7 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2391,7 +2397,7 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2599,7 +2605,7 @@ fn sync_editable_and_local() -> Result<()> {
 #[test]
 fn incompatible_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
-    let wheel = context.temp_dir.child("foo-1.2.3-not-compatible-wheel.whl");
+    let wheel = context.temp_dir.child("foo-1.2.3-py3-none-any.whl");
     wheel.touch()?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -2616,7 +2622,7 @@ fn incompatible_wheel() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because foo has an invalid package format and you require foo, we can conclude that your requirements are unsatisfiable.
 
-          hint: The structure of foo was invalid:
+          hint: The structure of `foo` was invalid:
             Failed to read from zip file
     "###
     );
@@ -3292,6 +3298,55 @@ fn compile() -> Result<()> {
     Ok(())
 }
 
+/// Re-install with bytecode compilation.
+#[test]
+fn recompile() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("MarkupSafe==2.1.3")?;
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + markupsafe==2.1.3
+    "###
+    );
+
+    uv_snapshot!(context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--compile")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Bytecode compiled 3 files in [TIME]
+    "###
+    );
+
+    assert!(context
+        .site_packages()
+        .join("markupsafe")
+        .join("__pycache__")
+        .join("__init__.cpython-312.pyc")
+        .exists());
+
+    context.assert_command("import markupsafe").success();
+
+    Ok(())
+}
+
 /// Raise an error when an editable's `Requires-Python` constraint is not met.
 #[test]
 fn requires_python_editable() -> Result<()> {
@@ -3326,37 +3381,6 @@ requires-python = ">=3.13"
       × No solution found when resolving dependencies:
       ╰─▶ Because the current Python version (3.12.[X]) does not satisfy Python>=3.13 and example==0.0.0 depends on Python>=3.13, we can conclude that example==0.0.0 cannot be used.
           And because only example==0.0.0 is available and you require example, we can conclude that your requirements are unsatisfiable.
-    "###
-    );
-
-    Ok(())
-}
-
-/// Install packages from an index that "doesn't support" zip file streaming (by way of using
-/// data descriptors).
-#[test]
-fn no_stream() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    // Write to a requirements file.
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt
-        .write_str("hashb_foxglove_protocolbuffers_python==25.3.0.1.20240226043130+465630478360")?;
-
-    uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .arg("requirements.txt")
-        .arg("--index-url")
-        .arg("https://buf.build/gen/python"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + hashb-foxglove-protocolbuffers-python==25.3.0.1.20240226043130+465630478360
     "###
     );
 
@@ -3615,14 +3639,13 @@ fn require_hashes_wheel_only_binary() -> Result<()> {
 /// Include the hash for _just_ the source distribution with `--no-binary`.
 #[test]
 fn require_hashes_source_no_binary() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("source-distribution==0.0.1 --hash=sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--no-binary")
         .arg(":all:")
@@ -4151,7 +4174,7 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
+      × Failed to read `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
       ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
 
           Expected:
@@ -5010,14 +5033,13 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 /// Include the hash in the URL directly.
 #[test]
 fn require_hashes_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -5038,14 +5060,13 @@ fn require_hashes_url() -> Result<()> {
 /// Include an irrelevant fragment in the URL.
 #[test]
 fn require_hashes_url_other_fragment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#foo=bar")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5063,14 +5084,13 @@ fn require_hashes_url_other_fragment() -> Result<()> {
 /// Include an invalid hash in the URL directly.
 #[test]
 fn require_hashes_url_invalid() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5096,14 +5116,13 @@ fn require_hashes_url_invalid() -> Result<()> {
 /// Ignore the (valid) hash on the fragment if (invalid) hashes are provided directly.
 #[test]
 fn require_hashes_url_ignore() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374 --hash sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5129,14 +5148,13 @@ fn require_hashes_url_ignore() -> Result<()> {
 /// Include the hash in the URL directly.
 #[test]
 fn require_hashes_url_unnamed() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -5157,13 +5175,16 @@ fn require_hashes_url_unnamed() -> Result<()> {
 /// Sync to a `--target` directory with a built distribution.
 #[test]
 fn target_built_distribution() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Install `iniconfig` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==2.0.0")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
         .arg("target"), @r###"
@@ -5172,6 +5193,7 @@ fn target_built_distribution() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5198,7 +5220,7 @@ fn target_built_distribution() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==1.1.1")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
         .arg("target"), @r###"
@@ -5207,6 +5229,7 @@ fn target_built_distribution() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -5219,7 +5242,7 @@ fn target_built_distribution() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flask")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--target")
         .arg("target"), @r###"
@@ -5228,6 +5251,7 @@ fn target_built_distribution() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -5249,13 +5273,16 @@ fn target_built_distribution() -> Result<()> {
 /// Sync to a `--target` directory with a package that requires building from source.
 #[test]
 fn target_source_distribution() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Install `iniconfig` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==2.0.0")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--no-binary")
         .arg("iniconfig")
@@ -5266,6 +5293,7 @@ fn target_source_distribution() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5298,13 +5326,16 @@ fn target_source_distribution() -> Result<()> {
 /// `--no-build-isolation`.
 #[test]
 fn target_no_build_isolation() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Install `hatchling` into the current environment.
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("flit_core")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in"), @r###"
     success: true
     exit_code: 0
@@ -5321,7 +5352,7 @@ fn target_no_build_isolation() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("wheel")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--no-build-isolation")
         .arg("--no-binary")
@@ -5333,6 +5364,7 @@ fn target_no_build_isolation() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5361,10 +5393,44 @@ fn target_no_build_isolation() -> Result<()> {
     Ok(())
 }
 
+/// Sync to a `--target` directory without a virtual environment.
+#[test]
+fn target_system() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+
+    // Install `iniconfig` to the target directory.
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("iniconfig==2.0.0")?;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.in")
+        .arg("--target")
+        .arg("target"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    // Ensure that the package is present in the target directory.
+    assert!(context.temp_dir.child("target").child("iniconfig").is_dir());
+
+    Ok(())
+}
+
 /// Sync to a `--prefix` directory.
 #[test]
 fn prefix() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
 
     // Install `iniconfig` to the target directory.
     let requirements_in = context.temp_dir.child("requirements.in");
@@ -5372,7 +5438,7 @@ fn prefix() -> Result<()> {
 
     let prefix = context.temp_dir.child("prefix");
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
         .arg(prefix.path()), @r###"
@@ -5381,6 +5447,7 @@ fn prefix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -5407,7 +5474,7 @@ fn prefix() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("iniconfig==1.1.1")?;
 
-    uv_snapshot!(context.pip_sync()
+    uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.in")
         .arg("--prefix")
         .arg(prefix.path()), @r###"
@@ -5416,6 +5483,7 @@ fn prefix() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: .venv/[BIN]/python
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]

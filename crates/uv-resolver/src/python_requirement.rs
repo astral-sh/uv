@@ -1,3 +1,5 @@
+use std::collections::Bound;
+
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
 use uv_python::{Interpreter, PythonVersion};
@@ -22,8 +24,15 @@ impl PythonRequirement {
     /// [`PythonVersion`].
     pub fn from_python_version(interpreter: &Interpreter, python_version: &PythonVersion) -> Self {
         let exact = interpreter.python_full_version().version.clone();
-        let installed = interpreter.python_full_version().version.only_release();
-        let target = python_version.python_full_version().only_release();
+        let installed = interpreter
+            .python_full_version()
+            .version
+            .only_release()
+            .without_trailing_zeros();
+        let target = python_version
+            .python_full_version()
+            .only_release()
+            .without_trailing_zeros();
         Self {
             exact,
             installed: RequiresPython::greater_than_equal_version(&installed),
@@ -43,8 +52,16 @@ impl PythonRequirement {
 
     /// Create a [`PythonRequirement`] to resolve against an [`Interpreter`].
     pub fn from_interpreter(interpreter: &Interpreter) -> Self {
-        let exact = interpreter.python_full_version().version.clone();
-        let installed = interpreter.python_full_version().version.only_release();
+        let exact = interpreter
+            .python_full_version()
+            .version
+            .clone()
+            .without_trailing_zeros();
+        let installed = interpreter
+            .python_full_version()
+            .version
+            .only_release()
+            .without_trailing_zeros();
         Self {
             exact,
             installed: RequiresPython::greater_than_equal_version(&installed),
@@ -63,8 +80,16 @@ impl PythonRequirement {
         marker_env: &MarkerEnvironment,
         requires_python: RequiresPython,
     ) -> Self {
-        let exact = marker_env.python_full_version().version.clone();
-        let installed = marker_env.python_full_version().version.only_release();
+        let exact = marker_env
+            .python_full_version()
+            .version
+            .clone()
+            .without_trailing_zeros();
+        let installed = marker_env
+            .python_full_version()
+            .version
+            .only_release()
+            .without_trailing_zeros();
         Self {
             exact,
             installed: RequiresPython::greater_than_equal_version(&installed),
@@ -75,6 +100,8 @@ impl PythonRequirement {
 
     /// Narrow the [`PythonRequirement`] to the given version, if it's stricter (i.e., greater)
     /// than the current `Requires-Python` minimum.
+    ///
+    /// Returns `None` if the given range is not narrower than the current range.
     pub fn narrow(&self, target: &RequiresPythonRange) -> Option<Self> {
         Some(Self {
             exact: self.exact.clone(),
@@ -82,6 +109,28 @@ impl PythonRequirement {
             target: self.target.narrow(target)?,
             source: self.source,
         })
+    }
+
+    /// Split the [`PythonRequirement`] at the given version.
+    ///
+    /// For example, if the current requirement is `>=3.10`, and the split point is `3.11`, then
+    /// the result will be `>=3.10 and <3.11` and `>=3.11`.
+    pub fn split(&self, at: Bound<Version>) -> Option<(Self, Self)> {
+        let (lower, upper) = self.target.split(at)?;
+        Some((
+            Self {
+                exact: self.exact.clone(),
+                installed: self.installed.clone(),
+                target: lower,
+                source: self.source,
+            },
+            Self {
+                exact: self.exact.clone(),
+                installed: self.installed.clone(),
+                target: upper,
+                source: self.source,
+            },
+        ))
     }
 
     /// Returns `true` if the minimum version of Python required by the target is greater than the

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 
 use indexmap::IndexSet;
 use petgraph::{
@@ -7,6 +8,7 @@ use petgraph::{
     Directed, Direction,
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
@@ -18,22 +20,21 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
 use uv_pypi_types::{
-    Conflicts, HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked,
+    Conflicts, HashDigests, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked,
 };
 
-use crate::graph_ops::marker_reachability;
+use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
 use crate::pins::FilePins;
 use crate::preferences::Preferences;
 use crate::redirect::url_to_precise;
 use crate::resolution::AnnotatedDist;
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolver::{Resolution, ResolutionDependencyEdge, ResolutionPackage};
+use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::{
     InMemoryIndex, MetadataResponse, Options, PythonRequirement, RequiresPython, ResolveError,
     VersionsResponse,
 };
-
-pub(crate) type MarkersForDistribution = Vec<MarkerTree>;
 
 /// The output of a successful resolution.
 ///
@@ -42,12 +43,12 @@ pub(crate) type MarkersForDistribution = Vec<MarkerTree>;
 #[derive(Debug)]
 pub struct ResolverOutput {
     /// The underlying graph.
-    pub(crate) graph: Graph<ResolutionGraphNode, MarkerTree, Directed>,
+    pub(crate) graph: Graph<ResolutionGraphNode, UniversalMarker, Directed>,
     /// The range of supported Python versions.
     pub(crate) requires_python: RequiresPython,
     /// If the resolution had non-identical forks, store the forks in the lockfile so we can
     /// recreate them in subsequent resolutions.
-    pub(crate) fork_markers: Vec<MarkerTree>,
+    pub(crate) fork_markers: Vec<UniversalMarker>,
     /// Any diagnostics that were encountered while building the graph.
     pub(crate) diagnostics: Vec<ResolutionDiagnostic>,
     /// The requirements that were used to build the graph.
@@ -67,10 +68,37 @@ pub(crate) enum ResolutionGraphNode {
 }
 
 impl ResolutionGraphNode {
-    pub(crate) fn marker(&self) -> &MarkerTree {
+    pub(crate) fn marker(&self) -> &UniversalMarker {
         match self {
-            ResolutionGraphNode::Root => &MarkerTree::TRUE,
+            ResolutionGraphNode::Root => &UniversalMarker::TRUE,
             ResolutionGraphNode::Dist(dist) => &dist.marker,
+        }
+    }
+
+    pub(crate) fn package_extra_names(&self) -> Option<(&PackageName, &ExtraName)> {
+        match *self {
+            ResolutionGraphNode::Root => None,
+            ResolutionGraphNode::Dist(ref dist) => {
+                let extra = dist.extra.as_ref()?;
+                Some((&dist.name, extra))
+            }
+        }
+    }
+
+    pub(crate) fn package_group_names(&self) -> Option<(&PackageName, &GroupName)> {
+        match *self {
+            ResolutionGraphNode::Root => None,
+            ResolutionGraphNode::Dist(ref dist) => {
+                let group = dist.dev.as_ref()?;
+                Some((&dist.name, group))
+            }
+        }
+    }
+
+    pub(crate) fn package_name(&self) -> Option<&PackageName> {
+        match *self {
+            ResolutionGraphNode::Root => None,
+            ResolutionGraphNode::Dist(ref dist) => Some(&dist.name),
         }
     }
 }
@@ -84,7 +112,7 @@ impl Display for ResolutionGraphNode {
     }
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 struct PackageRef<'a> {
     package_name: &'a PackageName,
     version: &'a Version,
@@ -110,7 +138,7 @@ impl ResolverOutput {
         options: Options,
     ) -> Result<Self, ResolveError> {
         let size_guess = resolutions[0].nodes.len();
-        let mut graph: Graph<ResolutionGraphNode, MarkerTree, Directed> =
+        let mut graph: Graph<ResolutionGraphNode, UniversalMarker, Directed> =
             Graph::with_capacity(size_guess, size_guess);
         let mut inverse: FxHashMap<PackageRef, NodeIndex<u32>> =
             FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
@@ -119,24 +147,10 @@ impl ResolverOutput {
         // Add the root node.
         let root_index = graph.add_node(ResolutionGraphNode::Root);
 
-        let mut package_markers: FxHashMap<PackageName, MarkersForDistribution> =
-            FxHashMap::default();
-
         let mut seen = FxHashSet::default();
         for resolution in resolutions {
             // Add every package to the graph.
             for (package, version) in &resolution.nodes {
-                if package.is_base() {
-                    // For packages with diverging versions, store which version comes from which
-                    // fork.
-                    if let Some(markers) = resolution.env.try_markers() {
-                        package_markers
-                            .entry(package.name.clone())
-                            .or_default()
-                            .push(markers.clone());
-                    }
-                }
-
                 if !seen.insert((package, version)) {
                     // Insert each node only once.
                     continue;
@@ -157,72 +171,63 @@ impl ResolverOutput {
 
         let mut seen = FxHashSet::default();
         for resolution in resolutions {
-            let marker = resolution.env.try_markers().cloned().unwrap_or_default();
+            let marker = resolution.env.try_universal_markers().unwrap_or_default();
 
             // Add every edge to the graph, propagating the marker for the current fork, if
             // necessary.
             for edge in &resolution.edges {
-                if !seen.insert((edge, marker.clone())) {
+                if !seen.insert((edge, marker)) {
                     // Insert each node only once.
                     continue;
                 }
 
-                Self::add_edge(&mut graph, &mut inverse, root_index, edge, marker.clone());
+                Self::add_edge(&mut graph, &mut inverse, root_index, edge, marker);
             }
         }
 
         // Extract the `Requires-Python` range, if provided.
         let requires_python = python.target().clone();
 
-        let fork_markers = if let [resolution] = resolutions {
+        let fork_markers: Vec<UniversalMarker> = if let [resolution] = resolutions {
+            // In the case of a singleton marker, we only include it if it's not
+            // always true. Otherwise, we keep our `fork_markers` empty as there
+            // are no forks.
             resolution
                 .env
-                .try_markers()
-                .map(|_| {
-                    resolutions
-                        .iter()
-                        .map(|resolution| {
-                            resolution
-                                .env
-                                .try_markers()
-                                .expect("A non-forking resolution exists in forking mode")
-                                .clone()
-                        })
-                        // Any unsatisfiable forks were skipped.
-                        .filter(|fork| !fork.is_false())
-                        .collect()
-                })
-                .unwrap_or_else(Vec::new)
+                .try_universal_markers()
+                .into_iter()
+                .filter(|marker| !marker.is_true())
+                .collect()
         } else {
             resolutions
                 .iter()
-                .map(|resolution| {
-                    resolution
-                        .env
-                        .try_markers()
-                        .cloned()
-                        .unwrap_or(MarkerTree::TRUE)
-                })
-                // Any unsatisfiable forks were skipped.
-                .filter(|fork| !fork.is_false())
+                .map(|resolution| resolution.env.try_universal_markers().unwrap_or_default())
                 .collect()
         };
 
         // Compute and apply the marker reachability.
         let mut reachability = marker_reachability(&graph, &fork_markers);
 
-        // Apply the reachability to the graph.
+        // Apply the reachability to the graph and imbibe world
+        // knowledge about conflicts.
+        let conflict_marker = ConflictMarker::from_conflicts(conflicts);
         for index in graph.node_indices() {
             if let ResolutionGraphNode::Dist(dist) = &mut graph[index] {
                 dist.marker = reachability.remove(&index).unwrap_or_default();
+                dist.marker.imbibe(conflict_marker);
             }
         }
+        for weight in graph.edge_weights_mut() {
+            weight.imbibe(conflict_marker);
+        }
+
+        simplify_conflict_markers(conflicts, &mut graph);
 
         // Discard any unreachable nodes.
         graph.retain_nodes(|graph, node| !graph[node].marker().is_false());
 
         if matches!(resolution_strategy, ResolutionStrategy::Lowest) {
-            report_missing_lower_bounds(&graph, &mut diagnostics);
+            report_missing_lower_bounds(&graph, &mut diagnostics, constraints, overrides);
         }
 
         let output = Self {
@@ -247,6 +252,9 @@ impl ResolverOutput {
         // the same time. At which point, uv will report an error,
         // thereby sidestepping the possibility of installing different
         // versions of the same package into the same virtualenv. ---AG
+        //
+        // FIXME: When `UniversalMarker` supports extras/groups, we can
+        // re-enable this.
         if conflicts.is_empty() {
             #[allow(unused_mut, reason = "Used in debug_assertions below")]
             let mut conflicting = output.find_conflicting_distributions();
@@ -275,11 +283,11 @@ impl ResolverOutput {
     }
 
     fn add_edge(
-        graph: &mut Graph<ResolutionGraphNode, MarkerTree>,
+        graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
         inverse: &mut FxHashMap<PackageRef<'_>, NodeIndex>,
         root_index: NodeIndex,
         edge: &ResolutionDependencyEdge,
-        marker: MarkerTree,
+        marker: UniversalMarker,
     ) {
         let from_index = edge.from.as_ref().map_or(root_index, |from| {
             inverse[&PackageRef {
@@ -301,25 +309,25 @@ impl ResolverOutput {
         }];
 
         let edge_marker = {
-            let mut edge_marker = edge.marker.clone();
+            let mut edge_marker = edge.universal_marker();
             edge_marker.and(marker);
             edge_marker
         };
 
-        if let Some(marker) = graph
+        if let Some(weight) = graph
             .find_edge(from_index, to_index)
             .and_then(|edge| graph.edge_weight_mut(edge))
         {
             // If either the existing marker or new marker is `true`, then the dependency is
             // included unconditionally, and so the combined marker is `true`.
-            marker.or(edge_marker);
+            weight.or(edge_marker);
         } else {
             graph.update_edge(from_index, to_index, edge_marker);
         }
     }
 
     fn add_version<'a>(
-        graph: &mut Graph<ResolutionGraphNode, MarkerTree>,
+        graph: &mut Graph<ResolutionGraphNode, UniversalMarker>,
         inverse: &mut FxHashMap<PackageRef<'a>, NodeIndex>,
         diagnostics: &mut Vec<ResolutionDiagnostic>,
         preferences: &Preferences,
@@ -380,7 +388,7 @@ impl ResolverOutput {
             dev: dev.clone(),
             hashes,
             metadata,
-            marker: MarkerTree::TRUE,
+            marker: UniversalMarker::TRUE,
         }));
         inverse.insert(
             PackageRef {
@@ -406,7 +414,7 @@ impl ResolverOutput {
         preferences: &Preferences,
         in_memory: &InMemoryIndex,
         git: &GitResolver,
-    ) -> Result<(ResolvedDist, Vec<HashDigest>, Option<Metadata>), ResolveError> {
+    ) -> Result<(ResolvedDist, HashDigests, Option<Metadata>), ResolveError> {
         Ok(if let Some(url) = url {
             // Create the distribution.
             let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
@@ -442,8 +450,8 @@ impl ResolverOutput {
 
             (
                 ResolvedDist::Installable {
-                    dist,
-                    version: version.clone(),
+                    dist: Arc::new(dist),
+                    version: Some(version.clone()),
                 },
                 hashes,
                 Some(metadata),
@@ -468,7 +476,7 @@ impl ResolverOutput {
                 Some(Yanked::Reason(reason)) => {
                     diagnostics.push(ResolutionDiagnostic::YankedVersion {
                         dist: dist.clone(),
-                        reason: Some(reason.clone()),
+                        reason: Some(reason.to_string()),
                     });
                 }
             }
@@ -512,11 +520,11 @@ impl ResolverOutput {
         version: &Version,
         preferences: &Preferences,
         in_memory: &InMemoryIndex,
-    ) -> Vec<HashDigest> {
+    ) -> HashDigests {
         // 1. Look for hashes from the lockfile.
         if let Some(digests) = preferences.match_hashes(name, version) {
             if !digests.is_empty() {
-                return digests.to_vec();
+                return HashDigests::from(digests);
             }
         }
 
@@ -533,31 +541,53 @@ impl ResolverOutput {
 
         // 3. Look for hashes from the registry, which are served at the package level.
         if url.is_none() {
-            let versions_response = if let Some(index) = index {
-                in_memory.explicit().get(&(name.clone(), index.clone()))
-            } else {
-                in_memory.implicit().get(name)
-            };
+            // Query the implicit and explicit indexes (lazily) for the hashes.
+            let implicit_response = in_memory.implicit().get(name);
+            let mut explicit_response = None;
 
-            if let Some(versions_response) = versions_response {
-                if let VersionsResponse::Found(ref version_maps) = *versions_response {
-                    if let Some(digests) = version_maps
-                        .iter()
-                        .find_map(|version_map| version_map.hashes(version))
-                        .map(|mut digests| {
-                            digests.sort_unstable();
-                            digests
-                        })
-                    {
-                        if !digests.is_empty() {
-                            return digests;
-                        }
+            // Search in the implicit indexes.
+            let hashes = implicit_response
+                .as_ref()
+                .and_then(|response| {
+                    if let VersionsResponse::Found(version_maps) = &**response {
+                        Some(version_maps)
+                    } else {
+                        None
                     }
+                })
+                .into_iter()
+                .flatten()
+                .filter(|version_map| version_map.index() == index)
+                .find_map(|version_map| version_map.hashes(version))
+                .or_else(|| {
+                    // Search in the explicit indexes.
+                    explicit_response = index
+                        .and_then(|index| in_memory.explicit().get(&(name.clone(), index.clone())));
+                    explicit_response
+                        .as_ref()
+                        .and_then(|response| {
+                            if let VersionsResponse::Found(version_maps) = &**response {
+                                Some(version_maps)
+                            } else {
+                                None
+                            }
+                        })
+                        .into_iter()
+                        .flatten()
+                        .filter(|version_map| version_map.index() == index)
+                        .find_map(|version_map| version_map.hashes(version))
+                });
+
+            if let Some(hashes) = hashes {
+                let mut digests = HashDigests::from(hashes);
+                digests.sort_unstable();
+                if !digests.is_empty() {
+                    return digests;
                 }
             }
         }
 
-        vec![]
+        HashDigests::empty()
     }
 
     /// Returns an iterator over the distinct packages in the graph.
@@ -616,7 +646,8 @@ impl ResolverOutput {
         marker_env: &MarkerEnvironment,
     ) -> Result<MarkerTree, Box<ParsedUrlError>> {
         use uv_pep508::{
-            MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString, MarkerValueVersion,
+            CanonicalMarkerValueString, CanonicalMarkerValueVersion, MarkerExpression,
+            MarkerOperator, MarkerTree,
         };
 
         /// A subset of the possible marker values.
@@ -626,37 +657,37 @@ impl ResolverOutput {
         /// values based on the current marker environment.
         #[derive(Debug, Eq, Hash, PartialEq)]
         enum MarkerParam {
-            Version(MarkerValueVersion),
-            String(MarkerValueString),
+            Version(CanonicalMarkerValueVersion),
+            String(CanonicalMarkerValueString),
         }
 
         /// Add all marker parameters from the given tree to the given set.
-        fn add_marker_params_from_tree(marker_tree: &MarkerTree, set: &mut IndexSet<MarkerParam>) {
+        fn add_marker_params_from_tree(marker_tree: MarkerTree, set: &mut IndexSet<MarkerParam>) {
             match marker_tree.kind() {
                 MarkerTreeKind::True => {}
                 MarkerTreeKind::False => {}
                 MarkerTreeKind::Version(marker) => {
                     set.insert(MarkerParam::Version(marker.key()));
                     for (_, tree) in marker.edges() {
-                        add_marker_params_from_tree(&tree, set);
+                        add_marker_params_from_tree(tree, set);
                     }
                 }
                 MarkerTreeKind::String(marker) => {
                     set.insert(MarkerParam::String(marker.key()));
                     for (_, tree) in marker.children() {
-                        add_marker_params_from_tree(&tree, set);
+                        add_marker_params_from_tree(tree, set);
                     }
                 }
                 MarkerTreeKind::In(marker) => {
                     set.insert(MarkerParam::String(marker.key()));
                     for (_, tree) in marker.children() {
-                        add_marker_params_from_tree(&tree, set);
+                        add_marker_params_from_tree(tree, set);
                     }
                 }
                 MarkerTreeKind::Contains(marker) => {
                     set.insert(MarkerParam::String(marker.key()));
                     for (_, tree) in marker.children() {
-                        add_marker_params_from_tree(&tree, set);
+                        add_marker_params_from_tree(tree, set);
                     }
                 }
                 // We specifically don't care about these for the
@@ -666,7 +697,7 @@ impl ResolverOutput {
                 // interested in which markers are used.
                 MarkerTreeKind::Extra(marker) => {
                     for (_, tree) in marker.children() {
-                        add_marker_params_from_tree(&tree, set);
+                        add_marker_params_from_tree(tree, set);
                     }
                 }
             }
@@ -697,7 +728,7 @@ impl ResolverOutput {
                 .constraints
                 .apply(self.overrides.apply(archive.metadata.requires_dist.iter()))
             {
-                add_marker_params_from_tree(&req.marker, &mut seen_marker_values);
+                add_marker_params_from_tree(req.marker, &mut seen_marker_values);
             }
         }
 
@@ -706,7 +737,7 @@ impl ResolverOutput {
             .constraints
             .apply(self.overrides.apply(self.requirements.iter()))
         {
-            add_marker_params_from_tree(&direct_req.marker, &mut seen_marker_values);
+            add_marker_params_from_tree(direct_req.marker, &mut seen_marker_values);
         }
 
         // Generate the final marker expression as a conjunction of
@@ -717,16 +748,16 @@ impl ResolverOutput {
                 MarkerParam::Version(value_version) => {
                     let from_env = marker_env.get_version(value_version);
                     MarkerExpression::Version {
-                        key: value_version,
+                        key: value_version.into(),
                         specifier: VersionSpecifier::equals_version(from_env.clone()),
                     }
                 }
                 MarkerParam::String(value_string) => {
                     let from_env = marker_env.get_string(value_string);
                     MarkerExpression::String {
-                        key: value_string,
+                        key: value_string.into(),
                         operator: MarkerOperator::Equal,
-                        value: from_env.to_string(),
+                        value: from_env.into(),
                     }
                 }
             };
@@ -744,7 +775,7 @@ impl ResolverOutput {
     /// an installation in that marker environment could wind up trying to
     /// install different versions of the same package, which is not allowed.
     fn find_conflicting_distributions(&self) -> Vec<ConflictingDistributionError> {
-        let mut name_to_markers: BTreeMap<&PackageName, Vec<(&Version, &MarkerTree)>> =
+        let mut name_to_markers: BTreeMap<&PackageName, Vec<(&Version, &UniversalMarker)>> =
             BTreeMap::new();
         for node in self.graph.node_weights() {
             let annotated_dist = match node {
@@ -758,8 +789,8 @@ impl ResolverOutput {
         }
         let mut dupes = vec![];
         for (name, marker_trees) in name_to_markers {
-            for (i, (version1, marker1)) in marker_trees.iter().enumerate() {
-                for (version2, marker2) in &marker_trees[i + 1..] {
+            for (i, (version1, &marker1)) in marker_trees.iter().enumerate() {
+                for (version2, &marker2) in &marker_trees[i + 1..] {
                     if version1 == version2 {
                         continue;
                     }
@@ -768,8 +799,8 @@ impl ResolverOutput {
                             name: name.clone(),
                             version1: (*version1).clone(),
                             version2: (*version2).clone(),
-                            marker1: (*marker1).clone(),
-                            marker2: (*marker2).clone(),
+                            marker1,
+                            marker2,
                         });
                     }
                 }
@@ -790,8 +821,8 @@ pub struct ConflictingDistributionError {
     name: PackageName,
     version1: Version,
     version2: Version,
-    marker1: MarkerTree,
-    marker2: MarkerTree,
+    marker1: UniversalMarker,
+    marker2: UniversalMarker,
 }
 
 impl std::error::Error for ConflictingDistributionError {}
@@ -865,7 +896,11 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
         // Re-add the edges to the reduced graph.
         for edge in graph.edge_indices() {
             let (source, target) = graph.edge_endpoints(edge).unwrap();
-            let marker = graph[edge].clone();
+            // OK to ignore conflicting marker because we've asserted
+            // above that we aren't in universal mode. If we aren't in
+            // universal mode, then there can be no conflicts since
+            // conflicts imply forks and forks imply universal mode.
+            let marker = graph[edge].pep508();
 
             match (&graph[source], &graph[target]) {
                 (ResolutionGraphNode::Root, ResolutionGraphNode::Dist(target_dist)) => {
@@ -901,22 +936,17 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
 
 /// Find any packages that don't have any lower bound on them when in resolution-lowest mode.
 fn report_missing_lower_bounds(
-    graph: &Graph<ResolutionGraphNode, MarkerTree>,
+    graph: &Graph<ResolutionGraphNode, UniversalMarker>,
     diagnostics: &mut Vec<ResolutionDiagnostic>,
+    constraints: &Constraints,
+    overrides: &Overrides,
 ) {
     for node_index in graph.node_indices() {
         let ResolutionGraphNode::Dist(dist) = graph.node_weight(node_index).unwrap() else {
             // Ignore the root package.
             continue;
         };
-        if dist.dev.is_some() {
-            // TODO(konsti): Dev dependencies are modelled incorrectly in the graph. There should
-            // be an edge from root to project-with-dev, just like to project-with-extra, but
-            // currently there is only an edge from project to to project-with-dev that we then
-            // have to drop.
-            continue;
-        }
-        if !has_lower_bound(node_index, dist.name(), graph) {
+        if !has_lower_bound(node_index, dist.name(), graph, constraints, overrides) {
             diagnostics.push(ResolutionDiagnostic::MissingLowerBound {
                 package_name: dist.name().clone(),
             });
@@ -928,7 +958,9 @@ fn report_missing_lower_bounds(
 fn has_lower_bound(
     node_index: NodeIndex,
     package_name: &PackageName,
-    graph: &Graph<ResolutionGraphNode, MarkerTree>,
+    graph: &Graph<ResolutionGraphNode, UniversalMarker>,
+    constraints: &Constraints,
+    overrides: &Overrides,
 ) -> bool {
     for neighbor_index in graph.neighbors_directed(node_index, Direction::Incoming) {
         let neighbor_dist = match graph.node_weight(neighbor_index).unwrap() {
@@ -955,7 +987,10 @@ fn has_lower_bound(
         for requirement in metadata
             .requires_dist
             .iter()
+            // These bounds sources are missing from the graph.
             .chain(metadata.dependency_groups.values().flatten())
+            .chain(constraints.requirements())
+            .chain(overrides.requirements())
         {
             if requirement.name != *package_name {
                 continue;

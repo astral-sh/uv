@@ -1,13 +1,13 @@
+use arcstr::ArcStr;
 use std::str::FromStr;
-
 use uv_normalize::ExtraName;
 use uv_pep440::{Version, VersionPattern, VersionSpecifier};
 
 use crate::cursor::Cursor;
 use crate::marker::MarkerValueExtra;
 use crate::{
-    ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueVersion,
-    MarkerWarningKind, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
+    ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
+    MarkerValueVersion, MarkerWarningKind, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
 };
 
 /// ```text
@@ -72,6 +72,7 @@ fn parse_marker_operator<T: Pep508Url>(
 /// '`implementation_version`', 'extra'
 pub(crate) fn parse_marker_value<T: Pep508Url>(
     cursor: &mut Cursor,
+    reporter: &mut impl Reporter,
 ) -> Result<MarkerValue, Pep508Error<T>> {
     // > User supplied constants are always encoded as strings with either ' or " quote marks. Note
     // > that backslash escapes are not defined, but existing implementations do support them. They
@@ -91,24 +92,70 @@ pub(crate) fn parse_marker_value<T: Pep508Url>(
         Some((start_pos, quotation_mark @ ('"' | '\''))) => {
             cursor.next();
             let (start, len) = cursor.take_while(|c| c != quotation_mark);
-            let value = cursor.slice(start, len).to_string();
+            let value = ArcStr::from(cursor.slice(start, len));
             cursor.next_expect_char(quotation_mark, start_pos)?;
             Ok(MarkerValue::QuotedString(value))
         }
         // ... or it can be a keyword
         Some(_) => {
             let (start, len) = cursor.take_while(|char| {
-                !char.is_whitespace() && !['>', '=', '<', '!', '~', ')'].contains(&char)
+                !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')')
             });
             let key = cursor.slice(start, len);
-            MarkerValue::from_str(key).map_err(|_| Pep508Error {
-                message: Pep508ErrorSource::String(format!(
-                    "Expected a quoted string or a valid marker name, found `{key}`"
-                )),
-                start,
-                len,
-                input: cursor.to_string(),
-            })
+            MarkerValue::from_str(key)
+                .map_err(|_| Pep508Error {
+                    message: Pep508ErrorSource::String(format!(
+                        "Expected a quoted string or a valid marker name, found `{key}`"
+                    )),
+                    start,
+                    len,
+                    input: cursor.to_string(),
+                })
+                .inspect(|value| match value {
+                    MarkerValue::MarkerEnvString(MarkerValueString::OsNameDeprecated) => {
+                        reporter.report(
+                            MarkerWarningKind::DeprecatedMarkerName,
+                            "os.name is deprecated in favor of os_name".to_string(),
+                        );
+                    }
+                    MarkerValue::MarkerEnvString(MarkerValueString::PlatformMachineDeprecated) => {
+                        reporter.report(
+                            MarkerWarningKind::DeprecatedMarkerName,
+                            "platform.machine is deprecated in favor of platform_machine".to_string(),
+                        );
+                    }
+                    MarkerValue::MarkerEnvString(
+                        MarkerValueString::PlatformPythonImplementationDeprecated,
+                    ) => {
+                        reporter.report(
+                            MarkerWarningKind::DeprecatedMarkerName,
+                            "platform.python_implementation is deprecated in favor of platform_python_implementation".to_string(),
+                        );
+                    }
+                    MarkerValue::MarkerEnvString(
+                        MarkerValueString::PythonImplementationDeprecated,
+                    ) => {
+                        reporter.report(
+                            MarkerWarningKind::DeprecatedMarkerName,
+                            "python_implementation is deprecated in favor of platform_python_implementation"
+                                .to_string(),
+                        );
+                    }
+                    MarkerValue::MarkerEnvString(MarkerValueString::PlatformVersionDeprecated) => {
+                        reporter.report(
+                            MarkerWarningKind::DeprecatedMarkerName,
+                            "platform.version is deprecated in favor of platform_version"
+                                .to_string(),
+                        );
+                    }
+                    MarkerValue::MarkerEnvString(MarkerValueString::SysPlatformDeprecated) => {
+                        reporter.report(
+                            MarkerWarningKind::DeprecatedMarkerName,
+                            "sys.platform is deprecated in favor of sys_platform".to_string(),
+                        );
+                    }
+                    _ => {}
+                })
         }
     }
 }
@@ -121,14 +168,14 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerExpression>, Pep508Error<T>> {
     cursor.eat_whitespace();
-    let l_value = parse_marker_value(cursor)?;
+    let l_value = parse_marker_value(cursor, reporter)?;
     cursor.eat_whitespace();
     // "not in" and "in" must be preceded by whitespace. We must already have matched a whitespace
     // when we're here because other `parse_marker_key` would have pulled the characters in and
     // errored
     let operator = parse_marker_operator(cursor)?;
     cursor.eat_whitespace();
-    let r_value = parse_marker_value(cursor)?;
+    let r_value = parse_marker_value(cursor, reporter)?;
 
     // Convert a `<marker_value> <marker_op> <marker_value>` expression into its
     // typed equivalent.

@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.39/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/HEAD/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -50,7 +50,7 @@ fn command(context: &TestContext) -> Command {
         .arg(packse_index_url())
         .arg("--find-links")
         .arg(build_vendor_links_url());
-    context.add_shared_args(&mut command, true);
+    context.add_shared_options(&mut command, true);
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command
 }
@@ -334,10 +334,11 @@ fn dependency_excludes_non_contiguous_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-a are available:
+      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
-              package-a>2.0.0,<=3.0.0
-          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
+              package-a>2.0.0
+          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+          And because only package-a<=3.0.0 is available, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
           Because only the following versions of package-c are available:
               package-c==1.0.0
@@ -445,10 +446,11 @@ fn dependency_excludes_range_of_compatible_versions() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only the following versions of package-a are available:
+      ╰─▶ Because package-a==1.0.0 depends on package-b==1.0.0 and only the following versions of package-a are available:
               package-a==1.0.0
-              package-a>2.0.0,<=3.0.0
-          and package-a==1.0.0 depends on package-b==1.0.0, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
+              package-a>2.0.0
+          we can conclude that package-a<2.0.0 depends on package-b==1.0.0.
+          And because only package-a<=3.0.0 is available, we can conclude that package-a<2.0.0 depends on package-b==1.0.0. (1)
 
           Because only the following versions of package-c are available:
               package-c==1.0.0
@@ -834,8 +836,8 @@ fn extra_incompatible_with_extra() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a[extra-c]==1.0.0 is available and package-a[extra-c]==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a[extra-c] depend on package-b==2.0.0.
-          And because package-a[extra-b]==1.0.0 depends on package-b==1.0.0 and only package-a[extra-b]==1.0.0 is available, we can conclude that all versions of package-a[extra-b] and all versions of package-a[extra-c] are incompatible.
+      ╰─▶ Because only package-a[extra-b]==1.0.0 is available and package-a[extra-b]==1.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-a[extra-b] depend on package-b==1.0.0.
+          And because package-a[extra-c]==1.0.0 depends on package-b==2.0.0 and only package-a[extra-c]==1.0.0 is available, we can conclude that all versions of package-a[extra-b] and all versions of package-a[extra-c] are incompatible.
           And because you require package-a[extra-b] and package-a[extra-c], we can conclude that your requirements are unsatisfiable.
     "###);
 
@@ -2718,7 +2720,7 @@ fn package_only_prereleases_in_range() {
       × No solution found when resolving dependencies:
       ╰─▶ Because only package-a<0.1.0 is available and you require package-a>0.1.0, we can conclude that your requirements are unsatisfiable.
 
-          hint: Pre-releases are available for package-a in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+          hint: Pre-releases are available for `package-a` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);
 
     // Since there are stable versions of `a` available, prerelease versions should not be selected without explicit opt-in.
@@ -3021,7 +3023,8 @@ fn package_prereleases_global_boundary() {
 /// │   └── python3.8
 /// ├── root
 /// │   └── requires a<0.2.0a2
-/// │       └── satisfied by a-0.1.0
+/// │       ├── satisfied by a-0.1.0
+/// │       └── satisfied by a-0.2.0a1
 /// └── a
 ///     ├── a-0.1.0
 ///     ├── a-0.2.0
@@ -3162,7 +3165,8 @@ fn requires_package_prerelease_and_final_any() {
 /// │   ├── requires a
 /// │   │   └── satisfied by a-0.1.0
 /// │   └── requires b>0.0.0a1
-/// │       └── satisfied by b-0.1.0
+/// │       ├── satisfied by b-0.1.0
+/// │       └── satisfied by b-1.0.0a1
 /// ├── a
 /// │   └── a-0.1.0
 /// │       └── requires b>0.1
@@ -3250,7 +3254,7 @@ fn transitive_package_only_prereleases_in_range() {
       ╰─▶ Because only package-b<0.1 is available and package-a==0.1.0 depends on package-b>0.1, we can conclude that package-a==0.1.0 cannot be used.
           And because only package-a==0.1.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
 
-          hint: Pre-releases are available for package-b in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+          hint: Pre-releases are available for `package-b` in the requested range (e.g., 1.0.0a1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);
 
     // Since there are stable versions of `b` available, the prerelease version should not be selected without explicit opt-in. The available version is excluded by the range requested by the user.
@@ -3329,7 +3333,15 @@ fn transitive_package_only_prereleases() {
 /// ├── a
 /// │   └── a-1.0.0
 /// │       └── requires c!=2.0.0a5,!=2.0.0a6,!=2.0.0a7,!=2.0.0b1,<2.0.0b5,>1.0.0
-/// │           └── unsatisfied: no matching version
+/// │           ├── satisfied by c-2.0.0a1
+/// │           ├── satisfied by c-2.0.0a2
+/// │           ├── satisfied by c-2.0.0a3
+/// │           ├── satisfied by c-2.0.0a4
+/// │           ├── satisfied by c-2.0.0a8
+/// │           ├── satisfied by c-2.0.0a9
+/// │           ├── satisfied by c-2.0.0b2
+/// │           ├── satisfied by c-2.0.0b3
+/// │           └── satisfied by c-2.0.0b4
 /// ├── b
 /// │   └── b-1.0.0
 /// │       └── requires c<=3.0.0,>=1.0.0
@@ -3388,7 +3400,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions_holes() {
           we can conclude that package-a==1.0.0 cannot be used.
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
 
-          hint: package-c was requested with a pre-release marker (e.g., all of:
+          hint: `package-c` was requested with a pre-release marker (e.g., all of:
               package-c>1.0.0,<2.0.0a5
               package-c>2.0.0a7,<2.0.0b1
               package-c>2.0.0b1,<2.0.0b5
@@ -3482,7 +3494,7 @@ fn transitive_prerelease_and_stable_dependency_many_versions() {
           And because package-b==1.0.0 depends on package-c and only package-b==1.0.0 is available, we can conclude that all versions of package-a and all versions of package-b are incompatible.
           And because you require package-a and package-b, we can conclude that your requirements are unsatisfiable.
 
-          hint: package-c was requested with a pre-release marker (e.g., package-c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+          hint: `package-c` was requested with a pre-release marker (e.g., package-c>=2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
@@ -3618,7 +3630,7 @@ fn transitive_prerelease_and_stable_dependency() {
       ╰─▶ Because there is no version of package-c==2.0.0b1 and package-a==1.0.0 depends on package-c==2.0.0b1, we can conclude that package-a==1.0.0 cannot be used.
           And because only package-a==1.0.0 is available and you require package-a, we can conclude that your requirements are unsatisfiable.
 
-          hint: package-c was requested with a pre-release marker (e.g., package-c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+          hint: `package-c` was requested with a pre-release marker (e.g., package-c==2.0.0b1), but pre-releases weren't enabled (try: `--prerelease=allow`)
     "###);
 
     // Since the user did not explicitly opt-in to a prerelease, it cannot be selected.
@@ -3722,19 +3734,14 @@ fn python_greater_than_current_excluded() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10,<3.11 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that all of:
-              Python>=3.10,<3.11
-              Python>=3.12
-           are incompatible.
-          And because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12, we can conclude that Python>=3.10 is incompatible.
-          And because package-a==2.0.0 depends on Python>=3.10 and only the following versions of package-a are available:
+      ╰─▶ Because the current Python version (3.9.[X]) does not satisfy Python>=3.10 and package-a==2.0.0 depends on Python>=3.10, we can conclude that package-a==2.0.0 cannot be used.
+          And because only the following versions of package-a are available:
               package-a<=2.0.0
               package-a==3.0.0
               package-a==4.0.0
           we can conclude that package-a>=2.0.0,<3.0.0 cannot be used. (1)
 
-          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11,<3.12 and the current Python version (3.9.[X]) does not satisfy Python>=3.12, we can conclude that Python>=3.11 is incompatible.
-          And because package-a==3.0.0 depends on Python>=3.11, we can conclude that package-a==3.0.0 cannot be used.
+          Because the current Python version (3.9.[X]) does not satisfy Python>=3.11 and package-a==3.0.0 depends on Python>=3.11, we can conclude that package-a==3.0.0 cannot be used.
           And because we know from (1) that package-a>=2.0.0,<3.0.0 cannot be used, we can conclude that package-a>=2.0.0,<4.0.0 cannot be used. (2)
 
           Because the current Python version (3.9.[X]) does not satisfy Python>=3.12 and package-a==4.0.0 depends on Python>=3.12, we can conclude that package-a==4.0.0 cannot be used.
@@ -4072,6 +4079,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
     filters.push((r"no-sdist-no-wheels-with-matching-abi-", "package-"));
 
     uv_snapshot!(filters, command(&context)
+        .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-abi-a")
         , @r###"
     success: false
@@ -4080,8 +4088,10 @@ fn no_sdist_no_wheels_with_matching_abi() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python ABI tag, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python ABI tag (e.g., `cp38`), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: You require CPython 3.8 (`cp38`), but we only found wheels for `package-a` (v1.0.0) with the following Python ABI tag: `graalpy240_310_native`
     "###);
 
     assert_not_installed(
@@ -4112,6 +4122,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
     filters.push((r"no-sdist-no-wheels-with-matching-platform-", "package-"));
 
     uv_snapshot!(filters, command(&context)
+        .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-platform-a")
         , @r###"
     success: false
@@ -4120,8 +4131,10 @@ fn no_sdist_no_wheels_with_matching_platform() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching platform tag, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: Wheels are available for `package-a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
     "###);
 
     assert_not_installed(
@@ -4152,6 +4165,7 @@ fn no_sdist_no_wheels_with_matching_python() {
     filters.push((r"no-sdist-no-wheels-with-matching-python-", "package-"));
 
     uv_snapshot!(filters, command(&context)
+        .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-python-a")
         , @r###"
     success: false
@@ -4160,8 +4174,10 @@ fn no_sdist_no_wheels_with_matching_python() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python implementation tag, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python implementation tag (e.g., `cp38`), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: You require CPython 3.8 (`cp38`), but we only found wheels for `package-a` (v1.0.0) with the following Python implementation tag: `graalpy310`
     "###);
 
     assert_not_installed(
@@ -4202,8 +4218,10 @@ fn no_wheels_no_build() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no usable wheels and building from source is disabled, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no usable wheels, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: Wheels are required for `package-a` because building from source is disabled for `package-a` (i.e., with `--no-build-package package-a`)
     "###);
 
     assert_not_installed(&context.venv, "no_wheels_no_build_a", &context.temp_dir);
@@ -4310,8 +4328,10 @@ fn only_wheels_no_binary() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no source distribution and using wheels is disabled, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no source distribution, we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: A source distribution is required for `package-a` because using pre-built wheels is disabled for `package-a` (i.e., with `--no-binary-package package-a`)
     "###);
 
     assert_not_installed(&context.venv, "only_wheels_no_binary_a", &context.temp_dir);

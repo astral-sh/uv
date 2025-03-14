@@ -1,3 +1,4 @@
+use tokio::sync::Semaphore;
 use tracing::debug;
 use uv_client::{RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
@@ -21,16 +22,21 @@ pub(crate) struct LatestClient<'env> {
     pub(crate) requires_python: &'env RequiresPython,
 }
 
-impl<'env> LatestClient<'env> {
+impl LatestClient<'_> {
     /// Find the latest version of a package from an index.
     pub(crate) async fn find_latest(
         &self,
         package: &PackageName,
         index: Option<&IndexUrl>,
+        download_concurrency: &Semaphore,
     ) -> anyhow::Result<Option<DistFilename>, uv_client::Error> {
         debug!("Fetching latest version of: `{package}`");
 
-        let archives = match self.client.simple(package, index, self.capabilities).await {
+        let archives = match self
+            .client
+            .simple(package, index, self.capabilities, download_concurrency)
+            .await
+        {
             Ok(archives) => archives,
             Err(err) => {
                 return match err.into_kind() {

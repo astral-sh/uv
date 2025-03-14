@@ -1,15 +1,17 @@
 ---
-source: crates/uv-resolver/src/lock/tests.rs
+source: crates/uv-resolver/src/lock/mod.rs
 expression: result
 ---
 Ok(
     Lock {
         version: 1,
+        revision: 0,
         fork_markers: [],
         conflicts: Conflicts(
             [],
         ),
         supported_environments: [],
+        required_environments: [],
         requires_python: RequiresPython {
             specifiers: VersionSpecifiers(
                 [
@@ -33,6 +35,7 @@ Ok(
         options: ResolverOptions {
             resolution_mode: Highest,
             prerelease_mode: IfNecessaryOrExplicit,
+            fork_strategy: RequiresPython,
             exclude_newer: None,
         },
         packages: [
@@ -41,7 +44,9 @@ Ok(
                     name: PackageName(
                         "anyio",
                     ),
-                    version: "4.3.0",
+                    version: Some(
+                        "4.3.0",
+                    ),
                     source: Registry(
                         Url(
                             UrlString(
@@ -65,16 +70,16 @@ Ok(
                                 "anyio",
                             ),
                             version: "4.3.0",
-                            build_tag: None,
-                            python_tag: [
-                                "py3",
-                            ],
-                            abi_tag: [
-                                "none",
-                            ],
-                            platform_tag: [
-                                "any",
-                            ],
+                            tags: Small {
+                                small: WheelTagSmall {
+                                    python_tag: Python {
+                                        major: 3,
+                                        minor: None,
+                                    },
+                                    abi_tag: None,
+                                    platform_tag: Any,
+                                },
+                            },
                         },
                     },
                 ],
@@ -84,6 +89,7 @@ Ok(
                 dependency_groups: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
+                    provides_extras: [],
                     dependency_groups: {},
                 },
             },
@@ -93,7 +99,9 @@ Ok(
                 name: PackageName(
                     "anyio",
                 ),
-                version: "4.3.0",
+                version: Some(
+                    "4.3.0",
+                ),
                 source: Registry(
                     Url(
                         UrlString(
@@ -106,6 +114,7 @@ Ok(
         manifest: ResolverManifest {
             members: {},
             requirements: {},
+            dependency_groups: {},
             constraints: {},
             overrides: {},
             dependency_metadata: {},

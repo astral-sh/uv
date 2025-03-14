@@ -21,7 +21,7 @@ walkdir = { workspace = true }
 [dev-dependencies]
 fs-err = { workspace = true }
 insta = "1.41.1"
-tempfile = "3.14.0"
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

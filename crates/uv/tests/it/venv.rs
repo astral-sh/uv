@@ -535,7 +535,13 @@ fn create_venv_warns_user_on_requires_python_discovery_error() -> Result<()> {
         |         ^
       expected `.`, `=`
 
-    warning: Failed to parse: `pyproject.toml`
+    warning: Failed to parse `pyproject.toml` during environment creation:
+      TOML parse error at line 1, column 9
+        |
+      1 | invalid toml
+        |         ^
+      expected `.`, `=`
+
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
@@ -1117,7 +1123,7 @@ fn create_venv_apostrophe() {
 
     // One of them should be commonly available on a linux developer machine, if not, we have to
     // extend the fallbacks.
-    let shell = env::var_os("SHELL").unwrap_or(OsString::from("bash"));
+    let shell = env::var_os(EnvVars::SHELL).unwrap_or(OsString::from("bash"));
     let mut child = Command::new(shell)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

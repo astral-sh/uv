@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "httpx>=0.27.2,<0.28",
+#     "httpx>=0.28.1,<0.29",
 #     "packaging>=24.1,<25",
 # ]
 # ///
@@ -52,12 +52,14 @@ Docs: https://forgejo.org/docs/latest/user/packages/pypi/
 
 import os
 import re
+import shutil
+import sys
 import time
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import rmtree
-from subprocess import PIPE, check_call, check_output, run
+from subprocess import PIPE, check_call, run
 from time import sleep
 
 import httpx
@@ -70,6 +72,30 @@ from packaging.version import Version
 
 TEST_PYPI_PUBLISH_URL = "https://test.pypi.org/legacy/"
 PYTHON_VERSION = os.environ.get("UV_TEST_PUBLISH_PYTHON_VERSION", "3.12")
+# `pyproject.toml` contents using all supported metadata fields, except for the
+# generated header with `[project]`, name and version.
+PYPROJECT_TAIL = """
+authors = [{ name = "konstin", email = "konstin@mailbox.org" }]
+classifiers = ["Topic :: Software Development :: Testing"]
+# Empty for simplicity with the `uv compile` check, anyio still tests,
+# optional-dependencies still test the `Requires-Dist` field.
+dependencies = []
+description = "Add your description here"
+dynamic = ["gui-scripts", "scripts"]
+keywords = ["test", "publish"]
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE*"]
+maintainers = [{ name = "konstin", email = "konstin@mailbox.org" }]
+optional-dependencies = { "async" = ["anyio>=4,<5"] }
+readme = "README.md"
+requires-python = ">=3.12"
+urls = { "github" = "https://github.com/astral-sh/uv" }
+
+# https://github.com/pypa/hatch/issues/1828
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+""".lstrip()
 
 cwd = Path(__file__).parent
 
@@ -79,6 +105,17 @@ class TargetConfiguration:
     project_name: str
     publish_url: str
     index_url: str
+    index: str | None = None
+
+    def index_declaration(self) -> str | None:
+        if not self.index:
+            return None
+        return (
+            "[[tool.uv.index]]\n"
+            + f'name = "{self.index}"\n'
+            + f'url = "{self.index_url}"\n'
+            + f'publish-url = "{self.publish_url}"\n'
+        )
 
 
 # Map CLI target name to package name and index url.
@@ -89,6 +126,7 @@ local_targets: dict[str, TargetConfiguration] = {
         "astral-test-token",
         TEST_PYPI_PUBLISH_URL,
         "https://test.pypi.org/simple/",
+        "test-pypi",
     ),
     "pypi-password-env": TargetConfiguration(
         "astral-test-password",
@@ -143,12 +181,18 @@ def get_latest_version(project_name: str, client: httpx.Client) -> Version:
                 break
             except httpx.HTTPError as err:
                 error = err
-                print(f"Error getting version, sleeping for 1s: {err}")
+                print(
+                    f"Error getting version for {project_name}, sleeping for 1s: {err}",
+                    file=sys.stderr,
+                )
                 time.sleep(1)
             except InvalidSdistFilename as err:
                 # Sometimes there's a link that says "status page"
                 error = err
-                print(f"Invalid index page, sleeping for 1s: {err}")
+                print(
+                    f"Invalid index page for {project_name}, sleeping for 1s: {err}",
+                    file=sys.stderr,
+                )
                 time.sleep(1)
         else:
             raise RuntimeError(f"Failed to fetch {url}") from error
@@ -184,10 +228,12 @@ def get_filenames(url: str, client: httpx.Client) -> list[str]:
 
 
 def build_project_at_version(
-    project_name: str, version: Version, uv: Path, modified: bool = False
+    target: str, version: Version, uv: Path, modified: bool = False
 ) -> Path:
     """Build a source dist and a wheel with the project name and an unclaimed
     version."""
+    project_name = all_targets[target].project_name
+
     if modified:
         dir_name = f"{project_name}-modified"
     else:
@@ -200,12 +246,26 @@ def build_project_at_version(
         [uv, "init", "-p", PYTHON_VERSION, "--lib", "--name", project_name, dir_name],
         cwd=cwd,
     )
-    pyproject_toml = project_root.joinpath("pyproject.toml")
+    toml = (
+        "[project]\n"
+        + f'name = "{project_name}"\n'
+        # Set to an unclaimed version
+        + f'version = "{version}"\n'
+        # Add all supported metadata
+        + PYPROJECT_TAIL
+    )
+    if index_declaration := all_targets[target].index_declaration():
+        toml += index_declaration
 
-    # Set to an unclaimed version
-    toml = pyproject_toml.read_text()
-    toml = re.sub('version = ".*"', f'version = "{version}"', toml)
-    pyproject_toml.write_text(toml)
+    project_root.joinpath("pyproject.toml").write_text(toml)
+    shutil.copy(
+        cwd.parent.parent.joinpath("LICENSE-APACHE"),
+        cwd.joinpath(dir_name).joinpath("LICENSE-APACHE"),
+    )
+    shutil.copy(
+        cwd.parent.parent.joinpath("LICENSE-MIT"),
+        cwd.joinpath(dir_name).joinpath("LICENSE-MIT"),
+    )
 
     # Modify the code so we get a different source dist and wheel
     if modified:
@@ -239,7 +299,7 @@ def wait_for_index(
     just `get_filenames` fails non-deterministically.
     """
     for _ in range(50):
-        output = check_output(
+        result = run(
             [
                 uv,
                 "pip",
@@ -257,13 +317,31 @@ def wait_for_index(
             ],
             text=True,
             input=f"{project_name}",
+            stdout=PIPE,
         )
-        if f"{project_name}=={version}" in output and output.count("--hash") == 2:
+        # codeberg sometimes times out
+        if result.returncode != 0:
+            print(
+                f"uv pip compile not updated, missing 2 files for {version}, "
+                + f"sleeping for 2s: `{index_url}`:\n",
+                file=sys.stderr,
+            )
+            sleep(2)
+            continue
+
+        if (
+            f"{project_name}=={version}" in result.stdout
+            and result.stdout.count("--hash") == 2
+        ):
             break
 
         print(
-            f"uv pip compile not updated, missing 2 files for {version}: `{output.replace("\\\n    ", "")}`, "
-            f"sleeping for 2s: `{index_url}`"
+            f"uv pip compile not updated, missing 2 files for {version}, "
+            + f"sleeping for 2s: `{index_url}`:\n"
+            + "```\n"
+            + result.stdout.replace("\\\n    ", "")
+            + "```",
+            file=sys.stderr,
         )
         sleep(2)
 
@@ -277,33 +355,59 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     """
     project_name = all_targets[target].project_name
 
-    print(f"\nPublish {project_name} for {target}")
+    # If a version was recently uploaded by another run of this script,
+    # `get_latest_version` may get a cached version and uploading fails. In this case
+    # we wait and try again.
+    retries = 3
+    while True:
+        print(f"\nPublish {project_name} for {target}", file=sys.stderr)
 
-    # The distributions are build to the dist directory of the project.
-    previous_version = get_latest_version(project_name, client)
-    version = get_new_version(previous_version)
-    project_dir = build_project_at_version(project_name, version, uv)
+        # The distributions are build to the dist directory of the project.
+        previous_version = get_latest_version(project_name, client)
+        version = get_new_version(previous_version)
+        project_dir = build_project_at_version(target, version, uv)
 
-    # Upload configuration
-    publish_url = all_targets[target].publish_url
-    index_url = all_targets[target].index_url
-    env, extra_args = target_configuration(target)
-    env = {**os.environ, **env}
-    expected_filenames = [path.name for path in project_dir.joinpath("dist").iterdir()]
-    # Ignore the gitignore file in dist
-    expected_filenames.remove(".gitignore")
-    # Ignore our test file
-    expected_filenames.remove(".DS_Store")
+        # Upload configuration
+        publish_url = all_targets[target].publish_url
+        index_url = all_targets[target].index_url
+        env, extra_args = target_configuration(target)
+        env = {**os.environ, **env}
+        expected_filenames = [
+            path.name for path in project_dir.joinpath("dist").iterdir()
+        ]
+        # Ignore the gitignore file in dist
+        expected_filenames.remove(".gitignore")
+        # Ignore our test file
+        expected_filenames.remove(".DS_Store")
 
-    print(
-        f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ==="
-    )
-    args = [uv, "publish", "--publish-url", publish_url, *extra_args]
-    check_call(args, cwd=project_dir, env=env)
+        print(
+            f"\n=== 1. Publishing a new version: {project_name} {version} {publish_url} ===",
+            file=sys.stderr,
+        )
+
+        args = [uv, "publish", "--publish-url", publish_url, *extra_args]
+        result = run(args, cwd=project_dir, env=env, text=True, stderr=PIPE)
+        if result.returncode == 0:
+            # Successful upload
+            break
+
+        retries -= 1
+        if retries > 0:
+            print(
+                f"Publish failed, retrying after 10s:\n---\n{result.stderr}\n---",
+                file=sys.stderr,
+            )
+            sleep(10)
+        else:
+            # Raise the error after three failures
+            result.check_returncode()
 
     if publish_url == TEST_PYPI_PUBLISH_URL:
         # Confirm pypi behaviour: Uploading the same file again is fine.
-        print(f"\n=== 2. Publishing {project_name} {version} again (PyPI) ===")
+        print(
+            f"\n=== 2. Publishing {project_name} {version} again (PyPI) ===",
+            file=sys.stderr,
+        )
         wait_for_index(index_url, project_name, version, uv)
         args = [uv, "publish", "--publish-url", publish_url, *extra_args]
         output = run(
@@ -315,22 +419,36 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
         ):
             raise RuntimeError(
                 f"PyPI re-upload of the same files failed: "
-                f"{output.count("Uploading")} != {len(expected_filenames)}, "
-                f"{output.count("already exists")} != 0\n"
+                f"{output.count('Uploading')} != {len(expected_filenames)}, "
+                f"{output.count('already exists')} != 0\n"
                 f"---\n{output}\n---"
             )
 
-    print(f"\n=== 3. Publishing {project_name} {version} again with check URL ===")
+    mode = "index" if all_targets[target].index else "check URL"
+    print(
+        f"\n=== 3. Publishing {project_name} {version} again with {mode} ===",
+        file=sys.stderr,
+    )
     wait_for_index(index_url, project_name, version, uv)
-    args = [
-        uv,
-        "publish",
-        "--publish-url",
-        publish_url,
-        "--check-url",
-        index_url,
-        *extra_args,
-    ]
+    # Test twine-style and index-style uploads for different packages.
+    if index := all_targets[target].index:
+        args = [
+            uv,
+            "publish",
+            "--index",
+            index,
+            *extra_args,
+        ]
+    else:
+        args = [
+            uv,
+            "publish",
+            "--publish-url",
+            publish_url,
+            "--check-url",
+            index_url,
+            *extra_args,
+        ]
     output = run(
         args, cwd=project_dir, env=env, text=True, check=True, stderr=PIPE
     ).stderr
@@ -340,20 +458,19 @@ def publish_project(target: str, uv: Path, client: httpx.Client):
     ):
         raise RuntimeError(
             f"Re-upload with check URL failed: "
-            f"{output.count("Uploading")} != 0, "
-            f"{output.count("already exists")} != {len(expected_filenames)}\n"
+            f"{output.count('Uploading')} != 0, "
+            f"{output.count('already exists')} != {len(expected_filenames)}\n"
             f"---\n{output}\n---"
         )
 
     # Build a different source dist and wheel at the same version, so the upload fails
     del project_dir
-    modified_project_dir = build_project_at_version(
-        project_name, version, uv, modified=True
-    )
+    modified_project_dir = build_project_at_version(target, version, uv, modified=True)
 
     print(
         f"\n=== 4. Publishing modified {project_name} {version} "
-        f"again with skip existing (error test) ==="
+        f"again with skip existing (error test) ===",
+        file=sys.stderr,
     )
     wait_for_index(index_url, project_name, version, uv)
     args = [

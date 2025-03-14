@@ -25,13 +25,13 @@ uv-pypi-types = { workspace = true }
 uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 
+astral-tokio-tar = { workspace = true }
 async-compression = { workspace = true }
 base64 = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 glob = { workspace = true }
 itertools = { workspace = true }
-krata-tokio-tar = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }

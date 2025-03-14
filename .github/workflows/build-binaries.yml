@@ -4,7 +4,7 @@
 #
 # Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a local
 # artifacts job within `cargo-dist`.
-name: "Build binaries"
+name: "Build release binaries"
 
 on:
   workflow_call:
@@ -14,9 +14,17 @@ on:
         type: string
   pull_request:
     paths:
-      # When we change pyproject.toml, we want to ensure that the maturin builds still work.
+      # We want to ensure that the maturin builds still work when we change
+      # Project metadata
       - pyproject.toml
-      # And when we change this workflow itself...
+      - Cargo.toml
+      - .cargo/config.toml
+      - crates/uv-build/Cargo.toml
+      - crates/uv-build/pyproject.toml
+      # Toolchain or dependency versions
+      - Cargo.lock
+      - rust-toolchain.toml
+      # And the workflow itself
       - .github/workflows/build-binaries.yml
 
 concurrency:
@@ -38,11 +46,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      # uv
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
       - name: "Build sdist"
@@ -52,6 +60,8 @@ jobs:
           args: --out dist
       - name: "Test sdist"
         run: |
+          # We can't use `--find-links` here, since we need maturin, which means no `--no-index`, and without that option
+          # we run the risk that pip pull uv from PyPI instead.
           pip install dist/${{ env.PACKAGE_NAME }}-*.tar.gz --force-reinstall
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
@@ -59,22 +69,39 @@ jobs:
       - name: "Upload sdist"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-sdist
+          name: wheels_uv-sdist
           path: dist
+
+      # uv-build
+      - name: "Build sdist uv-build"
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
+      - name: "Test sdist uv-build"
+        run: |
+          pip install crates/uv-build/dist/${{ env.PACKAGE_NAME }}_build-*.tar.gz --force-reinstall
+          ${{ env.MODULE_NAME }}-build --help
+          python -m ${{ env.MODULE_NAME }}_build --help
+      - name: "Upload sdist uv-build"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels_uv_build-sdist
+          path: crates/uv-build/dist
 
   macos-x86_64:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
+
+      # uv
       - name: "Build wheels - x86_64"
         uses: PyO3/maturin-action@v1
         with:
@@ -83,7 +110,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-macos-x86_64
+          name: wheels_uv-macos-x86_64
           path: dist
       - name: "Archive binary"
         run: |
@@ -104,19 +131,31 @@ jobs:
             *.tar.gz
             *.sha256
 
+      # uv-build
+      - name: "Build wheels uv-build - x86_64"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64
+          args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
+      - name: "Upload wheels uv-build"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels_uv_build-macos-x86_64
+          path: crates/uv-build/dist
+
   macos-aarch64:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: arm64
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
+
+      # uv
       - name: "Build wheels - aarch64"
         uses: PyO3/maturin-action@v1
         with:
@@ -124,14 +163,14 @@ jobs:
           args: --release --locked --out dist --features self-update
       - name: "Test wheel - aarch64"
         run: |
-          pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
           uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-aarch64-apple-darwin
+          name: wheels_uv-aarch64-apple-darwin
           path: dist
       - name: "Archive binary"
         run: |
@@ -152,9 +191,26 @@ jobs:
             *.tar.gz
             *.sha256
 
+      # uv-build
+      - name: "Build wheels uv-build - aarch64"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: aarch64
+          args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
+      - name: "Test wheel - aarch64"
+        run: |
+          pip install ${{ env.PACKAGE_NAME }}_build --no-index --find-links crates/uv-build/dist --force-reinstall
+          ${{ env.MODULE_NAME }}-build --help
+          python -m ${{ env.MODULE_NAME }}_build --help
+      - name: "Upload wheels uv-build"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels_uv_build-aarch64-apple-darwin
+          path: crates/uv-build/dist
+
   windows:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
-    runs-on: windows-latest-large
+    runs-on: github-windows-2022-x86_64-8
     strategy:
       matrix:
         platform:
@@ -162,16 +218,18 @@ jobs:
             arch: x64
           - target: i686-pc-windows-msvc
             arch: x86
+          - target: aarch64-pc-windows-msvc
+            arch: x64 # not relevant here
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
+
+      # uv
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -181,14 +239,14 @@ jobs:
         if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
         run: |
-          python -m pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
           uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.platform.target }}
+          name: wheels_uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
@@ -205,6 +263,25 @@ jobs:
             *.zip
             *.sha256
 
+      # uv-build
+      - name: "Build wheels uv-build"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
+      - name: "Test wheel uv-build"
+        if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
+        shell: bash
+        run: |
+          pip install ${{ env.PACKAGE_NAME }}_build --no-index --find-links crates/uv-build/dist --force-reinstall
+          ${{ env.MODULE_NAME }}-build --help
+          python -m ${{ env.MODULE_NAME }}_build --help
+      - name: "Upload wheels uv-build"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels_uv_build-${{ matrix.platform.target }}
+          path: crates/uv-build/dist
+
   linux:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: depot-ubuntu-latest-4
@@ -215,16 +292,17 @@ jobs:
           - i686-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
+
+      # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@v1
+        # Use patch for https://github.com/PyO3/maturin-action/issues/331
+        uses: PyO3/maturin-action@711bb9fcefaea0b45a7d625ee2c265fd9fe7f3e5
         with:
           target: ${{ matrix.target }}
           manylinux: auto
@@ -247,20 +325,18 @@ jobs:
       - name: "Test wheel"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
-          pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
           uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.target }}
+          name: wheels_uv-${{ matrix.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
         run: |
-          set -euo pipefail
-
           TARGET=${{ matrix.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
@@ -278,9 +354,29 @@ jobs:
             *.tar.gz
             *.sha256
 
+      # uv-build
+      - name: "Build wheels uv-build"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: auto
+          args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
+      - name: "Test wheel uv-build"
+        if: ${{ startsWith(matrix.target, 'x86_64') }}
+        run: |
+          pip install ${{ env.PACKAGE_NAME }}_build --no-index --find-links crates/uv-build/dist --force-reinstall
+          ${{ env.MODULE_NAME }}-build --help
+          python -m ${{ env.MODULE_NAME }}_build --help
+      - name: "Upload wheels uv-build"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels_uv_build-${{ matrix.target }}
+          path: crates/uv-build/dist
+
   linux-arm:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       matrix:
         platform:
@@ -296,13 +392,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
+
+      # uv
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -312,29 +408,29 @@ jobs:
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update
       - uses: uraimo/run-on-arch-action@v2
-        name: Test wheel
+        name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch == 'arm' && 'armv6' || matrix.platform.arch }}
           distro: ${{ matrix.platform.arch == 'arm' && 'bullseye' || 'ubuntu20.04' }}
           githubToken: ${{ github.token }}
           install: |
             apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip
+            apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
           run: |
-            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # python -m ${{ env.MODULE_NAME }} --help
             uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.platform.target }}
+          name: wheels_uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
         run: |
-          set -euo pipefail
-
           TARGET=${{ matrix.platform.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
@@ -352,9 +448,40 @@ jobs:
             *.tar.gz
             *.sha256
 
+      # uv-build
+      - name: "Build wheels uv-build"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          # On `aarch64`, use `manylinux: 2_28`; otherwise, use `manylinux: auto`.
+          manylinux: ${{ matrix.platform.arch == 'aarch64' && '2_28' || 'auto' }}
+          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
+      - uses: uraimo/run-on-arch-action@v2
+        name: "Test wheel uv-build"
+        with:
+          arch: ${{ matrix.platform.arch == 'arm' && 'armv6' || matrix.platform.arch }}
+          distro: ${{ matrix.platform.arch == 'arm' && 'bullseye' || 'ubuntu20.04' }}
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update
+            apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
+            pip3 install -U pip
+          run: |
+            pip install ${{ env.PACKAGE_NAME }}_build --no-index --find-links crates/uv-build/dist --force-reinstall
+            ${{ env.MODULE_NAME }}-build --help
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # python -m ${{ env.MODULE_NAME }}_build --help
+      - name: "Upload wheels uv-build"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels_uv_build-${{ matrix.platform.target }}
+          path: crates/uv-build/dist
+
   # Like `linux-arm`.
   linux-s390x:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
+    timeout-minutes: 30
     runs-on: depot-ubuntu-latest-4
     strategy:
       matrix:
@@ -364,13 +491,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
+
+      # uv
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -380,29 +507,29 @@ jobs:
           args: --release --locked --out dist --features self-update
       - uses: uraimo/run-on-arch-action@v2
         if: matrix.platform.arch != 'ppc64'
-        name: Test wheel
+        name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch }}
           distro: ubuntu20.04
           githubToken: ${{ github.token }}
           install: |
             apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip
+            apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
           run: |
-            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # python -m ${{ env.MODULE_NAME }} --help
             uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.platform.target }}
+          name: wheels_uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
         run: |
-          set -euo pipefail
-
           TARGET=${{ matrix.platform.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
@@ -419,6 +546,36 @@ jobs:
           path: |
             *.tar.gz
             *.sha256
+
+      # uv-build
+      - name: "Build wheels uv-build"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
+      - uses: uraimo/run-on-arch-action@v2
+        if: matrix.platform.arch != 'ppc64'
+        name: "Test wheel uv-build"
+        with:
+          arch: ${{ matrix.platform.arch }}
+          distro: ubuntu20.04
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update
+            apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
+            pip3 install -U pip
+          run: |
+            pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
+            ${{ env.MODULE_NAME }}-build --help
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # python -m ${{ env.MODULE_NAME }}-build --help
+      - name: "Upload wheels uv-build"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels_uv_build-${{ matrix.platform.target }}
+          path: crates/uv-build/dist
 
   # Like `linux-arm`, but install the `gcc-powerpc64-linux-gnu` package.
   linux-powerpc:
@@ -438,13 +595,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
+
+      # uv
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -459,31 +616,32 @@ jobs:
                 yum repolist
                 yum install -y gcc-powerpc64-linux-gnu
             fi
-      - uses: uraimo/run-on-arch-action@v2
-        if: matrix.platform.arch != 'ppc64'
-        name: Test wheel
-        with:
-          arch: ${{ matrix.platform.arch }}
-          distro: ubuntu20.04
-          githubToken: ${{ github.token }}
-          install: |
-            apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip
-            pip3 install -U pip
-          run: |
-            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            ${{ env.MODULE_NAME }} --help
-            uvx --help
+      # TODO(charlie): Re-enable testing for PPC wheels.
+      # - uses: uraimo/run-on-arch-action@v2
+      #   if: matrix.platform.arch != 'ppc64'
+      #   name: "Test wheel"
+      #   with:
+      #     arch: ${{ matrix.platform.arch }}
+      #     distro: ubuntu20.04
+      #     githubToken: ${{ github.token }}
+      #     install: |
+      #       apt-get update
+      #       apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
+      #       pip3 install -U pip
+      #     run: |
+      #       pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+      #       ${{ env.MODULE_NAME }} --help
+      #       #(konsti) TODO: Enable this test on all platforms,currently `find_uv_bin` is failingto discover uv here.
+      #       # python -m ${{ env.MODULE_NAME }} --helppython -m ${{ env.MODULE_NAME }} --help
+      #       uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.platform.target }}
+          name: wheels_uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
         run: |
-          set -euo pipefail
-
           TARGET=${{ matrix.platform.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
@@ -501,6 +659,28 @@ jobs:
             *.tar.gz
             *.sha256
 
+      # uv-build
+      - name: "Build wheels uv-build"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
+          before-script-linux: |
+            if command -v yum &> /dev/null; then
+                yum update -y
+                yum -y install epel-release
+                yum repolist
+                yum install -y gcc-powerpc64-linux-gnu
+            fi
+      # TODO(charlie): Re-enable testing for PPC wheels.
+      - name: "Upload wheels uv-build"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels_uv_build-${{ matrix.platform.target }}
+          path: crates/uv-build/dist
+
   musllinux:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
@@ -511,14 +691,14 @@ jobs:
           - i686-unknown-linux-musl
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
+
+      # uv
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
@@ -537,17 +717,17 @@ jobs:
             .venv/bin/pip install --upgrade pip
             .venv/bin/pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             .venv/bin/${{ env.MODULE_NAME }} --help
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # .venv/bin/python -m ${{ env.MODULE_NAME }} --help
             .venv/bin/uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.target }}
+          name: wheels_uv-${{ matrix.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
         run: |
-          set -euo pipefail
-
           TARGET=${{ matrix.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
@@ -565,6 +745,32 @@ jobs:
             *.tar.gz
             *.sha256
 
+      # uv-build
+      - name: "Build wheels uv-build"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: musllinux_1_1
+          args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
+      - name: "Test wheel uv-build"
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        uses: addnab/docker-run-action@v3
+        with:
+          image: alpine:3.12
+          options: -v ${{ github.workspace }}:/io -w /io
+          run: |
+            apk add python3
+            python3 -m venv .venv
+            .venv/bin/pip install --upgrade pip
+            .venv/bin/pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
+            .venv/bin/${{ env.MODULE_NAME }}-build --help
+            .venv/bin/python -m ${{ env.MODULE_NAME }}_build --help
+      - name: "Upload wheels uv-build"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels_uv_build-${{ matrix.target }}
+          path: crates/uv-build/dist
+
   musllinux-cross:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
@@ -576,32 +782,27 @@ jobs:
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
           - target: armv7-unknown-linux-musleabihf
             arch: armv7
-          - target: powerpc64le-unknown-linux-musl
-            arch: ppc64le
-            # see https://github.com/astral-sh/uv/issues/6528
-            maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
-            toolchain: nightly
       fail-fast: false
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
+
+      # uv
       - name: "Build wheels"
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
-          args: ${{ matrix.platform.arch == 'ppc64le' && '--profile release-no-lto' || '--release'}} --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
+          args: --release --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
       - uses: uraimo/run-on-arch-action@v2
-        name: Test wheel
+        name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch }}
           distro: alpine_latest
@@ -610,11 +811,13 @@ jobs:
             apk add python3
           run: |
             python -m venv .venv
-            .venv/bin/pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            .venv/bin/pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             .venv/bin/${{ env.MODULE_NAME }} --help
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # .venv/bin/python -m ${{ env.MODULE_NAME }} --help
             .venv/bin/uvx --help
       - uses: uraimo/run-on-arch-action@v2
-        name: Test wheel (manylinux)
+        name: "Test wheel (manylinux)"
         if: matrix.platform.arch == 'aarch64'
         with:
           arch: aarch64
@@ -622,22 +825,22 @@ jobs:
           githubToken: ${{ github.token }}
           install: |
             apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip
+            apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
             pip3 install -U pip
           run: |
-            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
             ${{ env.MODULE_NAME }} --help
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # python -m ${{ env.MODULE_NAME }} --help
             uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.platform.target }}
+          name: wheels_uv-${{ matrix.platform.target }}
           path: dist
       - name: "Archive binary"
         shell: bash
         run: |
-          set -euo pipefail
-
           TARGET=${{ matrix.platform.target }}
           ARCHIVE_NAME=uv-$TARGET
           ARCHIVE_FILE=$ARCHIVE_NAME.tar.gz
@@ -655,3 +858,48 @@ jobs:
           path: |
             *.tar.gz
             *.sha256
+
+      # uv-build
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          manylinux: musllinux_1_1
+          args: --profile minimal-size --locked ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}} --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
+          docker-options: ${{ matrix.platform.maturin_docker_options }}
+          rust-toolchain: ${{ matrix.platform.toolchain || null }}
+      - uses: uraimo/run-on-arch-action@v2
+        name: "Test wheel"
+        with:
+          arch: ${{ matrix.platform.arch }}
+          distro: alpine_latest
+          githubToken: ${{ github.token }}
+          install: |
+            apk add python3
+          run: |
+            python -m venv .venv
+            .venv/bin/pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
+            .venv/bin/${{ env.MODULE_NAME }}-build --help
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # .venv/bin/python -m ${{ env.MODULE_NAME }}_build --help
+      - uses: uraimo/run-on-arch-action@v2
+        name: "Test wheel (manylinux)"
+        if: matrix.platform.arch == 'aarch64'
+        with:
+          arch: aarch64
+          distro: ubuntu20.04
+          githubToken: ${{ github.token }}
+          install: |
+            apt-get update
+            apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
+            pip3 install -U pip
+          run: |
+            pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
+            ${{ env.MODULE_NAME }}-build --help
+            # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
+            # python -m ${{ env.MODULE_NAME }}_build --help
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels_uv_build-${{ matrix.platform.target }}
+          path: crates/uv-build/dist

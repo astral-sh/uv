@@ -414,7 +414,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 8 packages in [TIME]
@@ -440,7 +440,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -474,7 +474,7 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
     Success
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 8 packages in [TIME]
@@ -519,7 +519,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 8 packages in [TIME]
@@ -545,7 +545,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     Success
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Resolved 8 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -584,7 +584,7 @@ fn test_uv_run_isolate() -> Result<()> {
     Success
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Resolved 8 packages in [TIME]
@@ -615,7 +615,7 @@ fn test_uv_run_isolate() -> Result<()> {
     Success
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored
+    warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Resolved 8 packages in [TIME]
     Audited 5 packages in [TIME]
     "###
@@ -1201,6 +1201,7 @@ fn workspace_inherit_sources() -> Result<()> {
         assert_snapshot!(
             lock, @r###"
         version = 1
+        revision = 1
         requires-python = ">=3.12"
 
         [options]
@@ -1624,9 +1625,8 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × No solution found when resolving dependencies:
-      ╰─▶ Because bar depends on bar:dev and bar:dev depends on anyio==4.2.0, we can conclude that bar depends on anyio==4.2.0.
-          And because foo depends on anyio==4.1.0, we can conclude that bar and foo are incompatible.
-          And because your workspace requires bar and foo, we can conclude that your workspace's requirements are unsatisfiable.
+      ╰─▶ Because bar:dev depends on anyio==4.2.0 and foo depends on anyio==4.1.0, we can conclude that foo and bar:dev are incompatible.
+          And because your workspace requires bar:dev and foo, we can conclude that your workspace's requirements are unsatisfiable.
     "###
     );
 
@@ -1697,7 +1697,7 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
       × Failed to build `foo @ file://[TEMP_DIR]/workspace/packages/foo`
       ├─▶ Failed to parse entry: `anyio`
-      ╰─▶ Package is not included as workspace package in `tool.uv.workspace`
+      ╰─▶ `anyio` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `anyio = { workspace = true }`)
     "###
     );
 
@@ -1766,6 +1766,7 @@ fn test_path_hopping() -> Result<()> {
 /// are correctly resolving `d` to a git dependency with a subdirectory and not relative to the
 /// checkout directory.
 #[test]
+#[cfg(feature = "git")]
 fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1840,6 +1841,7 @@ fn transitive_dep_in_git_workspace_no_root() -> Result<()> {
 /// to `uv-git-workspace-in-root`. Check that we are correctly resolving `uv-git-workspace-in-root`
 /// to a git dependency without a subdirectory and not relative to the checkout directory.
 #[test]
+#[cfg(feature = "git")]
 fn transitive_dep_in_git_workspace_with_root() -> Result<()> {
     let context = TestContext::new("3.12");
 

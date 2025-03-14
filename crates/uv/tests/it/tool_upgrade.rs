@@ -6,6 +6,91 @@ use uv_static::EnvVars;
 use crate::common::{uv_snapshot, TestContext};
 
 #[test]
+fn tool_upgrade_empty() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--all")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Nothing to upgrade
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--all")
+        .arg("-p")
+        .arg("3.13")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Nothing to upgrade
+    "###);
+
+    // Install the latest `babel`.
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("babel")
+        .arg("--index-url")
+        .arg("https://pypi.org/simple/")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + babel==2.14.0
+    Installed 1 executable: pybabel
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--all")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Nothing to upgrade
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("--all")
+        .arg("-p")
+        .arg("3.12")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Nothing to upgrade
+    "###);
+}
+
+#[test]
 fn tool_upgrade_name() {
     let context = TestContext::new("3.12")
         .with_filtered_counts()
@@ -467,7 +552,28 @@ fn tool_upgrade_constraint() {
     Installed 1 executable: pybabel
     "###);
 
-    // Upgrade `babel`, but apply a constraint.
+    // Upgrade `babel`, but apply a constraint inline.
+    uv_snapshot!(context.filters(), context.tool_upgrade()
+        .arg("babel<2.12.0")
+        .arg("--index-url")
+        .arg("https://pypi.org/simple/")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Updated babel v2.6.0 -> v2.11.0
+     - babel==2.6.0
+     + babel==2.11.0
+     - pytz==2018.5
+     + pytz==2024.1
+    Installed 1 executable: pybabel
+    "###);
+
+    // Upgrade `babel`, but apply a constraint via `--upgrade-package`.
     uv_snapshot!(context.filters(), context.tool_upgrade()
         .arg("babel")
         .arg("--index-url")
@@ -482,10 +588,11 @@ fn tool_upgrade_constraint() {
     ----- stdout -----
 
     ----- stderr -----
-    Updated babel v2.6.0 -> v2.13.1
-     - babel==2.6.0
+    warning: `--upgrade-package` is enabled by default on `uv tool upgrade`
+    Updated babel v2.11.0 -> v2.13.1
+     - babel==2.11.0
      + babel==2.13.1
-     - pytz==2018.5
+     - pytz==2024.1
      + setuptools==69.2.0
     Installed 1 executable: pybabel
     "###);

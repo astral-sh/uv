@@ -17,7 +17,7 @@ To change the installation path, use `UV_INSTALL_DIR`:
 === "Windows"
 
     ```powershell
-    $env:UV_INSTALL_DIR = "C:\Custom\Path" powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    powershell -ExecutionPolicy ByPass -c {$env:UV_INSTALL_DIR = "C:\Custom\Path";irm https://astral.sh/uv/install.ps1 | iex}
     ```
 
 ## Disabling shell modifications

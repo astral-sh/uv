@@ -83,7 +83,10 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
 
     debug = logging.getLogger().getEffectiveLevel() <= logging.DEBUG
 
-    update_common_mod_rs(packse_version)
+    # Don't update the version to `0.0.0` to preserve the `UV_TEST_VENDOR_LINKS_URL`
+    # in local tests.
+    if packse_version != "0.0.0":
+        update_common_mod_rs(packse_version)
 
     if not scenarios:
         if packse_version == "0.0.0":
@@ -93,7 +96,7 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
                     "Detected development version of packse, using scenarios from %s",
                     path,
                 )
-                scenarios = path.glob("*.json")
+                scenarios = [path]
             else:
                 logging.error(
                     "No scenarios provided. Found development version of packse but is missing scenarios. Is it installed as an editable?"
@@ -108,6 +111,7 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
         if target.is_dir():
             targets.extend(target.glob("**/*.json"))
             targets.extend(target.glob("**/*.toml"))
+            targets.extend(target.glob("**/*.yaml"))
         else:
             targets.append(target)
 
@@ -226,16 +230,20 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
                 "--test-runner",
                 "nextest",
                 "--test",
+                "it",
+                "--",
                 tests.with_suffix("").name,
             ]
-            logging.debug(f"Running {" ".join(command)}")
-            subprocess.call(
+            logging.debug(f"Running {' '.join(command)}")
+            exit_code = subprocess.call(
                 command,
                 cwd=PROJECT_ROOT,
                 stderr=subprocess.STDOUT,
                 stdout=sys.stderr if debug else subprocess.DEVNULL,
                 env=env,
             )
+            if exit_code != 0:
+                logging.warning(f"Snapshot update failed (Exit code: {exit_code})")
         else:
             logging.info("Skipping snapshot update")
 
@@ -261,9 +269,9 @@ def update_common_mod_rs(packse_version: str):
         url_matcher = re.compile(
             re.escape(before_version) + '[^"]+' + re.escape(after_version)
         )
-        assert (
-            len(url_matcher.findall(test_common)) == 1
-        ), f"PACKSE_VERSION not found in {TESTS_COMMON_MOD_RS}"
+        assert len(url_matcher.findall(test_common)) == 1, (
+            f"PACKSE_VERSION not found in {TESTS_COMMON_MOD_RS}"
+        )
         test_common = url_matcher.sub(build_vendor_links_url, test_common)
         TESTS_COMMON_MOD_RS.write_text(test_common)
 

@@ -23,6 +23,7 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-small-str = { workspace = true }
 uv-static = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
@@ -38,6 +39,7 @@ html-escape = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
+percent-encoding = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
@@ -52,7 +54,6 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-urlencoding = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

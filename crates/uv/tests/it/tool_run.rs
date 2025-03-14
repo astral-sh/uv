@@ -100,7 +100,10 @@ fn tool_run_at_version() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Not a valid package or extra name: "pytest@". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+    error: Failed to parse: `pytest@`
+      Caused by: Expected URL
+    pytest@
+           ^
     "###);
 
     // Invalid versions are just treated as package and command names
@@ -110,11 +113,12 @@ fn tool_run_at_version() {
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Not a valid package or extra name: "pytest@invalid". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+      × Failed to resolve tool requirement
+      ╰─▶ Distribution not found at: file://[TEMP_DIR]/invalid
     "###);
 
     let filters = context
@@ -186,6 +190,70 @@ fn tool_run_from_version() {
 }
 
 #[test]
+fn tool_run_constraints() {
+    let context = TestContext::new("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let constraints_txt = context.temp_dir.child("constraints.txt");
+    constraints_txt.write_str("pluggy<1.4.0").unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--constraints")
+        .arg("constraints.txt")
+        .arg("pytest")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pytest 8.0.2
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.3.0
+     + pytest==8.0.2
+    "###);
+}
+
+#[test]
+fn tool_run_overrides() {
+    let context = TestContext::new("3.12");
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let overrides_txt = context.temp_dir.child("overrides.txt");
+    overrides_txt.write_str("pluggy<1.4.0").unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--overrides")
+        .arg("overrides.txt")
+        .arg("pytest")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pytest 8.1.1
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.3.0
+     + pytest==8.1.1
+    "###);
+}
+
+#[test]
 fn tool_run_suggest_valid_commands() {
     let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
@@ -241,9 +309,13 @@ fn tool_run_suggest_valid_commands() {
 
 #[test]
 fn tool_run_warn_executable_not_in_from() {
-    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    // FastAPI 0.111 is only available from this date onwards.
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
+
     let mut filters = context.filters();
     filters.push(("\\+ uvloop(.+)\n ", ""));
     // Strip off the `fastapi` command output.
@@ -253,8 +325,6 @@ fn tool_run_warn_executable_not_in_from() {
         .arg("--from")
         .arg("fastapi")
         .arg("fastapi")
-        .env(EnvVars::UV_EXCLUDE_NEWER, "2024-05-04T00:00:00Z") // TODO: Remove this once EXCLUDE_NEWER is bumped past 2024-05-04
-        // (FastAPI 0.111 is only available from this date onwards)
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: false
@@ -435,6 +505,189 @@ fn tool_run_from_install() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
+    "###);
+}
+
+#[test]
+fn tool_run_from_install_constraints() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `flask` at a specific version.
+    context
+        .tool_install()
+        .arg("flask==3.0.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Verify that `tool run flask` uses the already-installed version.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.0
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    "###);
+
+    // Verify that `tool run flask` with a compatible constraint uses the already-installed version.
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str("werkzeug<4.0.0")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--constraints")
+        .arg("constraints.txt")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.0
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    "###);
+
+    // Verify that `tool run flask` with an incompatible constraint installs a new version.
+    context
+        .temp_dir
+        .child("constraints.txt")
+        .write_str("werkzeug<3.0.0")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--constraints")
+        .arg("constraints.txt")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 2.3.3
+    Werkzeug 2.3.8
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==2.3.3
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==2.3.8
+    "###);
+
+    // Verify that `tool run flask` with a compatible override uses the already-installed version.
+    context
+        .temp_dir
+        .child("override.txt")
+        .write_str("werkzeug==3.0.1")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--override")
+        .arg("override.txt")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.0
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    "###);
+
+    // Verify that `tool run flask` with an incompatible override installs a new version.
+    context
+        .temp_dir
+        .child("override.txt")
+        .write_str("werkzeug==3.0.0")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--override")
+        .arg("override.txt")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.0
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.0
+    "###);
+
+    // Verify that an override that enables a new extra also invalidates the environment.
+    context
+        .temp_dir
+        .child("override.txt")
+        .write_str("flask[dotenv]")
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--override")
+        .arg("override.txt")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + python-dotenv==1.0.1
+     + werkzeug==3.0.1
     "###);
 }
 
@@ -648,6 +901,56 @@ fn tool_run_url() {
      + jinja2==3.1.3
      + markupsafe==2.1.5
      + werkzeug==3.0.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl")
+        .arg("flask")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.3
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("flask @ https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.3
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.3
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
     "###);
 }
 
@@ -866,44 +1169,28 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
        "
     })?;
 
-    // performs a tool run with CSV `with` flag
+    // Performs a tool run with a comma-separated `--with` flag.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with")
-        .arg("numpy,pandas")
-        .arg("ipython")
-        .arg("-c")
-        .arg("import numpy; import pandas;")
+        .arg("iniconfig,typing-extensions")
+        .arg("pytest")
+        .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
+    pytest 8.1.1
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + asttokens==2.4.1
-     + decorator==5.1.1
-     + executing==2.0.1
-     + ipython==8.22.2
-     + jedi==0.19.1
-     + matplotlib-inline==0.1.6
-     + numpy==1.26.4
-     + pandas==2.2.1
-     + parso==0.8.3
-     + pexpect==4.9.0
-     + prompt-toolkit==3.0.43
-     + ptyprocess==0.7.0
-     + pure-eval==0.2.2
-     + pygments==2.17.2
-     + python-dateutil==2.9.0.post0
-     + pytz==2024.1
-     + six==1.16.0
-     + stack-data==0.6.3
-     + traitlets==5.14.2
-     + tzdata==2024.1
-     + wcwidth==0.2.13
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())
@@ -946,41 +1233,28 @@ fn tool_run_csv_with() -> anyhow::Result<()> {
        "
     })?;
 
-    // performs a tool run with CSV `with` flag
+    // Performs a tool run with a comma-separated `--with` flag.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with")
-        .arg("numpy,pandas")
-        .arg("ipython")
-        .arg("-c")
-        .arg("import numpy; import pandas;")
+        .arg("iniconfig,typing-extensions")
+        .arg("pytest")
+        .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
+    pytest 8.1.1
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + asttokens==2.4.1
-     + decorator==5.1.1
-     + executing==2.0.1
-     + ipython==8.22.2
-     + jedi==0.19.1
-     + matplotlib-inline==0.1.6
-     + numpy==1.26.4
-     + pandas==2.2.1
-     + parso==0.8.3
-     + prompt-toolkit==3.0.43
-     + pure-eval==0.2.2
-     + pygments==2.17.2
-     + python-dateutil==2.9.0.post0
-     + pytz==2024.1
-     + six==1.16.0
-     + stack-data==0.6.3
-     + traitlets==5.14.2
-     + wcwidth==0.2.13
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())
@@ -1023,46 +1297,30 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
        "
     })?;
 
-    // performs a tool run with repeated `with` flag
+    // Performs a tool run with a repeated `--with` flag.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with")
-        .arg("numpy")
+        .arg("iniconfig")
         .arg("--with")
-        .arg("pandas")
-        .arg("ipython")
-        .arg("-c")
-        .arg("import numpy; import pandas;")
+        .arg("typing-extensions")
+        .arg("pytest")
+        .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
+    pytest 8.1.1
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + asttokens==2.4.1
-     + decorator==5.1.1
-     + executing==2.0.1
-     + ipython==8.22.2
-     + jedi==0.19.1
-     + matplotlib-inline==0.1.6
-     + numpy==1.26.4
-     + pandas==2.2.1
-     + parso==0.8.3
-     + pexpect==4.9.0
-     + prompt-toolkit==3.0.43
-     + ptyprocess==0.7.0
-     + pure-eval==0.2.2
-     + pygments==2.17.2
-     + python-dateutil==2.9.0.post0
-     + pytz==2024.1
-     + six==1.16.0
-     + stack-data==0.6.3
-     + traitlets==5.14.2
-     + tzdata==2024.1
-     + wcwidth==0.2.13
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())
@@ -1105,43 +1363,30 @@ fn tool_run_repeated_with() -> anyhow::Result<()> {
        "
     })?;
 
-    // performs a tool run with repeated `with` flag
+    // Performs a tool run with a repeated `--with` flag.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with")
-        .arg("numpy")
+        .arg("iniconfig")
         .arg("--with")
-        .arg("pandas")
-        .arg("ipython")
-        .arg("-c")
-        .arg("import numpy; import pandas;")
+        .arg("typing-extensions")
+        .arg("pytest")
+        .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
+    pytest 8.1.1
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
-     + asttokens==2.4.1
-     + decorator==5.1.1
-     + executing==2.0.1
-     + ipython==8.22.2
-     + jedi==0.19.1
-     + matplotlib-inline==0.1.6
-     + numpy==1.26.4
-     + pandas==2.2.1
-     + parso==0.8.3
-     + prompt-toolkit==3.0.43
-     + pure-eval==0.2.2
-     + pygments==2.17.2
-     + python-dateutil==2.9.0.post0
-     + pytz==2024.1
-     + six==1.16.0
-     + stack-data==0.6.3
-     + traitlets==5.14.2
-     + wcwidth==0.2.13
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + typing-extensions==4.10.0
     "###);
 
     Ok(())
@@ -1452,4 +1697,885 @@ fn tool_run_latest() {
 
     ----- stderr -----
     "###);
+}
+
+#[test]
+fn tool_run_latest_extra() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("flask[dotenv]@latest")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + python-dotenv==1.0.1
+     + werkzeug==3.0.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("flask[dotenv]@3.0.0")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.0
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 8 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.0
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + python-dotenv==1.0.1
+     + werkzeug==3.0.1
+    "###);
+}
+
+#[test]
+fn tool_run_extra() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("flask[dotenv]")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 3.0.2
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 8 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + python-dotenv==1.0.1
+     + werkzeug==3.0.1
+    "###);
+}
+
+#[test]
+fn tool_run_specifier() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("flask<3.0.0")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+    Flask 2.3.3
+    Werkzeug 3.0.1
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==2.3.3
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###);
+}
+
+#[test]
+fn tool_run_python() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python")
+        .arg("-c")
+        .arg("print('Hello, world!')"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+}
+
+#[test]
+fn tool_run_python_at_version() {
+    let context = TestContext::new_with_versions(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+            .arg("python@3.12")
+            .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.11")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    // Request a version via `-p`
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("-p")
+        .arg("3.11")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+
+    // Request a version in the tool and `-p`
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("-p")
+        .arg("3.12")
+        .arg("python@3.11")
+        .arg("--version"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Received multiple Python version requests: `3.12` and `3.11`
+    "###);
+
+    // Request a version that does not exist
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.12.99"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for Python 3.12.[X] in [PYTHON SOURCES]
+    "###);
+
+    // Request an invalid version
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@3.300"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: 3.300
+    "###);
+
+    // Request `@latest` (not yet supported)
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python@latest")
+        .arg("--version"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requesting the 'latest' Python version is not yet supported
+    "###);
+}
+
+#[test]
+fn tool_run_python_from() {
+    let context = TestContext::new_with_versions(&["3.12", "3.11"])
+        .with_filtered_counts()
+        .with_filtered_python_sources();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python@3.11")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    Audited in [TIME]
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python>=3.12")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Using `--from python<specifier>` is not supported. Use `python@<version>` instead.
+    "###);
+}
+
+#[test]
+fn tool_run_from_at() {
+    let context = TestContext::new("3.12")
+        .with_exclude_newer("2025-01-18T00:00:00Z")
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("executable-application@latest")
+        .arg("app")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    app 0.3.0
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + executable-application==0.3.0
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("executable-application@0.2.0")
+        .arg("app")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    app 0.2.0
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + executable-application==0.2.0
+    "###);
+}
+
+#[test]
+fn tool_run_verbatim_name() {
+    let context = TestContext::new("3.12")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // The normalized package name is `change-wheel-version`, but the executable is `change_wheel_version`.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("change_wheel_version")
+        .arg("--help")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    usage: change_wheel_version [-h] [--local-version LOCAL_VERSION] [--version VERSION]
+                                [--delete-old-wheel] [--allow-same-version]
+                                wheel
+
+    positional arguments:
+      wheel
+
+    options:
+      -h, --help            show this help message and exit
+      --local-version LOCAL_VERSION
+      --version VERSION
+      --delete-old-wheel
+      --allow-same-version
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + change-wheel-version==0.5.0
+     + installer==0.7.0
+     + packaging==24.0
+     + wheel==0.43.0
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("change-wheel-version")
+        .arg("--help")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    The executable `change-wheel-version` was not found.
+    The following executables are provided by `change-wheel-version`:
+    - change_wheel_version
+    Consider using `uv tool run --from change-wheel-version <EXECUTABLE_NAME>` instead.
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    warning: An executable named `change-wheel-version` is not provided by package `change-wheel-version`.
+    "###);
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("change-wheel-version")
+        .arg("change_wheel_version")
+        .arg("--help")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    usage: change_wheel_version [-h] [--local-version LOCAL_VERSION] [--version VERSION]
+                                [--delete-old-wheel] [--allow-same-version]
+                                wheel
+
+    positional arguments:
+      wheel
+
+    options:
+      -h, --help            show this help message and exit
+      --local-version LOCAL_VERSION
+      --version VERSION
+      --delete-old-wheel
+      --allow-same-version
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
+}
+
+#[test]
+fn tool_run_with_existing_py_script() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    context.temp_dir.child("script.py").touch()?;
+
+    uv_snapshot!(context.filters(), context.tool_run().arg("script.py"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you tried to run a Python script at `script.py`, which is not supported by `uv tool run`
+
+    hint: Use `uv run script.py` instead
+    ");
+    Ok(())
+}
+
+#[test]
+fn tool_run_with_existing_pyw_script() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    context.temp_dir.child("script.pyw").touch()?;
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("script.pyw"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you tried to run a Python script at `script.pyw`, which is not supported by `uv tool run`
+
+    hint: Use `uv run script.pyw` instead
+    ");
+    Ok(())
+}
+
+#[test]
+fn tool_run_with_nonexistent_py_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("script.py"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you provided a Python script to run, which is not supported supported by `uv tool run`
+
+    hint: We did not find a script at the requested path. If you meant to run a command from the `script-py` package, pass the normalized package name to `--from` to disambiguate, e.g., `uv tool run --from script-py script.py`
+    ");
+}
+
+#[test]
+fn tool_run_with_nonexistent_pyw_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("script.pyw"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you provided a Python script to run, which is not supported supported by `uv tool run`
+
+    hint: We did not find a script at the requested path. If you meant to run a command from the `script-pyw` package, pass the normalized package name to `--from` to disambiguate, e.g., `uv tool run --from script-pyw script.pyw`
+    ");
+}
+
+#[test]
+fn tool_run_with_from_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("script.py")
+        .arg("ruff"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you provided a Python script to `--from`, which is not supported
+
+    hint: If you meant to run a command from the `script-py` package, use the normalized package name instead to disambiguate, e.g., `uv tool run --from script-py ruff`
+    ");
+}
+
+#[test]
+fn tool_run_with_script_and_from_script() {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    // We treat arguments before the command as uv arguments
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("script.py")
+        .arg("other-script.py"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: It looks you provided a Python script to `--from`, which is not supported
+
+    hint: If you meant to run a command from the `script-py` package, use the normalized package name instead to disambiguate, e.g., `uv tool run --from script-py other-script.py`
+    ");
+}
+
+/// Test windows runnable types, namely console scripts and legacy setuptools scripts.
+/// Console Scripts <https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#console-scripts>
+/// Legacy Scripts <https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/#scripts>.
+///
+/// This tests for uv tool run of windows runnable types defined by [`WindowsRunnable`].
+#[cfg(windows)]
+#[test]
+fn tool_run_windows_runnable_types() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let foo_dir = context.temp_dir.child("foo");
+    let foo_pyproject_toml = foo_dir.child("pyproject.toml");
+
+    // Use `script-files` which enables legacy scripts packaging.
+    foo_pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = []
+
+        [project.scripts]
+        custom_pydoc = "foo.main:run"
+
+        [tool.setuptools]
+        script-files = [
+            "misc/custom_pydoc.bat",
+            "misc/custom_pydoc.cmd",
+            "misc/custom_pydoc.ps1"
+        ]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+
+    // Create the legacy scripts
+    let custom_pydoc_bat = foo_dir.child("misc").child("custom_pydoc.bat");
+    let custom_pydoc_cmd = foo_dir.child("misc").child("custom_pydoc.cmd");
+    let custom_pydoc_ps1 = foo_dir.child("misc").child("custom_pydoc.ps1");
+
+    custom_pydoc_bat.write_str("python.exe -m pydoc %*")?;
+    custom_pydoc_cmd.write_str("python.exe -m pydoc %*")?;
+    custom_pydoc_ps1.write_str("python.exe -m pydoc $args")?;
+
+    // Create the foo module
+    let foo_project_src = foo_dir.child("src");
+    let foo_module = foo_project_src.child("foo");
+    let foo_main_py = foo_module.child("main.py");
+    foo_main_py.write_str(indoc! { r#"
+        import pydoc, sys
+
+        def run():
+            sys.argv[0] = "pydoc"
+            pydoc.cli()
+
+        __name__ == "__main__" and run()
+       "#
+    })?;
+
+    // Install `foo` tool.
+    context
+        .tool_install()
+        .arg(foo_dir.as_os_str())
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("foo")
+        .arg("does_not_exist")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    The executable `does_not_exist` was not found.
+    The following executables are provided by `foo`:
+    - custom_pydoc.exe
+    - custom_pydoc.bat
+    - custom_pydoc.cmd
+    - custom_pydoc.ps1
+    Consider using `uv tool run --from foo <EXECUTABLE_NAME>` instead.
+
+    ----- stderr -----
+    warning: An executable named `does_not_exist` is not provided by package `foo`.
+    "###);
+
+    // Test with explicit .bat extension
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("foo")
+        .arg("custom_pydoc.bat")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pydoc - the Python documentation tool
+
+    pydoc <name> ...
+        Show text documentation on something.  <name> may be the name of a
+        Python keyword, topic, function, module, or package, or a dotted
+        reference to a class or function within a module or module in a
+        package.  If <name> contains a '\', it is used as the path to a
+        Python source file to document. If name is 'keywords', 'topics',
+        or 'modules', a listing of these things is displayed.
+
+    pydoc -k <keyword>
+        Search for a keyword in the synopsis lines of all available modules.
+
+    pydoc -n <hostname>
+        Start an HTTP server with the given hostname (default: localhost).
+
+    pydoc -p <port>
+        Start an HTTP server on the given port on the local machine.  Port
+        number 0 can be used to get an arbitrary unused port.
+
+    pydoc -b
+        Start an HTTP server on an arbitrary unused port and open a web browser
+        to interactively browse documentation.  This option can be used in
+        combination with -n and/or -p.
+
+    pydoc -w <name> ...
+        Write out the HTML documentation for a module to a file in the current
+        directory.  If <name> contains a '\', it is treated as a filename; if
+        it names a directory, documentation is written for all the contents.
+
+
+    ----- stderr -----
+    "###);
+
+    // Test with explicit .cmd extension
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("foo")
+        .arg("custom_pydoc.cmd")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pydoc - the Python documentation tool
+
+    pydoc <name> ...
+        Show text documentation on something.  <name> may be the name of a
+        Python keyword, topic, function, module, or package, or a dotted
+        reference to a class or function within a module or module in a
+        package.  If <name> contains a '\', it is used as the path to a
+        Python source file to document. If name is 'keywords', 'topics',
+        or 'modules', a listing of these things is displayed.
+
+    pydoc -k <keyword>
+        Search for a keyword in the synopsis lines of all available modules.
+
+    pydoc -n <hostname>
+        Start an HTTP server with the given hostname (default: localhost).
+
+    pydoc -p <port>
+        Start an HTTP server on the given port on the local machine.  Port
+        number 0 can be used to get an arbitrary unused port.
+
+    pydoc -b
+        Start an HTTP server on an arbitrary unused port and open a web browser
+        to interactively browse documentation.  This option can be used in
+        combination with -n and/or -p.
+
+    pydoc -w <name> ...
+        Write out the HTML documentation for a module to a file in the current
+        directory.  If <name> contains a '\', it is treated as a filename; if
+        it names a directory, documentation is written for all the contents.
+
+
+    ----- stderr -----
+    "###);
+
+    // Test with explicit .ps1 extension
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("foo")
+        .arg("custom_pydoc.ps1")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pydoc - the Python documentation tool
+
+    pydoc <name> ...
+        Show text documentation on something.  <name> may be the name of a
+        Python keyword, topic, function, module, or package, or a dotted
+        reference to a class or function within a module or module in a
+        package.  If <name> contains a '\', it is used as the path to a
+        Python source file to document. If name is 'keywords', 'topics',
+        or 'modules', a listing of these things is displayed.
+
+    pydoc -k <keyword>
+        Search for a keyword in the synopsis lines of all available modules.
+
+    pydoc -n <hostname>
+        Start an HTTP server with the given hostname (default: localhost).
+
+    pydoc -p <port>
+        Start an HTTP server on the given port on the local machine.  Port
+        number 0 can be used to get an arbitrary unused port.
+
+    pydoc -b
+        Start an HTTP server on an arbitrary unused port and open a web browser
+        to interactively browse documentation.  This option can be used in
+        combination with -n and/or -p.
+
+    pydoc -w <name> ...
+        Write out the HTML documentation for a module to a file in the current
+        directory.  If <name> contains a '\', it is treated as a filename; if
+        it names a directory, documentation is written for all the contents.
+
+
+    ----- stderr -----
+    "###);
+
+    // Test with explicit .exe extension
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("foo")
+        .arg("custom_pydoc")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pydoc - the Python documentation tool
+
+    pydoc <name> ...
+        Show text documentation on something.  <name> may be the name of a
+        Python keyword, topic, function, module, or package, or a dotted
+        reference to a class or function within a module or module in a
+        package.  If <name> contains a '\', it is used as the path to a
+        Python source file to document. If name is 'keywords', 'topics',
+        or 'modules', a listing of these things is displayed.
+
+    pydoc -k <keyword>
+        Search for a keyword in the synopsis lines of all available modules.
+
+    pydoc -n <hostname>
+        Start an HTTP server with the given hostname (default: localhost).
+
+    pydoc -p <port>
+        Start an HTTP server on the given port on the local machine.  Port
+        number 0 can be used to get an arbitrary unused port.
+
+    pydoc -b
+        Start an HTTP server on an arbitrary unused port and open a web browser
+        to interactively browse documentation.  This option can be used in
+        combination with -n and/or -p.
+
+    pydoc -w <name> ...
+        Write out the HTML documentation for a module to a file in the current
+        directory.  If <name> contains a '\', it is treated as a filename; if
+        it names a directory, documentation is written for all the contents.
+
+
+    ----- stderr -----
+    "###);
+
+    // Test without explicit extension (.exe should be used)
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("foo")
+        .arg("custom_pydoc")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pydoc - the Python documentation tool
+
+    pydoc <name> ...
+        Show text documentation on something.  <name> may be the name of a
+        Python keyword, topic, function, module, or package, or a dotted
+        reference to a class or function within a module or module in a
+        package.  If <name> contains a '\', it is used as the path to a
+        Python source file to document. If name is 'keywords', 'topics',
+        or 'modules', a listing of these things is displayed.
+
+    pydoc -k <keyword>
+        Search for a keyword in the synopsis lines of all available modules.
+
+    pydoc -n <hostname>
+        Start an HTTP server with the given hostname (default: localhost).
+
+    pydoc -p <port>
+        Start an HTTP server on the given port on the local machine.  Port
+        number 0 can be used to get an arbitrary unused port.
+
+    pydoc -b
+        Start an HTTP server on an arbitrary unused port and open a web browser
+        to interactively browse documentation.  This option can be used in
+        combination with -n and/or -p.
+
+    pydoc -w <name> ...
+        Write out the HTML documentation for a module to a file in the current
+        directory.  If <name> contains a '\', it is treated as a filename; if
+        it names a directory, documentation is written for all the contents.
+
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
 }

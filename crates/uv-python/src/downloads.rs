@@ -28,6 +28,7 @@ use crate::implementation::{
 };
 use crate::installation::PythonInstallationKey;
 use crate::libc::LibcDetectionError;
+use crate::managed::ManagedPythonInstallation;
 use crate::platform::{self, Arch, Libc, Os};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
@@ -145,6 +146,12 @@ impl PythonDownloadRequest {
     }
 
     #[must_use]
+    pub fn with_any_arch(mut self) -> Self {
+        self.arch = None;
+        self
+    }
+
+    #[must_use]
     pub fn with_os(mut self, os: Os) -> Self {
         self.os = Some(os);
         self
@@ -243,18 +250,20 @@ impl PythonDownloadRequest {
             .filter(move |download| self.satisfied_by_download(download))
     }
 
-    /// Whether this request is satisfied by the key of an existing installation.
+    /// Whether this request is satisfied by an installation key.
     pub fn satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
-        if let Some(arch) = &self.arch {
-            if key.arch != *arch {
-                return false;
-            }
-        }
         if let Some(os) = &self.os {
             if key.os != *os {
                 return false;
             }
         }
+
+        if let Some(arch) = &self.arch {
+            if !arch.supports(key.arch) {
+                return false;
+            }
+        }
+
         if let Some(libc) = &self.libc {
             if key.libc != *libc {
                 return false;
@@ -335,6 +344,23 @@ impl PythonDownloadRequest {
             }
         }
         true
+    }
+}
+
+impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
+    fn from(installation: &ManagedPythonInstallation) -> Self {
+        let key = installation.key();
+        Self::new(
+            Some(VersionRequest::from(&key.version())),
+            match &key.implementation {
+                LenientImplementationName::Known(implementation) => Some(*implementation),
+                LenientImplementationName::Unknown(name) => unreachable!("Managed Python installations are expected to always have known implementation names, found {name}"),
+            },
+            Some(key.arch),
+            Some(key.os),
+            Some(key.libc),
+            Some(key.prerelease.is_some()),
+        )
     }
 }
 
@@ -440,14 +466,10 @@ impl ManagedPythonDownload {
 
     /// Iterate over all [`ManagedPythonDownload`]s.
     pub fn iter_all() -> impl Iterator<Item = &'static ManagedPythonDownload> {
-        PYTHON_DOWNLOADS
-            .iter()
-            // TODO(konsti): musl python-build-standalone builds are currently broken (statically
-            // linked), so we pretend they don't exist. https://github.com/astral-sh/uv/issues/4242
-            .filter(|download| download.key.libc != Libc::Some(target_lexicon::Environment::Musl))
+        PYTHON_DOWNLOADS.iter()
     }
 
-    pub fn url(&self) -> &str {
+    pub fn url(&self) -> &'static str {
         self.url
     }
 
@@ -459,17 +481,17 @@ impl ManagedPythonDownload {
         self.key.os()
     }
 
-    pub fn sha256(&self) -> Option<&str> {
+    pub fn sha256(&self) -> Option<&'static str> {
         self.sha256
     }
 
     /// Download and extract a Python distribution, retrying on failure.
-    #[instrument(skip(client, installation_dir, cache_dir, reporter), fields(download = % self.key()))]
+    #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
     pub async fn fetch_with_retry(
         &self,
         client: &uv_client::BaseClient,
         installation_dir: &Path,
-        cache_dir: &Path,
+        scratch_dir: &Path,
         reinstall: bool,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
@@ -483,7 +505,7 @@ impl ManagedPythonDownload {
                 .fetch(
                     client,
                     installation_dir,
-                    cache_dir,
+                    scratch_dir,
                     reinstall,
                     python_install_mirror,
                     pypy_install_mirror,
@@ -514,12 +536,12 @@ impl ManagedPythonDownload {
     }
 
     /// Download and extract a Python distribution.
-    #[instrument(skip(client, installation_dir, cache_dir, reporter), fields(download = % self.key()))]
+    #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
     pub async fn fetch(
         &self,
         client: &uv_client::BaseClient,
         installation_dir: &Path,
-        cache_dir: &Path,
+        scratch_dir: &Path,
         reinstall: bool,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
@@ -543,7 +565,7 @@ impl ManagedPythonDownload {
             .map(|reporter| (reporter, reporter.on_download_start(&self.key, size)));
 
         // Download and extract into a temporary directory.
-        let temp_dir = tempfile::tempdir_in(cache_dir).map_err(Error::DownloadDirError)?;
+        let temp_dir = tempfile::tempdir_in(scratch_dir).map_err(Error::DownloadDirError)?;
 
         debug!(
             "Downloading {url} to temporary location: {}",
@@ -651,7 +673,7 @@ impl ManagedPythonDownload {
             LenientImplementationName::Known(ImplementationName::CPython) => {
                 if let Some(mirror) = python_install_mirror {
                     let Some(suffix) = self.url.strip_prefix(
-                        "https://github.com/indygreg/python-build-standalone/releases/download/",
+                        "https://github.com/astral-sh/python-build-standalone/releases/download/",
                     ) else {
                         return Err(Error::Mirror(EnvVars::UV_PYTHON_INSTALL_MIRROR, self.url));
                     };

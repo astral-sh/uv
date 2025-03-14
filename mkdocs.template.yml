@@ -62,12 +62,18 @@ markdown_extensions:
       alternate_style: true
 plugins:
   - search
+  - git-revision-date-localized:
+      timezone: UTC # It can only be in UTC unless the ISO time can include timezone.
   - redirects:
       # Note that redirecting an anchor, e.g., `concepts/projects/#managing-dependencies` must be done
       # client-side and is implemented in `extra.js` instead.
       redirect_maps:
+        "guides/publish.md": "guides/package.md"
         "concepts/workspaces.md": "concepts/projects/workspaces.md"
         "concepts/dependencies.md": "concepts/projects/dependencies.md"
+        "reference/versioning.md": "reference/policies/versioning.md"
+        "reference/platforms.md": "reference/policies/platforms.md"
+        "reference/build_failures.md": "reference/troubleshooting/build-failures.md"
 extra_css:
   - stylesheets/extra.css
 extra_javascript:
@@ -98,7 +104,7 @@ nav:
       - Running scripts: guides/scripts.md
       - Using tools: guides/tools.md
       - Working on projects: guides/projects.md
-      - Publishing packages: guides/publish.md
+      - Publishing packages: guides/package.md
       - Integrations:
           - guides/integration/index.md
           - Docker: guides/integration/docker.md
@@ -110,6 +116,7 @@ nav:
           - FastAPI: guides/integration/fastapi.md
           - Alternative indexes: guides/integration/alternative-indexes.md
           - Dependency bots: guides/integration/dependency-bots.md
+          - AWS Lambda: guides/integration/aws-lambda.md
   - Concepts:
       - concepts/index.md
       - Projects:
@@ -145,11 +152,17 @@ nav:
       - reference/index.md
       - Commands: reference/cli.md
       - Settings: reference/settings.md
-      - Build Failures: reference/build_failures.md
+      - Troubleshooting:
+          - reference/troubleshooting/index.md
+          - Build failures: reference/troubleshooting/build-failures.md
+          - Reproducible examples: reference/troubleshooting/reproducible-examples.md
       - Resolver: reference/resolver-internals.md
       - Benchmarks: reference/benchmarks.md
-      - Versioning: reference/versioning.md
-      - Platform support: reference/platforms.md
+      - Policies:
+          - reference/policies/index.md
+          - Versioning: reference/policies/versioning.md
+          - Platform support: reference/policies/platforms.md
+          - License: reference/policies/license.md
 validation:
   omitted_files: warn
   absolute_links: warn

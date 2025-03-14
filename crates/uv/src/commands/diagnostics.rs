@@ -1,20 +1,19 @@
 use std::str::FromStr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use version_ranges::Ranges;
 
-use uv_distribution_types::{BuiltDist, DerivationChain, DerivationStep, Name, SourceDist};
+use uv_distribution_types::{
+    DerivationChain, DerivationStep, Dist, DistErrorKind, Name, RequestedDist,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_resolver::SentinelRange;
 
 use crate::commands::pip;
 
-type Error = Box<dyn std::error::Error + Send + Sync>;
-
-/// Static map of common package name typos or misconfigurations to their correct package names.
 static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::new(|| {
     let suggestions: Vec<(String, String)> =
         serde_json::from_str(include_str!("suggestions.json")).unwrap();
@@ -35,26 +34,37 @@ static SUGGESTIONS: LazyLock<FxHashMap<PackageName, PackageName>> = LazyLock::ne
 pub(crate) struct OperationDiagnostic {
     /// The hint to display to the user upon resolution failure.
     pub(crate) hint: Option<String>,
+    /// Whether native TLS is enabled.
+    pub(crate) native_tls: bool,
     /// The context to display to the user upon resolution failure.
     pub(crate) context: Option<&'static str>,
 }
 
 impl OperationDiagnostic {
+    /// Create an [`OperationDiagnostic`] with the given native TLS setting.
+    #[must_use]
+    pub(crate) fn native_tls(native_tls: bool) -> Self {
+        Self {
+            native_tls,
+            ..Default::default()
+        }
+    }
+
     /// Set the hint to display to the user upon resolution failure.
     #[must_use]
-    pub(crate) fn with_hint(hint: String) -> Self {
+    pub(crate) fn with_hint(self, hint: String) -> Self {
         Self {
             hint: Some(hint),
-            ..Default::default()
+            ..self
         }
     }
 
     /// Set the context to display to the user upon resolution failure.
     #[must_use]
-    pub(crate) fn with_context(context: &'static str) -> Self {
+    pub(crate) fn with_context(self, context: &'static str) -> Self {
         Self {
             context: Some(context),
-            ..Default::default()
+            ..self
         }
     }
 
@@ -67,80 +77,38 @@ impl OperationDiagnostic {
                 if let Some(context) = self.context {
                     no_solution_context(&err, context);
                 } else if let Some(hint) = self.hint {
-                    // TODO(charlie): The `hint` should be shown on all diagnostics, not just
-                    // `NoSolutionError`.
                     no_solution_hint(err, hint);
                 } else {
                     no_solution(&err);
                 }
                 None
             }
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::DownloadAndBuild(
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::Dist(
+                kind,
                 dist,
                 chain,
                 err,
             )) => {
-                download_and_build(dist, &chain, Box::new(err));
+                requested_dist_error(kind, dist, &chain, err, self.hint);
                 None
             }
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::Download(
+            pip::operations::Error::Requirements(uv_requirements::Error::Dist(kind, dist, err)) => {
+                dist_error(
+                    kind,
+                    dist,
+                    &DerivationChain::default(),
+                    Arc::new(err),
+                    self.hint,
+                );
+                None
+            }
+            pip::operations::Error::Prepare(uv_installer::PrepareError::Dist(
+                kind,
                 dist,
                 chain,
                 err,
             )) => {
-                download(dist, &chain, Box::new(err));
-                None
-            }
-            pip::operations::Error::Resolve(uv_resolver::ResolveError::Build(dist, chain, err)) => {
-                build(dist, &chain, Box::new(err));
-                None
-            }
-            pip::operations::Error::Requirements(uv_requirements::Error::DownloadAndBuild(
-                dist,
-                chain,
-                err,
-            )) => {
-                download_and_build(dist, &chain, Box::new(err));
-                None
-            }
-            pip::operations::Error::Requirements(uv_requirements::Error::Download(
-                dist,
-                chain,
-                err,
-            )) => {
-                download(dist, &chain, Box::new(err));
-                None
-            }
-            pip::operations::Error::Requirements(uv_requirements::Error::Build(
-                dist,
-                chain,
-                err,
-            )) => {
-                build(dist, &chain, Box::new(err));
-                None
-            }
-            pip::operations::Error::Prepare(uv_installer::PrepareError::DownloadAndBuild(
-                dist,
-                chain,
-                err,
-            )) => {
-                download_and_build(dist, &chain, Box::new(err));
-                None
-            }
-            pip::operations::Error::Prepare(uv_installer::PrepareError::Download(
-                dist,
-                chain,
-                err,
-            )) => {
-                download(dist, &chain, Box::new(err));
-                None
-            }
-            pip::operations::Error::Prepare(uv_installer::PrepareError::Build(
-                dist,
-                chain,
-                err,
-            )) => {
-                build(dist, &chain, Box::new(err));
+                dist_error(kind, dist, &chain, Arc::new(err), self.hint);
                 None
             }
             pip::operations::Error::Requirements(err) => {
@@ -153,31 +121,44 @@ impl OperationDiagnostic {
                     Some(pip::operations::Error::Requirements(err))
                 }
             }
+            pip::operations::Error::Resolve(uv_resolver::ResolveError::Client(err))
+                if !self.native_tls && err.is_ssl() =>
+            {
+                native_tls_hint(err);
+                None
+            }
             err => Some(err),
         }
     }
 }
 
-/// Render a remote source distribution build failure with a help message.
-pub(crate) fn download_and_build(sdist: Box<SourceDist>, chain: &DerivationChain, cause: Error) {
+/// Render a distribution failure (read, download or build) with a help message.
+pub(crate) fn dist_error(
+    kind: DistErrorKind,
+    dist: Box<Dist>,
+    chain: &DerivationChain,
+    cause: Arc<uv_distribution::Error>,
+    help: Option<String>,
+) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("Failed to download and build `{sdist}`")]
+    #[error("{kind} `{dist}`")]
     #[diagnostic()]
     struct Diagnostic {
-        sdist: Box<SourceDist>,
+        kind: DistErrorKind,
+        dist: Box<Dist>,
         #[source]
-        cause: Error,
+        cause: Arc<uv_distribution::Error>,
         #[help]
         help: Option<String>,
     }
 
-    let report = miette::Report::new(Diagnostic {
-        help: SUGGESTIONS
-            .get(sdist.name())
+    let help = help.or_else(|| {
+        SUGGESTIONS
+            .get(dist.name())
             .map(|suggestion| {
                 format!(
                     "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                    sdist.name().cyan(),
+                    dist.name().cyan(),
                     suggestion.cyan(),
                     suggestion.cyan(),
                 )
@@ -186,35 +167,46 @@ pub(crate) fn download_and_build(sdist: Box<SourceDist>, chain: &DerivationChain
                 if chain.is_empty() {
                     None
                 } else {
-                    Some(format_chain(sdist.name(), sdist.version(), chain))
+                    Some(format_chain(dist.name(), dist.version(), chain))
                 }
-            }),
-        sdist,
+            })
+    });
+    let report = miette::Report::new(Diagnostic {
+        kind,
+        dist,
         cause,
+        help,
     });
     anstream::eprint!("{report:?}");
 }
 
-/// Render a remote binary distribution download failure with a help message.
-pub(crate) fn download(wheel: Box<BuiltDist>, chain: &DerivationChain, cause: Error) {
+/// Render a requested distribution failure (read, download or build) with a help message.
+pub(crate) fn requested_dist_error(
+    kind: DistErrorKind,
+    dist: Box<RequestedDist>,
+    chain: &DerivationChain,
+    cause: Arc<uv_distribution::Error>,
+    help: Option<String>,
+) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("Failed to download `{wheel}`")]
+    #[error("{kind} `{dist}`")]
     #[diagnostic()]
     struct Diagnostic {
-        wheel: Box<BuiltDist>,
+        kind: DistErrorKind,
+        dist: Box<RequestedDist>,
         #[source]
-        cause: Error,
+        cause: Arc<uv_distribution::Error>,
         #[help]
         help: Option<String>,
     }
 
-    let report = miette::Report::new(Diagnostic {
-        help: SUGGESTIONS
-            .get(wheel.name())
+    let help = help.or_else(|| {
+        SUGGESTIONS
+            .get(dist.name())
             .map(|suggestion| {
                 format!(
                     "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                    wheel.name().cyan(),
+                    dist.name().cyan(),
                     suggestion.cyan(),
                     suggestion.cyan(),
                 )
@@ -223,48 +215,15 @@ pub(crate) fn download(wheel: Box<BuiltDist>, chain: &DerivationChain, cause: Er
                 if chain.is_empty() {
                     None
                 } else {
-                    Some(format_chain(wheel.name(), Some(wheel.version()), chain))
+                    Some(format_chain(dist.name(), dist.version(), chain))
                 }
-            }),
-        wheel,
-        cause,
+            })
     });
-    anstream::eprint!("{report:?}");
-}
-
-/// Render a local source distribution build failure with a help message.
-pub(crate) fn build(sdist: Box<SourceDist>, chain: &DerivationChain, cause: Error) {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
-    #[error("Failed to build `{sdist}`")]
-    #[diagnostic()]
-    struct Diagnostic {
-        sdist: Box<SourceDist>,
-        #[source]
-        cause: Error,
-        #[help]
-        help: Option<String>,
-    }
-
     let report = miette::Report::new(Diagnostic {
-        help: SUGGESTIONS
-            .get(sdist.name())
-            .map(|suggestion| {
-                format!(
-                    "`{}` is often confused for `{}` Did you mean to install `{}` instead?",
-                    sdist.name().cyan(),
-                    suggestion.cyan(),
-                    suggestion.cyan(),
-                )
-            })
-            .or_else(|| {
-                if chain.is_empty() {
-                    None
-                } else {
-                    Some(format_chain(sdist.name(), sdist.version(), chain))
-                }
-            }),
-        sdist,
+        kind,
+        dist,
         cause,
+        help,
     });
     anstream::eprint!("{report:?}");
 }
@@ -304,6 +263,41 @@ pub(crate) fn no_solution_hint(err: uv_resolver::NoSolutionError, help: String) 
     anstream::eprint!("{report:?}");
 }
 
+/// Render a [`uv_resolver::NoSolutionError`] with a help message.
+pub(crate) fn native_tls_hint(err: uv_client::Error) {
+    #[derive(Debug, miette::Diagnostic)]
+    #[diagnostic()]
+    struct Error {
+        /// The underlying error.
+        err: uv_client::Error,
+
+        /// The help message to display.
+        #[help]
+        help: String,
+    }
+
+    impl std::fmt::Display for Error {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.err)
+        }
+    }
+
+    impl std::error::Error for Error {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            self.err.source()
+        }
+    }
+
+    let report = miette::Report::new(Error {
+        err,
+        help: format!(
+            "Consider enabling use of system TLS certificates with the `{}` command-line flag",
+            "--native-tls".green()
+        ),
+    });
+    anstream::eprint!("{report:?}");
+}
+
 /// Format a [`DerivationChain`] as a human-readable error message.
 fn format_chain(name: &PackageName, version: Option<&Version>, chain: &DerivationChain) -> String {
     /// Format a step in the [`DerivationChain`] as a human-readable error message.
@@ -312,52 +306,86 @@ fn format_chain(name: &PackageName, version: Option<&Version>, chain: &Derivatio
             range.filter(|range| *range != Ranges::empty() && *range != Ranges::full())
         {
             if let Some(extra) = &step.extra {
-                // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)`
-                format!(
-                    "`{}{}` ({})",
-                    format!("{}[{}]", step.name, extra).cyan(),
-                    range.cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask[dotenv]>=1.0.0` (v1.2.3)
+                    format!(
+                        "`{}{}` ({})",
+                        format!("{}[{}]", step.name, extra).cyan(),
+                        range.cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask[dotenv]>=1.0.0`
+                    format!(
+                        "`{}{}`",
+                        format!("{}[{}]", step.name, extra).cyan(),
+                        range.cyan(),
+                    )
+                }
             } else if let Some(group) = &step.group {
-                // Ex) `flask:dev>=1.0.0` (v1.2.3)`
-                format!(
-                    "`{}{}` ({})",
-                    format!("{}:{}", step.name, group).cyan(),
-                    range.cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask:dev>=1.0.0` (v1.2.3)
+                    format!(
+                        "`{}{}` ({})",
+                        format!("{}:{}", step.name, group).cyan(),
+                        range.cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask:dev>=1.0.0`
+                    format!(
+                        "`{}{}`",
+                        format!("{}:{}", step.name, group).cyan(),
+                        range.cyan(),
+                    )
+                }
             } else {
-                // Ex) `flask>=1.0.0` (v1.2.3)`
-                format!(
-                    "`{}{}` ({})",
-                    step.name.cyan(),
-                    range.cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask>=1.0.0` (v1.2.3)
+                    format!(
+                        "`{}{}` ({})",
+                        step.name.cyan(),
+                        range.cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask>=1.0.0`
+                    format!("`{}{}`", step.name.cyan(), range.cyan())
+                }
             }
         } else {
             if let Some(extra) = &step.extra {
-                // Ex) `flask[dotenv]` (v1.2.3)`
-                format!(
-                    "`{}` ({})",
-                    format!("{}[{}]", step.name, extra).cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask[dotenv]` (v1.2.3)
+                    format!(
+                        "`{}` ({})",
+                        format!("{}[{}]", step.name, extra).cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask[dotenv]`
+                    format!("`{}`", format!("{}[{}]", step.name, extra).cyan())
+                }
             } else if let Some(group) = &step.group {
-                // Ex) `flask:dev` (v1.2.3)`
-                format!(
-                    "`{}` ({})",
-                    format!("{}:{}", step.name, group).cyan(),
-                    format!("v{}", step.version).cyan(),
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask:dev` (v1.2.3)
+                    format!(
+                        "`{}` ({})",
+                        format!("{}:{}", step.name, group).cyan(),
+                        format!("v{version}").cyan(),
+                    )
+                } else {
+                    // Ex) `flask:dev`
+                    format!("`{}`", format!("{}:{}", step.name, group).cyan())
+                }
             } else {
-                // Ex) `flask` (v1.2.3)`
-                format!(
-                    "`{}` ({})",
-                    step.name.cyan(),
-                    format!("v{}", step.version).cyan()
-                )
+                if let Some(version) = step.version.as_ref() {
+                    // Ex) `flask` (v1.2.3)
+                    format!("`{}` ({})", step.name.cyan(), format!("v{version}").cyan())
+                } else {
+                    // Ex) `flask`
+                    format!("`{}`", step.name.cyan())
+                }
             }
         }
     }

@@ -10,14 +10,14 @@ pub enum BuildIsolation<'a> {
     SharedPackage(&'a PythonEnvironment, &'a [PackageName]),
 }
 
-impl<'a> BuildIsolation<'a> {
+impl BuildIsolation<'_> {
     /// Returns `true` if build isolation is enforced for the given package name.
     pub fn is_isolated(&self, package: Option<&PackageName>) -> bool {
         match self {
             Self::Isolated => true,
             Self::Shared(_) => false,
             Self::SharedPackage(_, packages) => {
-                package.map_or(true, |package| !packages.iter().any(|p| p == package))
+                package.is_none_or(|package| !packages.iter().any(|p| p == package))
             }
         }
     }

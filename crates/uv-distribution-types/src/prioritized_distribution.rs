@@ -1,12 +1,18 @@
 use std::fmt::{Display, Formatter};
-use uv_distribution_filename::BuildTag;
 
+use arcstr::ArcStr;
+use owo_colors::OwoColorize;
+use tracing::debug;
+
+use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_pep440::VersionSpecifiers;
-use uv_platform_tags::{IncompatibleTag, TagPriority};
+use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
-    InstalledDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, ResolvedDistRef,
+    InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    ResolvedDistRef,
 };
 
 /// A collection of distributions that have been filtered by relevance.
@@ -14,7 +20,7 @@ use crate::{
 pub struct PrioritizedDist(Box<PrioritizedDistInner>);
 
 /// [`PrioritizedDist`] is boxed because [`Dist`] is large.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 struct PrioritizedDistInner {
     /// The highest-priority source distribution. Between compatible source distributions this priority is arbitrary.
     source: Option<(RegistrySourceDist, SourceDistCompatibility)>,
@@ -25,10 +31,24 @@ struct PrioritizedDistInner {
     wheels: Vec<(RegistryBuiltWheel, WheelCompatibility)>,
     /// The hashes for each distribution.
     hashes: Vec<HashDigest>,
+    /// The set of supported platforms for the distribution, described in terms of their markers.
+    markers: MarkerTree,
+}
+
+impl Default for PrioritizedDistInner {
+    fn default() -> Self {
+        Self {
+            source: None,
+            best_wheel_index: None,
+            wheels: Vec::new(),
+            hashes: Vec::new(),
+            markers: MarkerTree::FALSE,
+        }
+    }
 }
 
 /// A distribution that can be used for both resolution and installation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum CompatibleDist<'a> {
     /// The distribution is already installed and can be used.
     InstalledDist(&'a InstalledDist),
@@ -60,6 +80,28 @@ pub enum CompatibleDist<'a> {
     },
 }
 
+impl CompatibleDist<'_> {
+    /// Return the `requires-python` specifier for the distribution, if any.
+    pub fn requires_python(&self) -> Option<&VersionSpecifiers> {
+        match self {
+            CompatibleDist::InstalledDist(_) => None,
+            CompatibleDist::SourceDist { sdist, .. } => sdist.file.requires_python.as_ref(),
+            CompatibleDist::CompatibleWheel { wheel, .. } => wheel.file.requires_python.as_ref(),
+            CompatibleDist::IncompatibleWheel { sdist, .. } => sdist.file.requires_python.as_ref(),
+        }
+    }
+
+    /// Return the set of supported platform the distribution, in terms of their markers.
+    pub fn implied_markers(&self) -> MarkerTree {
+        match self {
+            CompatibleDist::InstalledDist(_) => MarkerTree::TRUE,
+            CompatibleDist::SourceDist { prioritized, .. } => prioritized.0.markers,
+            CompatibleDist::CompatibleWheel { prioritized, .. } => prioritized.0.markers,
+            CompatibleDist::IncompatibleWheel { prioritized, .. } => prioritized.0.markers,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum IncompatibleDist {
     /// An incompatible wheel is available.
@@ -82,6 +124,7 @@ impl IncompatibleDist {
                     None => format!("has {self}"),
                 },
                 IncompatibleWheel::RequiresPython(..) => format!("requires {self}"),
+                IncompatibleWheel::MissingPlatform(_) => format!("has {self}"),
             },
             Self::Source(incompatibility) => match incompatibility {
                 IncompatibleSource::NoBuild => format!("has {self}"),
@@ -109,6 +152,7 @@ impl IncompatibleDist {
                     None => format!("have {self}"),
                 },
                 IncompatibleWheel::RequiresPython(..) => format!("require {self}"),
+                IncompatibleWheel::MissingPlatform(_) => format!("have {self}"),
             },
             Self::Source(incompatibility) => match incompatibility {
                 IncompatibleSource::NoBuild => format!("have {self}"),
@@ -124,15 +168,48 @@ impl IncompatibleDist {
             Self::Unavailable => format!("have {self}"),
         }
     }
+
+    pub fn context_message(
+        &self,
+        tags: Option<&Tags>,
+        requires_python: Option<AbiTag>,
+    ) -> Option<String> {
+        match self {
+            Self::Wheel(incompatibility) => match incompatibility {
+                IncompatibleWheel::Tag(IncompatibleTag::Python) => {
+                    let tag = tags?.python_tag().as_ref().map(ToString::to_string)?;
+                    Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
+                }
+                IncompatibleWheel::Tag(IncompatibleTag::Abi) => {
+                    let tag = tags?.abi_tag().as_ref().map(ToString::to_string)?;
+                    Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
+                }
+                IncompatibleWheel::Tag(IncompatibleTag::AbiPythonVersion) => {
+                    let tag = requires_python?;
+                    Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
+                }
+                IncompatibleWheel::Tag(IncompatibleTag::Platform) => {
+                    let tag = tags?.platform_tag().map(ToString::to_string)?;
+                    Some(format!("(e.g., `{tag}`)", tag = tag.cyan()))
+                }
+                IncompatibleWheel::Tag(IncompatibleTag::Invalid) => None,
+                IncompatibleWheel::NoBinary => None,
+                IncompatibleWheel::Yanked(..) => None,
+                IncompatibleWheel::ExcludeNewer(..) => None,
+                IncompatibleWheel::RequiresPython(..) => None,
+                IncompatibleWheel::MissingPlatform(..) => None,
+            },
+            Self::Source(..) => None,
+            Self::Unavailable => None,
+        }
+    }
 }
 
 impl Display for IncompatibleDist {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Wheel(incompatibility) => match incompatibility {
-                IncompatibleWheel::NoBinary => {
-                    f.write_str("no source distribution and using wheels is disabled")
-                }
+                IncompatibleWheel::NoBinary => f.write_str("no source distribution"),
                 IncompatibleWheel::Tag(tag) => match tag {
                     IncompatibleTag::Invalid => f.write_str("no wheels with valid tags"),
                     IncompatibleTag::Python => {
@@ -161,11 +238,18 @@ impl Display for IncompatibleDist {
                 IncompatibleWheel::RequiresPython(python, _) => {
                     write!(f, "Python {python}")
                 }
+                IncompatibleWheel::MissingPlatform(marker) => {
+                    if let Some(platform) = KnownPlatform::from_marker(*marker) {
+                        write!(f, "no {platform}-compatible wheels")
+                    } else if let Some(marker) = marker.try_to_string() {
+                        write!(f, "no `{marker}`-compatible wheels")
+                    } else {
+                        write!(f, "no compatible wheels")
+                    }
+                }
             },
             Self::Source(incompatibility) => match incompatibility {
-                IncompatibleSource::NoBuild => {
-                    f.write_str("no usable wheels and building from source is disabled")
-                }
+                IncompatibleSource::NoBuild => f.write_str("no usable wheels"),
                 IncompatibleSource::Yanked(yanked) => match yanked {
                     Yanked::Bool(_) => f.write_str("yanked"),
                     Yanked::Reason(reason) => write!(
@@ -187,7 +271,7 @@ impl Display for IncompatibleDist {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum PythonRequirementKind {
     /// The installed version of Python.
     Installed,
@@ -215,6 +299,8 @@ pub enum IncompatibleWheel {
     Yanked(Yanked),
     /// The use of binary wheels is disabled.
     NoBinary,
+    /// Wheels are not available for the current platform.
+    MissingPlatform(MarkerTree),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -231,7 +317,7 @@ pub enum IncompatibleSource {
     NoBuild,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HashComparison {
     /// The hash is present, but does not match the expected value.
     Mismatched,
@@ -249,6 +335,7 @@ impl PrioritizedDist {
         compatibility: WheelCompatibility,
     ) -> Self {
         Self(Box::new(PrioritizedDistInner {
+            markers: implied_markers(&dist.filename),
             best_wheel_index: Some(0),
             wheels: vec![(dist, compatibility)],
             source: None,
@@ -263,6 +350,7 @@ impl PrioritizedDist {
         compatibility: SourceDistCompatibility,
     ) -> Self {
         Self(Box::new(PrioritizedDistInner {
+            markers: MarkerTree::TRUE,
             best_wheel_index: None,
             wheels: vec![],
             source: Some((dist, compatibility)),
@@ -277,6 +365,12 @@ impl PrioritizedDist {
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: WheelCompatibility,
     ) {
+        // Track the implied markers.
+        if compatibility.is_compatible() {
+            if !self.0.markers.is_true() {
+                self.0.markers.or(implied_markers(&dist.filename));
+            }
+        }
         // Track the highest-priority wheel.
         if let Some((.., existing_compatibility)) = self.best_wheel() {
             if compatibility.is_more_compatible(existing_compatibility) {
@@ -285,8 +379,8 @@ impl PrioritizedDist {
         } else {
             self.0.best_wheel_index = Some(self.0.wheels.len());
         }
-        self.0.wheels.push((dist, compatibility));
         self.0.hashes.extend(hashes);
+        self.0.wheels.push((dist, compatibility));
     }
 
     /// Insert the given source distribution into the [`PrioritizedDist`].
@@ -296,6 +390,10 @@ impl PrioritizedDist {
         hashes: impl IntoIterator<Item = HashDigest>,
         compatibility: SourceDistCompatibility,
     ) {
+        // Track the implied markers.
+        if compatibility.is_compatible() {
+            self.0.markers = MarkerTree::TRUE;
+        }
         // Track the highest-priority source.
         if let Some((.., existing_compatibility)) = &self.0.source {
             if compatibility.is_more_compatible(existing_compatibility) {
@@ -304,7 +402,6 @@ impl PrioritizedDist {
         } else {
             self.0.source = Some((dist, compatibility));
         }
-
         self.0.hashes.extend(hashes);
     }
 
@@ -436,6 +533,43 @@ impl PrioritizedDist {
     pub fn best_wheel(&self) -> Option<&(RegistryBuiltWheel, WheelCompatibility)> {
         self.0.best_wheel_index.map(|i| &self.0.wheels[i])
     }
+
+    /// Returns an iterator over all Python tags for the distribution.
+    pub fn python_tags(&self) -> impl Iterator<Item = LanguageTag> + '_ {
+        self.0
+            .wheels
+            .iter()
+            .flat_map(|(wheel, _)| wheel.filename.python_tags().iter().copied())
+    }
+
+    /// Returns an iterator over all ABI tags for the distribution.
+    pub fn abi_tags(&self) -> impl Iterator<Item = AbiTag> + '_ {
+        self.0
+            .wheels
+            .iter()
+            .flat_map(|(wheel, _)| wheel.filename.abi_tags().iter().copied())
+    }
+
+    /// Returns the set of platform tags for the distribution that are ABI-compatible with the given
+    /// tags.
+    pub fn platform_tags<'a>(
+        &'a self,
+        tags: &'a Tags,
+    ) -> impl Iterator<Item = &'a PlatformTag> + 'a {
+        self.0.wheels.iter().flat_map(move |(wheel, _)| {
+            if wheel.filename.python_tags().iter().any(|wheel_py| {
+                wheel
+                    .filename
+                    .abi_tags()
+                    .iter()
+                    .any(|wheel_abi| tags.is_compatible_abi(*wheel_py, *wheel_abi))
+            }) {
+                wheel.filename.platform_tags().iter()
+            } else {
+                [].iter()
+            }
+        })
+    }
 }
 
 impl<'a> CompatibleDist<'a> {
@@ -484,6 +618,7 @@ impl<'a> CompatibleDist<'a> {
 }
 
 impl WheelCompatibility {
+    /// Return `true` if the distribution is compatible.
     pub fn is_compatible(&self) -> bool {
         matches!(self, Self::Compatible(_, _, _))
     }
@@ -510,6 +645,11 @@ impl WheelCompatibility {
 }
 
 impl SourceDistCompatibility {
+    /// Return `true` if the distribution is compatible.
+    pub fn is_compatible(&self) -> bool {
+        matches!(self, Self::Compatible(_))
+    }
+
     /// Return the higher priority compatibility.
     ///
     /// Compatible source distributions are always higher priority than incompatible source distributions.
@@ -555,6 +695,7 @@ impl IncompatibleSource {
 }
 
 impl IncompatibleWheel {
+    #[allow(clippy::match_like_matches_macro)]
     fn is_more_compatible(&self, other: &Self) -> bool {
         match self {
             Self::ExcludeNewer(timestamp_self) => match other {
@@ -566,28 +707,203 @@ impl IncompatibleWheel {
                         timestamp_other < timestamp_self
                     }
                 },
-                Self::NoBinary | Self::RequiresPython(_, _) | Self::Tag(_) | Self::Yanked(_) => {
-                    true
-                }
+                Self::MissingPlatform(_)
+                | Self::NoBinary
+                | Self::RequiresPython(_, _)
+                | Self::Tag(_)
+                | Self::Yanked(_) => true,
             },
             Self::Tag(tag_self) => match other {
                 Self::ExcludeNewer(_) => false,
-                Self::Tag(tag_other) => tag_other > tag_self,
-                Self::NoBinary | Self::RequiresPython(_, _) | Self::Yanked(_) => true,
+                Self::Tag(tag_other) => tag_self > tag_other,
+                Self::MissingPlatform(_)
+                | Self::NoBinary
+                | Self::RequiresPython(_, _)
+                | Self::Yanked(_) => true,
             },
             Self::RequiresPython(_, _) => match other {
                 Self::ExcludeNewer(_) | Self::Tag(_) => false,
                 // Version specifiers cannot be reasonably compared
                 Self::RequiresPython(_, _) => false,
-                Self::NoBinary | Self::Yanked(_) => true,
+                Self::MissingPlatform(_) | Self::NoBinary | Self::Yanked(_) => true,
             },
             Self::Yanked(_) => match other {
                 Self::ExcludeNewer(_) | Self::Tag(_) | Self::RequiresPython(_, _) => false,
                 // Yanks with a reason are more helpful for errors
                 Self::Yanked(yanked_other) => matches!(yanked_other, Yanked::Reason(_)),
-                Self::NoBinary => true,
+                Self::MissingPlatform(_) | Self::NoBinary => true,
             },
-            Self::NoBinary => false,
+            Self::NoBinary => match other {
+                Self::ExcludeNewer(_)
+                | Self::Tag(_)
+                | Self::RequiresPython(_, _)
+                | Self::Yanked(_) => false,
+                Self::NoBinary => false,
+                Self::MissingPlatform(_) => true,
+            },
+            Self::MissingPlatform(_) => false,
         }
+    }
+}
+
+/// Given a wheel filename, determine the set of supported platforms, in terms of their markers.
+///
+/// This is roughly the inverse of platform tag generation: given a tag, we want to infer the
+/// supported platforms (rather than generating the supported tags from a given platform).
+pub fn implied_markers(filename: &WheelFilename) -> MarkerTree {
+    let mut marker = MarkerTree::FALSE;
+    for platform_tag in filename.platform_tags() {
+        match platform_tag {
+            PlatformTag::Any => {
+                return MarkerTree::TRUE;
+            }
+
+            // Windows
+            PlatformTag::Win32 => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("win32"),
+                });
+                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformMachine,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("x86"),
+                }));
+                marker.or(tag_marker);
+            }
+            PlatformTag::WinAmd64 => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("win32"),
+                });
+                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformMachine,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("x86_64"),
+                }));
+                marker.or(tag_marker);
+            }
+            PlatformTag::WinArm64 => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("win32"),
+                });
+                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformMachine,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("arm64"),
+                }));
+                marker.or(tag_marker);
+            }
+
+            // macOS
+            PlatformTag::Macos { binary_format, .. } => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("darwin"),
+                });
+
+                // Extract the architecture from the end of the tag.
+                let mut arch_marker = MarkerTree::FALSE;
+                for arch in binary_format.platform_machine() {
+                    arch_marker.or(MarkerTree::expression(MarkerExpression::String {
+                        key: MarkerValueString::PlatformMachine,
+                        operator: MarkerOperator::Equal,
+                        value: ArcStr::from(arch.name()),
+                    }));
+                }
+                tag_marker.and(arch_marker);
+
+                marker.or(tag_marker);
+            }
+
+            // Linux
+            PlatformTag::Manylinux { arch, .. }
+            | PlatformTag::Manylinux1 { arch, .. }
+            | PlatformTag::Manylinux2010 { arch, .. }
+            | PlatformTag::Manylinux2014 { arch, .. }
+            | PlatformTag::Musllinux { arch, .. }
+            | PlatformTag::Linux { arch } => {
+                let mut tag_marker = MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::SysPlatform,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("linux"),
+                });
+                tag_marker.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformMachine,
+                    operator: MarkerOperator::Equal,
+                    value: ArcStr::from(arch.name()),
+                }));
+                marker.or(tag_marker);
+            }
+
+            tag => {
+                debug!("Unknown platform tag in wheel tag: {tag}");
+            }
+        }
+    }
+    marker
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[track_caller]
+    fn assert_markers(filename: &str, expected: &str) {
+        let filename = WheelFilename::from_str(filename).unwrap();
+        assert_eq!(
+            implied_markers(&filename),
+            expected.parse::<MarkerTree>().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_implied_markers() {
+        let filename = WheelFilename::from_str("example-1.0-py3-none-any.whl").unwrap();
+        assert_eq!(implied_markers(&filename), MarkerTree::TRUE);
+
+        assert_markers(
+            "example-1.0-cp310-cp310-win32.whl",
+            "sys_platform == 'win32' and platform_machine == 'x86'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp313-cp313t-win_amd64.whl",
+            "sys_platform == 'win32' and platform_machine == 'x86_64'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp313-cp313t-win_arm64.whl",
+            "sys_platform == 'win32' and platform_machine == 'arm64'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp313-cp313t-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+            "sys_platform == 'linux' and platform_machine == 'aarch64'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "sys_platform == 'linux' and platform_machine == 'x86_64'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp312-cp312-musllinux_1_2_aarch64.whl",
+            "sys_platform == 'linux' and platform_machine == 'aarch64'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp310-cp310-macosx_14_0_x86_64.whl",
+            "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp310-cp310-macosx_10_9_x86_64.whl",
+            "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+        );
+        assert_markers(
+            "numpy-2.2.1-cp310-cp310-macosx_11_0_arm64.whl",
+            "sys_platform == 'darwin' and platform_machine == 'arm64'",
+        );
     }
 }

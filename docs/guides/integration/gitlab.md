@@ -1,3 +1,9 @@
+---
+title: Using uv in GitLab CI/CD
+description: A guide to using uv in GitLab CI/CD, including installation, setting up Python,
+  installing dependencies, and more.
+---
+
 # Using uv in GitLab CI/CD
 
 ## Using the uv image
@@ -10,16 +16,26 @@ variables:
   UV_VERSION: 0.5
   PYTHON_VERSION: 3.12
   BASE_LAYER: bookworm-slim
-
-stages:
-  - analysis
+  # GitLab CI creates a separate mountpoint for the build directory,
+  # so we need to copy instead of using hard links.
+  UV_LINK_MODE: copy
 
 uv:
-  stage: analysis
   image: ghcr.io/astral-sh/uv:$UV_VERSION-python$PYTHON_VERSION-$BASE_LAYER
   script:
     # your `uv` commands
 ```
+
+!!! note
+
+    If you are using a distroless image, you have to specify the entrypoint:
+    ```yaml
+    uv:
+      image:
+        name: ghcr.io/astral-sh/uv:$UV_VERSION
+        entrypoint: [""]
+      # ...
+    ```
 
 ## Caching
 

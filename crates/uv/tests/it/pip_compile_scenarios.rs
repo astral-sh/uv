@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.39/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/HEAD/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -33,7 +33,7 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg(packse_index_url())
         .arg("--find-links")
         .arg(build_vendor_links_url());
-    context.add_shared_args(&mut command, true);
+    context.add_shared_options(&mut command, true);
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command.env(EnvVars::UV_TEST_PYTHON_PATH, python_path);
 
@@ -75,10 +75,10 @@ fn compatible_python_incompatible_override() -> Result<()> {
                  ----- stderr -----
                  warning: The requested Python version 3.9 is not available; 3.11.[X] will be used to build dependencies instead.
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the requested Python version (>=3.9.0) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
+                   ╰─▶ Because the requested Python version (>=3.9) does not satisfy Python>=3.10 and package-a==1.0.0 depends on Python>=3.10, we can conclude that package-a==1.0.0 cannot be used.
                        And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
 
-                       hint: The `--python-version` value (>=3.9.0) includes Python versions that are not supported by your dependencies (e.g., package-a==1.0.0 only supports >=3.10). Consider using a higher `--python-version` value.
+                       hint: The `--python-version` value (>=3.9) includes Python versions that are not supported by your dependencies (e.g., package-a==1.0.0 only supports >=3.10). Consider using a higher `--python-version` value.
                  "###
     );
 
@@ -384,10 +384,10 @@ fn python_patch_override_no_patch() -> Result<()> {
 
                  ----- stderr -----
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the requested Python version (>=3.8.0) does not satisfy Python>=3.8.4 and package-a==1.0.0 depends on Python>=3.8.4, we can conclude that package-a==1.0.0 cannot be used.
+                   ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.8.4 and package-a==1.0.0 depends on Python>=3.8.4, we can conclude that package-a==1.0.0 cannot be used.
                        And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
 
-                       hint: The `--python-version` value (>=3.8.0) includes Python versions that are not supported by your dependencies (e.g., package-a==1.0.0 only supports >=3.8.4). Consider using a higher `--python-version` value.
+                       hint: The `--python-version` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., package-a==1.0.0 only supports >=3.8.4). Consider using a higher `--python-version` value.
                  "###
     );
 

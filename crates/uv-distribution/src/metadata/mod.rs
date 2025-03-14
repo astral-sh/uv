@@ -3,18 +3,18 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use uv_configuration::{LowerBound, SourceStrategy};
+use uv_configuration::SourceStrategy;
 use uv_distribution_types::{GitSourceUrl, IndexLocations};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pypi_types::{HashDigest, ResolutionMetadata};
+use uv_pypi_types::{HashDigests, ResolutionMetadata};
 use uv_workspace::dependency_groups::DependencyGroupError;
-use uv_workspace::WorkspaceError;
+use uv_workspace::{WorkspaceCache, WorkspaceError};
 
 pub use crate::metadata::build_requires::BuildRequires;
 pub use crate::metadata::lowering::LoweredRequirement;
-use crate::metadata::lowering::LoweringError;
-pub use crate::metadata::requires_dist::RequiresDist;
+pub use crate::metadata::lowering::LoweringError;
+pub use crate::metadata::requires_dist::{FlatRequiresDist, RequiresDist};
 
 mod build_requires;
 mod lowering;
@@ -50,6 +50,7 @@ pub struct Metadata {
     pub requires_python: Option<VersionSpecifiers>,
     pub provides_extras: Vec<ExtraName>,
     pub dependency_groups: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
+    pub dynamic: bool,
 }
 
 impl Metadata {
@@ -67,6 +68,7 @@ impl Metadata {
             requires_python: metadata.requires_python,
             provides_extras: metadata.provides_extras,
             dependency_groups: BTreeMap::default(),
+            dynamic: metadata.dynamic,
         }
     }
 
@@ -78,26 +80,28 @@ impl Metadata {
         git_source: Option<&GitWorkspaceMember<'_>>,
         locations: &IndexLocations,
         sources: SourceStrategy,
-        bounds: LowerBound,
+        cache: &WorkspaceCache,
     ) -> Result<Self, MetadataError> {
         // Lower the requirements.
         let requires_dist = uv_pypi_types::RequiresDist {
             name: metadata.name,
             requires_dist: metadata.requires_dist,
             provides_extras: metadata.provides_extras,
+            dynamic: metadata.dynamic,
         };
         let RequiresDist {
             name,
             requires_dist,
             provides_extras,
             dependency_groups,
+            dynamic,
         } = RequiresDist::from_project_maybe_workspace(
             requires_dist,
             install_path,
             git_source,
             locations,
             sources,
-            bounds,
+            cache,
         )
         .await?;
 
@@ -109,6 +113,7 @@ impl Metadata {
             requires_python: metadata.requires_python,
             provides_extras,
             dependency_groups,
+            dynamic,
         })
     }
 }
@@ -119,7 +124,7 @@ pub struct ArchiveMetadata {
     /// The [`Metadata`] for the underlying distribution.
     pub metadata: Metadata,
     /// The hashes of the source or built archive.
-    pub hashes: Vec<HashDigest>,
+    pub hashes: HashDigests,
 }
 
 impl ArchiveMetadata {
@@ -128,12 +133,12 @@ impl ArchiveMetadata {
     pub fn from_metadata23(metadata: ResolutionMetadata) -> Self {
         Self {
             metadata: Metadata::from_metadata23(metadata),
-            hashes: vec![],
+            hashes: HashDigests::empty(),
         }
     }
 
     /// Create an [`ArchiveMetadata`] with the given metadata and hashes.
-    pub fn with_hashes(metadata: Metadata, hashes: Vec<HashDigest>) -> Self {
+    pub fn with_hashes(metadata: Metadata, hashes: HashDigests) -> Self {
         Self { metadata, hashes }
     }
 }
@@ -142,7 +147,7 @@ impl From<Metadata> for ArchiveMetadata {
     fn from(metadata: Metadata) -> Self {
         Self {
             metadata,
-            hashes: vec![],
+            hashes: HashDigests::empty(),
         }
     }
 }

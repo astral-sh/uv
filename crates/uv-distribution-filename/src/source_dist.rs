@@ -14,6 +14,8 @@ use uv_pep440::{Version, VersionParseError};
     Debug,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
     Serialize,
     Deserialize,
     rkyv::Archive,
@@ -36,14 +38,14 @@ impl SourceDistFilename {
         package_name: &PackageName,
     ) -> Result<Self, SourceDistFilenameError> {
         // Drop the extension (e.g., given `tar.gz`, drop `.tar.gz`).
-        if filename.len() <= extension.to_string().len() + 1 {
+        if filename.len() <= extension.name().len() + 1 {
             return Err(SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::Extension,
             });
         }
 
-        let stem = &filename[..(filename.len() - (extension.to_string().len() + 1))];
+        let stem = &filename[..(filename.len() - (extension.name().len() + 1))];
 
         if stem.len() <= package_name.as_ref().len() + "-".len() {
             return Err(SourceDistFilenameError {
@@ -92,14 +94,14 @@ impl SourceDistFilename {
         };
 
         // Drop the extension (e.g., given `tar.gz`, drop `.tar.gz`).
-        if filename.len() <= extension.to_string().len() + 1 {
+        if filename.len() <= extension.name().len() + 1 {
             return Err(SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::Extension,
             });
         }
 
-        let stem = &filename[..(filename.len() - (extension.to_string().len() + 1))];
+        let stem = &filename[..(filename.len() - (extension.name().len() + 1))];
 
         let Some((package_name, version)) = stem.rsplit_once('-') else {
             return Err(SourceDistFilenameError {

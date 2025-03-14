@@ -40,12 +40,12 @@ pub trait Cacheable: Sized {
     ///
     /// Typical use of this is for wrapper types used to provide blanket trait
     /// impls without hitting overlapping impl problems.
-    type Target;
+    type Target: Send + 'static;
 
     /// Deserialize a value from bytes aligned to a 16-byte boundary.
     fn from_aligned_bytes(bytes: AlignedVec) -> Result<Self::Target, Error>;
     /// Serialize bytes to a possibly owned byte buffer.
-    fn to_bytes(&self) -> Result<Cow<'_, [u8]>, crate::Error>;
+    fn to_bytes(&self) -> Result<Cow<'_, [u8]>, Error>;
     /// Convert this type into its final form.
     fn into_target(self) -> Self::Target;
 }
@@ -58,7 +58,7 @@ pub(crate) struct SerdeCacheable<T> {
     inner: T,
 }
 
-impl<T: Serialize + DeserializeOwned> Cacheable for SerdeCacheable<T> {
+impl<T: Serialize + DeserializeOwned + Send + 'static> Cacheable for SerdeCacheable<T> {
     type Target = T;
 
     fn from_aligned_bytes(bytes: AlignedVec) -> Result<T, Error> {
@@ -79,7 +79,7 @@ impl<T: Serialize + DeserializeOwned> Cacheable for SerdeCacheable<T> {
 /// All `OwnedArchive` values are cacheable.
 impl<A> Cacheable for OwnedArchive<A>
 where
-    A: rkyv::Archive + for<'a> rkyv::Serialize<crate::rkyvutil::Serializer<'a>>,
+    A: rkyv::Archive + for<'a> rkyv::Serialize<crate::rkyvutil::Serializer<'a>> + Send + 'static,
     A::Archived: rkyv::Portable
         + rkyv::Deserialize<A, crate::rkyvutil::Deserializer>
         + for<'a> rkyv::bytecheck::CheckBytes<crate::rkyvutil::Validator<'a>>,
@@ -214,7 +214,7 @@ impl CachedClient {
     /// allowed to make subsequent requests, e.g. through the uncached client.
     #[instrument(skip_all)]
     pub async fn get_serde<
-        Payload: Serialize + DeserializeOwned + 'static,
+        Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError: std::error::Error + 'static,
         Callback,
         CallbackReturn,
@@ -342,7 +342,7 @@ impl CachedClient {
 
     /// Make a request without checking whether the cache is fresh.
     pub async fn skip_cache<
-        Payload: Serialize + DeserializeOwned + 'static,
+        Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError: std::error::Error + 'static,
         Callback,
         CallbackReturn,
@@ -569,7 +569,7 @@ impl CachedClient {
     /// Perform a [`CachedClient::get_serde`] request with a default retry strategy.
     #[instrument(skip_all)]
     pub async fn get_serde_with_retry<
-        Payload: Serialize + DeserializeOwned + 'static,
+        Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError: std::error::Error + 'static,
         Callback,
         CallbackReturn,
@@ -648,7 +648,7 @@ impl CachedClient {
     ///
     /// See: <https://github.com/TrueLayer/reqwest-middleware/blob/8a494c165734e24c62823714843e1c9347027e8a/reqwest-retry/src/middleware.rs#L137>
     pub async fn skip_cache_with_retry<
-        Payload: Serialize + DeserializeOwned + 'static,
+        Payload: Serialize + DeserializeOwned + Send + 'static,
         CallBackError: std::error::Error + 'static,
         Callback,
         CallbackReturn,
@@ -814,7 +814,7 @@ impl DataWithCachePolicy {
     /// If the given byte buffer is not in a valid format or if the reader
     /// fails, then this returns an error.
     pub fn from_reader(mut rdr: impl std::io::Read) -> Result<Self, Error> {
-        let mut aligned_bytes = rkyv::util::AlignedVec::new();
+        let mut aligned_bytes = AlignedVec::new();
         aligned_bytes
             .extend_from_reader(&mut rdr)
             .map_err(ErrorKind::Io)?;

@@ -1,3 +1,10 @@
+---
+title: Working on projects
+description:
+  A guide to using uv to create and manage Python projects, including adding dependencies, running
+  commands, and building publishable distributions.
+---
+
 # Working on projects
 
 uv supports managing Python projects, which define their dependencies in a `pyproject.toml` file.
@@ -25,14 +32,14 @@ uv will create the following files:
 .
 ├── .python-version
 ├── README.md
-├── hello.py
+├── main.py
 └── pyproject.toml
 ```
 
-The `hello.py` file contains a simple "Hello world" program. Try it out with `uv run`:
+The `main.py` file contains a simple "Hello world" program. Try it out with `uv run`:
 
 ```console
-$ uv run hello.py
+$ uv run main.py
 Hello from hello-world!
 ```
 
@@ -53,7 +60,7 @@ A complete listing would look like:
 │   └── pyvenv.cfg
 ├── .python-version
 ├── README.md
-├── hello.py
+├── main.py
 ├── pyproject.toml
 └── uv.lock
 ```
@@ -177,12 +184,23 @@ $ uv run example.py
 Alternatively, you can use `uv sync` to manually update the environment then activate it before
 executing a command:
 
-```console
-$ uv sync
-$ source .venv/bin/activate
-$ flask run -p 3000
-$ python example.py
-```
+=== "macOS and Linux"
+
+    ```console
+    $ uv sync
+    $ source .venv/bin/activate
+    $ flask run -p 3000
+    $ python example.py
+    ```
+
+=== "Windows"
+
+    ```powershell
+    uv sync
+    source .venv\Scripts\activate
+    flask run -p 3000
+    python example.py
+    ```
 
 !!! note
 
@@ -214,4 +232,4 @@ To learn more about working on projects with uv, see the
 [projects concept](../concepts/projects/index.md) page and the
 [command reference](../reference/cli.md#uv).
 
-Or, read on to learn how to [publish your project as a package](./publish.md).
+Or, read on to learn how to [build and publish your project to a package index](./package.md).

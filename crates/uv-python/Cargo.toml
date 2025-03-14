@@ -51,6 +51,7 @@ same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sys-info = { workspace = true }
 target-lexicon = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
@@ -64,15 +65,16 @@ which = { workspace = true }
 procfs = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { workspace = true }
 windows-registry = { workspace = true }
 windows-result = { workspace = true }
+windows-sys = { workspace = true }
 
 [dev-dependencies]
 anyhow = { version = "1.0.89" }
 assert_fs = { version = "1.1.2" }
-indoc = { version = "2.0.5" }
-itertools = { version = "0.13.0" }
+indoc = { workspace = true }
+insta = { version = "1.40.0" }
+itertools = { version = "0.14.0" }
 temp-env = { version = "0.3.6" }
-tempfile = { version = "3.12.0" }
+tempfile = { workspace = true }
 test-log = { version = "0.2.16", features = ["trace"], default-features = false }

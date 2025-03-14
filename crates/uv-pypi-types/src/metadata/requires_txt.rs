@@ -96,7 +96,7 @@ impl RequiresTxt {
 
             // Add the markers and extra, if necessary.
             requires_dist.push(Requirement {
-                marker: current_marker.clone(),
+                marker: current_marker,
                 ..requirement
             });
         }

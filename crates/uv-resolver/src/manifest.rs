@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use either::Either;
 
 use uv_configuration::{Constraints, Overrides};
-use uv_normalize::{GroupName, PackageName};
+use uv_normalize::PackageName;
 use uv_pypi_types::Requirement;
 use uv_types::RequestedRequirements;
 
@@ -22,10 +22,6 @@ pub struct Manifest {
 
     /// The overrides for the project.
     pub(crate) overrides: Overrides,
-
-    /// The enabled development dependency groups for the project. Dependency groups are global,
-    /// such that any provided groups will be enabled for all requirements.
-    pub(crate) dev: Vec<GroupName>,
 
     /// The preferences for the project.
     ///
@@ -59,10 +55,9 @@ impl Manifest {
         requirements: Vec<Requirement>,
         constraints: Constraints,
         overrides: Overrides,
-        dev: Vec<GroupName>,
         preferences: Preferences,
         project: Option<PackageName>,
-        workspace_members: Option<BTreeSet<PackageName>>,
+        workspace_members: BTreeSet<PackageName>,
         exclusions: Exclusions,
         lookaheads: Vec<RequestedRequirements>,
     ) -> Self {
@@ -70,10 +65,9 @@ impl Manifest {
             requirements,
             constraints,
             overrides,
-            dev,
             preferences,
             project,
-            workspace_members: workspace_members.unwrap_or_default(),
+            workspace_members,
             exclusions,
             lookaheads,
         }
@@ -84,7 +78,6 @@ impl Manifest {
             requirements,
             constraints: Constraints::default(),
             overrides: Overrides::default(),
-            dev: Vec::new(),
             preferences: Preferences::default(),
             project: None,
             exclusions: Exclusions::default(),

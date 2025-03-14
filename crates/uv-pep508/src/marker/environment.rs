@@ -2,13 +2,11 @@ use std::sync::Arc;
 
 use uv_pep440::{Version, VersionParseError};
 
-use crate::{MarkerValueString, MarkerValueVersion, StringVersion};
+use crate::{CanonicalMarkerValueString, CanonicalMarkerValueVersion, StringVersion};
 
 /// The marker values for a python interpreter, normally the current one
 ///
 /// <https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers>
-///
-/// Some are `(String, Version)` because we have to support version comparison
 #[allow(missing_docs, clippy::unsafe_derive_deserialize)]
 #[derive(Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct MarkerEnvironment {
@@ -33,35 +31,28 @@ struct MarkerEnvironmentInner {
 
 impl MarkerEnvironment {
     /// Returns of the PEP 440 version typed value of the key in the current environment
-    pub fn get_version(&self, key: MarkerValueVersion) -> &Version {
+    pub fn get_version(&self, key: CanonicalMarkerValueVersion) -> &Version {
         match key {
-            MarkerValueVersion::ImplementationVersion => &self.implementation_version().version,
-            MarkerValueVersion::PythonFullVersion => &self.python_full_version().version,
-            MarkerValueVersion::PythonVersion => &self.python_version().version,
+            CanonicalMarkerValueVersion::ImplementationVersion => {
+                &self.implementation_version().version
+            }
+            CanonicalMarkerValueVersion::PythonFullVersion => &self.python_full_version().version,
         }
     }
 
     /// Returns of the stringly typed value of the key in the current environment
-    pub fn get_string(&self, key: MarkerValueString) -> &str {
+    pub fn get_string(&self, key: CanonicalMarkerValueString) -> &str {
         match key {
-            MarkerValueString::ImplementationName => self.implementation_name(),
-            MarkerValueString::OsName | MarkerValueString::OsNameDeprecated => self.os_name(),
-            MarkerValueString::PlatformMachine | MarkerValueString::PlatformMachineDeprecated => {
-                self.platform_machine()
-            }
-            MarkerValueString::PlatformPythonImplementation
-            | MarkerValueString::PlatformPythonImplementationDeprecated
-            | MarkerValueString::PythonImplementationDeprecated => {
+            CanonicalMarkerValueString::ImplementationName => self.implementation_name(),
+            CanonicalMarkerValueString::OsName => self.os_name(),
+            CanonicalMarkerValueString::PlatformMachine => self.platform_machine(),
+            CanonicalMarkerValueString::PlatformPythonImplementation => {
                 self.platform_python_implementation()
             }
-            MarkerValueString::PlatformRelease => self.platform_release(),
-            MarkerValueString::PlatformSystem => self.platform_system(),
-            MarkerValueString::PlatformVersion | MarkerValueString::PlatformVersionDeprecated => {
-                self.platform_version()
-            }
-            MarkerValueString::SysPlatform | MarkerValueString::SysPlatformDeprecated => {
-                self.sys_platform()
-            }
+            CanonicalMarkerValueString::PlatformRelease => self.platform_release(),
+            CanonicalMarkerValueString::PlatformSystem => self.platform_system(),
+            CanonicalMarkerValueString::PlatformVersion => self.platform_version(),
+            CanonicalMarkerValueString::SysPlatform => self.sys_platform(),
         }
     }
 }

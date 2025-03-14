@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.5.4"
+version = "0.6.6"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -37,6 +37,7 @@ Repository = "https://github.com/astral-sh/uv"
 Documentation = "https://docs.astral.sh/uv"
 Changelog = "https://github.com/astral-sh/uv/blob/main/CHANGELOG.md"
 Releases = "https://github.com/astral-sh/uv/releases"
+Discord = "https://discord.gg/astral-sh"
 
 [tool.maturin]
 bindings = "bin"
@@ -48,8 +49,7 @@ include = [
     { path = "rust-toolchain.toml", format = ["sdist", "wheel"] },
     # this one isn't discovered by maturin because it's behind a feature flag
     { path = "crates/uv-performance-memory-allocator/**/*", format = ["sdist", "wheel"] },
-    { path = "crates/uv-performance-flate2-backend/**/*", format = ["sdist", "wheel"] },
-    { path = "crates/uv-trampoline/trampolines/*", format = "sdist" }, 
+    { path = "crates/uv-trampoline/trampolines/*", format = "sdist" },
     { path = "LICENSE-APACHE", format = "sdist" },
     { path = "LICENSE-MIT", format = "sdist" },
 ]
@@ -79,10 +79,13 @@ version_files = [
   "README.md",
   "crates/uv/Cargo.toml",
   "crates/uv-version/Cargo.toml",
+  "crates/uv-build/Cargo.toml",
+  "crates/uv-build/pyproject.toml",
   "docs/getting-started/installation.md",
   "docs/guides/integration/docker.md",
   "docs/guides/integration/pre-commit.md",
   "docs/guides/integration/github.md",
+  "docs/guides/integration/aws-lambda.md",
 ]
 
 [tool.mypy]

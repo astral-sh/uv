@@ -8,6 +8,6 @@ use crate::VerbatimParsedUrl;
 /// See: <https://peps.python.org/pep-0518/>
 #[derive(Debug, Clone)]
 pub struct BuildRequires {
-    pub name: PackageName,
+    pub name: Option<PackageName>,
     pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
 }

@@ -14,15 +14,25 @@
         "$ref": "#/definitions/TrustedHost"
       }
     },
+    "build-constraint-dependencies": {
+      "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "cache-dir": {
-      "description": "Path to the cache directory.\n\nDefaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux, and `%LOCALAPPDATA%\\uv\\cache` on Windows.",
+      "description": "Path to the cache directory.\n\nDefaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux and macOS, and `%LOCALAPPDATA%\\uv\\cache` on Windows.",
       "type": [
         "string",
         "null"
       ]
     },
     "cache-keys": {
-      "description": "The keys to consider when caching builds for the project.\n\nCache keys enable you to specify the files or directories that should trigger a rebuild when modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`, or `setup.cfg` files in the project directory are modified, i.e.:\n\n```toml cache-keys = [{ file = \"pyproject.toml\" }, { file = \"setup.py\" }, { file = \"setup.cfg\" }] ```\n\nAs an example: if a project uses dynamic metadata to read its dependencies from a `requirements.txt` file, you can specify `cache-keys = [{ file = \"requirements.txt\" }, { file = \"pyproject.toml\" }]` to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in addition to watching the `pyproject.toml`).\n\nGlobs are supported, following the syntax of the [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html) crate. For example, to invalidate the cache whenever a `.toml` file in the project directory or any of its subdirectories is modified, you can specify `cache-keys = [{ file = \"**/*.toml\" }]`. Note that the use of globs can be expensive, as uv may need to walk the filesystem to determine whether any files have changed.\n\nCache keys can also include version control information. For example, if a project uses `setuptools_scm` to read its version from a Git commit, you can specify `cache-keys = [{ git = { commit = true }, { file = \"pyproject.toml\" }]` to include the current Git commit hash in the cache key (in addition to the `pyproject.toml`). Git tags are also supported via `cache-keys = [{ git = { commit = true, tags = true } }]`.\n\nCache keys only affect the project defined by the `pyproject.toml` in which they're specified (as opposed to, e.g., affecting all members in a workspace), and all paths and globs are interpreted as relative to the project directory.",
+      "description": "The keys to consider when caching builds for the project.\n\nCache keys enable you to specify the files or directories that should trigger a rebuild when modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`, or `setup.cfg` files in the project directory are modified, i.e.:\n\n```toml cache-keys = [{ file = \"pyproject.toml\" }, { file = \"setup.py\" }, { file = \"setup.cfg\" }] ```\n\nAs an example: if a project uses dynamic metadata to read its dependencies from a `requirements.txt` file, you can specify `cache-keys = [{ file = \"requirements.txt\" }, { file = \"pyproject.toml\" }]` to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in addition to watching the `pyproject.toml`).\n\nGlobs are supported, following the syntax of the [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html) crate. For example, to invalidate the cache whenever a `.toml` file in the project directory or any of its subdirectories is modified, you can specify `cache-keys = [{ file = \"**/*.toml\" }]`. Note that the use of globs can be expensive, as uv may need to walk the filesystem to determine whether any files have changed.\n\nCache keys can also include version control information. For example, if a project uses `setuptools_scm` to read its version from a Git commit, you can specify `cache-keys = [{ git = { commit = true }, { file = \"pyproject.toml\" }]` to include the current Git commit hash in the cache key (in addition to the `pyproject.toml`). Git tags are also supported via `cache-keys = [{ git = { commit = true, tags = true } }]`.\n\nCache keys can also include environment variables. For example, if a project relies on `MACOSX_DEPLOYMENT_TARGET` or other environment variables to determine its behavior, you can specify `cache-keys = [{ env = \"MACOSX_DEPLOYMENT_TARGET\" }]` to invalidate the cache whenever the environment variable changes.\n\nCache keys only affect the project defined by the `pyproject.toml` in which they're specified (as opposed to, e.g., affecting all members in a workspace), and all paths and globs are interpreted as relative to the project directory.",
       "type": [
         "array",
         "null"
@@ -30,6 +40,17 @@
       "items": {
         "$ref": "#/definitions/CacheKey"
       }
+    },
+    "check-url": {
+      "description": "Check an index URL for existing files to skip duplicate uploads.\n\nThis option allows retrying publishing that failed after only some, but not all files have been uploaded, and handles error due to parallel uploads of the same file.\n\nBefore uploading, the index is checked. If the exact same file already exists in the index, the file will not be uploaded. If an error occurred during the upload, the index is checked again, to handle cases where the identical file was uploaded twice in parallel.\n\nThe exact behavior will vary based on the index. When uploading to PyPI, uploading the same file succeeds even without `--check-url`, while most other indexes error.\n\nThe index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/IndexUrl"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "compile-bytecode": {
       "description": "Compile Python files to bytecode after installation.\n\nBy default, uv does not compile Python (`.py`) files to bytecode (`__pycache__/*.pyc`); instead, compilation is performed lazily the first time a module is imported. For use-cases in which start time is critical, such as CLI applications and Docker containers, this option can be enabled to trade longer installation times for faster start times.\n\nWhen enabled, uv will process the entire site-packages directory (including packages that are not being modified by the current operation) for consistency. Like pip, it will also ignore errors.",
@@ -77,7 +98,7 @@
       ]
     },
     "conflicts": {
-      "description": "A list sets of conflicting groups or extras.",
+      "description": "A list of sets of conflicting groups or extras.",
       "anyOf": [
         {
           "$ref": "#/definitions/SchemaConflicts"
@@ -168,8 +189,20 @@
         "$ref": "#/definitions/IndexUrl"
       }
     },
+    "fork-strategy": {
+      "description": "The strategy to use when selecting multiple versions of a given package across Python versions and platforms.\n\nBy default, uv will optimize for selecting the latest version of each package for each supported Python version (`requires-python`), while minimizing the number of selected versions across platforms.\n\nUnder `fewest`, uv will minimize the number of selected versions for each package, preferring older versions that are compatible with a wider range of supported Python versions or platforms.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ForkStrategy"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "index": {
-      "description": "The indexes to use when resolving dependencies.\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nIndexes are considered in the order in which they're defined, such that the first-defined index has the highest priority. Further, the indexes provided by this setting are given higher priority than any indexes specified via [`index_url`](#index-url) or [`extra_index_url`](#extra-index-url). uv will only consider the first index that contains a given package, unless an alternative [index strategy](#index-strategy) is specified.\n\nIf an index is marked as `explicit = true`, it will be used exclusively for those dependencies that select it explicitly via `[tool.uv.sources]`, as in:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\" explicit = true\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```\n\nIf an index is marked as `default = true`, it will be moved to the end of the prioritized list, such that it is given the lowest priority when resolving packages. Additionally, marking an index as default will disable the PyPI default index.",
+      "description": "The indexes to use when resolving dependencies.\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nIndexes are considered in the order in which they're defined, such that the first-defined index has the highest priority. Further, the indexes provided by this setting are given higher priority than any indexes specified via [`index_url`](#index-url) or [`extra_index_url`](#extra-index-url). uv will only consider the first index that contains a given package, unless an alternative [index strategy](#index-strategy) is specified.\n\nIf an index is marked as `explicit = true`, it will be used exclusively for the dependencies that select it explicitly via `[tool.uv.sources]`, as in:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\" explicit = true\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```\n\nIf an index is marked as `default = true`, it will be moved to the end of the prioritized list, such that it is given the lowest priority when resolving packages. Additionally, marking an index as default will disable the PyPI default index.",
+      "default": null,
       "type": [
         "array",
         "null"
@@ -179,7 +212,7 @@
       }
     },
     "index-strategy": {
-      "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.",
+      "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-index`). This prevents \"dependency confusion\" attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.",
       "anyOf": [
         {
           "$ref": "#/definitions/IndexStrategy"
@@ -387,7 +420,7 @@
       ]
     },
     "python-install-mirror": {
-      "description": "Mirror URL for downloading managed Python installations.\n\nBy default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/indygreg/python-build-standalone). This variable can be set to a mirror URL to use a different source for Python installations. The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
+      "description": "Mirror URL for downloading managed Python installations.\n\nBy default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone). This variable can be set to a mirror URL to use a different source for Python installations. The provided URL will replace `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g., `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
       "type": [
         "string",
         "null"
@@ -420,6 +453,27 @@
       "items": {
         "$ref": "#/definitions/PackageName"
       }
+    },
+    "required-environments": {
+      "description": "A list of environment markers, e.g., `sys_platform == 'darwin'.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "required-version": {
+      "description": "Enforce a requirement on the version of uv.\n\nIf the version of uv does not meet the requirement at runtime, uv will exit with an error.\n\nAccepts a [PEP 440](https://peps.python.org/pep-0440/) specifier, like `==0.5.0` or `>=0.5.0`.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/RequiredVersion"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "resolution": {
       "description": "The strategy to use when selecting between the different compatible versions for a given package requirement.\n\nBy default, uv will use the latest compatible version of each package (`highest`).",
@@ -503,6 +557,32 @@
         }
       ]
     },
+    "AuthPolicy": {
+      "description": "When to use authentication.",
+      "oneOf": [
+        {
+          "description": "Authenticate when necessary.\n\nIf credentials are provided, they will be used. Otherwise, an unauthenticated request will be attempted first. If the request fails, uv will search for credentials. If credentials are found, an authenticated request will be attempted.",
+          "type": "string",
+          "enum": [
+            "auto"
+          ]
+        },
+        {
+          "description": "Always authenticate.\n\nIf credentials are not provided, uv will eagerly search for credentials. If credentials cannot be found, uv will error instead of attempting an unauthenticated request.",
+          "type": "string",
+          "enum": [
+            "always"
+          ]
+        },
+        {
+          "description": "Never authenticate.\n\nIf credentials are provided, uv will error. uv will not search for credentials.",
+          "type": "string",
+          "enum": [
+            "never"
+          ]
+        }
+      ]
+    },
     "CacheKey": {
       "anyOf": [
         {
@@ -531,6 +611,19 @@
           "properties": {
             "git": {
               "$ref": "#/definitions/GitPattern"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Ex) `{ env = \"UV_CACHE_INFO\" }`",
+          "type": "object",
+          "required": [
+            "env"
+          ],
+          "properties": {
+            "env": {
+              "type": "string"
             }
           },
           "additionalProperties": false
@@ -577,35 +670,6 @@
         "$ref": "#/definitions/ConfigSettingValue"
       }
     },
-    "ConflictPackage": {
-      "description": "The actual conflicting data for a package.\n\nThat is, either an extra or a group name.",
-      "oneOf": [
-        {
-          "type": "object",
-          "required": [
-            "Extra"
-          ],
-          "properties": {
-            "Extra": {
-              "$ref": "#/definitions/ExtraName"
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": [
-            "Group"
-          ],
-          "properties": {
-            "Group": {
-              "$ref": "#/definitions/GroupName"
-            }
-          },
-          "additionalProperties": false
-        }
-      ]
-    },
     "ExcludeNewer": {
       "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`).",
       "type": "string",
@@ -614,6 +678,24 @@
     "ExtraName": {
       "description": "The normalized name of an extra dependency.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`. For example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: - <https://peps.python.org/pep-0685/#specification/> - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "type": "string"
+    },
+    "ForkStrategy": {
+      "oneOf": [
+        {
+          "description": "Optimize for selecting the fewest number of versions for each package. Older versions may be preferred if they are compatible with a wider range of supported Python versions or platforms.",
+          "type": "string",
+          "enum": [
+            "fewest"
+          ]
+        },
+        {
+          "description": "Optimize for selecting latest supported version of each package, for each supported Python version.",
+          "type": "string",
+          "enum": [
+            "requires-python"
+          ]
+        }
+      ]
     },
     "GitPattern": {
       "anyOf": [
@@ -653,6 +735,15 @@
         "url"
       ],
       "properties": {
+        "authenticate": {
+          "description": "When uv should use authentication for requests to the index.\n\n```toml [[tool.uv.index]] name = \"my-index\" url = \"https://<omitted>/simple\" authenticate = \"always\" ```",
+          "default": "auto",
+          "allOf": [
+            {
+              "$ref": "#/definitions/AuthPolicy"
+            }
+          ]
+        },
         "default": {
           "description": "Mark the index as the default index.\n\nBy default, uv uses PyPI as the default index, such that even if additional indexes are defined via `[[tool.uv.index]]`, PyPI will still be used as a fallback for packages that aren't found elsewhere. To disable the PyPI default, set `default = true` on at least one other index.\n\nMarking an index as default will move it to the front of the list of indexes, such that it is given the highest priority when resolving packages.",
           "default": false,
@@ -673,6 +764,14 @@
               "type": "null"
             }
           ]
+        },
+        "publish-url": {
+          "description": "The URL of the upload endpoint.\n\nWhen using `uv publish --index <name>`, this URL is used for publishing.\n\nA configuration for the default index PyPI would look as follows:\n\n```toml [[tool.uv.index]] name = \"pypi\" url = \"https://pypi.org/simple\" publish-url = \"https://upload.pypi.org/legacy/\" ```",
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
         },
         "url": {
           "description": "The URL of the index.\n\nExpects to receive a URL (e.g., `https://pypi.org/simple`) or a local path.",
@@ -888,7 +987,7 @@
           ]
         },
         "exclude-newer": {
-          "description": "Limit candidate packages to those that were uploaded prior to the given date.\n\nAccepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your system's configured time zone.",
+          "description": "Limit candidate packages to those that were uploaded prior to a given point in time.\n\nAccepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g., `2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will behave consistently across timezones.",
           "anyOf": [
             {
               "$ref": "#/definitions/ExcludeNewer"
@@ -928,6 +1027,17 @@
             "$ref": "#/definitions/IndexUrl"
           }
         },
+        "fork-strategy": {
+          "description": "The strategy to use when selecting multiple versions of a given package across Python versions and platforms.\n\nBy default, uv will optimize for selecting the latest version of each package for each supported Python version (`requires-python`), while minimizing the number of selected versions across platforms.\n\nUnder `fewest`, uv will minimize the number of selected versions for each package, preferring older versions that are compatible with a wider range of supported Python versions or platforms.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ForkStrategy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "generate-hashes": {
           "description": "Include distribution hashes in the output file.",
           "type": [
@@ -936,7 +1046,7 @@
           ]
         },
         "index-strategy": {
-          "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.",
+          "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-index`). This prevents \"dependency confusion\" attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.",
           "anyOf": [
             {
               "$ref": "#/definitions/IndexStrategy"
@@ -1021,7 +1131,7 @@
           }
         },
         "no-deps": {
-          "description": "Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting the requirements file.",
+          "description": "Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting requirements file.",
           "type": [
             "boolean",
             "null"
@@ -1035,6 +1145,16 @@
           ],
           "items": {
             "$ref": "#/definitions/PackageName"
+          }
+        },
+        "no-extra": {
+          "description": "Exclude the specified optional dependencies if `all-extras` is supplied.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/ExtraName"
           }
         },
         "no-header": {
@@ -1323,9 +1443,13 @@
       ]
     },
     "PythonVersion": {
-      "description": "A Python version specifier, e.g. `3.7` or `3.8.0`.",
+      "description": "A Python version specifier, e.g. `3.11` or `3.12.4`.",
       "type": "string",
       "pattern": "^3\\.\\d+(\\.\\d+)?$"
+    },
+    "RequiredVersion": {
+      "description": "A version specifier, e.g. `>=0.5.0` or `==0.5.0`.",
+      "type": "string"
     },
     "Requirement": {
       "description": "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`",
@@ -1357,16 +1481,33 @@
       ]
     },
     "SchemaConflictItem": {
-      "description": "Like [`ConflictItem`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.",
+      "description": "A single item in a conflicting set.\n\nEach item is a pair of an (optional) package and a corresponding extra or group name for that package.",
       "type": "object",
-      "required": [
-        "conflict"
-      ],
       "properties": {
-        "conflict": {
-          "$ref": "#/definitions/ConflictPackage"
+        "extra": {
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ExtraName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "group": {
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/GroupName"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "package": {
+          "default": null,
           "anyOf": [
             {
               "$ref": "#/definitions/PackageName"
@@ -1376,8 +1517,7 @@
             }
           ]
         }
-      },
-      "additionalProperties": false
+      }
     },
     "SchemaConflictSet": {
       "description": "Like [`ConflictSet`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.",
@@ -1548,6 +1688,13 @@
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },
+            "package": {
+              "description": "Whether to treat the dependency as a buildable Python package (`true`) or as a virtual package (`false`). If `false`, the package will not be built or installed, but its dependencies will be included in the virtual environment.\n\nWhen omitted, the package status is inferred based on the presence of a `[build-system]` in the project's `pyproject.toml`.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "path": {
               "$ref": "#/definitions/String"
             }
@@ -1649,8 +1796,7 @@
       "description": "A subset of the Python Package Metadata 2.3 standard as specified in <https://packaging.python.org/specifications/core-metadata/>.",
       "type": "object",
       "required": [
-        "name",
-        "version"
+        "name"
       ],
       "properties": {
         "name": {
@@ -1679,7 +1825,10 @@
         },
         "version": {
           "description": "PEP 440-style package version, e.g., `1.2.3`",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
@@ -1767,6 +1916,13 @@
           ]
         },
         {
+          "description": "An `x86_64` target for the `manylinux2014` platform. Equivalent to `x86_64-manylinux_2_17`.",
+          "type": "string",
+          "enum": [
+            "x86_64-manylinux2014"
+          ]
+        },
+        {
           "description": "An `x86_64` target for the `manylinux_2_17` platform.",
           "type": "string",
           "enum": [
@@ -1848,6 +2004,13 @@
           "type": "string",
           "enum": [
             "x86_64-manylinux_2_40"
+          ]
+        },
+        {
+          "description": "An ARM64 target for the `manylinux2014` platform. Equivalent to `aarch64-manylinux_2_17`.",
+          "type": "string",
+          "enum": [
+            "aarch64-manylinux2014"
           ]
         },
         {

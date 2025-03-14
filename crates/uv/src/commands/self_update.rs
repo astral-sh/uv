@@ -6,6 +6,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_client::WrappedReqwestError;
+use uv_fs::Simplified;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
@@ -26,7 +27,7 @@ pub(crate) async fn self_update(
     // Load the "install receipt" for the current binary. If the receipt is not found, then
     // uv was likely installed via a package manager.
     let Ok(updater) = updater.load_receipt() else {
-        debug!("no receipt found; assuming uv was installed via a package manager");
+        debug!("No receipt found; assuming uv was installed via a package manager");
         writeln!(
             printer.stderr(),
             "{}",
@@ -48,9 +49,9 @@ pub(crate) async fn self_update(
     // uv binaries installed, and the current binary was _not_ installed via the standalone
     // installation scripts.
     if !updater.check_receipt_is_for_this_executable()? {
-        debug!(
-            "receipt is not for this executable; assuming uv was installed via a package manager"
-        );
+        let current_exe = std::env::current_exe()?;
+        let receipt_prefix = updater.install_prefix_root()?;
+
         writeln!(
             printer.stderr(),
             "{}",
@@ -59,10 +60,12 @@ pub(crate) async fn self_update(
                     "{}{} Self-update is only available for uv binaries installed via the standalone installation scripts.",
                     "\n",
                     "\n",
-                    "If you installed uv with pip, brew, or another package manager, update uv with `pip install --upgrade`, `brew upgrade`, or similar."
+                    "The current executable is at `{}` but the standalone installer was used to install uv to `{}`. Are multiple copies of uv installed?"
                 ),
                 "warning".yellow().bold(),
-                ":".bold()
+                ":".bold(),
+                current_exe.simplified_display().bold().cyan(),
+                receipt_prefix.simplified_display().bold().cyan()
             )
         )?;
         return Ok(ExitStatus::Error);

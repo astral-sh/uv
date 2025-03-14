@@ -6,10 +6,10 @@ use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::{EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest};
 use uv_warnings::{warn_user, warn_user_once};
-use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::commands::{
-    project::{validate_requires_python, WorkspacePython},
+    project::{validate_project_requires_python, WorkspacePython},
     ExitStatus,
 };
 
@@ -29,10 +29,13 @@ pub(crate) async fn find(
         EnvironmentPreference::Any
     };
 
+    let workspace_cache = WorkspaceCache::default();
     let project = if no_project {
         None
     } else {
-        match VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await {
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+            .await
+        {
             Ok(project) => Some(project),
             Err(WorkspaceError::MissingProject(_)) => None,
             Err(WorkspaceError::MissingPyprojectToml) => None,
@@ -65,7 +68,7 @@ pub(crate) async fn find(
 
     // Warn if the discovered Python version is incompatible with the current workspace
     if let Some(requires_python) = requires_python {
-        match validate_requires_python(
+        match validate_project_requires_python(
             python.interpreter(),
             project.as_ref().map(VirtualProject::workspace),
             &requires_python,

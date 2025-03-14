@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::{
     env, io,
     path::{Path, PathBuf},
@@ -5,6 +6,7 @@ use std::{
 
 use fs_err as fs;
 use thiserror::Error;
+
 use uv_pypi_types::Scheme;
 use uv_static::EnvVars;
 
@@ -17,6 +19,9 @@ pub struct VirtualEnvironment {
     /// The path to the Python interpreter inside the virtualenv, e.g., `.venv/bin/python`
     /// (Unix, Python 3.11).
     pub executable: PathBuf,
+
+    /// The path to the base executable for the environment, within the `home` directory.
+    pub base_executable: PathBuf,
 
     /// The [`Scheme`] paths for the virtualenv, as returned by (e.g.) `sysconfig.get_paths()`.
     pub scheme: Scheme,
@@ -34,6 +39,8 @@ pub struct PyVenvConfiguration {
     pub(crate) relocatable: bool,
     /// Was the virtual environment populated with seed packages?
     pub(crate) seed: bool,
+    /// Should the virtual environment include system site packages?
+    pub(crate) include_system_site_packages: bool,
 }
 
 #[derive(Debug, Error)]
@@ -185,6 +192,7 @@ impl PyVenvConfiguration {
         let mut uv = false;
         let mut relocatable = false;
         let mut seed = false;
+        let mut include_system_site_packages = true;
 
         // Per https://snarky.ca/how-virtual-environments-work/, the `pyvenv.cfg` file is not a
         // valid INI file, and is instead expected to be parsed by partitioning each line on the
@@ -208,6 +216,9 @@ impl PyVenvConfiguration {
                 "seed" => {
                     seed = value.trim().to_lowercase() == "true";
                 }
+                "include-system-site-packages" => {
+                    include_system_site_packages = value.trim().to_lowercase() == "true";
+                }
                 _ => {}
             }
         }
@@ -217,6 +228,7 @@ impl PyVenvConfiguration {
             uv,
             relocatable,
             seed,
+            include_system_site_packages,
         })
     }
 
@@ -238,5 +250,120 @@ impl PyVenvConfiguration {
     /// Returns true if the virtual environment was populated with seed packages.
     pub fn is_seed(&self) -> bool {
         self.seed
+    }
+
+    /// Returns true if the virtual environment should include system site packages.
+    pub fn include_system_site_packages(&self) -> bool {
+        self.include_system_site_packages
+    }
+
+    /// Set the key-value pair in the `pyvenv.cfg` file.
+    pub fn set(content: &str, key: &str, value: &str) -> String {
+        let mut lines = content.lines().map(Cow::Borrowed).collect::<Vec<_>>();
+        let mut found = false;
+        for line in &mut lines {
+            if let Some((lhs, _)) = line.split_once('=') {
+                if lhs.trim() == key {
+                    *line = Cow::Owned(format!("{key} = {value}"));
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if !found {
+            lines.push(Cow::Owned(format!("{key} = {value}")));
+        }
+        if lines.is_empty() {
+            String::new()
+        } else {
+            format!("{}\n", lines.join("\n"))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use indoc::indoc;
+
+    use super::*;
+
+    #[test]
+    fn test_set_existing_key() {
+        let content = indoc! {"
+            home = /path/to/python
+            version = 3.8.0
+            include-system-site-packages = false
+        "};
+        let result = PyVenvConfiguration::set(content, "version", "3.9.0");
+        assert_eq!(
+            result,
+            indoc! {"
+                home = /path/to/python
+                version = 3.9.0
+                include-system-site-packages = false
+            "}
+        );
+    }
+
+    #[test]
+    fn test_set_new_key() {
+        let content = indoc! {"
+            home = /path/to/python
+            version = 3.8.0
+        "};
+        let result = PyVenvConfiguration::set(content, "include-system-site-packages", "false");
+        assert_eq!(
+            result,
+            indoc! {"
+                home = /path/to/python
+                version = 3.8.0
+                include-system-site-packages = false
+            "}
+        );
+    }
+
+    #[test]
+    fn test_set_key_no_spaces() {
+        let content = indoc! {"
+            home=/path/to/python
+            version=3.8.0
+        "};
+        let result = PyVenvConfiguration::set(content, "include-system-site-packages", "false");
+        assert_eq!(
+            result,
+            indoc! {"
+                home=/path/to/python
+                version=3.8.0
+                include-system-site-packages = false
+            "}
+        );
+    }
+
+    #[test]
+    fn test_set_key_prefix() {
+        let content = indoc! {"
+            home = /path/to/python
+            home_dir = /other/path
+        "};
+        let result = PyVenvConfiguration::set(content, "home", "new/path");
+        assert_eq!(
+            result,
+            indoc! {"
+                home = new/path
+                home_dir = /other/path
+            "}
+        );
+    }
+
+    #[test]
+    fn test_set_empty_content() {
+        let content = "";
+        let result = PyVenvConfiguration::set(content, "version", "3.9.0");
+        assert_eq!(
+            result,
+            indoc! {"
+                version = 3.9.0
+            "}
+        );
     }
 }

@@ -35,7 +35,7 @@ impl KeyringProvider {
     /// Returns [`None`] if no password was found for the username or if any errors
     /// are encountered in the keyring backend.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
-    pub(crate) async fn fetch(&self, url: &Url, username: &str) -> Option<Credentials> {
+    pub async fn fetch(&self, url: &Url, username: &str) -> Option<Credentials> {
         // Validate the request
         debug_assert!(
             url.host_str().is_some(),

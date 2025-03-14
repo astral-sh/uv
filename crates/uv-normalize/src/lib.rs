@@ -6,25 +6,27 @@ pub use extra_name::ExtraName;
 pub use group_name::{GroupName, DEV_DEPENDENCIES};
 pub use package_name::PackageName;
 
+use uv_small_str::SmallString;
+
 mod dist_info_name;
 mod extra_name;
 mod group_name;
 mod package_name;
 
-/// Validate and normalize an owned package or extra name.
-pub(crate) fn validate_and_normalize_owned(name: String) -> Result<String, InvalidNameError> {
-    if is_normalized(&name)? {
-        Ok(name)
-    } else {
-        validate_and_normalize_ref(name)
-    }
-}
-
 /// Validate and normalize an unowned package or extra name.
 pub(crate) fn validate_and_normalize_ref(
     name: impl AsRef<str>,
-) -> Result<String, InvalidNameError> {
+) -> Result<SmallString, InvalidNameError> {
     let name = name.as_ref();
+    if is_normalized(name)? {
+        Ok(SmallString::from(name))
+    } else {
+        Ok(SmallString::from(normalize(name)?))
+    }
+}
+
+/// Normalize an unowned package or extra name.
+fn normalize(name: &str) -> Result<String, InvalidNameError> {
     let mut normalized = String::with_capacity(name.len());
 
     let mut last = None;
@@ -95,7 +97,7 @@ fn is_normalized(name: impl AsRef<str>) -> Result<bool, InvalidNameError> {
     Ok(true)
 }
 
-/// Invalid [`crate::PackageName`] or [`crate::ExtraName`].
+/// Invalid [`PackageName`] or [`ExtraName`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InvalidNameError(String);
 
@@ -136,9 +138,8 @@ mod tests {
             "FrIeNdLy-._.-bArD",
         ];
         for input in inputs {
-            assert_eq!(validate_and_normalize_ref(input).unwrap(), "friendly-bard");
             assert_eq!(
-                validate_and_normalize_owned(input.to_string()).unwrap(),
+                validate_and_normalize_ref(input).unwrap().as_ref(),
                 "friendly-bard"
             );
         }
@@ -169,11 +170,7 @@ mod tests {
         // Unchanged
         let unchanged = ["friendly-bard", "1okay", "okay2"];
         for input in unchanged {
-            assert_eq!(validate_and_normalize_ref(input).unwrap(), input);
-            assert_eq!(
-                validate_and_normalize_owned(input.to_string()).unwrap(),
-                input
-            );
+            assert_eq!(validate_and_normalize_ref(input).unwrap().as_ref(), input);
             assert!(is_normalized(input).unwrap());
         }
     }
@@ -191,7 +188,6 @@ mod tests {
         ];
         for input in failures {
             assert!(validate_and_normalize_ref(input).is_err());
-            assert!(validate_and_normalize_owned(input.to_string()).is_err());
             assert!(is_normalized(input).is_err());
         }
     }

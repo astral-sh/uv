@@ -55,24 +55,20 @@ pub(crate) fn create(
     seed: bool,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
-    // considered the "base" for the virtual environment. This is typically the Python executable
-    // from the [`Interpreter`]; however, if the interpreter is a virtual environment itself, then
-    // the base Python executable is the Python executable of the interpreter's base interpreter.
+    // considered the "base" for the virtual environment.
+    //
+    // For consistency with the standard library, rely on `sys._base_executable`, _unless_ we're
+    // using a uv-managed Python (in which case, we can do better for symlinked executables).
     let base_python = if cfg!(unix) && interpreter.is_standalone() {
-        // In `python-build-standalone`, a symlinked interpreter will return its own executable path
-        // as `sys._base_executable`. Using the symlinked path as the base Python executable is
-        // incorrect,  since it will cause `home` to point to something that is _not_ a Python
-        // installation.
-        //
-        // Instead, we want to fully resolve the symlink to the actual Python executable.
-        uv_fs::canonicalize_executable(interpreter.sys_executable())?
+        interpreter.find_base_python()?
     } else {
-        std::path::absolute(
-            interpreter
-                .sys_base_executable()
-                .unwrap_or(interpreter.sys_executable()),
-        )?
+        interpreter.to_base_python()?
     };
+
+    debug!(
+        "Using base executable for virtual environment: {}",
+        base_python.display()
+    );
 
     // Validate the existing location.
     match location.metadata() {
@@ -87,6 +83,18 @@ pub(crate) fn create(
                     debug!("Allowing existing directory");
                 } else if location.join("pyvenv.cfg").is_file() {
                     debug!("Removing existing directory");
+
+                    // On Windows, if the current executable is in the directory, guard against
+                    // self-deletion.
+                    #[cfg(windows)]
+                    if let Ok(itself) = std::env::current_exe() {
+                        let target = std::path::absolute(location)?;
+                        if itself.starts_with(&target) {
+                            debug!("Detected self-delete of executable: {}", itself.display());
+                            self_replace::self_delete_outside_path(location)?;
+                        }
+                    }
+
                     fs::remove_dir_all(location)?;
                     fs::create_dir_all(location)?;
                 } else if location
@@ -399,6 +407,7 @@ pub(crate) fn create(
         },
         root: location,
         executable,
+        base_executable: base_python,
     })
 }
 

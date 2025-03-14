@@ -112,7 +112,7 @@ index.
 ## Searching across multiple indexes
 
 By default, uv will stop at the first index on which a given package is available, and limit
-resolutions to those present on that first index (`first-match`).
+resolutions to those present on that first index (`first-index`).
 
 For example, if an internal index is specified via `[[tool.uv.index]]`, uv's behavior is such that
 if a package exists on that internal index, it will _always_ be installed from that internal index,
@@ -125,7 +125,7 @@ December 2022.
 Users can opt in to alternate index behaviors via the`--index-strategy` command-line option, or the
 `UV_INDEX_STRATEGY` environment variable, which supports the following values:
 
-- `first-match` (default): Search for each package across all indexes, limiting the candidate
+- `first-index` (default): Search for each package across all indexes, limiting the candidate
   versions to those present in the first index that contains the package.
 - `unsafe-first-match`: Search for each package across all indexes, but prefer the first index with
   a compatible version, even if newer versions are available on other indexes.
@@ -135,13 +135,19 @@ Users can opt in to alternate index behaviors via the`--index-strategy` command-
 While `unsafe-best-match` is the closest to pip's behavior, it exposes users to the risk of
 "dependency confusion" attacks.
 
-## Providing credentials
+## Authentication
 
-Most private registries require authentication to access packages, typically via a username and
+Most private package indexes require authentication to access packages, typically via a username and
 password (or access token).
 
-To authenticate with a provide index, either provide credentials via environment variables or embed
-them in the URL.
+!!! tip
+
+    See the [alternative index guide](../guides/integration/alternative-indexes.md) for details on
+    authenticating with specific private index providers, e.g., from AWS, Azure, or GCP.
+
+### Providing credentials directly
+
+Credentials can be provided directly via environment variables or by embedding them in the URL.
 
 For example, given an index named `internal-proxy` that requires a username (`public`) and password
 (`koala`), define the index (without credentials) in your `pyproject.toml`:
@@ -174,6 +180,48 @@ url = "https://public:koala@pypi-proxy.corp.dev/simple"
 
 For security purposes, credentials are _never_ stored in the `uv.lock` file; as such, uv _must_ have
 access to the authenticated URL at installation time.
+
+### Using credential providers
+
+In addition to providing credentials directly, uv supports discovery of credentials from netrc and
+keyring. See the [HTTP authentication](./authentication.md#http-authentication) documentation for
+details on setting up specific credential providers.
+
+By default, uv will attempt an unauthenticated request before querying providers. If the request
+fails, uv will search for credentials. If credentials are found, an authenticated request will be
+attempted.
+
+!!! note
+
+    If a username is set, uv will search for credentials before making an unauthenticated request.
+
+Some indexes (e.g., GitLab) will forward unauthenticated requests to a public index, like PyPI —
+which means that uv will not search for credentials. This behavior can be changed per-index, using
+the `authenticate` setting. For example, to always search for credentials:
+
+```toml hl_lines="4"
+[[tool.uv.index]]
+name = "example"
+url = "https://example.com/simple"
+authenticate = "always"
+```
+
+When `authenticate` is set to `always`, uv will eagerly search for credentials and error if
+credentials cannot be found.
+
+### Disabling authentication
+
+To prevent leaking credentials, authentication can be disabled for an index:
+
+```toml hl_lines="4"
+[[tool.uv.index]]
+name = "example"
+url = "https://example.com/simple"
+authenticate = "never"
+```
+
+When `authenticate` is set to `never`, uv will never search for credentials for the given index and
+will error if credentials are provided directly.
 
 ## `--index-url` and `--extra-index-url`
 

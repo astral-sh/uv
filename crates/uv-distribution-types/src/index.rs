@@ -1,9 +1,10 @@
+use std::path::Path;
 use std::str::FromStr;
 
 use thiserror::Error;
 use url::Url;
 
-use uv_auth::Credentials;
+use uv_auth::{AuthPolicy, Credentials};
 
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
@@ -11,6 +12,7 @@ use crate::{IndexUrl, IndexUrlError};
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
 pub struct Index {
     /// The name of the index.
     ///
@@ -67,6 +69,29 @@ pub struct Index {
     // /// can point to either local or remote resources.
     // #[serde(default)]
     // pub r#type: IndexKind,
+    /// The URL of the upload endpoint.
+    ///
+    /// When using `uv publish --index <name>`, this URL is used for publishing.
+    ///
+    /// A configuration for the default index PyPI would look as follows:
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "pypi"
+    /// url = "https://pypi.org/simple"
+    /// publish-url = "https://upload.pypi.org/legacy/"
+    /// ```
+    pub publish_url: Option<Url>,
+    /// When uv should use authentication for requests to the index.
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "my-index"
+    /// url = "https://<omitted>/simple"
+    /// authenticate = "always"
+    /// ```
+    #[serde(default)]
+    pub authenticate: AuthPolicy,
 }
 
 // #[derive(
@@ -90,6 +115,8 @@ impl Index {
             explicit: false,
             default: true,
             origin: None,
+            publish_url: None,
+            authenticate: AuthPolicy::default(),
         }
     }
 
@@ -101,6 +128,8 @@ impl Index {
             explicit: false,
             default: false,
             origin: None,
+            publish_url: None,
+            authenticate: AuthPolicy::default(),
         }
     }
 
@@ -112,6 +141,8 @@ impl Index {
             explicit: false,
             default: false,
             origin: None,
+            publish_url: None,
+            authenticate: AuthPolicy::default(),
         }
     }
 
@@ -132,9 +163,17 @@ impl Index {
         self.url
     }
 
-    /// Return the raw [`URL`] of the index.
+    /// Return the raw [`Url`] of the index.
     pub fn raw_url(&self) -> &Url {
         self.url.url()
+    }
+
+    /// Return the root [`Url`] of the index, if applicable.
+    ///
+    /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
+    /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
+    pub fn root_url(&self) -> Option<Url> {
+        self.url.root()
     }
 
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
@@ -148,6 +187,16 @@ impl Index {
 
         // Otherwise, extract the credentials from the URL.
         Credentials::from_url(self.url.url())
+    }
+
+    /// Resolve the index relative to the given root directory.
+    pub fn relative_to(mut self, root_dir: &Path) -> Result<Self, IndexUrlError> {
+        if let IndexUrl::Path(ref url) = self.url {
+            if let Some(given) = url.given() {
+                self.url = IndexUrl::parse(given, Some(root_dir))?;
+            }
+        }
+        Ok(self)
     }
 }
 
@@ -166,6 +215,8 @@ impl FromStr for Index {
                     explicit: false,
                     default: false,
                     origin: None,
+                    publish_url: None,
+                    authenticate: AuthPolicy::default(),
                 });
             }
         }
@@ -178,6 +229,8 @@ impl FromStr for Index {
             explicit: false,
             default: false,
             origin: None,
+            publish_url: None,
+            authenticate: AuthPolicy::default(),
         })
     }
 }

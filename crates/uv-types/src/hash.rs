@@ -1,16 +1,18 @@
-use rustc_hash::FxHashMap;
 use std::str::FromStr;
 use std::sync::Arc;
+
+use rustc_hash::FxHashMap;
 use url::Url;
 
 use uv_configuration::HashCheckingMode;
 use uv_distribution_types::{
-    DistributionMetadata, HashPolicy, Name, Resolution, UnresolvedRequirement, VersionId,
+    DistributionMetadata, HashGeneration, HashPolicy, Name, Resolution, UnresolvedRequirement,
+    VersionId,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::{
-    HashDigest, HashError, Hashes, Requirement, RequirementSource, ResolverMarkerEnvironment,
+    HashDigest, HashDigests, HashError, Requirement, RequirementSource, ResolverMarkerEnvironment,
 };
 
 #[derive(Debug, Default, Clone)]
@@ -19,7 +21,7 @@ pub enum HashStrategy {
     #[default]
     None,
     /// Hashes should be generated (specifically, a SHA-256 hash), but not validated.
-    Generate,
+    Generate(HashGeneration),
     /// Hashes should be validated, if present, but ignored if absent.
     ///
     /// If necessary, hashes should be generated to ensure that the archive is valid.
@@ -35,7 +37,7 @@ impl HashStrategy {
     pub fn get<T: DistributionMetadata>(&self, distribution: &T) -> HashPolicy {
         match self {
             Self::None => HashPolicy::None,
-            Self::Generate => HashPolicy::Generate,
+            Self::Generate(mode) => HashPolicy::Generate(*mode),
             Self::Verify(hashes) => {
                 if let Some(hashes) = hashes.get(&distribution.version_id()) {
                     HashPolicy::Validate(hashes.as_slice())
@@ -56,7 +58,7 @@ impl HashStrategy {
     pub fn get_package(&self, name: &PackageName, version: &Version) -> HashPolicy {
         match self {
             Self::None => HashPolicy::None,
-            Self::Generate => HashPolicy::Generate,
+            Self::Generate(mode) => HashPolicy::Generate(*mode),
             Self::Verify(hashes) => {
                 if let Some(hashes) =
                     hashes.get(&VersionId::from_registry(name.clone(), version.clone()))
@@ -79,7 +81,7 @@ impl HashStrategy {
     pub fn get_url(&self, url: &Url) -> HashPolicy {
         match self {
             Self::None => HashPolicy::None,
-            Self::Generate => HashPolicy::Generate,
+            Self::Generate(mode) => HashPolicy::Generate(*mode),
             Self::Verify(hashes) => {
                 if let Some(hashes) = hashes.get(&VersionId::from_url(url)) {
                     HashPolicy::Validate(hashes.as_slice())
@@ -100,7 +102,7 @@ impl HashStrategy {
     pub fn allows_package(&self, name: &PackageName, version: &Version) -> bool {
         match self {
             Self::None => true,
-            Self::Generate => true,
+            Self::Generate(_) => true,
             Self::Verify(_) => true,
             Self::Require(hashes) => {
                 hashes.contains_key(&VersionId::from_registry(name.clone(), version.clone()))
@@ -112,7 +114,7 @@ impl HashStrategy {
     pub fn allows_url(&self, url: &Url) -> bool {
         match self {
             Self::None => true,
-            Self::Generate => true,
+            Self::Generate(_) => true,
             Self::Verify(_) => true,
             Self::Require(hashes) => hashes.contains_key(&VersionId::from_url(url)),
         }
@@ -156,7 +158,8 @@ impl HashStrategy {
                 // it from the fragment.
                 requirement
                     .hashes()
-                    .map(Hashes::into_digests)
+                    .map(HashDigests::from)
+                    .map(|hashes| hashes.to_vec())
                     .unwrap_or_default()
             } else {
                 // Parse the hashes.
@@ -209,7 +212,8 @@ impl HashStrategy {
                 // it from the fragment.
                 requirement
                     .hashes()
-                    .map(Hashes::into_digests)
+                    .map(HashDigests::from)
+                    .map(|hashes| hashes.to_vec())
                     .unwrap_or_default()
             } else {
                 // Parse the hashes.

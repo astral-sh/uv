@@ -34,13 +34,13 @@ pub(crate) async fn uninstall(name: Vec<PackageName>, printer: Printer) -> Resul
     do_uninstall(&installed_tools, name, printer).await?;
 
     // Clean up any empty directories.
-    if uv_fs::directories(installed_tools.root()).all(|path| uv_fs::is_temporary(&path)) {
+    if uv_fs::directories(installed_tools.root())?.all(|path| uv_fs::is_temporary(&path)) {
         fs_err::tokio::remove_dir_all(&installed_tools.root())
             .await
             .ignore_currently_being_deleted()?;
-        if let Some(top_level) = installed_tools.root().parent() {
-            if uv_fs::directories(top_level).all(|path| uv_fs::is_temporary(&path)) {
-                fs_err::tokio::remove_dir_all(top_level)
+        if let Some(parent) = installed_tools.root().parent() {
+            if uv_fs::directories(parent)?.all(|path| uv_fs::is_temporary(&path)) {
+                fs_err::tokio::remove_dir_all(parent)
                     .await
                     .ignore_currently_being_deleted()?;
             }
@@ -82,6 +82,7 @@ impl IgnoreCurrentlyBeingDeleted for Result<(), std::io::Error> {
     fn ignore_currently_being_deleted(self) -> Self {
         match self {
             Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::DirectoryNotEmpty => Ok(()),
             Err(err) if err.is_in_process_of_being_deleted() => Ok(()),
             Err(err) => Err(err),
         }
@@ -180,6 +181,9 @@ async fn uninstall_tool(
     // Remove the tool itself.
     tools.remove_environment(name)?;
 
+    #[cfg(windows)]
+    let itself = std::env::current_exe().ok();
+
     // Remove the tool's entrypoints.
     let entrypoints = receipt.entrypoints();
     for entrypoint in entrypoints {
@@ -187,6 +191,15 @@ async fn uninstall_tool(
             "Removing executable: {}",
             entrypoint.install_path.user_display()
         );
+
+        #[cfg(windows)]
+        if itself.as_ref().is_some_and(|itself| {
+            std::path::absolute(&entrypoint.install_path).is_ok_and(|target| *itself == target)
+        }) {
+            self_replace::self_delete()?;
+            continue;
+        }
+
         match fs_err::tokio::remove_file(&entrypoint.install_path).await {
             Ok(()) => {}
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {

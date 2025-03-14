@@ -1,3 +1,5 @@
+use uv_static::EnvVars;
+
 use crate::common::{uv_snapshot, TestContext};
 
 #[test]
@@ -52,12 +54,12 @@ fn help() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -132,12 +134,12 @@ fn help_flag() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -211,12 +213,12 @@ fn help_short_flag() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -347,9 +349,9 @@ fn help_subcommand() {
               (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
 
           --color <COLOR_CHOICE>
-              Control colors in output
+              Control the use of color in output.
               
-              [default: auto]
+              By default, uv will automatically detect support for colors when writing to a terminal.
 
               Possible values:
               - auto:   Enables colored output only when the output is going to a terminal or TTY with
@@ -374,6 +376,8 @@ fn help_subcommand() {
               Disable network access.
               
               When disabled, uv will only use locally cached data and locally available files.
+              
+              [env: UV_OFFLINE=]
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host.
@@ -450,16 +454,16 @@ fn help_subcommand() {
 fn help_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r##"
+    uv_snapshot!(context.filters(), context.help().env_remove(EnvVars::UV_PYTHON_INSTALL_DIR).arg("python").arg("install"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
     Download and install Python versions.
 
-    Multiple Python versions may be requested.
-
-    Supports CPython and PyPy. CPython distributions are downloaded from the `python-build-standalone`
-    project. PyPy distributions are downloaded from `python.org`.
+    Supports CPython and PyPy. CPython distributions are downloaded from the Astral
+    `python-build-standalone` project. PyPy distributions are downloaded from `python.org`. The
+    available Python versions are bundled with each uv release. To install new Python versions, you may
+    need upgrade uv.
 
     Python versions are installed into the uv Python directory, which can be retrieved with `uv python
     dir`.
@@ -467,6 +471,8 @@ fn help_subsubcommand() {
     A `python` executable is not made globally available, managed Python versions are only used in uv
     commands or in active virtual environments. There is experimental support for adding Python
     executables to the `PATH` — use the `--preview` flag to enable this behavior.
+
+    Multiple Python versions may be requested.
 
     See `uv help python` to view supported request formats.
 
@@ -476,19 +482,33 @@ fn help_subsubcommand() {
       [TARGETS]...
               The Python version(s) to install.
               
-              If not provided, the requested Python version(s) will be read from the `.python-versions`
-              or `.python-version` files. If neither file is present, uv will check if it has installed
-              any Python versions. If not, it will install the latest stable version of Python.
+              If not provided, the requested Python version(s) will be read from the `UV_PYTHON`
+              environment variable then `.python-versions` or `.python-version` files. If none of the
+              above are present, uv will check if it has installed any Python versions. If not, it will
+              install the latest stable version of Python.
               
               See `uv help python` to view supported request formats.
+              
+              [env: UV_PYTHON=]
 
     Options:
+      -i, --install-dir <INSTALL_DIR>
+              The directory to store the Python installation in.
+              
+              If provided, `UV_PYTHON_INSTALL_DIR` will need to be set for subsequent operations for uv
+              to discover the Python installation.
+              
+              See `uv python dir` to view the current Python installation directory. Defaults to
+              `~/.local/share/uv/python`.
+              
+              [env: UV_PYTHON_INSTALL_DIR=]
+
           --mirror <MIRROR>
               Set the URL to use as the source for downloading Python installations.
               
               The provided URL will replace
-              `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g.,
-              `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+              `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g.,
+              `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
               
               Distributions can be read from a local directory by using the `file://` URL scheme.
               
@@ -515,6 +535,19 @@ fn help_subsubcommand() {
               By default, uv will refuse to replace executables that it does not manage.
               
               Implies `--reinstall`.
+
+          --default
+              Use as the default Python version.
+              
+              By default, only a `python{major}.{minor}` executable is installed, e.g., `python3.10`.
+              When the `--default` flag is used, `python{major}`, e.g., `python3`, and `python`
+              executables are also installed.
+              
+              Alternative Python variants will still include their tag. For example, installing
+              3.13+freethreaded with `--default` will include in `python3t` and `pythont`, not `python3`
+              and `python`.
+              
+              If multiple Python versions are requested, uv will exit with an error.
 
     Cache options:
       -n, --no-cache
@@ -565,9 +598,9 @@ fn help_subsubcommand() {
               (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
 
           --color <COLOR_CHOICE>
-              Control colors in output
+              Control the use of color in output.
               
-              [default: auto]
+              By default, uv will automatically detect support for colors when writing to a terminal.
 
               Possible values:
               - auto:   Enables colored output only when the output is going to a terminal or TTY with
@@ -592,6 +625,8 @@ fn help_subsubcommand() {
               Disable network access.
               
               When disabled, uv will only use locally cached data and locally available files.
+              
+              [env: UV_OFFLINE=]
 
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host.
@@ -659,7 +694,7 @@ fn help_subsubcommand() {
 
 
     ----- stderr -----
-    "##);
+    "###);
 }
 
 #[test]
@@ -700,12 +735,12 @@ fn help_flag_subcommand() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -742,15 +777,18 @@ fn help_flag_subsubcommand() {
     Usage: uv python install [OPTIONS] [TARGETS]...
 
     Arguments:
-      [TARGETS]...  The Python version(s) to install
+      [TARGETS]...  The Python version(s) to install [env: UV_PYTHON=]
 
     Options:
+      -i, --install-dir <INSTALL_DIR>  The directory to store the Python installation in [env:
+                                       UV_PYTHON_INSTALL_DIR=]
           --mirror <MIRROR>            Set the URL to use as the source for downloading Python
                                        installations [env: UV_PYTHON_INSTALL_MIRROR=]
           --pypy-mirror <PYPY_MIRROR>  Set the URL to use as the source for downloading PyPy
                                        installations [env: UV_PYPY_INSTALL_MIRROR=]
       -r, --reinstall                  Reinstall the requested Python version, if it's already installed
       -f, --force                      Replace existing Python executables during installation
+          --default                    Use as the default Python version
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -770,12 +808,12 @@ fn help_flag_subsubcommand() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -927,12 +965,12 @@ fn help_with_global_option() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress
@@ -1043,12 +1081,12 @@ fn help_with_no_pager() {
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
           --offline
-              Disable network access
+              Disable network access [env: UV_OFFLINE=]
           --allow-insecure-host <ALLOW_INSECURE_HOST>
               Allow insecure connections to a host [env: UV_INSECURE_HOST=]
           --no-progress

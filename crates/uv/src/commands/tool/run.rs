@@ -1,10 +1,12 @@
 use std::fmt::Display;
 use std::fmt::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use anstream::eprint;
 use anyhow::{bail, Context};
+use console::Term;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tokio::process::Command;
@@ -13,35 +15,45 @@ use tracing::{debug, warn};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
-use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, TrustedHost};
-use uv_distribution_types::{Name, UnresolvedRequirementSpecification};
+use uv_client::BaseClientBuilder;
+use uv_configuration::{Concurrency, PreviewMode};
+use uv_distribution_types::{
+    IndexUrl, Name, NameRequirementSpecification, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
+};
+use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{Requirement, RequirementSource};
+use uv_python::VersionRequest;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_settings::PythonInstallMirrors;
+use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
+use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
-use crate::commands::project::{resolve_names, EnvironmentSpecification, ProjectError};
-use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::tool::Target;
-use crate::commands::{
-    diagnostics, project::environment::CachedEnvironment, tool::common::matching_packages,
+use crate::commands::project::{
+    resolve_names, EnvironmentSpecification, PlatformState, ProjectError,
 };
-use crate::commands::{ExitStatus, SharedState};
+use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::run::run_to_completion;
+use crate::commands::tool::common::{matching_packages, refine_interpreter};
+use crate::commands::tool::{Target, ToolRequest};
+use crate::commands::ExitStatus;
+use crate::commands::{diagnostics, project::environment::CachedEnvironment};
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 use crate::settings::ResolverInstallerSettings;
 
 /// The user-facing command used to invoke a tool run.
@@ -63,25 +75,35 @@ impl Display for ToolRunCommand {
 }
 
 /// Run a command.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn run(
     command: Option<ExternalCommand>,
     from: Option<String>,
     with: &[RequirementsSource],
+    constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
     show_resolution: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
+    options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
+    network_settings: NetworkSettings,
     invocation_source: ToolRunCommand,
     isolated: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
+    installer_metadata: bool,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
+    /// Whether or not a path looks like a Python script based on the file extension.
+    fn has_python_script_ext(path: &Path) -> bool {
+        path.extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
+    }
+
     let Some(command) = command else {
         // When a command isn't provided, we'll show a brief help including available tools
         show_help(invocation_source, &cache, printer).await?;
@@ -95,13 +117,87 @@ pub(crate) async fn run(
     };
 
     let Some(target) = target.to_str() else {
-        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name."));
+        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"));
     };
 
-    let target = Target::parse(target, from.as_deref());
+    if let Some(ref from) = from {
+        if has_python_script_ext(Path::new(from)) {
+            let package_name = PackageName::from_str(from)?;
+            return Err(anyhow::anyhow!(
+                "It looks you provided a Python script to `--from`, which is not supported\n\n{}{} If you meant to run a command from the `{}` package, use the normalized package name instead to disambiguate, e.g., `{}`",
+                "hint".bold().cyan(),
+                ":".bold(),
+                package_name.cyan(),
+                format!("{} --from {} {}", invocation_source, package_name.cyan(), target).green(),
+            ));
+        }
+    } else {
+        let target_path = Path::new(target);
+
+        // If the user tries to invoke `uvx script.py`, hint them towards `uv run`.
+        if has_python_script_ext(target_path) {
+            return if target_path.try_exists()? {
+                Err(anyhow::anyhow!(
+                    "It looks you tried to run a Python script at `{}`, which is not supported by `{}`\n\n{}{} Use `{}` instead",
+                    target_path.user_display(),
+                    invocation_source,
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    format!("uv run {}", target_path.user_display().cyan()),
+                ))
+            } else {
+                let package_name = PackageName::from_str(target)?;
+                Err(anyhow::anyhow!(
+                    "It looks you provided a Python script to run, which is not supported supported by `{}`\n\n{}{} We did not find a script at the requested path. If you meant to run a command from the `{}` package, pass the normalized package name to `--from` to disambiguate, e.g., `{}`",
+                    invocation_source,
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package_name.cyan(),
+                    format!("{invocation_source} --from {package_name} {target}").green(),
+                ))
+            };
+        }
+    }
+
+    // If the user tries to invoke `uvx run ruff`, hint them towards `uvx ruff`, but only if
+    // the `run` package is guaranteed to come from PyPI.
+    let (mut target, mut args) = (target, args);
+    if from.is_none()
+        && invocation_source == ToolRunCommand::Uvx
+        && target == "run"
+        && settings
+            .resolver
+            .index_locations
+            .indexes()
+            .all(|index| matches!(index.url, IndexUrl::Pypi(..)))
+    {
+        let term = Term::stderr();
+        if term.is_term() {
+            let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
+            let prompt = format!(
+                "`{}` invokes the `{}` package. Did you mean `{}`?",
+                format!("uvx run {rest}").green(),
+                "run".cyan(),
+                format!("uvx {rest}").green()
+            );
+            let confirmation = uv_console::confirm(&prompt, &term, true)?;
+            if confirmation {
+                let Some((next_target, next_args)) = args.split_first() else {
+                    return Err(anyhow::anyhow!("No tool command provided"));
+                };
+                let Some(next_target) = next_target.to_str() else {
+                    return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"));
+                };
+                target = next_target;
+                args = next_args;
+            }
+        }
+    }
+
+    let request = ToolRequest::parse(target, from.as_deref());
 
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
-    let cache = if target.is_latest() {
+    let cache = if request.is_latest() {
         cache.with_refresh(Refresh::All(Timestamp::now()))
     } else {
         cache
@@ -109,30 +205,49 @@ pub(crate) async fn run(
 
     // Get or create a compatible environment in which to execute the tool.
     let result = get_or_create_environment(
-        &target,
+        &request,
         with,
+        constraints,
+        overrides,
         show_resolution,
         python.as_deref(),
         install_mirrors,
+        options,
         &settings,
+        &network_settings,
         isolated,
         python_preference,
         python_downloads,
-        connectivity,
+        installer_metadata,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         &cache,
         printer,
+        preview,
     )
     .await;
 
     let (from, environment) = match result {
         Ok(resolution) => resolution,
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::with_context("tool")
+            // If the user ran `uvx run ...`, the `run` is likely a mistake. Show a dedicated hint.
+            if from.is_none() && invocation_source == ToolRunCommand::Uvx && target == "run" {
+                let rest = args.iter().map(|s| s.to_string_lossy()).join(" ");
+                return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+                    .with_hint(format!(
+                        "`{}` invokes the `{}` package. Did you mean `{}`?",
+                        format!("uvx run {rest}").green(),
+                        "run".cyan(),
+                        format!("uvx {rest}").green()
+                    ))
+                    .with_context("tool")
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            }
+
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+                .with_context("tool")
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(ProjectError::Requirements(err)) => {
             let err = miette::Report::msg(format!("{err}"))
@@ -144,10 +259,15 @@ pub(crate) async fn run(
     };
 
     // TODO(zanieb): Determine the executable command via the package entry points
-    let executable = target.executable();
+    let executable = from.executable();
 
     // Construct the command
-    let mut process = Command::new(executable);
+    let mut process = if cfg!(windows) {
+        WindowsRunnable::from_script_path(environment.scripts(), executable.as_ref()).into()
+    } else {
+        Command::new(executable)
+    };
+
     process.args(args);
 
     // Construct the `PATH` environment variable.
@@ -175,57 +295,31 @@ pub(crate) async fn run(
 
     // We check if the provided command is not part of the executables for the `from` package.
     // If the command is found in other packages, we warn the user about the correct package to use.
-    warn_executable_not_provided_by_package(
-        executable,
-        &from.name,
-        &site_packages,
-        invocation_source,
-    );
+    match &from {
+        ToolRequirement::Python => {}
+        ToolRequirement::Package {
+            requirement: from, ..
+        } => {
+            warn_executable_not_provided_by_package(
+                executable,
+                &from.name,
+                &site_packages,
+                invocation_source,
+            );
+        }
+    }
 
-    let mut handle = match process.spawn() {
+    let handle = match process.spawn() {
         Ok(handle) => Ok(handle),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            match get_entrypoints(&from.name, &site_packages) {
-                Ok(entrypoints) => {
-                    writeln!(
-                        printer.stdout(),
-                        "The executable `{}` was not found.",
-                        executable.cyan(),
-                    )?;
-                    if entrypoints.is_empty() {
-                        warn_user!(
-                            "Package `{}` does not provide any executables.",
-                            from.name.red()
-                        );
-                    } else {
-                        warn_user!(
-                            "An executable named `{}` is not provided by package `{}`.",
-                            executable.cyan(),
-                            from.name.red()
-                        );
-                        writeln!(
-                            printer.stdout(),
-                            "The following executables are provided by `{}`:",
-                            from.name.green()
-                        )?;
-                        for (name, _) in entrypoints {
-                            writeln!(printer.stdout(), "- {}", name.cyan())?;
-                        }
-                        let suggested_command = format!(
-                            "{} --from {} <EXECUTABLE_NAME>",
-                            invocation_source, from.name
-                        );
-                        writeln!(
-                            printer.stdout(),
-                            "Consider using `{}` instead.",
-                            suggested_command.green()
-                        )?;
-                    }
-                    return Ok(ExitStatus::Failure);
-                }
-                Err(err) => {
-                    warn!("Failed to get entrypoints for `{from}`: {err}");
-                }
+            if let Some(exit_status) = hint_on_not_found(
+                executable,
+                &from,
+                &site_packages,
+                invocation_source,
+                printer,
+            )? {
+                return Ok(exit_status);
             }
             Err(err)
         }
@@ -233,60 +327,68 @@ pub(crate) async fn run(
     }
     .with_context(|| format!("Failed to spawn: `{executable}`"))?;
 
-    // Ignore signals in the parent process, deferring them to the child. This is safe as long as
-    // the command is the last thing that runs in this process; otherwise, we'd need to restore the
-    // signal handlers after the command completes.
-    let _handler = tokio::spawn(async { while tokio::signal::ctrl_c().await.is_ok() {} });
-
-    // Exit based on the result of the command.
-    #[cfg(unix)]
-    let status = {
-        use tokio::select;
-        use tokio::signal::unix::{signal, SignalKind};
-
-        let mut term_signal = signal(SignalKind::terminate())?;
-        loop {
-            select! {
-                result = handle.wait() => {
-                    break result;
-                },
-
-                // `SIGTERM`
-                _ = term_signal.recv() => {
-                    let _ = terminate_process(&mut handle);
-                }
-            };
-        }
-    }?;
-
-    #[cfg(not(unix))]
-    let status = handle.wait().await?;
-
-    if let Some(code) = status.code() {
-        debug!("Command exited with code: {code}");
-        if let Ok(code) = u8::try_from(code) {
-            Ok(ExitStatus::External(code))
-        } else {
-            #[allow(clippy::exit)]
-            std::process::exit(code);
-        }
-    } else {
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::ExitStatusExt;
-            debug!("Command exited with signal: {:?}", status.signal());
-        }
-        Ok(ExitStatus::Failure)
-    }
+    run_to_completion(handle).await
 }
 
-#[cfg(unix)]
-fn terminate_process(child: &mut tokio::process::Child) -> anyhow::Result<()> {
-    use nix::sys::signal::{self, Signal};
-    use nix::unistd::Pid;
-
-    let pid = child.id().context("Failed to get child process ID")?;
-    signal::kill(Pid::from_raw(pid.try_into()?), Signal::SIGTERM).context("Failed to send SIGTERM")
+/// Show a hint when a command fails due to a missing executable.
+///
+/// Returns an exit status if the caller should exit after hinting.
+fn hint_on_not_found(
+    executable: &str,
+    from: &ToolRequirement,
+    site_packages: &SitePackages,
+    invocation_source: ToolRunCommand,
+    printer: Printer,
+) -> anyhow::Result<Option<ExitStatus>> {
+    let from = match from {
+        ToolRequirement::Python => return Ok(None),
+        ToolRequirement::Package {
+            requirement: from, ..
+        } => from,
+    };
+    match get_entrypoints(&from.name, site_packages) {
+        Ok(entrypoints) => {
+            writeln!(
+                printer.stdout(),
+                "The executable `{}` was not found.",
+                executable.cyan(),
+            )?;
+            if entrypoints.is_empty() {
+                warn_user!(
+                    "Package `{}` does not provide any executables.",
+                    from.name.red()
+                );
+            } else {
+                warn_user!(
+                    "An executable named `{}` is not provided by package `{}`.",
+                    executable.cyan(),
+                    from.name.red()
+                );
+                writeln!(
+                    printer.stdout(),
+                    "The following executables are provided by `{}`:",
+                    from.name.green()
+                )?;
+                for (name, _) in entrypoints {
+                    writeln!(printer.stdout(), "- {}", name.cyan())?;
+                }
+                let suggested_command = format!(
+                    "{} --from {} <EXECUTABLE_NAME>",
+                    invocation_source, from.name
+                );
+                writeln!(
+                    printer.stdout(),
+                    "Consider using `{}` instead.",
+                    suggested_command.green()
+                )?;
+            }
+            Ok(Some(ExitStatus::Failure))
+        }
+        Err(err) => {
+            warn!("Failed to get entrypoints for `{from}`: {err}");
+            Ok(None)
+        }
+    }
 }
 
 /// Return the entry points for the specified package.
@@ -420,35 +522,99 @@ fn warn_executable_not_provided_by_package(
     }
 }
 
+// Clippy isn't happy about the difference in size between these variants, but
+// [`ToolRequirement::Package`] is the more common case and it seems annoying to box it.
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum ToolRequirement {
+    Python,
+    Package {
+        executable: String,
+        requirement: Requirement,
+    },
+}
+
+impl ToolRequirement {
+    fn executable(&self) -> &str {
+        match self {
+            ToolRequirement::Python => "python",
+            ToolRequirement::Package { executable, .. } => executable,
+        }
+    }
+}
+
+impl std::fmt::Display for ToolRequirement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ToolRequirement::Python => write!(f, "python"),
+            ToolRequirement::Package { requirement, .. } => write!(f, "{requirement}"),
+        }
+    }
+}
+
 /// Get or create a [`PythonEnvironment`] in which to run the specified tools.
 ///
 /// If the target tool is already installed in a compatible environment, returns that
 /// [`PythonEnvironment`]. Otherwise, gets or creates a [`CachedEnvironment`].
+#[allow(clippy::fn_params_excessive_bools)]
 async fn get_or_create_environment(
-    target: &Target<'_>,
+    request: &ToolRequest<'_>,
     with: &[RequirementsSource],
+    constraints: &[RequirementsSource],
+    overrides: &[RequirementsSource],
     show_resolution: bool,
     python: Option<&str>,
     install_mirrors: PythonInstallMirrors,
+    options: ResolverInstallerOptions,
     settings: &ResolverInstallerSettings,
+    network_settings: &NetworkSettings,
     isolated: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
+    installer_metadata: bool,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
-) -> Result<(Requirement, PythonEnvironment), ProjectError> {
+    preview: PreviewMode,
+) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     let reporter = PythonDownloadReporter::single(printer);
 
-    let python_request = python.map(PythonRequest::parse);
+    // Check if the target is `python`
+    let python_request = if request.is_python() {
+        let target_request = match &request.target {
+            Target::Unspecified(_) => None,
+            Target::Version(_, _, _, version) => Some(PythonRequest::Version(
+                VersionRequest::from_str(&version.to_string()).map_err(anyhow::Error::from)?,
+            )),
+            // TODO(zanieb): Add `PythonRequest::Latest`
+            Target::Latest(_, _, _) => {
+                return Err(anyhow::anyhow!(
+                    "Requesting the 'latest' Python version is not yet supported"
+                )
+                .into())
+            }
+        };
+
+        if let Some(target_request) = &target_request {
+            if let Some(python) = python {
+                return Err(anyhow::anyhow!(
+                    "Received multiple Python version requests: `{}` and `{}`",
+                    python.to_string().cyan(),
+                    target_request.to_canonical_string().cyan(),
+                )
+                .into());
+            }
+        }
+
+        target_request.or_else(|| python.map(PythonRequest::parse))
+    } else {
+        python.map(PythonRequest::parse)
+    };
 
     // Discover an interpreter.
     let interpreter = PythonInstallation::find_or_download(
@@ -466,151 +632,242 @@ async fn get_or_create_environment(
     .into_interpreter();
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = PlatformState::default();
+    let workspace_cache = WorkspaceCache::default();
 
-    // Resolve the `--from` requirement.
-    let from = match target {
-        // Ex) `ruff`
-        Target::Unspecified(name) => Requirement {
-            name: PackageName::from_str(name)?,
-            extras: vec![],
-            marker: MarkerTree::default(),
-            source: RequirementSource::Registry {
-                specifier: VersionSpecifiers::empty(),
-                index: None,
-                conflict: None,
-            },
-            origin: None,
-        },
-        // Ex) `ruff@0.6.0`
-        Target::Version(name, version) | Target::FromVersion(_, name, version) => Requirement {
-            name: PackageName::from_str(name)?,
-            extras: vec![],
-            marker: MarkerTree::default(),
-            source: RequirementSource::Registry {
-                specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
-                    version.clone(),
-                )),
-                index: None,
-                conflict: None,
-            },
-            origin: None,
-        },
-        // Ex) `ruff@latest`
-        Target::Latest(name) | Target::FromLatest(_, name) => Requirement {
-            name: PackageName::from_str(name)?,
-            extras: vec![],
-            marker: MarkerTree::default(),
-            source: RequirementSource::Registry {
-                specifier: VersionSpecifiers::empty(),
-                index: None,
-                conflict: None,
-            },
-            origin: None,
-        },
-        // Ex) `ruff>=0.6.0`
-        Target::From(_, from) => resolve_names(
-            vec![RequirementsSpecification::parse_package(from)?],
-            &interpreter,
-            settings,
-            &state,
-            connectivity,
-            concurrency,
-            native_tls,
-            allow_insecure_host,
-            cache,
-            printer,
-        )
-        .await?
-        .pop()
-        .unwrap(),
+    let from = if request.is_python() {
+        ToolRequirement::Python
+    } else {
+        let (executable, requirement) = match &request.target {
+            // Ex) `ruff>=0.6.0`
+            Target::Unspecified(requirement) => {
+                let spec = RequirementsSpecification::parse_package(requirement)?;
+
+                // Extract the verbatim executable name, if possible.
+                let name = match &spec.requirement {
+                    UnresolvedRequirement::Named(..) => {
+                        // Identify the package name from the PEP 508 specifier.
+                        //
+                        // For example, given `ruff>=0.6.0`, extract `ruff`, to use as the executable name.
+                        let content = requirement.trim();
+                        let index = content
+                            .find(|c| !matches!(c, 'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.'))
+                            .unwrap_or(content.len());
+                        Some(&content[..index])
+                    }
+                    UnresolvedRequirement::Unnamed(..) => None,
+                };
+
+                if let UnresolvedRequirement::Named(requirement) = &spec.requirement {
+                    if requirement.name.as_str() == "python" {
+                        return Err(anyhow::anyhow!(
+                            "Using `{}` is not supported. Use `{}` instead.",
+                            "--from python<specifier>".cyan(),
+                            "python@<version>".cyan(),
+                        )
+                        .into());
+                    }
+                }
+
+                let requirement = resolve_names(
+                    vec![spec],
+                    &interpreter,
+                    settings,
+                    network_settings,
+                    &state,
+                    concurrency,
+                    cache,
+                    &workspace_cache,
+                    printer,
+                    preview,
+                )
+                .await?
+                .pop()
+                .unwrap();
+
+                // Prefer, in order:
+                // 1. The verbatim executable provided by the user, independent of the requirement (as in: `uvx --from package executable`).
+                // 2. The verbatim executable provided by the user as a named requirement (as in: `uvx change_wheel_version`).
+                // 3. The resolved package name (as in: `uvx git+https://github.com/pallets/flask`).
+                let executable = request
+                    .executable
+                    .map(ToString::to_string)
+                    .or_else(|| name.map(ToString::to_string))
+                    .unwrap_or_else(|| requirement.name.to_string());
+
+                (executable, requirement)
+            }
+            // Ex) `ruff@0.6.0`
+            Target::Version(executable, name, extras, version) => {
+                let executable = request
+                    .executable
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| (*executable).to_string());
+                let requirement = Requirement {
+                    name: name.clone(),
+                    extras: extras.clone(),
+                    groups: vec![],
+                    marker: MarkerTree::default(),
+                    source: RequirementSource::Registry {
+                        specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
+                            version.clone(),
+                        )),
+                        index: None,
+                        conflict: None,
+                    },
+                    origin: None,
+                };
+
+                (executable, requirement)
+            }
+            // Ex) `ruff@latest`
+            Target::Latest(executable, name, extras) => {
+                let executable = request
+                    .executable
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| (*executable).to_string());
+                let requirement = Requirement {
+                    name: name.clone(),
+                    extras: extras.clone(),
+                    groups: vec![],
+                    marker: MarkerTree::default(),
+                    source: RequirementSource::Registry {
+                        specifier: VersionSpecifiers::empty(),
+                        index: None,
+                        conflict: None,
+                    },
+                    origin: None,
+                };
+
+                (executable, requirement)
+            }
+        };
+
+        ToolRequirement::Package {
+            executable,
+            requirement,
+        }
     };
 
     // Read the `--with` requirements.
-    let spec = {
-        let client_builder = BaseClientBuilder::new()
-            .connectivity(connectivity)
-            .native_tls(native_tls)
-            .allow_insecure_host(allow_insecure_host.to_vec());
-        RequirementsSpecification::from_simple_sources(with, &client_builder).await?
-    };
+    let spec =
+        RequirementsSpecification::from_sources(with, constraints, overrides, &client_builder)
+            .await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
-        requirements.push(from.clone());
+        match &from {
+            ToolRequirement::Python => {}
+            ToolRequirement::Package { requirement, .. } => requirements.push(requirement.clone()),
+        }
         requirements.extend(
             resolve_names(
                 spec.requirements.clone(),
                 &interpreter,
                 settings,
+                network_settings,
                 &state,
-                connectivity,
                 concurrency,
-                native_tls,
-                allow_insecure_host,
                 cache,
+                &workspace_cache,
                 printer,
+                preview,
             )
             .await?,
         );
         requirements
     };
 
+    // Resolve the constraints.
+    let constraints = spec
+        .constraints
+        .clone()
+        .into_iter()
+        .map(|constraint| constraint.requirement)
+        .collect::<Vec<_>>();
+
+    // Resolve the overrides.
+    let overrides = resolve_names(
+        spec.overrides.clone(),
+        &interpreter,
+        settings,
+        network_settings,
+        &state,
+        concurrency,
+        cache,
+        &workspace_cache,
+        printer,
+        preview,
+    )
+    .await?;
+
     // Check if the tool is already installed in a compatible environment.
-    if !isolated && !target.is_latest() {
+    if !isolated && !request.is_latest() {
         let installed_tools = InstalledTools::from_settings()?.init()?;
         let _lock = installed_tools.lock().await?;
 
-        let existing_environment =
-            installed_tools
-                .get_environment(&from.name, cache)?
+        if let ToolRequirement::Package { requirement, .. } = &from {
+            let existing_environment = installed_tools
+                .get_environment(&requirement.name, cache)?
                 .filter(|environment| {
-                    python_request.as_ref().map_or(true, |python_request| {
+                    python_request.as_ref().is_none_or(|python_request| {
                         python_request.satisfied(environment.interpreter(), cache)
                     })
                 });
-        if let Some(environment) = existing_environment {
+
             // Check if the installed packages meet the requirements.
-            let site_packages = SitePackages::from_environment(&environment)?;
-
-            let requirements = requirements
-                .iter()
-                .cloned()
-                .map(UnresolvedRequirementSpecification::from)
-                .collect::<Vec<_>>();
-            let constraints = [];
-
-            if matches!(
-                site_packages.satisfies(
-                    &requirements,
-                    &constraints,
-                    &interpreter.resolver_marker_environment()
-                ),
-                Ok(SatisfiesResult::Fresh { .. })
-            ) {
-                debug!("Using existing tool `{}`", from.name);
-                return Ok((from, environment));
+            if let Some(environment) = existing_environment {
+                if installed_tools
+                    .get_tool_receipt(&requirement.name)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|receipt| ToolOptions::from(options) == *receipt.options())
+                {
+                    // Check if the installed packages meet the requirements.
+                    let site_packages = SitePackages::from_environment(&environment)?;
+                    if matches!(
+                        site_packages.satisfies_requirements(
+                            requirements.iter(),
+                            constraints.iter(),
+                            overrides.iter(),
+                            &interpreter.resolver_marker_environment()
+                        ),
+                        Ok(SatisfiesResult::Fresh { .. })
+                    ) {
+                        debug!("Using existing tool `{}`", requirement.name);
+                        return Ok((from, environment));
+                    }
+                }
             }
         }
     }
 
     // Create a `RequirementsSpecification` from the resolved requirements, to avoid re-resolving.
-    let spec = RequirementsSpecification {
+    let spec = EnvironmentSpecification::from(RequirementsSpecification {
         requirements: requirements
             .into_iter()
             .map(UnresolvedRequirementSpecification::from)
             .collect(),
+        constraints: constraints
+            .into_iter()
+            .map(NameRequirementSpecification::from)
+            .collect(),
+        overrides: overrides
+            .into_iter()
+            .map(UnresolvedRequirementSpecification::from)
+            .collect(),
         ..spec
-    };
+    });
 
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
-    let environment = CachedEnvironment::get_or_create(
-        EnvironmentSpecification::from(spec),
-        interpreter,
+    let result = CachedEnvironment::from_spec(
+        spec.clone(),
+        &interpreter,
         settings,
+        network_settings,
         &state,
         if show_resolution {
             Box::new(DefaultResolveLogger)
@@ -622,14 +879,78 @@ async fn get_or_create_environment(
         } else {
             Box::new(SummaryInstallLogger)
         },
-        connectivity,
+        installer_metadata,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         printer,
+        preview,
     )
-    .await?;
+    .await;
+
+    let environment = match result {
+        Ok(environment) => environment,
+        Err(err) => match err {
+            ProjectError::Operation(err) => {
+                // If the resolution failed due to the discovered interpreter not satisfying the
+                // `requires-python` constraint, we can try to refine the interpreter.
+                //
+                // For example, if we discovered a Python 3.8 interpreter on the user's machine,
+                // but the tool requires Python 3.10 or later, we can try to download a
+                // Python 3.10 interpreter and re-resolve.
+                let Some(interpreter) = refine_interpreter(
+                    &interpreter,
+                    python_request.as_ref(),
+                    &err,
+                    &client_builder,
+                    &reporter,
+                    &install_mirrors,
+                    python_preference,
+                    python_downloads,
+                    cache,
+                )
+                .await
+                .ok()
+                .flatten() else {
+                    return Err(err.into());
+                };
+
+                debug!(
+                    "Re-resolving with Python {} (`{}`)",
+                    interpreter.python_version(),
+                    interpreter.sys_executable().display()
+                );
+
+                CachedEnvironment::from_spec(
+                    spec,
+                    &interpreter,
+                    settings,
+                    network_settings,
+                    &state,
+                    if show_resolution {
+                        Box::new(DefaultResolveLogger)
+                    } else {
+                        Box::new(SummaryResolveLogger)
+                    },
+                    if show_resolution {
+                        Box::new(DefaultInstallLogger)
+                    } else {
+                        Box::new(SummaryInstallLogger)
+                    },
+                    installer_metadata,
+                    concurrency,
+                    cache,
+                    printer,
+                    preview,
+                )
+                .await?
+            }
+            err => return Err(err),
+        },
+    };
+
+    // Clear any existing overlay.
+    environment.clear_overlay()?;
+    environment.clear_system_site_packages()?;
 
     Ok((from, environment.into()))
 }

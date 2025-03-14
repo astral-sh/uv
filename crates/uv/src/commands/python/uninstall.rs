@@ -1,48 +1,54 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, warn};
+
+use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::{python_executable_dir, ManagedPythonInstallations};
-use uv_python::PythonRequest;
+use uv_python::{PythonInstallationKey, PythonRequest};
 
+use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::{elapsed, ExitStatus};
 use crate::printer::Printer;
 
 /// Uninstall managed Python versions.
 pub(crate) async fn uninstall(
+    install_dir: Option<PathBuf>,
     targets: Vec<String>,
     all: bool,
-
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
-    let installations = ManagedPythonInstallations::from_settings()?.init()?;
+    let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
+
     let _lock = installations.lock().await?;
 
     // Perform the uninstallation.
-    do_uninstall(&installations, targets, all, printer).await?;
+    do_uninstall(&installations, targets, all, printer, preview).await?;
 
     // Clean up any empty directories.
-    if uv_fs::directories(installations.root()).all(|path| uv_fs::is_temporary(&path)) {
+    if uv_fs::directories(installations.root())?.all(|path| uv_fs::is_temporary(&path)) {
         fs_err::tokio::remove_dir_all(&installations.root()).await?;
 
         if let Some(top_level) = installations.root().parent() {
             // Remove the `toolchains` symlink.
-            match uv_fs::remove_symlink(top_level.join("toolchains")) {
+            match fs_err::tokio::remove_file(top_level.join("toolchains")).await {
                 Ok(()) => {}
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
                 Err(err) => return Err(err.into()),
             }
 
-            if uv_fs::directories(top_level).all(|path| uv_fs::is_temporary(&path)) {
+            if uv_fs::directories(top_level)?.all(|path| uv_fs::is_temporary(&path)) {
                 fs_err::tokio::remove_dir_all(top_level).await?;
             }
         }
@@ -57,6 +63,7 @@ async fn do_uninstall(
     targets: Vec<String>,
     all: bool,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -102,6 +109,16 @@ async fn do_uninstall(
             matching_installations.insert(installation.clone());
         }
         if !found {
+            // Clear any remnants in the registry
+            if preview.is_enabled() {
+                #[cfg(windows)]
+                {
+                    uv_python::windows_registry::remove_orphan_registry_entries(
+                        &installed_installations,
+                    );
+                }
+            }
+
             if matches!(requests.as_slice(), [PythonRequest::Default]) {
                 writeln!(printer.stderr(), "No Python installations found")?;
                 return Ok(ExitStatus::Failure);
@@ -123,8 +140,10 @@ async fn do_uninstall(
         return Ok(ExitStatus::Failure);
     }
 
-    // Collect files in a directory
-    let executables = python_executable_dir()?
+    // Find and remove all relevant Python executables
+    let mut uninstalled_executables: FxHashMap<PythonInstallationKey, FxHashSet<PathBuf>> =
+        FxHashMap::default();
+    for executable in python_executable_dir()?
         .read_dir()
         .into_iter()
         .flatten()
@@ -142,21 +161,31 @@ async fn do_uninstall(
         // leave broken links behind, i.e., if the user created them.
         .filter(|path| {
             matching_installations.iter().any(|installation| {
-                path.file_name().and_then(|name| name.to_str())
-                    == Some(&installation.key().versioned_executable_name())
+                let name = path.file_name().and_then(|name| name.to_str());
+                name == Some(&installation.key().executable_name_minor())
+                    || name == Some(&installation.key().executable_name_major())
+                    || name == Some(&installation.key().executable_name())
             })
         })
-        // Only include Python executables that match the installations
-        .filter(|path| {
-            matching_installations
-                .iter()
-                .any(|installation| installation.is_bin_link(path.as_path()))
-        })
-        .collect::<BTreeSet<_>>();
+        .sorted()
+    {
+        let Some(installation) = matching_installations
+            .iter()
+            .find(|installation| installation.is_bin_link(executable.as_path()))
+        else {
+            continue;
+        };
 
-    for executable in &executables {
-        fs_err::remove_file(executable)?;
-        debug!("Removed {}", executable.user_display());
+        fs_err::remove_file(&executable)?;
+        debug!(
+            "Removed `{}` for `{}`",
+            executable.simplified_display(),
+            installation.key()
+        );
+        uninstalled_executables
+            .entry(installation.key().clone())
+            .or_default()
+            .insert(executable);
     }
 
     let mut tasks = FuturesUnordered::new();
@@ -173,10 +202,20 @@ async fn do_uninstall(
     let mut errors = vec![];
     while let Some((key, result)) = tasks.next().await {
         if let Err(err) = result {
-            errors.push((key.clone(), err));
+            errors.push((key.clone(), anyhow::Error::new(err)));
         } else {
             uninstalled.push(key.clone());
         }
+    }
+
+    #[cfg(windows)]
+    if preview.is_enabled() {
+        uv_python::windows_registry::remove_registry_entry(
+            &matching_installations,
+            all,
+            &mut errors,
+        );
+        uv_python::windows_registry::remove_orphan_registry_entries(&installed_installations);
     }
 
     // Report on any uninstalled installations.
@@ -216,15 +255,15 @@ async fn do_uninstall(
             })
             .sorted_unstable_by(|a, b| a.key.cmp(&b.key).then_with(|| a.kind.cmp(&b.kind)))
         {
+            let executables = format_executables(&event, &uninstalled_executables);
             match event.kind {
-                // TODO(zanieb): Track removed executables and report them all here
                 ChangeEventKind::Removed => {
                     writeln!(
                         printer.stderr(),
-                        " {} {} ({})",
+                        " {} {}{}",
                         "-".red(),
                         event.key.bold(),
-                        event.key.versioned_executable_name()
+                        executables,
                     )?;
                 }
                 _ => unreachable!(),

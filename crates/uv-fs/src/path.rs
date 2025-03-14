@@ -6,8 +6,13 @@ use either::Either;
 use path_slash::PathExt;
 
 /// The current working directory.
-pub static CWD: LazyLock<PathBuf> =
-    LazyLock::new(|| std::env::current_dir().expect("The current directory must exist"));
+#[allow(clippy::exit, clippy::print_stderr)]
+pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
+    std::env::current_dir().unwrap_or_else(|_e| {
+        eprintln!("Current directory does not exist");
+        std::process::exit(1);
+    })
+});
 
 pub trait Simplified {
     /// Simplify a [`Path`].
@@ -64,6 +69,11 @@ impl<T: AsRef<Path>> Simplified for T {
             return path.display();
         }
 
+        if path.as_os_str() == "" {
+            // Avoid printing an empty string for the current directory
+            return Path::new(".").display();
+        }
+
         // Attempt to strip the current working directory, then the canonicalized current working
         // directory, in case they differ.
         let path = path.strip_prefix(CWD.simplified()).unwrap_or(path);
@@ -84,6 +94,11 @@ impl<T: AsRef<Path>> Simplified for T {
         let path = path
             .strip_prefix(base.as_ref())
             .unwrap_or_else(|_| path.strip_prefix(CWD.simplified()).unwrap_or(path));
+
+        if path.as_os_str() == "" {
+            // Avoid printing an empty string for the current directory
+            return Path::new(".").display();
+        }
 
         path.display()
     }
@@ -124,7 +139,9 @@ impl<T: AsRef<Path>> PythonExt for T {
 /// On other platforms, this is a no-op.
 pub fn normalize_url_path(path: &str) -> Cow<'_, str> {
     // Apply percent-decoding to the URL.
-    let path = urlencoding::decode(path).unwrap_or(Cow::Borrowed(path));
+    let path = percent_encoding::percent_decode_str(path)
+        .decode_utf8()
+        .unwrap_or(Cow::Borrowed(path));
 
     // Return the path.
     if cfg!(windows) {
@@ -189,7 +206,33 @@ pub fn normalize_absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
     Ok(ret)
 }
 
-/// Normalize a path, removing things like `.` and `..`.
+/// Normalize a [`Path`], removing things like `.` and `..`.
+pub fn normalize_path(path: &Path) -> Cow<Path> {
+    // Fast path: if the path is already normalized, return it as-is.
+    if path.components().all(|component| match component {
+        Component::Prefix(_) | Component::RootDir | Component::Normal(_) => true,
+        Component::ParentDir | Component::CurDir => false,
+    }) {
+        Cow::Borrowed(path)
+    } else {
+        Cow::Owned(normalized(path))
+    }
+}
+
+/// Normalize a [`PathBuf`], removing things like `.` and `..`.
+pub fn normalize_path_buf(path: PathBuf) -> PathBuf {
+    // Fast path: if the path is already normalized, return it as-is.
+    if path.components().all(|component| match component {
+        Component::Prefix(_) | Component::RootDir | Component::Normal(_) => true,
+        Component::ParentDir | Component::CurDir => false,
+    }) {
+        path
+    } else {
+        normalized(&path)
+    }
+}
+
+/// Normalize a [`Path`].
 ///
 /// Unlike [`normalize_absolute_path`], this works with relative paths and does never error.
 ///
@@ -206,8 +249,7 @@ pub fn normalize_absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
 /// Out: `workspace-git-path-dep-test/packages/d`
 ///
 /// In: `./a/../../b`
-/// Out: `../b`
-pub fn normalize_path(path: &Path) -> PathBuf {
+fn normalized(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
     for component in path.components() {
         match component {
@@ -262,13 +304,16 @@ pub fn relative_to(
     path: impl AsRef<Path>,
     base: impl AsRef<Path>,
 ) -> Result<PathBuf, std::io::Error> {
+    // Normalize both paths, to avoid intermediate `..` components.
+    let path = normalize_path(path.as_ref());
+    let base = normalize_path(base.as_ref());
+
     // Find the longest common prefix, and also return the path stripped from that prefix
     let (stripped, common_prefix) = base
-        .as_ref()
         .ancestors()
         .find_map(|ancestor| {
             // Simplifying removes the UNC path prefix on windows.
-            dunce::simplified(path.as_ref())
+            dunce::simplified(&path)
                 .strip_prefix(dunce::simplified(ancestor))
                 .ok()
                 .map(|stripped| (stripped, ancestor))
@@ -278,14 +323,14 @@ pub fn relative_to(
                 std::io::ErrorKind::Other,
                 format!(
                     "Trivial strip failed: {} vs. {}",
-                    path.as_ref().simplified_display(),
-                    base.as_ref().simplified_display()
+                    path.simplified_display(),
+                    base.simplified_display()
                 ),
             )
         })?;
 
     // go as many levels up as required
-    let levels_up = base.as_ref().components().count() - common_prefix.components().count();
+    let levels_up = base.components().count() - common_prefix.components().count();
     let up = std::iter::repeat("..").take(levels_up).collect::<PathBuf>();
 
     Ok(up.join(stripped))
@@ -307,7 +352,7 @@ impl schemars::JsonSchema for PortablePathBuf {
         PathBuf::schema_name()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         PathBuf::json_schema(_gen)
     }
 }
@@ -345,6 +390,16 @@ impl std::fmt::Display for PortablePathBuf {
             write!(f, ".")
         } else {
             write!(f, "{path}")
+        }
+    }
+}
+
+impl From<&str> for PortablePathBuf {
+    fn from(path: &str) -> Self {
+        if path == "." {
+            Self(PathBuf::new())
+        } else {
+            Self(PathBuf::from(path))
         }
     }
 }

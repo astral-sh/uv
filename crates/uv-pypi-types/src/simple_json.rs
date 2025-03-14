@@ -2,7 +2,9 @@ use std::str::FromStr;
 
 use jiff::Timestamp;
 use serde::{Deserialize, Deserializer, Serialize};
+
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
+use uv_small_str::SmallString;
 
 use crate::lenient_requirement::LenientVersionSpecifiers;
 
@@ -38,10 +40,12 @@ fn sorted_simple_json_files<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<File>
 pub struct File {
     // PEP 714-renamed field, followed by PEP 691-compliant field, followed by non-PEP 691-compliant
     // alias used by PyPI.
+    //
+    // TODO(charlie): Use a single value here and move this into the deserializer, to save space.
     pub core_metadata: Option<CoreMetadata>,
     pub dist_info_metadata: Option<CoreMetadata>,
     pub data_dist_info_metadata: Option<CoreMetadata>,
-    pub filename: String,
+    pub filename: SmallString,
     pub hashes: Hashes,
     /// There are a number of invalid specifiers on PyPI, so we first try to parse it into a
     /// [`VersionSpecifiers`] according to spec (PEP 440), then a [`LenientVersionSpecifiers`] with
@@ -51,8 +55,8 @@ pub struct File {
     pub requires_python: Option<Result<VersionSpecifiers, VersionSpecifiersParseError>>,
     pub size: Option<u64>,
     pub upload_time: Option<Timestamp>,
-    pub url: String,
-    pub yanked: Option<Yanked>,
+    pub url: SmallString,
+    pub yanked: Option<Box<Yanked>>,
 }
 
 fn deserialize_version_specifiers_lenient<'de, D>(
@@ -61,13 +65,37 @@ fn deserialize_version_specifiers_lenient<'de, D>(
 where
     D: Deserializer<'de>,
 {
-    let maybe_string: Option<String> = Option::deserialize(deserializer)?;
-    let Some(string) = maybe_string else {
-        return Ok(None);
-    };
-    Ok(Some(
-        LenientVersionSpecifiers::from_str(&string).map(VersionSpecifiers::from),
-    ))
+    struct Visitor;
+
+    impl<'de> serde::de::Visitor<'de> for Visitor {
+        type Value = Option<Result<VersionSpecifiers, VersionSpecifiersParseError>>;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a string representing a version specifier")
+        }
+
+        fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            Ok(Some(
+                LenientVersionSpecifiers::from_str(v).map(VersionSpecifiers::from),
+            ))
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            deserializer.deserialize_str(Visitor)
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(None)
+        }
+    }
+
+    deserializer.deserialize_option(Visitor)
 }
 
 #[derive(Debug, Clone)]
@@ -101,7 +129,7 @@ impl CoreMetadata {
 #[rkyv(derive(Debug))]
 pub enum Yanked {
     Bool(bool),
-    Reason(String),
+    Reason(SmallString),
 }
 
 impl<'de> Deserialize<'de> for Yanked {
@@ -111,7 +139,7 @@ impl<'de> Deserialize<'de> for Yanked {
     {
         serde_untagged::UntaggedEnumVisitor::new()
             .bool(|bool| Ok(Yanked::Bool(bool)))
-            .string(|string| Ok(Yanked::Reason(string.to_owned())))
+            .string(|string| Ok(Yanked::Reason(SmallString::from(string))))
             .deserialize(deserializer)
     }
 }
@@ -136,43 +164,13 @@ impl Default for Yanked {
 /// PEP 691 says multiple hashes can be included and the interpretation is left to the client.
 #[derive(Debug, Clone, Eq, PartialEq, Default, Deserialize)]
 pub struct Hashes {
-    pub md5: Option<Box<str>>,
-    pub sha256: Option<Box<str>>,
-    pub sha384: Option<Box<str>>,
-    pub sha512: Option<Box<str>>,
+    pub md5: Option<SmallString>,
+    pub sha256: Option<SmallString>,
+    pub sha384: Option<SmallString>,
+    pub sha512: Option<SmallString>,
 }
 
 impl Hashes {
-    /// Convert a set of [`Hashes`] into a list of [`HashDigest`]s.
-    pub fn into_digests(self) -> Vec<HashDigest> {
-        let mut digests = Vec::new();
-        if let Some(sha512) = self.sha512 {
-            digests.push(HashDigest {
-                algorithm: HashAlgorithm::Sha512,
-                digest: sha512,
-            });
-        }
-        if let Some(sha384) = self.sha384 {
-            digests.push(HashDigest {
-                algorithm: HashAlgorithm::Sha384,
-                digest: sha384,
-            });
-        }
-        if let Some(sha256) = self.sha256 {
-            digests.push(HashDigest {
-                algorithm: HashAlgorithm::Sha256,
-                digest: sha256,
-            });
-        }
-        if let Some(md5) = self.md5 {
-            digests.push(HashDigest {
-                algorithm: HashAlgorithm::Md5,
-                digest: md5,
-            });
-        }
-        digests
-    }
-
     /// Parse the hash from a fragment, as in: `sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61`
     pub fn parse_fragment(fragment: &str) -> Result<Self, HashError> {
         let mut parts = fragment.split('=');
@@ -191,46 +189,30 @@ impl Hashes {
         }
 
         match name {
-            "md5" => {
-                let md5 = std::str::from_utf8(value.as_bytes())?;
-                let md5 = md5.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: Some(md5),
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
-                })
-            }
-            "sha256" => {
-                let sha256 = std::str::from_utf8(value.as_bytes())?;
-                let sha256 = sha256.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: Some(sha256),
-                    sha384: None,
-                    sha512: None,
-                })
-            }
-            "sha384" => {
-                let sha384 = std::str::from_utf8(value.as_bytes())?;
-                let sha384 = sha384.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: Some(sha384),
-                    sha512: None,
-                })
-            }
-            "sha512" => {
-                let sha512 = std::str::from_utf8(value.as_bytes())?;
-                let sha512 = sha512.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: Some(sha512),
-                })
-            }
+            "md5" => Ok(Hashes {
+                md5: Some(SmallString::from(value)),
+                sha256: None,
+                sha384: None,
+                sha512: None,
+            }),
+            "sha256" => Ok(Hashes {
+                md5: None,
+                sha256: Some(SmallString::from(value)),
+                sha384: None,
+                sha512: None,
+            }),
+            "sha384" => Ok(Hashes {
+                md5: None,
+                sha256: None,
+                sha384: Some(SmallString::from(value)),
+                sha512: None,
+            }),
+            "sha512" => Ok(Hashes {
+                md5: None,
+                sha256: None,
+                sha384: None,
+                sha512: Some(SmallString::from(value)),
+            }),
             _ => Err(HashError::UnsupportedHashAlgorithm(fragment.to_string())),
         }
     }
@@ -256,42 +238,30 @@ impl FromStr for Hashes {
         }
 
         match name {
-            "md5" => {
-                let md5 = value.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: Some(md5),
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
-                })
-            }
-            "sha256" => {
-                let sha256 = value.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: Some(sha256),
-                    sha384: None,
-                    sha512: None,
-                })
-            }
-            "sha384" => {
-                let sha384 = value.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: Some(sha384),
-                    sha512: None,
-                })
-            }
-            "sha512" => {
-                let sha512 = value.to_owned().into_boxed_str();
-                Ok(Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: Some(sha512),
-                })
-            }
+            "md5" => Ok(Hashes {
+                md5: Some(SmallString::from(value)),
+                sha256: None,
+                sha384: None,
+                sha512: None,
+            }),
+            "sha256" => Ok(Hashes {
+                md5: None,
+                sha256: Some(SmallString::from(value)),
+                sha384: None,
+                sha512: None,
+            }),
+            "sha384" => Ok(Hashes {
+                md5: None,
+                sha256: None,
+                sha384: Some(SmallString::from(value)),
+                sha512: None,
+            }),
+            "sha512" => Ok(Hashes {
+                md5: None,
+                sha256: None,
+                sha384: None,
+                sha512: Some(SmallString::from(value)),
+            }),
             _ => Err(HashError::UnsupportedHashAlgorithm(s.to_string())),
         }
     }
@@ -363,7 +333,7 @@ impl std::fmt::Display for HashAlgorithm {
 #[rkyv(derive(Debug))]
 pub struct HashDigest {
     pub algorithm: HashAlgorithm,
-    pub digest: Box<str>,
+    pub digest: SmallString,
 }
 
 impl HashDigest {
@@ -399,11 +369,134 @@ impl FromStr for HashDigest {
         }
 
         let algorithm = HashAlgorithm::from_str(name)?;
+        let digest = SmallString::from(value);
 
-        Ok(HashDigest {
-            algorithm,
-            digest: value.to_owned().into_boxed_str(),
-        })
+        Ok(Self { algorithm, digest })
+    }
+}
+
+/// A collection of [`HashDigest`] entities.
+#[derive(
+    Debug,
+    Clone,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+    Hash,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+)]
+#[rkyv(derive(Debug))]
+pub struct HashDigests(Box<[HashDigest]>);
+
+impl HashDigests {
+    /// Initialize an empty collection of [`HashDigest`] entities.
+    pub fn empty() -> Self {
+        Self(Box::new([]))
+    }
+
+    /// Return the [`HashDigest`] entities as a slice.
+    pub fn as_slice(&self) -> &[HashDigest] {
+        self.0.as_ref()
+    }
+
+    /// Returns `true` if the [`HashDigests`] are empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Returns the first [`HashDigest`] entity.
+    pub fn first(&self) -> Option<&HashDigest> {
+        self.0.first()
+    }
+
+    /// Return the [`HashDigest`] entities as a vector.
+    pub fn to_vec(&self) -> Vec<HashDigest> {
+        self.0.to_vec()
+    }
+
+    /// Returns an [`Iterator`] over the [`HashDigest`] entities.
+    pub fn iter(&self) -> impl Iterator<Item = &HashDigest> {
+        self.0.iter()
+    }
+
+    /// Sort the underlying [`HashDigest`] entities.
+    pub fn sort_unstable(&mut self) {
+        self.0.sort_unstable();
+    }
+}
+
+/// Convert a set of [`Hashes`] into a list of [`HashDigest`]s.
+impl From<Hashes> for HashDigests {
+    fn from(value: Hashes) -> Self {
+        let mut digests = Vec::with_capacity(
+            usize::from(value.sha512.is_some())
+                + usize::from(value.sha384.is_some())
+                + usize::from(value.sha256.is_some())
+                + usize::from(value.md5.is_some()),
+        );
+        if let Some(sha512) = value.sha512 {
+            digests.push(HashDigest {
+                algorithm: HashAlgorithm::Sha512,
+                digest: sha512,
+            });
+        }
+        if let Some(sha384) = value.sha384 {
+            digests.push(HashDigest {
+                algorithm: HashAlgorithm::Sha384,
+                digest: sha384,
+            });
+        }
+        if let Some(sha256) = value.sha256 {
+            digests.push(HashDigest {
+                algorithm: HashAlgorithm::Sha256,
+                digest: sha256,
+            });
+        }
+        if let Some(md5) = value.md5 {
+            digests.push(HashDigest {
+                algorithm: HashAlgorithm::Md5,
+                digest: md5,
+            });
+        }
+        Self::from(digests)
+    }
+}
+
+impl From<HashDigest> for HashDigests {
+    fn from(value: HashDigest) -> Self {
+        Self(Box::new([value]))
+    }
+}
+
+impl From<&[HashDigest]> for HashDigests {
+    fn from(value: &[HashDigest]) -> Self {
+        Self(Box::from(value))
+    }
+}
+
+impl From<Vec<HashDigest>> for HashDigests {
+    fn from(value: Vec<HashDigest>) -> Self {
+        Self(value.into_boxed_slice())
+    }
+}
+
+impl FromIterator<HashDigest> for HashDigests {
+    fn from_iter<T: IntoIterator<Item = HashDigest>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
+impl IntoIterator for HashDigests {
+    type Item = HashDigest;
+    type IntoIter = std::vec::IntoIter<HashDigest>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_vec().into_iter()
     }
 }
 
@@ -419,9 +512,6 @@ pub enum HashError {
         "Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, or `sha512`) on: `{0}`"
     )]
     UnsupportedHashAlgorithm(String),
-
-    #[error("Non-UTF-8 hash digest")]
-    NonUtf8(#[from] std::str::Utf8Error),
 }
 
 #[cfg(test)]

@@ -19,12 +19,12 @@ An extremely fast Python package and project manager, written in Rust.
 - 🚀 A single tool to replace `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `twine`, `virtualenv`,
   and more.
 - ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`.
-- 🐍 [Installs and manages](#python-management) Python versions.
-- 🛠️ [Runs and installs](#tool-management) Python applications.
-- ❇️ [Runs scripts](#script-support), with support for
-  [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
-- 🗂️ Provides [comprehensive project management](#project-management), with a
+- 🗂️ Provides [comprehensive project management](#projects), with a
   [universal lockfile](./concepts/projects/layout.md#the-lockfile).
+- ❇️ [Runs scripts](#scripts), with support for
+  [inline dependency metadata](./guides/scripts.md#declaring-script-dependencies).
+- 🐍 [Installs and manages](#python-versions) Python versions.
+- 🛠️ [Runs and installs](#tools) tools published as Python packages.
 - 🔩 Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a
   familiar CLI.
 - 🏢 Supports Cargo-style [workspaces](./concepts/projects/workspaces.md) for scalable projects.
@@ -35,7 +35,7 @@ An extremely fast Python package and project manager, written in Rust.
 uv is backed by [Astral](https://astral.sh), the creators of
 [Ruff](https://github.com/astral-sh/ruff).
 
-## Getting started
+## Installation
 
 Install uv with our official standalone installer:
 
@@ -48,7 +48,7 @@ Install uv with our official standalone installer:
 === "Windows"
 
     ```console
-    $ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
 
 Then, check out the [first steps](./getting-started/first-steps.md) or read on for a brief overview.
@@ -58,7 +58,7 @@ Then, check out the [first steps](./getting-started/first-steps.md) or read on f
     uv may also be installed with pip, Homebrew, and more. See all of the methods on the
     [installation page](./getting-started/installation.md).
 
-## Project management
+## Projects
 
 uv manages project dependencies and environments, with support for lockfiles, workspaces, and more,
 similar to `rye` or `poetry`:
@@ -80,14 +80,45 @@ Installed 2 packages in 1ms
 
 $ uv run ruff check
 All checks passed!
+
+$ uv lock
+Resolved 2 packages in 0.33ms
+
+$ uv sync
+Resolved 2 packages in 0.70ms
+Audited 1 package in 0.02ms
 ```
 
 See the [project guide](./guides/projects.md) to get started.
 
 uv also supports building and publishing projects, even if they're not managed with uv. See the
-[publish guide](./guides/publish.md) to learn more.
+[packaging guide](./guides/package.md) to learn more.
 
-## Tool management
+## Scripts
+
+uv manages dependencies and environments for single-file scripts.
+
+Create a new script and add inline metadata declaring its dependencies:
+
+```console
+$ echo 'import requests; print(requests.get("https://astral.sh"))' > example.py
+
+$ uv add --script example.py requests
+Updated `example.py`
+```
+
+Then, run the script in an isolated virtual environment:
+
+```console
+$ uv run example.py
+Reading inline script metadata from: example.py
+Installed 5 packages in 12ms
+<Response [200]>
+```
+
+See the [scripts guide](./guides/scripts.md) to get started.
+
+## Tools
 
 uv executes and installs command-line tools provided by Python packages, similar to `pipx`.
 
@@ -125,7 +156,7 @@ ruff 0.5.4
 
 See the [tools guide](./guides/tools.md) to get started.
 
-## Python management
+## Python versions
 
 uv installs Python and allows quickly switching between versions.
 
@@ -160,35 +191,11 @@ Type "help", "copyright", "credits" or "license" for more information.
 Use a specific Python version in the current directory:
 
 ```console
-$ uv python pin pypy@3.11
-Pinned `.python-version` to `pypy@3.11`
+$ uv python pin 3.11
+Pinned `.python-version` to `3.11`
 ```
 
 See the [installing Python guide](./guides/install-python.md) to get started.
-
-## Script support
-
-uv manages dependencies and environments for single-file scripts.
-
-Create a new script and add inline metadata declaring its dependencies:
-
-```console
-$ echo 'import requests; print(requests.get("https://astral.sh"))' > example.py
-
-$ uv add --script example.py requests
-Updated `example.py`
-```
-
-Then, run the script in an isolated virtual environment:
-
-```console
-$ uv run example.py
-Reading inline script metadata from: example.py
-Installed 5 packages in 12ms
-<Response [200]>
-```
-
-See the [scripts guide](./guides/scripts.md) to get started.
 
 ## The pip interface
 

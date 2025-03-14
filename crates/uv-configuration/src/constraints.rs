@@ -75,7 +75,7 @@ impl Constraints {
                 constraints.iter().cloned().map(move |constraint| {
                     // Add the extra to the override marker.
                     let mut joint_marker = MarkerTree::expression(extra_expression.clone());
-                    joint_marker.and(constraint.marker.clone());
+                    joint_marker.and(constraint.marker);
                     Cow::Owned(Requirement {
                         marker: joint_marker,
                         ..constraint

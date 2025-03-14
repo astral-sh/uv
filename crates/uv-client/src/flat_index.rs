@@ -9,6 +9,8 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{File, FileLocation, IndexUrl, UrlString};
+use uv_pypi_types::HashDigests;
+use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
@@ -34,10 +36,18 @@ pub enum FindLinksDirectoryError {
     VerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
 }
 
+/// An entry in a `--find-links` index.
+#[derive(Debug, Clone)]
+pub struct FlatIndexEntry {
+    pub filename: DistFilename,
+    pub file: File,
+    pub index: IndexUrl,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct FlatIndexEntries {
     /// The list of `--find-links` entries.
-    pub entries: Vec<(DistFilename, File, IndexUrl)>,
+    pub entries: Vec<FlatIndexEntry>,
     /// Whether any `--find-links` entries could not be resolved due to a lack of network
     /// connectivity.
     pub offline: bool,
@@ -45,7 +55,7 @@ pub struct FlatIndexEntries {
 
 impl FlatIndexEntries {
     /// Create a [`FlatIndexEntries`] from a list of `--find-links` entries.
-    fn from_entries(entries: Vec<(DistFilename, File, IndexUrl)>) -> Self {
+    fn from_entries(entries: Vec<FlatIndexEntry>) -> Self {
         Self {
             entries,
             offline: false,
@@ -130,6 +140,9 @@ impl<'a> FlatIndexClient<'a> {
         while let Some(entries) = fetches.next().await.transpose()? {
             results.extend(entries);
         }
+        results
+            .entries
+            .sort_by(|a, b| a.filename.cmp(&b.filename).then(a.index.cmp(&b.index)));
         Ok(results)
     }
 
@@ -174,10 +187,13 @@ impl<'a> FlatIndexClient<'a> {
                 let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
+                // Convert to a reference-counted string.
+                let base = SmallString::from(base.as_str());
+
                 let unarchived: Vec<File> = files
                     .into_iter()
                     .filter_map(|file| {
-                        match File::try_from(file, base.as_url()) {
+                        match File::try_from(file, &base) {
                             Ok(file) => Some(file),
                             Err(err) => {
                                 // Ignore files with unparsable version specifiers.
@@ -211,11 +227,11 @@ impl<'a> FlatIndexClient<'a> {
                             .expect("archived version always deserializes")
                     })
                     .filter_map(|file| {
-                        Some((
-                            DistFilename::try_from_normalized_filename(&file.filename)?,
+                        Some(FlatIndexEntry {
+                            filename: DistFilename::try_from_normalized_filename(&file.filename)?,
                             file,
-                            flat_index.clone(),
-                        ))
+                            index: flat_index.clone(),
+                        })
                     })
                     .collect();
                 Ok(FlatIndexEntries::from_entries(files))
@@ -232,8 +248,12 @@ impl<'a> FlatIndexClient<'a> {
         path: &Path,
         flat_index: &IndexUrl,
     ) -> Result<FlatIndexEntries, FindLinksDirectoryError> {
+        // The path context is provided by the caller.
+        #[allow(clippy::disallowed_methods)]
+        let entries = std::fs::read_dir(path)?;
+
         let mut dists = Vec::new();
-        for entry in fs_err::read_dir(path)? {
+        for entry in entries {
             let entry = entry?;
             let metadata = entry.metadata()?;
 
@@ -254,10 +274,11 @@ impl<'a> FlatIndexClient<'a> {
                 }
             }
 
-            let Ok(filename) = entry.file_name().into_string() else {
+            let filename = entry.file_name();
+            let Some(filename) = filename.to_str() else {
                 warn!(
                     "Skipping non-UTF-8 filename in `--find-links` directory: {}",
-                    entry.file_name().to_string_lossy()
+                    filename.to_string_lossy()
                 );
                 continue;
             };
@@ -267,23 +288,27 @@ impl<'a> FlatIndexClient<'a> {
 
             let file = File {
                 dist_info_metadata: false,
-                filename: filename.to_string(),
-                hashes: Vec::new(),
+                filename: filename.into(),
+                hashes: HashDigests::empty(),
                 requires_python: None,
                 size: None,
                 upload_time_utc_ms: None,
-                url: FileLocation::AbsoluteUrl(UrlString::from(url)),
+                url: FileLocation::AbsoluteUrl(UrlString::from(&url)),
                 yanked: None,
             };
 
-            let Some(filename) = DistFilename::try_from_normalized_filename(&filename) else {
+            let Some(filename) = DistFilename::try_from_normalized_filename(filename) else {
                 debug!(
                     "Ignoring `--find-links` entry (expected a wheel or source distribution filename): {}",
                     entry.path().display()
                 );
                 continue;
             };
-            dists.push((filename, file, flat_index.clone()));
+            dists.push(FlatIndexEntry {
+                filename,
+                file,
+                index: flat_index.clone(),
+            });
         }
         Ok(FlatIndexEntries::from_entries(dists))
     }

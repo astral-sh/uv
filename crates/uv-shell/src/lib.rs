@@ -1,3 +1,4 @@
+pub mod runnable;
 mod shlex;
 pub mod windows;
 
@@ -80,6 +81,14 @@ impl Shell {
     /// ```
     pub fn from_shell_path(path: impl AsRef<Path>) -> Option<Shell> {
         parse_shell_from_path(path.as_ref())
+    }
+
+    /// Returns `true` if the shell supports a `PATH` update command.
+    pub fn supports_update(self) -> bool {
+        match self {
+            Shell::Powershell | Shell::Cmd => true,
+            shell => !shell.configuration_files().is_empty(),
+        }
     }
 
     /// Return the configuration files that should be modified to append to a shell's `PATH`.

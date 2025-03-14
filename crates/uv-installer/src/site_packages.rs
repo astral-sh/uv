@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::iter::Flatten;
 use std::path::PathBuf;
@@ -14,6 +15,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::VersionOrUrl;
 use uv_pypi_types::{Requirement, ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::InstalledPackagesProvider;
@@ -215,7 +217,7 @@ impl SitePackages {
 
                 // Determine the dependencies for the given package.
                 let Ok(metadata) = distribution.metadata() else {
-                    diagnostics.push(SitePackagesDiagnostic::IncompletePackage {
+                    diagnostics.push(SitePackagesDiagnostic::MetadataUnavailable {
                         package: package.clone(),
                         path: distribution.path().to_owned(),
                     });
@@ -281,70 +283,182 @@ impl SitePackages {
     }
 
     /// Returns if the installed packages satisfy the given requirements.
-    pub fn satisfies(
+    pub fn satisfies_spec(
         &self,
         requirements: &[UnresolvedRequirementSpecification],
         constraints: &[NameRequirementSpecification],
+        overrides: &[UnresolvedRequirementSpecification],
         markers: &ResolverMarkerEnvironment,
     ) -> Result<SatisfiesResult> {
-        // Collect the constraints.
+        // First, map all unnamed requirements to named requirements.
+        let requirements = {
+            let mut named = Vec::with_capacity(requirements.len());
+            for requirement in requirements {
+                match &requirement.requirement {
+                    UnresolvedRequirement::Named(requirement) => {
+                        named.push(Cow::Borrowed(requirement));
+                    }
+                    UnresolvedRequirement::Unnamed(requirement) => {
+                        match self.get_urls(requirement.url.verbatim.raw()).as_slice() {
+                            [] => {
+                                return Ok(SatisfiesResult::Unsatisfied(
+                                    requirement.url.verbatim.raw().to_string(),
+                                ))
+                            }
+                            [distribution] => {
+                                let requirement = uv_pep508::Requirement {
+                                    name: distribution.name().clone(),
+                                    version_or_url: Some(VersionOrUrl::Url(
+                                        requirement.url.clone(),
+                                    )),
+                                    marker: requirement.marker,
+                                    extras: requirement.extras.clone(),
+                                    origin: requirement.origin.clone(),
+                                };
+                                named.push(Cow::Owned(Requirement::from(requirement)));
+                            }
+                            _ => {
+                                return Ok(SatisfiesResult::Unsatisfied(
+                                    requirement.url.verbatim.raw().to_string(),
+                                ))
+                            }
+                        }
+                    }
+                }
+            }
+            named
+        };
+
+        // Second, map all overrides to named requirements. We assume that all overrides are
+        // relevant.
+        let overrides = {
+            let mut named = Vec::with_capacity(overrides.len());
+            for requirement in overrides {
+                match &requirement.requirement {
+                    UnresolvedRequirement::Named(requirement) => {
+                        named.push(Cow::Borrowed(requirement));
+                    }
+                    UnresolvedRequirement::Unnamed(requirement) => {
+                        match self.get_urls(requirement.url.verbatim.raw()).as_slice() {
+                            [] => {
+                                return Ok(SatisfiesResult::Unsatisfied(
+                                    requirement.url.verbatim.raw().to_string(),
+                                ))
+                            }
+                            [distribution] => {
+                                let requirement = uv_pep508::Requirement {
+                                    name: distribution.name().clone(),
+                                    version_or_url: Some(VersionOrUrl::Url(
+                                        requirement.url.clone(),
+                                    )),
+                                    marker: requirement.marker,
+                                    extras: requirement.extras.clone(),
+                                    origin: requirement.origin.clone(),
+                                };
+                                named.push(Cow::Owned(Requirement::from(requirement)));
+                            }
+                            _ => {
+                                return Ok(SatisfiesResult::Unsatisfied(
+                                    requirement.url.verbatim.raw().to_string(),
+                                ))
+                            }
+                        }
+                    }
+                }
+            }
+            named
+        };
+
+        self.satisfies_requirements(
+            requirements.iter().map(Cow::as_ref),
+            constraints.iter().map(|constraint| &constraint.requirement),
+            overrides.iter().map(Cow::as_ref),
+            markers,
+        )
+    }
+
+    /// Like [`SitePackages::satisfies_spec`], but with resolved names for all requirements.
+    pub fn satisfies_requirements<'a>(
+        &self,
+        requirements: impl ExactSizeIterator<Item = &'a Requirement>,
+        constraints: impl Iterator<Item = &'a Requirement>,
+        overrides: impl Iterator<Item = &'a Requirement>,
+        markers: &ResolverMarkerEnvironment,
+    ) -> Result<SatisfiesResult> {
+        // Collect the constraints and overrides by package name.
         let constraints: FxHashMap<&PackageName, Vec<&Requirement>> =
-            constraints
-                .iter()
-                .fold(FxHashMap::default(), |mut constraints, constraint| {
-                    constraints
-                        .entry(&constraint.requirement.name)
-                        .or_default()
-                        .push(&constraint.requirement);
-                    constraints
-                });
+            constraints.fold(FxHashMap::default(), |mut constraints, constraint| {
+                constraints
+                    .entry(&constraint.name)
+                    .or_default()
+                    .push(constraint);
+                constraints
+            });
+        let overrides: FxHashMap<&PackageName, Vec<&Requirement>> =
+            overrides.fold(FxHashMap::default(), |mut overrides, r#override| {
+                overrides
+                    .entry(&r#override.name)
+                    .or_default()
+                    .push(r#override);
+                overrides
+            });
 
         let mut stack = Vec::with_capacity(requirements.len());
         let mut seen = FxHashSet::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
 
         // Add the direct requirements to the queue.
-        for entry in requirements {
-            if entry.requirement.evaluate_markers(Some(markers), &[]) {
-                if seen.insert(entry.clone()) {
-                    stack.push(entry.clone());
+        for requirement in requirements {
+            if let Some(r#overrides) = overrides.get(&requirement.name) {
+                for dependency in r#overrides {
+                    if dependency.evaluate_markers(Some(markers), &[]) {
+                        if seen.insert((*dependency).clone()) {
+                            stack.push(Cow::Borrowed(*dependency));
+                        }
+                    }
+                }
+            } else {
+                if requirement.evaluate_markers(Some(markers), &[]) {
+                    if seen.insert(requirement.clone()) {
+                        stack.push(Cow::Borrowed(requirement));
+                    }
                 }
             }
         }
 
         // Verify that all non-editable requirements are met.
-        while let Some(entry) = stack.pop() {
-            let installed = match &entry.requirement {
-                UnresolvedRequirement::Named(requirement) => self.get_packages(&requirement.name),
-                UnresolvedRequirement::Unnamed(requirement) => {
-                    self.get_urls(requirement.url.verbatim.raw())
-                }
-            };
+        while let Some(requirement) = stack.pop() {
+            let name = &requirement.name;
+            let installed = self.get_packages(name);
             match installed.as_slice() {
                 [] => {
                     // The package isn't installed.
-                    return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()));
+                    return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
                 }
                 [distribution] => {
-                    match RequirementSatisfaction::check(
-                        distribution,
-                        entry.requirement.source().as_ref(),
-                    )? {
-                        RequirementSatisfaction::Mismatch | RequirementSatisfaction::OutOfDate => {
-                            return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()))
+                    // Validate that the requirement is satisfied.
+                    if requirement.evaluate_markers(Some(markers), &[]) {
+                        match RequirementSatisfaction::check(distribution, &requirement.source)? {
+                            RequirementSatisfaction::Mismatch
+                            | RequirementSatisfaction::OutOfDate => {
+                                return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()))
+                            }
+                            RequirementSatisfaction::Satisfied => {}
                         }
-                        RequirementSatisfaction::Satisfied => {}
                     }
 
                     // Validate that the installed version satisfies the constraints.
-                    for constraint in constraints.get(&distribution.name()).into_iter().flatten() {
-                        match RequirementSatisfaction::check(distribution, &constraint.source)? {
-                            RequirementSatisfaction::Mismatch
-                            | RequirementSatisfaction::OutOfDate => {
-                                return Ok(SatisfiesResult::Unsatisfied(
-                                    entry.requirement.to_string(),
-                                ))
+                    for constraint in constraints.get(name).into_iter().flatten() {
+                        if constraint.evaluate_markers(Some(markers), &[]) {
+                            match RequirementSatisfaction::check(distribution, &constraint.source)?
+                            {
+                                RequirementSatisfaction::Mismatch
+                                | RequirementSatisfaction::OutOfDate => {
+                                    return Ok(SatisfiesResult::Unsatisfied(
+                                        requirement.to_string(),
+                                    ))
+                                }
+                                RequirementSatisfaction::Satisfied => {}
                             }
-                            RequirementSatisfaction::Satisfied => {}
                         }
                     }
 
@@ -355,22 +469,27 @@ impl SitePackages {
 
                     // Add the dependencies to the queue.
                     for dependency in metadata.requires_dist {
-                        if dependency.evaluate_markers(markers, entry.requirement.extras()) {
-                            let dependency = UnresolvedRequirementSpecification {
-                                requirement: UnresolvedRequirement::Named(Requirement::from(
-                                    dependency,
-                                )),
-                                hashes: vec![],
-                            };
-                            if seen.insert(dependency.clone()) {
-                                stack.push(dependency);
+                        let dependency = Requirement::from(dependency);
+                        if let Some(r#overrides) = overrides.get(&dependency.name) {
+                            for dependency in r#overrides {
+                                if dependency.evaluate_markers(Some(markers), &requirement.extras) {
+                                    if seen.insert((*dependency).clone()) {
+                                        stack.push(Cow::Borrowed(*dependency));
+                                    }
+                                }
+                            }
+                        } else {
+                            if dependency.evaluate_markers(Some(markers), &requirement.extras) {
+                                if seen.insert(dependency.clone()) {
+                                    stack.push(Cow::Owned(dependency));
+                                }
                             }
                         }
                     }
                 }
                 _ => {
                     // There are multiple installed distributions for the same package.
-                    return Ok(SatisfiesResult::Unsatisfied(entry.requirement.to_string()));
+                    return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
                 }
             }
         }
@@ -387,7 +506,7 @@ pub enum SatisfiesResult {
     /// All requirements are recursively satisfied.
     Fresh {
         /// The flattened set (transitive closure) of all requirements checked.
-        recursive_requirements: FxHashSet<UnresolvedRequirementSpecification>,
+        recursive_requirements: FxHashSet<Requirement>,
     },
     /// We found an unsatisfied requirement. Since we exit early, we only know about the first
     /// unsatisfied requirement.
@@ -405,7 +524,7 @@ impl IntoIterator for SitePackages {
 
 #[derive(Debug)]
 pub enum SitePackagesDiagnostic {
-    IncompletePackage {
+    MetadataUnavailable {
         /// The package that is missing metadata.
         package: PackageName,
         /// The path to the package.
@@ -445,7 +564,7 @@ impl Diagnostic for SitePackagesDiagnostic {
     /// Convert the diagnostic into a user-facing message.
     fn message(&self) -> String {
         match self {
-            Self::IncompletePackage { package, path } => format!(
+            Self::MetadataUnavailable { package, path } => format!(
                 "The package `{package}` is broken or incomplete (unable to read `METADATA`). Consider recreating the virtualenv, or removing the package directory at: {}.", path.display(),
             ),
             Self::IncompatiblePythonVersion {
@@ -482,7 +601,7 @@ impl Diagnostic for SitePackagesDiagnostic {
     /// Returns `true` if the [`PackageName`] is involved in this diagnostic.
     fn includes(&self, name: &PackageName) -> bool {
         match self {
-            Self::IncompletePackage { package, .. } => name == package,
+            Self::MetadataUnavailable { package, .. } => name == package,
             Self::IncompatiblePythonVersion { package, .. } => name == package,
             Self::MissingDependency { package, .. } => name == package,
             Self::IncompatibleDependency {

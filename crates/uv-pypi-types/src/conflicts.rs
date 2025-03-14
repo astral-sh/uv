@@ -1,13 +1,19 @@
+use petgraph::{
+    algo::toposort,
+    graph::{DiGraph, NodeIndex},
+};
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::{collections::BTreeSet, hash::Hash, rc::Rc};
 use uv_normalize::{ExtraName, GroupName, PackageName};
+
+use crate::dependency_groups::{DependencyGroupSpecifier, DependencyGroups};
 
 /// A list of conflicting sets of extras/groups pre-defined by an end user.
 ///
 /// This is useful to force the resolver to fork according to extras that have
 /// unavoidable conflicts with each other. (The alternative is that resolution
 /// will fail.)
-#[derive(
-    Debug, Default, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize, schemars::JsonSchema,
-)]
+#[derive(Debug, Default, Clone, Eq, PartialEq, serde::Deserialize)]
 pub struct Conflicts(Vec<ConflictSet>);
 
 impl Conflicts {
@@ -24,7 +30,7 @@ impl Conflicts {
     }
 
     /// Returns an iterator over all sets of conflicting sets.
-    pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictSet> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictSet> + Clone + '_ {
         self.0.iter()
     }
 
@@ -49,6 +55,155 @@ impl Conflicts {
     pub fn append(&mut self, other: &mut Conflicts) {
         self.0.append(&mut other.0);
     }
+
+    /// Expand [`Conflicts`]s to include all [`ConflictSet`]s that can
+    /// be transitively inferred from group conflicts directly defined
+    /// in configuration.
+    ///
+    /// A directed acyclic graph (DAG) is created representing all
+    /// transitive group includes, with nodes corresponding to group conflict
+    /// items. For every conflict item directly mentioned in configuration,
+    /// its node starts with a set of canonical items with itself as the only
+    /// member.
+    ///
+    /// The graph is traversed one node at a time in topological order and
+    /// canonical items are propagated to each neighbor. We also update our
+    /// substitutions at each neighbor to reflect that this neighbor transitively
+    /// includes all canonical items visited so far to reach it.
+    ///
+    /// Finally, we apply the substitutions to the conflict sets that were
+    /// directly defined in configuration to generate all transitively inferable
+    /// [`ConflictSet`]s.
+    ///
+    /// There is an assumption that inclusion graphs will not be very large
+    /// or complex. This algorithm creates all combinations of substitutions.
+    /// Each resulting [`ConflictSet`] would also later correspond to a separate
+    /// resolver fork during resolution.
+    pub fn expand_transitive_group_includes(
+        &mut self,
+        package: &PackageName,
+        groups: &DependencyGroups,
+    ) {
+        let mut graph = DiGraph::new();
+        let mut group_node_idxs: FxHashMap<&GroupName, NodeIndex> = FxHashMap::default();
+        let mut node_conflict_items: FxHashMap<NodeIndex, Rc<ConflictItem>> = FxHashMap::default();
+        // Used for transitively deriving new conflict sets with substitutions.
+        // The keys are canonical items (mentioned directly in configured conflicts).
+        // The values correspond to groups that transitively include them.
+        let mut substitutions: FxHashMap<Rc<ConflictItem>, FxHashSet<Rc<ConflictItem>>> =
+            FxHashMap::default();
+
+        // Conflict sets that were directly defined in configuration.
+        let mut direct_conflict_sets: FxHashSet<&ConflictSet> = FxHashSet::default();
+        // Conflict sets that we will transitively infer in this method.
+        let mut transitive_conflict_sets: FxHashSet<ConflictSet> = FxHashSet::default();
+
+        // Add groups in directly defined conflict sets to the graph.
+        let mut seen: FxHashSet<&GroupName> = FxHashSet::default();
+
+        for set in &self.0 {
+            direct_conflict_sets.insert(set);
+            for item in set.iter() {
+                let ConflictPackage::Group(group) = &item.conflict else {
+                    // TODO(john): Do we also want to handle extras here?
+                    continue;
+                };
+                if !seen.insert(group) {
+                    continue;
+                }
+                let item = Rc::new(item.clone());
+                let mut canonical_items = FxHashSet::default();
+                canonical_items.insert(item.clone());
+                let node_id = graph.add_node(canonical_items);
+                group_node_idxs.insert(group, node_id);
+                node_conflict_items.insert(node_id, item.clone());
+            }
+        }
+
+        // Create conflict items for remaining groups and add them to the graph.
+        for group in groups.keys() {
+            if !seen.insert(group) {
+                continue;
+            }
+            let group_conflict_item = ConflictItem {
+                package: package.clone(),
+                conflict: ConflictPackage::Group(group.clone()),
+            };
+            let node_id = graph.add_node(FxHashSet::default());
+            group_node_idxs.insert(group, node_id);
+            node_conflict_items.insert(node_id, Rc::new(group_conflict_item));
+        }
+
+        // Create edges representing group inclusion (with edges reversed so that
+        // included groups point to including groups).
+        for (group, specifiers) in groups {
+            if let Some(includer) = group_node_idxs.get(group) {
+                for specifier in specifiers {
+                    if let DependencyGroupSpecifier::IncludeGroup { include_group } = specifier {
+                        if let Some(included) = group_node_idxs.get(include_group) {
+                            graph.add_edge(*included, *includer, ());
+                        }
+                    }
+                }
+            }
+        }
+
+        let Ok(topo_nodes) = toposort(&graph, None) else {
+            return;
+        };
+        // Propagate canonical items through the graph and populate substitutions.
+        for node in topo_nodes {
+            for neighbor_idx in graph.neighbors(node).collect::<Vec<_>>() {
+                let mut neighbor_canonical_items = Vec::new();
+                if let Some(canonical_items) = graph.node_weight(node) {
+                    let neighbor_item = node_conflict_items
+                        .get(&neighbor_idx)
+                        .expect("ConflictItem should already be in graph")
+                        .clone();
+                    for canonical_item in canonical_items {
+                        neighbor_canonical_items.push(canonical_item.clone());
+                        substitutions
+                            .entry(canonical_item.clone())
+                            .or_default()
+                            .insert(neighbor_item.clone());
+                    }
+                }
+                graph
+                    .node_weight_mut(neighbor_idx)
+                    .expect("Graph node should have weight")
+                    .extend(neighbor_canonical_items.into_iter());
+            }
+        }
+
+        // Create new conflict sets for all possible replacements of canonical
+        // items by substitution items.
+        // Note that new sets are (potentially) added to transitive_conflict_sets
+        // at the end of each iteration.
+        for (canonical_item, subs) in substitutions {
+            let mut new_conflict_sets = FxHashSet::default();
+            for conflict_set in direct_conflict_sets
+                .iter()
+                .copied()
+                .chain(transitive_conflict_sets.iter())
+                .filter(|set| set.contains_item(&canonical_item))
+            {
+                for sub in &subs {
+                    let mut new_set = conflict_set
+                        .replaced_item(&canonical_item, (**sub).clone())
+                        .expect("`ConflictItem` should be in `ConflictSet`");
+                    if !direct_conflict_sets.contains(&new_set) {
+                        new_set = new_set.with_inferred_conflict();
+                        if !transitive_conflict_sets.contains(&new_set) {
+                            new_conflict_sets.insert(new_set);
+                        }
+                    }
+                }
+            }
+            transitive_conflict_sets.extend(new_conflict_sets.into_iter());
+        }
+
+        self.0.extend(transitive_conflict_sets);
+    }
 }
 
 /// A single set of package-extra pairs that conflict with one another.
@@ -60,23 +215,24 @@ impl Conflicts {
 ///
 /// A `TryFrom<Vec<ConflictItem>>` impl may be used to build a set from a
 /// sequence. Note though that at least 2 items are required.
-#[derive(Debug, Default, Clone, Eq, PartialEq, serde::Serialize, schemars::JsonSchema)]
-pub struct ConflictSet(Vec<ConflictItem>);
+#[derive(Debug, Default, Clone, Hash, Eq, PartialEq)]
+pub struct ConflictSet {
+    set: BTreeSet<ConflictItem>,
+    is_inferred_conflict: bool,
+}
 
 impl ConflictSet {
     /// Create a pair of items that conflict with one another.
     pub fn pair(item1: ConflictItem, item2: ConflictItem) -> ConflictSet {
-        ConflictSet(vec![item1, item2])
-    }
-
-    /// Add a new conflicting item to this set.
-    pub fn push(&mut self, item: ConflictItem) {
-        self.0.push(item);
+        ConflictSet {
+            set: BTreeSet::from_iter(vec![item1, item2]),
+            is_inferred_conflict: false,
+        }
     }
 
     /// Returns an iterator over all conflicting items.
-    pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictItem> + '_ {
-        self.0.iter()
+    pub fn iter(&self) -> impl Iterator<Item = &'_ ConflictItem> + Clone + '_ {
+        self.set.iter()
     }
 
     /// Returns true if this conflicting item contains the given package and
@@ -89,6 +245,42 @@ impl ConflictSet {
         let conflict = conflict.into();
         self.iter()
             .any(|set| set.package() == package && *set.conflict() == conflict)
+    }
+
+    /// Returns true if these conflicts contain any set that contains the given
+    /// [`ConflictItem`].
+    pub fn contains_item(&self, conflict_item: &ConflictItem) -> bool {
+        self.set.contains(conflict_item)
+    }
+
+    /// This [`ConflictSet`] was inferred from directly defined conflicts.
+    pub fn is_inferred_conflict(&self) -> bool {
+        self.is_inferred_conflict
+    }
+
+    /// Replace an old [`ConflictItem`] with a new one.
+    pub fn replaced_item(
+        &self,
+        old: &ConflictItem,
+        new: ConflictItem,
+    ) -> Result<Self, ConflictError> {
+        let mut new_set = self.set.clone();
+        if !new_set.contains(old) {
+            return Err(ConflictError::ReplaceMissingConflictItem);
+        }
+        new_set.remove(old);
+        new_set.insert(new);
+        Ok(Self {
+            set: new_set,
+            is_inferred_conflict: false,
+        })
+    }
+
+    /// Mark this [`ConflictSet`] as being inferred from directly
+    /// defined conflicts.
+    fn with_inferred_conflict(mut self) -> Self {
+        self.is_inferred_conflict = true;
+        self
     }
 }
 
@@ -111,25 +303,19 @@ impl TryFrom<Vec<ConflictItem>> for ConflictSet {
             1 => return Err(ConflictError::OneItem),
             _ => {}
         }
-        Ok(ConflictSet(items))
+        Ok(ConflictSet {
+            set: BTreeSet::from_iter(items),
+            is_inferred_conflict: false,
+        })
     }
 }
 
 /// A single item in a conflicting set.
 ///
-/// Each item is a pair of a package and a corresponding extra name for that
-/// package.
+/// Each item is a pair of a package and a corresponding extra or group name
+/// for that package.
 #[derive(
-    Debug,
-    Clone,
-    Eq,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    serde::Deserialize,
-    serde::Serialize,
-    schemars::JsonSchema,
+    Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
 )]
 #[serde(
     deny_unknown_fields,
@@ -243,7 +429,7 @@ impl<'a> From<(&'a PackageName, &'a GroupName)> for ConflictItemRef<'a> {
     }
 }
 
-impl<'a> hashbrown::Equivalent<ConflictItem> for ConflictItemRef<'a> {
+impl hashbrown::Equivalent<ConflictItem> for ConflictItemRef<'_> {
     fn equivalent(&self, key: &ConflictItem) -> bool {
         key.as_ref() == *self
     }
@@ -252,7 +438,7 @@ impl<'a> hashbrown::Equivalent<ConflictItem> for ConflictItemRef<'a> {
 /// The actual conflicting data for a package.
 ///
 /// That is, either an extra or a group name.
-#[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord, schemars::JsonSchema)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum ConflictPackage {
     Extra(ExtraName),
     Group(GroupName),
@@ -335,7 +521,7 @@ impl<'a> From<&'a GroupName> for ConflictPackageRef<'a> {
     }
 }
 
-impl<'a> PartialEq<ConflictPackage> for ConflictPackageRef<'a> {
+impl PartialEq<ConflictPackage> for ConflictPackageRef<'_> {
     fn eq(&self, other: &ConflictPackage) -> bool {
         other.as_ref() == *self
     }
@@ -347,7 +533,7 @@ impl<'a> PartialEq<ConflictPackageRef<'a>> for ConflictPackage {
     }
 }
 
-impl<'a> hashbrown::Equivalent<ConflictPackage> for ConflictPackageRef<'a> {
+impl hashbrown::Equivalent<ConflictPackage> for ConflictPackageRef<'_> {
     fn equivalent(&self, key: &ConflictPackage) -> bool {
         key.as_ref() == *self
     }
@@ -375,6 +561,8 @@ pub enum ConflictError {
     /// An error that occurs when both `extra` and `group` are present.
     #[error("Expected one of `extra` or `group` in conflicting entry, but found both")]
     FoundExtraAndGroup,
+    #[error("Expected `ConflictSet` to contain `ConflictItem` to replace")]
+    ReplaceMissingConflictItem,
 }
 
 /// Like [`Conflicts`], but for deserialization in `pyproject.toml`.
@@ -386,9 +574,8 @@ pub enum ConflictError {
 ///
 /// N.B. `Conflicts` is still used for (de)serialization. Specifically, in the
 /// lock file, where the package name is required.
-#[derive(
-    Debug, Default, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize, schemars::JsonSchema,
-)]
+#[derive(Debug, Default, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct SchemaConflicts(Vec<SchemaConflictSet>);
 
 impl SchemaConflicts {
@@ -426,7 +613,8 @@ impl SchemaConflicts {
 /// schema format does not allow specifying the package name (or will make it
 /// optional in the future), where as the in-memory format needs the package
 /// name.
-#[derive(Debug, Default, Clone, Eq, PartialEq, serde::Serialize, schemars::JsonSchema)]
+#[derive(Debug, Default, Clone, Eq, PartialEq, serde::Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct SchemaConflictSet(Vec<SchemaConflictItem>);
 
 /// Like [`ConflictItem`], but for deserialization in `pyproject.toml`.
@@ -436,16 +624,7 @@ pub struct SchemaConflictSet(Vec<SchemaConflictItem>);
 /// optional in the future), where as the in-memory format needs the package
 /// name.
 #[derive(
-    Debug,
-    Clone,
-    Eq,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    serde::Deserialize,
-    serde::Serialize,
-    schemars::JsonSchema,
+    Debug, Clone, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
 )]
 #[serde(
     deny_unknown_fields,
@@ -455,6 +634,17 @@ pub struct SchemaConflictSet(Vec<SchemaConflictItem>);
 pub struct SchemaConflictItem {
     package: Option<PackageName>,
     conflict: ConflictPackage,
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for SchemaConflictItem {
+    fn schema_name() -> String {
+        "SchemaConflictItem".to_string()
+    }
+
+    fn json_schema(r#gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
+        <ConflictItemWire as schemars::JsonSchema>::json_schema(r#gen)
+    }
 }
 
 impl<'de> serde::Deserialize<'de> for SchemaConflictSet {
@@ -480,7 +670,12 @@ impl TryFrom<Vec<SchemaConflictItem>> for SchemaConflictSet {
     }
 }
 
+/// A single item in a conflicting set.
+///
+/// Each item is a pair of an (optional) package and a corresponding extra or group name for that
+/// package.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 struct ConflictItemWire {
     #[serde(default)]
     package: Option<PackageName>,

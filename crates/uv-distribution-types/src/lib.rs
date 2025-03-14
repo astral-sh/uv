@@ -39,21 +39,25 @@ use std::str::FromStr;
 
 use url::Url;
 
-use uv_distribution_filename::{DistExtension, SourceDistExtension, WheelFilename};
+use uv_distribution_filename::{
+    DistExtension, SourceDistExtension, SourceDistFilename, WheelFilename,
+};
 use uv_fs::normalize_absolute_path;
-use uv_git::GitUrl;
+use uv_git_types::GitUrl;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::{Pep508Url, VerbatimUrl};
-use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
+use uv_pypi_types::{
+    ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
+};
 
 pub use crate::annotation::*;
 pub use crate::any::*;
 pub use crate::buildable::*;
 pub use crate::cached::*;
 pub use crate::dependency_metadata::*;
-pub use crate::derivation::*;
 pub use crate::diagnostic::*;
+pub use crate::dist_error::*;
 pub use crate::error::*;
 pub use crate::file::*;
 pub use crate::hash::*;
@@ -62,9 +66,11 @@ pub use crate::index::*;
 pub use crate::index_name::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
+pub use crate::known_platform::*;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
+pub use crate::requested::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
@@ -75,8 +81,8 @@ mod any;
 mod buildable;
 mod cached;
 mod dependency_metadata;
-mod derivation;
 mod diagnostic;
+mod dist_error;
 mod error;
 mod file;
 mod hash;
@@ -85,9 +91,11 @@ mod index;
 mod index_name;
 mod index_url;
 mod installed;
+mod known_platform;
 mod origin;
 mod pip_index;
 mod prioritized_distribution;
+mod requested;
 mod resolution;
 mod resolved;
 mod specified_requirement;
@@ -101,7 +109,7 @@ pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
     Url(&'a T),
 }
 
-impl<'a, T: Pep508Url> VersionOrUrlRef<'a, T> {
+impl<T: Pep508Url> VersionOrUrlRef<'_, T> {
     /// If it is a URL, return its value.
     pub fn url(&self) -> Option<&T> {
         match self {
@@ -138,7 +146,7 @@ pub enum InstalledVersion<'a> {
     Url(&'a Url, &'a Version),
 }
 
-impl<'a> InstalledVersion<'a> {
+impl InstalledVersion<'_> {
     /// If it is a URL, return its value.
     pub fn url(&self) -> Option<&Url> {
         match self {
@@ -246,7 +254,7 @@ pub struct DirectUrlBuiltDist {
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
     /// The URL without the subdirectory fragment.
-    pub location: Url,
+    pub location: Box<Url>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -287,7 +295,7 @@ pub struct DirectUrlSourceDist {
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
     /// The URL without the subdirectory fragment.
-    pub location: Url,
+    pub location: Box<Url>,
     /// The subdirectory within the archive in which the source distribution is located.
     pub subdirectory: Option<PathBuf>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
@@ -312,6 +320,7 @@ pub struct GitSourceDist {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PathSourceDist {
     pub name: PackageName,
+    pub version: Option<Version>,
     /// The absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
@@ -358,14 +367,14 @@ impl Dist {
 
                 Ok(Self::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
                     filename,
-                    location,
+                    location: Box::new(location),
                     url,
                 })))
             }
             DistExtension::Source(ext) => {
                 Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
                     name,
-                    location,
+                    location: Box::new(location),
                     subdirectory,
                     ext,
                     url,
@@ -410,12 +419,24 @@ impl Dist {
                     url,
                 })))
             }
-            DistExtension::Source(ext) => Ok(Self::Source(SourceDist::Path(PathSourceDist {
-                name,
-                install_path,
-                ext,
-                url,
-            }))),
+            DistExtension::Source(ext) => {
+                // If there is a version in the filename, record it.
+                let version = url
+                    .filename()
+                    .ok()
+                    .and_then(|filename| {
+                        SourceDistFilename::parse(filename.as_ref(), ext, &name).ok()
+                    })
+                    .map(|filename| filename.version);
+
+                Ok(Self::Source(SourceDist::Path(PathSourceDist {
+                    name,
+                    version,
+                    install_path,
+                    ext,
+                    url,
+                })))
+            }
         }
     }
 
@@ -538,6 +559,15 @@ impl Dist {
     }
 }
 
+impl<'a> From<&'a Dist> for DistRef<'a> {
+    fn from(dist: &'a Dist) -> Self {
+        match dist {
+            Dist::Built(built) => DistRef::Built(built),
+            Dist::Source(source) => DistRef::Source(source),
+        }
+    }
+}
+
 impl<'a> From<&'a SourceDist> for DistRef<'a> {
     fn from(dist: &'a SourceDist) -> Self {
         DistRef::Source(dist)
@@ -633,6 +663,72 @@ impl RegistryBuiltDist {
     /// Returns the best or "most compatible" wheel in this distribution.
     pub fn best_wheel(&self) -> &RegistryBuiltWheel {
         &self.wheels[self.best_wheel_index]
+    }
+}
+
+impl DirectUrlBuiltDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Archive(ParsedArchiveUrl::from_source(
+            (*self.location).clone(),
+            None,
+            DistExtension::Wheel,
+        ))
+    }
+}
+
+impl PathBuiltDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Path(ParsedPathUrl::from_source(
+            self.install_path.clone(),
+            DistExtension::Wheel,
+            self.url.to_url(),
+        ))
+    }
+}
+
+impl PathSourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Path(ParsedPathUrl::from_source(
+            self.install_path.clone(),
+            DistExtension::Source(self.ext),
+            self.url.to_url(),
+        ))
+    }
+}
+
+impl DirectUrlSourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Archive(ParsedArchiveUrl::from_source(
+            (*self.location).clone(),
+            self.subdirectory.clone(),
+            DistExtension::Source(self.ext),
+        ))
+    }
+}
+
+impl GitSourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Git(ParsedGitUrl::from_source(
+            (*self.git).clone(),
+            self.subdirectory.clone(),
+        ))
+    }
+}
+
+impl DirectorySourceDist {
+    /// Return the [`ParsedUrl`] for the distribution.
+    pub fn parsed_url(&self) -> ParsedUrl {
+        ParsedUrl::Directory(ParsedDirectoryUrl::from_source(
+            self.install_path.clone(),
+            self.editable,
+            self.r#virtual,
+            self.url.to_url(),
+        ))
     }
 }
 
@@ -827,7 +923,7 @@ impl RemoteSource for Url {
         let last = path_segments.last().expect("path segments is non-empty");
 
         // Decode the filename, which may be percent-encoded.
-        let filename = urlencoding::decode(last)?;
+        let filename = percent_encoding::percent_decode_str(last).decode_utf8()?;
 
         Ok(filename)
     }
@@ -847,7 +943,7 @@ impl RemoteSource for UrlString {
             .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
 
         // Decode the filename, which may be percent-encoded.
-        let filename = urlencoding::decode(last)?;
+        let filename = percent_encoding::percent_decode_str(last).decode_utf8()?;
 
         Ok(filename)
     }
@@ -1031,19 +1127,19 @@ impl Identifier for Url {
 
 impl Identifier for File {
     fn distribution_id(&self) -> DistributionId {
-        if let Some(hash) = self.hashes.first() {
-            DistributionId::Digest(hash.clone())
-        } else {
-            self.url.distribution_id()
-        }
+        self.hashes
+            .first()
+            .cloned()
+            .map(DistributionId::Digest)
+            .unwrap_or_else(|| self.url.distribution_id())
     }
 
     fn resource_id(&self) -> ResourceId {
-        if let Some(hash) = self.hashes.first() {
-            ResourceId::Digest(hash.clone())
-        } else {
-            self.url.resource_id()
-        }
+        self.hashes
+            .first()
+            .cloned()
+            .map(ResourceId::Digest)
+            .unwrap_or_else(|| self.url.resource_id())
     }
 }
 
@@ -1317,20 +1413,12 @@ mod test {
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
     fn dist_size() {
+        assert!(size_of::<Dist>() <= 200, "{}", size_of::<Dist>());
+        assert!(size_of::<BuiltDist>() <= 200, "{}", size_of::<BuiltDist>());
         assert!(
-            std::mem::size_of::<Dist>() <= 336,
+            size_of::<SourceDist>() <= 176,
             "{}",
-            std::mem::size_of::<Dist>()
-        );
-        assert!(
-            std::mem::size_of::<BuiltDist>() <= 336,
-            "{}",
-            std::mem::size_of::<BuiltDist>()
-        );
-        assert!(
-            std::mem::size_of::<SourceDist>() <= 264,
-            "{}",
-            std::mem::size_of::<SourceDist>()
+            size_of::<SourceDist>()
         );
     }
 

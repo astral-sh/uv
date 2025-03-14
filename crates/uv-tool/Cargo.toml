@@ -29,6 +29,7 @@ uv-settings = { workspace = true }
 uv-state = { workspace = true }
 uv-static = { workspace = true }
 uv-virtualenv = { workspace = true }
+
 fs-err = { workspace = true }
 pathdiff = { workspace = true }
 serde = { workspace = true }
@@ -36,3 +37,6 @@ thiserror = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+self-replace = { workspace = true }

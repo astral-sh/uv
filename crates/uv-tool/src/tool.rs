@@ -1,3 +1,4 @@
+use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 
 use serde::Deserialize;
@@ -6,7 +7,7 @@ use toml_edit::Table;
 use toml_edit::Value;
 use toml_edit::{Array, Item};
 
-use uv_fs::PortablePath;
+use uv_fs::{PortablePath, Simplified};
 use uv_pypi_types::{Requirement, VerbatimParsedUrl};
 use uv_settings::ToolOptions;
 
@@ -16,6 +17,10 @@ use uv_settings::ToolOptions;
 pub struct Tool {
     /// The requirements requested by the user during installation.
     requirements: Vec<Requirement>,
+    /// The constraints requested by the user during installation.
+    constraints: Vec<Requirement>,
+    /// The overrides requested by the user during installation.
+    overrides: Vec<Requirement>,
     /// The Python requested by the user during installation.
     python: Option<String>,
     /// A mapping of entry point names to their metadata.
@@ -26,7 +31,12 @@ pub struct Tool {
 
 #[derive(Debug, Clone, Deserialize)]
 struct ToolWire {
+    #[serde(default)]
     requirements: Vec<RequirementWire>,
+    #[serde(default)]
+    constraints: Vec<Requirement>,
+    #[serde(default)]
+    overrides: Vec<Requirement>,
     python: Option<String>,
     entrypoints: Vec<ToolEntrypoint>,
     #[serde(default)]
@@ -51,6 +61,8 @@ impl From<Tool> for ToolWire {
                 .into_iter()
                 .map(RequirementWire::Requirement)
                 .collect(),
+            constraints: tool.constraints,
+            overrides: tool.overrides,
             python: tool.python,
             entrypoints: tool.entrypoints,
             options: tool.options,
@@ -71,6 +83,8 @@ impl TryFrom<ToolWire> for Tool {
                     RequirementWire::Deprecated(requirement) => Requirement::from(requirement),
                 })
                 .collect(),
+            constraints: tool.constraints,
+            overrides: tool.overrides,
             python: tool.python,
             entrypoints: tool.entrypoints,
             options: tool.options,
@@ -83,6 +97,32 @@ impl TryFrom<ToolWire> for Tool {
 pub struct ToolEntrypoint {
     pub name: String,
     pub install_path: PathBuf,
+}
+
+impl Display for ToolEntrypoint {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        #[cfg(windows)]
+        {
+            write!(
+                f,
+                "{} ({})",
+                self.name,
+                self.install_path
+                    .simplified_display()
+                    .to_string()
+                    .replace('/', "\\")
+            )
+        }
+        #[cfg(unix)]
+        {
+            write!(
+                f,
+                "{} ({})",
+                self.name,
+                self.install_path.simplified_display()
+            )
+        }
+    }
 }
 
 /// Format an array so that each element is on its own line and has a trailing comma.
@@ -116,6 +156,8 @@ impl Tool {
     /// Create a new `Tool`.
     pub fn new(
         requirements: Vec<Requirement>,
+        constraints: Vec<Requirement>,
+        overrides: Vec<Requirement>,
         python: Option<String>,
         entrypoints: impl Iterator<Item = ToolEntrypoint>,
         options: ToolOptions,
@@ -124,6 +166,8 @@ impl Tool {
         entrypoints.sort();
         Self {
             requirements,
+            constraints,
+            overrides,
             python,
             entrypoints,
             options,
@@ -140,25 +184,71 @@ impl Tool {
     pub(crate) fn to_toml(&self) -> Result<Table, toml_edit::ser::Error> {
         let mut table = Table::new();
 
-        table.insert("requirements", {
-            let requirements = self
-                .requirements
-                .iter()
-                .map(|requirement| {
-                    serde::Serialize::serialize(
-                        &requirement,
-                        toml_edit::ser::ValueSerializer::new(),
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+        if !self.requirements.is_empty() {
+            table.insert("requirements", {
+                let requirements = self
+                    .requirements
+                    .iter()
+                    .map(|requirement| {
+                        serde::Serialize::serialize(
+                            &requirement,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
-            let requirements = match requirements.as_slice() {
-                [] => Array::new(),
-                [requirement] => Array::from_iter([requirement]),
-                requirements => each_element_on_its_line_array(requirements.iter()),
-            };
-            value(requirements)
-        });
+                let requirements = match requirements.as_slice() {
+                    [] => Array::new(),
+                    [requirement] => Array::from_iter([requirement]),
+                    requirements => each_element_on_its_line_array(requirements.iter()),
+                };
+                value(requirements)
+            });
+        }
+
+        if !self.constraints.is_empty() {
+            table.insert("constraints", {
+                let constraints = self
+                    .constraints
+                    .iter()
+                    .map(|constraint| {
+                        serde::Serialize::serialize(
+                            &constraint,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let constraints = match constraints.as_slice() {
+                    [] => Array::new(),
+                    [constraint] => Array::from_iter([constraint]),
+                    constraints => each_element_on_its_line_array(constraints.iter()),
+                };
+                value(constraints)
+            });
+        }
+
+        if !self.overrides.is_empty() {
+            table.insert("overrides", {
+                let overrides = self
+                    .overrides
+                    .iter()
+                    .map(|r#override| {
+                        serde::Serialize::serialize(
+                            &r#override,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let overrides = match overrides.as_slice() {
+                    [] => Array::new(),
+                    [r#override] => Array::from_iter([r#override]),
+                    overrides => each_element_on_its_line_array(overrides.iter()),
+                };
+                value(overrides)
+            });
+        }
 
         if let Some(ref python) = self.python {
             table.insert("python", value(python));
@@ -194,6 +284,14 @@ impl Tool {
 
     pub fn requirements(&self) -> &[Requirement] {
         &self.requirements
+    }
+
+    pub fn constraints(&self) -> &[Requirement] {
+        &self.constraints
+    }
+
+    pub fn overrides(&self) -> &[Requirement] {
+        &self.overrides
     }
 
     pub fn python(&self) -> &Option<String> {

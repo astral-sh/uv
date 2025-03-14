@@ -7,8 +7,8 @@ with private repositories.
 
 Using SSH:
 
-- `git+ssh://git@<hostname>/...` (e.g. `git+ssh://git@github.com/astral-sh/uv`)
-- `git+ssh://git@<host>/...` (e.g. `git+ssh://git@github.com-key-2/astral-sh/uv`)
+- `git+ssh://git@<hostname>/...` (e.g., `git+ssh://git@github.com/astral-sh/uv`)
+- `git+ssh://git@<host>/...` (e.g., `git+ssh://git@github.com-key-2/astral-sh/uv`)
 
 See the
 [GitHub SSH documentation](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/about-ssh)
@@ -16,10 +16,10 @@ for more details on how to configure SSH.
 
 Using a password or token:
 
-- `git+https://<user>:<token>@<hostname>/...` (e.g.
+- `git+https://<user>:<token>@<hostname>/...` (e.g.,
   `git+https://git:github_pat_asdf@github.com/astral-sh/uv`)
-- `git+https://<token>@<hostname>/...` (e.g. `git+https://github_pat_asdf@github.com/astral-sh/uv`)
-- `git+https://<user>@<hostname>/...` (e.g. `git+https://git@github.com/astral-sh/uv`)
+- `git+https://<token>@<hostname>/...` (e.g., `git+https://github_pat_asdf@github.com/astral-sh/uv`)
+- `git+https://<user>@<hostname>/...` (e.g., `git+https://git@github.com/astral-sh/uv`)
 
 When using a GitHub personal access token, the username is arbitrary. GitHub does not support
 logging in with password directly, although other hosts may. If a username is provided without
@@ -50,13 +50,22 @@ argument to uv, or set `UV_KEYRING_PROVIDER=subprocess`.
 
 Authentication may be used for hosts specified in the following contexts:
 
+- `[index]`
 - `index-url`
 - `extra-index-url`
 - `find-links`
 - `package @ https://...`
 
+See the [index authentication documentation](./indexes.md#authentication) for details on
+authenticating index URLs.
+
 See the [`pip` compatibility guide](../pip/compatibility.md#registry-authentication) for details on
 differences from `pip`.
+
+## Authentication with alternative package indexes
+
+See the [alternative indexes integration guide](../guides/integration/alternative-indexes.md) for
+details on authentication with popular alternative Python package indexes.
 
 ## Custom CA certificates
 
@@ -93,8 +102,3 @@ insecure.
 
 Use `allow-insecure-host` with caution and only in trusted environments, as it can expose you to
 security risks due to the lack of certificate verification.
-
-## Authentication with alternative package indexes
-
-See the [alternative indexes integration guide](../guides/integration/alternative-indexes.md) for
-details on authentication with popular alternative Python package indexes.

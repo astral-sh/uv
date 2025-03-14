@@ -1,28 +1,32 @@
+use std::collections::BTreeSet;
 use std::fmt::Write;
+use std::sync::Arc;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, HashCheckingMode,
-    IndexStrategy, LowerBound, Reinstall, SourceStrategy, TrustedHost, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, DryRun,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy,
+    Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
-use uv_dispatch::BuildDispatch;
+use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
     DependencyMetadata, Index, IndexLocations, NameRequirementSpecification, Origin, Resolution,
     UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_pep508::PackageName;
 use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{
-    EnvironmentPreference, Prefix, PythonEnvironment, PythonRequest, PythonVersion, Target,
+    EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
+    PythonRequest, PythonVersion, Target,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
@@ -30,13 +34,15 @@ use uv_resolver::{
     ResolutionMode, ResolverEnvironment,
 };
 use uv_types::{BuildIsolation, HashStrategy};
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::report_target_environment;
 use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
-use crate::commands::{diagnostics, ExitStatus, SharedState};
+use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Install packages into the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -47,7 +53,9 @@ pub(crate) async fn pip_install(
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
+    build_constraints_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
+    groups: &DependencyGroups,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
@@ -56,11 +64,12 @@ pub(crate) async fn pip_install(
     index_strategy: IndexStrategy,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
+    network_settings: &NetworkSettings,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
     hash_checking: Option<HashCheckingMode>,
-    connectivity: Connectivity,
+    installer_metadata: bool,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
@@ -76,20 +85,20 @@ pub(crate) async fn pip_install(
     break_system_packages: bool,
     target: Option<Target>,
     prefix: Option<Prefix>,
+    python_preference: PythonPreference,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: Cache,
-    dry_run: bool,
+    dry_run: DryRun,
     printer: Printer,
+    preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
     let start = std::time::Instant::now();
 
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -110,13 +119,10 @@ pub(crate) async fn pip_install(
         constraints,
         overrides,
         extras,
+        groups,
         &client_builder,
     )
     .await?;
-
-    // Read build constraints.
-    let build_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
 
     let constraints: Vec<NameRequirementSpecification> = constraints
         .iter()
@@ -138,17 +144,45 @@ pub(crate) async fn pip_install(
         )
         .collect();
 
-    // Detect the current Python interpreter.
-    let environment = PythonEnvironment::find(
-        &python
-            .as_deref()
-            .map(PythonRequest::parse)
-            .unwrap_or_default(),
-        EnvironmentPreference::from_system_flag(system, true),
-        &cache,
-    )?;
+    // Read build constraints.
+    let build_constraints: Vec<NameRequirementSpecification> =
+        operations::read_constraints(build_constraints, &client_builder)
+            .await?
+            .iter()
+            .cloned()
+            .chain(
+                build_constraints_from_workspace
+                    .iter()
+                    .cloned()
+                    .map(NameRequirementSpecification::from),
+            )
+            .collect();
 
-    report_target_environment(&environment, &cache, printer)?;
+    // Detect the current Python interpreter.
+    let environment = if target.is_some() || prefix.is_some() {
+        let installation = PythonInstallation::find(
+            &python
+                .as_deref()
+                .map(PythonRequest::parse)
+                .unwrap_or_default(),
+            EnvironmentPreference::from_system_flag(system, false),
+            python_preference,
+            &cache,
+        )?;
+        report_interpreter(&installation, true, printer)?;
+        PythonEnvironment::from_installation(installation)
+    } else {
+        let environment = PythonEnvironment::find(
+            &python
+                .as_deref()
+                .map(PythonRequest::parse)
+                .unwrap_or_default(),
+            EnvironmentPreference::from_system_flag(system, true),
+            &cache,
+        )?;
+        report_target_environment(&environment, &cache, printer)?;
+        environment
+    };
 
     // Apply any `--target` or `--prefix` directories.
     let environment = if let Some(target) = target {
@@ -206,10 +240,9 @@ pub(crate) async fn pip_install(
     if reinstall.is_none()
         && upgrade.is_none()
         && source_trees.is_empty()
-        && overrides.is_empty()
         && matches!(modifications, Modifications::Sufficient)
     {
-        match site_packages.satisfies(&requirements, &constraints, &marker_env)? {
+        match site_packages.satisfies_spec(&requirements, &constraints, &overrides, &marker_env)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -217,14 +250,14 @@ pub(crate) async fn pip_install(
                 if enabled!(Level::DEBUG) {
                     for requirement in recursive_requirements
                         .iter()
-                        .map(|entry| entry.requirement.to_string())
+                        .map(ToString::to_string)
                         .sorted()
                     {
                         debug!("Requirement satisfied: {requirement}");
                     }
                 }
                 DefaultInstallLogger.on_audit(requirements.len(), start, printer)?;
-                if dry_run {
+                if dry_run.enabled() {
                     writeln!(printer.stderr(), "Would make no changes")?;
                 }
 
@@ -270,9 +303,6 @@ pub(crate) async fn pip_install(
     // When resolving, don't take any external preferences into account.
     let preferences = Vec::default();
 
-    // Ignore development dependencies.
-    let dev = Vec::default();
-
     // Incorporate any index locations from the provided sources.
     let index_locations = index_locations.combine(
         extra_index_urls
@@ -292,7 +322,11 @@ pub(crate) async fn pip_install(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            uv_auth::store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
@@ -358,10 +392,7 @@ pub(crate) async fn pip_install(
         &index_locations,
         &flat_index,
         &dependency_metadata,
-        &state.index,
-        &state.git,
-        &state.capabilities,
-        &state.in_flight,
+        state.clone(),
         index_strategy,
         config_settings,
         build_isolation,
@@ -369,9 +400,10 @@ pub(crate) async fn pip_install(
         &build_options,
         &build_hasher,
         exclude_newer,
-        LowerBound::Warn,
         sources,
+        WorkspaceCache::default(),
         concurrency,
+        preview,
     );
 
     let options = OptionsBuilder::new()
@@ -380,6 +412,7 @@ pub(crate) async fn pip_install(
         .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)
+        .build_options(build_options.clone())
         .build();
 
     // Resolve the requirements.
@@ -387,11 +420,11 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
-        dev,
         source_trees,
         project,
-        None,
+        BTreeSet::default(),
         extras,
+        groups,
         preferences,
         site_packages.clone(),
         &hasher,
@@ -403,7 +436,7 @@ pub(crate) async fn pip_install(
         Conflicts::empty(),
         &client,
         &flat_index,
-        &state.index,
+        state.index(),
         &build_dispatch,
         concurrency,
         options,
@@ -414,7 +447,7 @@ pub(crate) async fn pip_install(
     {
         Ok(graph) => Resolution::from(graph),
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -434,12 +467,13 @@ pub(crate) async fn pip_install(
         &hasher,
         &tags,
         &client,
-        &state.in_flight,
+        state.in_flight(),
         concurrency,
         &build_dispatch,
         &cache,
         &environment,
         Box::new(DefaultInstallLogger),
+        installer_metadata,
         dry_run,
         printer,
     )
@@ -447,7 +481,7 @@ pub(crate) async fn pip_install(
     {
         Ok(_) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -457,7 +491,7 @@ pub(crate) async fn pip_install(
     operations::diagnose_resolution(resolution.diagnostics(), printer)?;
 
     // Notify the user of any environment diagnostics.
-    if strict && !dry_run {
+    if strict && !dry_run.enabled() {
         operations::diagnose_environment(&resolution, &environment, &marker_env, printer)?;
     }
 

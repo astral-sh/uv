@@ -1,11 +1,13 @@
 use std::fmt;
 use std::ops::Bound;
 
+use arcstr::ArcStr;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use rustc_hash::FxBuildHasher;
-use uv_pep440::{Version, VersionSpecifier};
 use version_ranges::Ranges;
+
+use uv_pep440::{Version, VersionSpecifier};
 
 use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerTreeKind};
 
@@ -17,10 +19,11 @@ use crate::{ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerT
 /// which can be used to create a CNF expression.
 ///
 /// We choose DNF as it is easier to simplify for user-facing output.
-pub(crate) fn to_dnf(tree: &MarkerTree) -> Vec<Vec<MarkerExpression>> {
+pub(crate) fn to_dnf(tree: MarkerTree) -> Vec<Vec<MarkerExpression>> {
     let mut dnf = Vec::new();
     collect_dnf(tree, &mut dnf, &mut Vec::new());
     simplify(&mut dnf);
+    sort(&mut dnf);
     dnf
 }
 
@@ -31,7 +34,7 @@ pub(crate) fn to_dnf(tree: &MarkerTree) -> Vec<Vec<MarkerExpression>> {
 ///
 /// `path` is the list of marker expressions traversed on the current path.
 fn collect_dnf(
-    tree: &MarkerTree,
+    tree: MarkerTree,
     dnf: &mut Vec<Vec<MarkerExpression>>,
     path: &mut Vec<MarkerExpression>,
 ) {
@@ -51,12 +54,12 @@ fn collect_dnf(
                     let current = path.len();
                     for version in excluded {
                         path.push(MarkerExpression::Version {
-                            key: marker.key(),
+                            key: marker.key().into(),
                             specifier: VersionSpecifier::not_equals_version(version.clone()),
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                     continue;
                 }
@@ -64,11 +67,11 @@ fn collect_dnf(
                 // Detect whether the range for this edge can be simplified as a star inequality.
                 if let Some(specifier) = star_range_inequality(&range) {
                     path.push(MarkerExpression::Version {
-                        key: marker.key(),
+                        key: marker.key().into(),
                         specifier,
                     });
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.pop();
                     continue;
                 }
@@ -77,12 +80,12 @@ fn collect_dnf(
                     let current = path.len();
                     for specifier in VersionSpecifier::from_release_only_bounds(bounds) {
                         path.push(MarkerExpression::Version {
-                            key: marker.key(),
+                            key: marker.key().into(),
                             specifier,
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                 }
             }
@@ -94,13 +97,13 @@ fn collect_dnf(
                     let current = path.len();
                     for value in excluded {
                         path.push(MarkerExpression::String {
-                            key: marker.key(),
+                            key: marker.key().into(),
                             operator: MarkerOperator::NotEqual,
                             value: value.clone(),
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                     continue;
                 }
@@ -109,13 +112,13 @@ fn collect_dnf(
                     let current = path.len();
                     for (operator, value) in MarkerOperator::from_bounds(bounds) {
                         path.push(MarkerExpression::String {
-                            key: marker.key(),
+                            key: marker.key().into(),
                             operator,
                             value: value.clone(),
                         });
                     }
 
-                    collect_dnf(&tree, dnf, path);
+                    collect_dnf(tree, dnf, path);
                     path.truncate(current);
                 }
             }
@@ -129,13 +132,13 @@ fn collect_dnf(
                 };
 
                 let expr = MarkerExpression::String {
-                    key: marker.key(),
-                    value: marker.value().to_owned(),
+                    key: marker.key().into(),
+                    value: ArcStr::from(marker.value()),
                     operator,
                 };
 
                 path.push(expr);
-                collect_dnf(&tree, dnf, path);
+                collect_dnf(tree, dnf, path);
                 path.pop();
             }
         }
@@ -148,13 +151,13 @@ fn collect_dnf(
                 };
 
                 let expr = MarkerExpression::String {
-                    key: marker.key(),
-                    value: marker.value().to_owned(),
+                    key: marker.key().into(),
+                    value: ArcStr::from(marker.value()),
                     operator,
                 };
 
                 path.push(expr);
-                collect_dnf(&tree, dnf, path);
+                collect_dnf(tree, dnf, path);
                 path.pop();
             }
         }
@@ -167,12 +170,12 @@ fn collect_dnf(
                 };
 
                 let expr = MarkerExpression::Extra {
-                    name: marker.name().clone(),
+                    name: marker.name().clone().into(),
                     operator,
                 };
 
                 path.push(expr);
-                collect_dnf(&tree, dnf, path);
+                collect_dnf(tree, dnf, path);
                 path.pop();
             }
         }
@@ -278,6 +281,22 @@ fn simplify(dnf: &mut Vec<Vec<MarkerExpression>>) {
     }
 }
 
+/// Sort the clauses in a DNF expression, for backwards compatibility. The goal is to avoid
+/// unnecessary churn in the display output of the marker expressions, e.g., when modifying the
+/// internal representations used in the marker algebra.
+fn sort(dnf: &mut [Vec<MarkerExpression>]) {
+    // Sort each clause.
+    for clause in dnf.iter_mut() {
+        clause.sort_by_key(MarkerExpression::kind);
+    }
+    // Sort the clauses.
+    dnf.sort_by(|a, b| {
+        a.iter()
+            .map(MarkerExpression::kind)
+            .cmp(b.iter().map(MarkerExpression::kind))
+    });
+}
+
 /// Merge any edges that lead to identical subtrees into a single range.
 pub(crate) fn collect_edges<'a, T>(
     map: impl ExactSizeIterator<Item = (&'a Ranges<T>, MarkerTree)>,
@@ -335,7 +354,7 @@ fn star_range_inequality(range: &Ranges<Version>) -> Option<VersionSpecifier> {
     match (b1, b2) {
         ((Bound::Unbounded, Bound::Excluded(v1)), (Bound::Included(v2), Bound::Unbounded))
             if v1.release().len() == 2
-                && v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
+                && *v2.release() == [v1.release()[0], v1.release()[1] + 1] =>
         {
             Some(VersionSpecifier::not_equals_star_version(v1.clone()))
         }

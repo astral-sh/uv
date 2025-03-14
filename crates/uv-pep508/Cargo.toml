@@ -13,8 +13,6 @@ repository = { workspace = true }
 authors = { workspace = true }
 
 [lib]
-name = "uv_pep508"
-crate-type = ["cdylib", "rlib"]
 doctest = false
 
 [lints]
@@ -25,6 +23,7 @@ uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 
+arcstr = { workspace = true}
 boxcar = { workspace = true }
 indexmap = { workspace = true }
 itertools = { workspace = true }

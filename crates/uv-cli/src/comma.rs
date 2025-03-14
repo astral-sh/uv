@@ -111,7 +111,7 @@ mod tests {
     fn single_specifiers() {
         assert_eq!(
             CommaSeparatedRequirements::from_str("requests>=2.1,<3").unwrap(),
-            CommaSeparatedRequirements(vec!["requests>=2.1,<3".to_string(),])
+            CommaSeparatedRequirements(vec!["requests>=2.1,<3".to_string()])
         );
     }
 

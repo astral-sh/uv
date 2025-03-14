@@ -1,5 +1,4 @@
-use std::iter;
-
+use either::Either;
 use rustc_hash::FxHashMap;
 use same_file::is_same_file;
 use tracing::debug;
@@ -8,7 +7,7 @@ use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Verbatim;
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
-use uv_pep508::VerbatimUrl;
+use uv_pep508::{MarkerTree, VerbatimUrl};
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
 
 use crate::{DependencyMode, Manifest, ResolveError, ResolverEnvironment};
@@ -24,10 +23,10 @@ use crate::{DependencyMode, Manifest, ResolveError, ResolverEnvironment};
 /// [`crate::fork_urls::ForkUrls`].
 #[derive(Debug, Default)]
 pub(crate) struct Urls {
-    /// URL requirements in overrides. There can only be a single URL per package in overrides
-    /// (since it replaces all other URLs), and an override URL replaces all requirements and
-    /// constraints URLs.
-    overrides: FxHashMap<PackageName, VerbatimParsedUrl>,
+    /// URL requirements in overrides. An override URL replaces all requirements and constraints
+    /// URLs. There can be multiple URLs for the same package as long as they are in different
+    /// forks.
+    overrides: FxHashMap<PackageName, Vec<(MarkerTree, VerbatimParsedUrl)>>,
     /// URLs from regular requirements or from constraints. There can be multiple URLs for the same
     /// package as long as they are in different forks.
     regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>>,
@@ -39,9 +38,10 @@ impl Urls {
         env: &ResolverEnvironment,
         git: &GitResolver,
         dependencies: DependencyMode,
-    ) -> Result<Self, ResolveError> {
-        let mut urls: FxHashMap<PackageName, Vec<VerbatimParsedUrl>> = FxHashMap::default();
-        let mut overrides: FxHashMap<PackageName, VerbatimParsedUrl> = FxHashMap::default();
+    ) -> Self {
+        let mut regular: FxHashMap<PackageName, Vec<VerbatimParsedUrl>> = FxHashMap::default();
+        let mut overrides: FxHashMap<PackageName, Vec<(MarkerTree, VerbatimParsedUrl)>> =
+            FxHashMap::default();
 
         // Add all direct regular requirements and constraints URL.
         for requirement in manifest.requirements_no_overrides(env, dependencies) {
@@ -50,7 +50,7 @@ impl Urls {
                 continue;
             };
 
-            let package_urls = urls.entry(requirement.name.clone()).or_default();
+            let package_urls = regular.entry(requirement.name.clone()).or_default();
             if let Some(package_url) = package_urls
                 .iter_mut()
                 .find(|package_url| same_resource(&package_url.parsed_url, &url.parsed_url, git))
@@ -85,60 +85,57 @@ impl Urls {
             // We only clear for non-URL overrides, since e.g. with an override `anyio==0.0.0` and
             // a requirements.txt entry `./anyio`, we still use the URL. See
             // `allow_recursive_url_local_path_override_constraint`.
-            urls.remove(&requirement.name);
-            let previous = overrides.insert(requirement.name.clone(), url.clone());
-            if let Some(previous) = previous {
-                if !same_resource(&previous.parsed_url, &url.parsed_url, git) {
-                    return Err(ResolveError::ConflictingOverrideUrls(
-                        requirement.name.clone(),
-                        previous.verbatim.verbatim().to_string(),
-                        url.verbatim.verbatim().to_string(),
-                    ));
-                }
-            }
+            regular.remove(&requirement.name);
+            overrides
+                .entry(requirement.name.clone())
+                .or_default()
+                .push((requirement.marker, url));
         }
 
-        Ok(Self {
-            regular: urls,
-            overrides,
-        })
+        Self { overrides, regular }
     }
 
-    /// Check and canonicalize the URL of a requirement.
+    /// Return an iterator over the allowed URLs for the given package.
     ///
     /// If we have a URL override, apply it unconditionally for registry and URL requirements.
-    /// Otherwise, there are two case: For a URL requirement (`url` isn't `None`), check that the
-    /// URL is allowed and return its canonical form. For registry requirements, we return `None`
-    /// if there is no override.
+    /// Otherwise, there are two case: for a URL requirement (`url` isn't `None`), check that the
+    /// URL is allowed and return its canonical form.
+    ///
+    /// For registry requirements, we return an empty iterator.
     pub(crate) fn get_url<'a>(
         &'a self,
-        env: &ResolverEnvironment,
+        env: &'a ResolverEnvironment,
         name: &'a PackageName,
         url: Option<&'a VerbatimParsedUrl>,
         git: &'a GitResolver,
-    ) -> Result<Option<&'a VerbatimParsedUrl>, ResolveError> {
-        if let Some(override_url) = self.get_override(name) {
-            Ok(Some(override_url))
+    ) -> Result<impl Iterator<Item = &'a VerbatimParsedUrl>, ResolveError> {
+        if let Some(override_urls) = self.get_overrides(name) {
+            Ok(Either::Left(Either::Left(override_urls.iter().filter_map(
+                |(marker, url)| {
+                    if env.included_by_marker(*marker) {
+                        Some(url)
+                    } else {
+                        None
+                    }
+                },
+            ))))
         } else if let Some(url) = url {
-            Ok(Some(self.canonicalize_allowed_url(
-                env,
-                name,
-                git,
-                &url.verbatim,
-                &url.parsed_url,
-            )?))
+            let url =
+                self.canonicalize_allowed_url(env, name, git, &url.verbatim, &url.parsed_url)?;
+            Ok(Either::Left(Either::Right(std::iter::once(url))))
         } else {
-            Ok(None)
+            Ok(Either::Right(std::iter::empty()))
         }
     }
 
+    /// Return `true` if the package has any URL (from overrides or regular requirements).
     pub(crate) fn any_url(&self, name: &PackageName) -> bool {
-        self.get_override(name).is_some() || self.get_regular(name).is_some()
+        self.get_overrides(name).is_some() || self.get_regular(name).is_some()
     }
 
     /// Return the [`VerbatimUrl`] override for the given package, if any.
-    fn get_override(&self, package: &PackageName) -> Option<&VerbatimParsedUrl> {
-        self.overrides.get(package)
+    fn get_overrides(&self, package: &PackageName) -> Option<&[(MarkerTree, VerbatimParsedUrl)]> {
+        self.overrides.get(package).map(Vec::as_slice)
     }
 
     /// Return the allowed [`VerbatimUrl`]s for given package from regular requirements and
@@ -174,7 +171,7 @@ impl Urls {
             let mut conflicting_urls: Vec<_> = matching_urls
                 .into_iter()
                 .map(|parsed_url| parsed_url.verbatim.verbatim().to_string())
-                .chain(iter::once(verbatim_url.verbatim().to_string()))
+                .chain(std::iter::once(verbatim_url.verbatim().to_string()))
                 .collect();
             conflicting_urls.sort();
             return Err(ResolveError::ConflictingUrls {
@@ -191,11 +188,14 @@ impl Urls {
 fn same_resource(a: &ParsedUrl, b: &ParsedUrl, git: &GitResolver) -> bool {
     match (a, b) {
         (ParsedUrl::Archive(a), ParsedUrl::Archive(b)) => {
-            a.subdirectory == b.subdirectory
+            a.subdirectory.as_deref().map(uv_fs::normalize_path)
+                == b.subdirectory.as_deref().map(uv_fs::normalize_path)
                 && CanonicalUrl::new(&a.url) == CanonicalUrl::new(&b.url)
         }
         (ParsedUrl::Git(a), ParsedUrl::Git(b)) => {
-            a.subdirectory == b.subdirectory && git.same_ref(&a.url, &b.url)
+            a.subdirectory.as_deref().map(uv_fs::normalize_path)
+                == b.subdirectory.as_deref().map(uv_fs::normalize_path)
+                && git.same_ref(&a.url, &b.url)
         }
         (ParsedUrl::Path(a), ParsedUrl::Path(b)) => {
             a.install_path == b.install_path

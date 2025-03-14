@@ -13,7 +13,7 @@ use std::time::Duration;
 use std::{env, iter};
 use tracing::{debug, trace};
 use url::Url;
-use uv_auth::AuthMiddleware;
+use uv_auth::{AuthMiddleware, UrlAuthPolicies};
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
@@ -25,7 +25,7 @@ use uv_warnings::warn_user_once;
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
-use crate::{Connectivity, WrappedReqwestError};
+use crate::Connectivity;
 
 pub const DEFAULT_RETRIES: u32 = 3;
 
@@ -50,10 +50,10 @@ pub struct BaseClientBuilder<'a> {
     native_tls: bool,
     retries: u32,
     pub connectivity: Connectivity,
-    client: Option<Client>,
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
+    url_auth_policies: Option<UrlAuthPolicies>,
     default_timeout: Duration,
     extra_middleware: Option<ExtraMiddleware>,
 }
@@ -84,10 +84,10 @@ impl BaseClientBuilder<'_> {
             native_tls: false,
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
-            client: None,
             markers: None,
             platform: None,
             auth_integration: AuthIntegration::default(),
+            url_auth_policies: None,
             default_timeout: Duration::from_secs(30),
             extra_middleware: None,
         }
@@ -126,12 +126,6 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn client(mut self, client: Client) -> Self {
-        self.client = Some(client);
-        self
-    }
-
-    #[must_use]
     pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
         self.markers = Some(markers);
         self
@@ -146,6 +140,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn auth_integration(mut self, auth_integration: AuthIntegration) -> Self {
         self.auth_integration = auth_integration;
+        self
+    }
+
+    #[must_use]
+    pub fn url_auth_policies(mut self, auth_policies: UrlAuthPolicies) -> Self {
+        self.url_auth_policies = Some(auth_policies);
         self
     }
 
@@ -324,8 +324,13 @@ impl<'a> BaseClientBuilder<'a> {
                 // Initialize the authentication middleware to set headers.
                 match self.auth_integration {
                     AuthIntegration::Default => {
-                        client = client
-                            .with(AuthMiddleware::new().with_keyring(self.keyring.to_provider()));
+                        let mut auth_middleware =
+                            AuthMiddleware::new().with_keyring(self.keyring.to_provider());
+                        if let Some(url_auth_policies) = &self.url_auth_policies {
+                            auth_middleware =
+                                auth_middleware.with_url_auth_policies(url_auth_policies.clone());
+                        }
+                        client = client.with(auth_middleware);
                     }
                     AuthIntegration::OnlyAuthenticated => {
                         client = client.with(
@@ -387,15 +392,18 @@ enum Security {
 impl BaseClient {
     /// Selects the appropriate client based on the host's trustworthiness.
     pub fn for_host(&self, url: &Url) -> &ClientWithMiddleware {
-        if self
-            .allow_insecure_host
-            .iter()
-            .any(|allow_insecure_host| allow_insecure_host.matches(url))
-        {
+        if self.disable_ssl(url) {
             &self.dangerous_client
         } else {
             &self.client
         }
+    }
+
+    /// Returns `true` if the host is trusted to use the insecure client.
+    pub fn disable_ssl(&self, url: &Url) -> bool {
+        self.allow_insecure_host
+            .iter()
+            .any(|allow_insecure_host| allow_insecure_host.matches(url))
     }
 
     /// The configured client timeout, in seconds.
@@ -456,53 +464,18 @@ impl RetryableStrategy for UvRetryableStrategy {
 ///
 /// These cases should be safe to retry with [`Retryable::Transient`].
 pub fn is_extended_transient_error(err: &dyn Error) -> bool {
-    trace!("Attempting to retry error: {err:?}");
+    trace!("Considering retry of error: {err:?}");
 
-    if let Some(err) = find_source::<WrappedReqwestError>(&err) {
-        // First, look for `WrappedReqwestError`, which wraps `reqwest::Error` but doesn't always
-        // include it in the source.
-        if let Some(io) = find_source::<std::io::Error>(&err) {
-            if io.kind() == std::io::ErrorKind::ConnectionReset
-                || io.kind() == std::io::ErrorKind::UnexpectedEof
-            {
-                trace!(
-                    "Retrying error: `ConnectionReset` or `UnexpectedEof` (`WrappedReqwestError`)"
-                );
-                return true;
-            }
-            trace!("Cannot retry error: not one of `ConnectionReset` or `UnexpectedEof` (`WrappedReqwestError`)");
-        } else {
-            trace!("Cannot retry error: not an IO error (`WrappedReqwestError`)");
+    if let Some(io) = find_source::<std::io::Error>(&err) {
+        if io.kind() == std::io::ErrorKind::ConnectionReset
+            || io.kind() == std::io::ErrorKind::UnexpectedEof
+        {
+            trace!("Retrying error: `ConnectionReset` or `UnexpectedEof`");
+            return true;
         }
-    } else if let Some(err) = find_source::<reqwest_middleware::Error>(&err) {
-        // Next, look for `reqwest_middleware::Error`, which wraps `reqwest::Error`, but also
-        // includes errors from the middleware stack.
-        if let Some(io) = find_source::<std::io::Error>(&err) {
-            if io.kind() == std::io::ErrorKind::ConnectionReset
-                || io.kind() == std::io::ErrorKind::UnexpectedEof
-            {
-                trace!("Retrying error: `ConnectionReset` or `UnexpectedEof` (`reqwest_middleware::Error`)");
-                return true;
-            }
-            trace!("Cannot retry error: not one of `ConnectionReset` or `UnexpectedEof` (`reqwest_middleware::Error`)");
-        } else {
-            trace!("Cannot retry error: not an IO error (`reqwest_middleware::Error`)");
-        }
-    } else if let Some(err) = find_source::<reqwest::Error>(&err) {
-        // Finally, look for `reqwest::Error`, which is the most common error type.
-        if let Some(io) = find_source::<std::io::Error>(&err) {
-            if io.kind() == std::io::ErrorKind::ConnectionReset
-                || io.kind() == std::io::ErrorKind::UnexpectedEof
-            {
-                trace!("Retrying error: `ConnectionReset` or `UnexpectedEof` (`reqwest::Error`)");
-                return true;
-            }
-            trace!("Cannot retry error: not one of `ConnectionReset` or `UnexpectedEof` (`reqwest::Error`)");
-        } else {
-            trace!("Cannot retry error: not an IO error (`reqwest::Error`)");
-        }
+        trace!("Cannot retry error: not one of `ConnectionReset` or `UnexpectedEof`");
     } else {
-        trace!("Cannot retry error: not a reqwest error");
+        trace!("Cannot retry error: not an IO error");
     }
 
     false

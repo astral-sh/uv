@@ -185,6 +185,8 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
 
     // Do not display options for commands with children
     if !has_subcommands {
+        let name_key = name.replace(' ', "-");
+
         // Display positional arguments
         let mut arguments = command
             .get_positionals()
@@ -196,10 +198,11 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
             output.push_str("<dl class=\"cli-reference\">");
 
             for arg in arguments {
-                output.push_str("<dt>");
+                let id = format!("{name_key}--{}", arg.get_id());
+                output.push_str(&format!("<dt id=\"{id}\">"));
                 output.push_str(&format!(
-                    "<code>{}</code>",
-                    arg.get_id().to_string().to_uppercase()
+                    "<a href=\"#{id}\"<code>{}</code></a>",
+                    arg.get_id().to_string().to_uppercase(),
                 ));
                 output.push_str("</dt>");
                 if let Some(help) = arg.get_long_help().or_else(|| arg.get_help()) {
@@ -225,9 +228,10 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
             output.push_str("<dl class=\"cli-reference\">");
             for opt in options {
                 let Some(long) = opt.get_long() else { continue };
+                let id = format!("{name_key}--{long}");
 
-                output.push_str("<dt>");
-                output.push_str(&format!("<code>--{long}</code>"));
+                output.push_str(&format!("<dt id=\"{id}\">"));
+                output.push_str(&format!("<a href=\"#{id}\"><code>--{long}</code></a>",));
                 if let Some(short) = opt.get_short() {
                     output.push_str(&format!(", <code>-{short}</code>"));
                 }
@@ -315,6 +319,7 @@ fn emit_possible_options(opt: &clap::Arg, output: &mut String) {
             "\nPossible values:\n{}",
             values
                 .into_iter()
+                .filter(|value| !value.is_hide_set())
                 .map(|value| {
                     let name = value.get_name();
                     value.get_help().map_or_else(

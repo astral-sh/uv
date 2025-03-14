@@ -1,16 +1,16 @@
+use anyhow::{anyhow, Context, Result};
+use owo_colors::OwoColorize;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-
-use anyhow::{anyhow, Context, Result};
-use owo_colors::OwoColorize;
+use std::str::FromStr;
 
 use tracing::{debug, warn};
 use uv_cache::Cache;
 use uv_cli::AuthorFrom;
-use uv_client::{BaseClientBuilder, Connectivity};
+use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    ProjectBuildBackend, TrustedHost, VersionControlError, VersionControlSystem,
+    PreviewMode, ProjectBuildBackend, VersionControlError, VersionControlSystem,
 };
 use uv_fs::{Simplified, CWD};
 use uv_git::GIT;
@@ -26,12 +26,13 @@ use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceError};
 
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
@@ -41,23 +42,28 @@ pub(crate) async fn init(
     name: Option<PackageName>,
     package: bool,
     init_kind: InitKind,
+    bare: bool,
+    description: Option<String>,
+    no_description: bool,
     vcs: Option<VersionControlSystem>,
     build_backend: Option<ProjectBuildBackend>,
     no_readme: bool,
     author_from: Option<AuthorFrom>,
-    no_pin_python: bool,
+    pin_python: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
+    network_settings: &NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    if build_backend == Some(ProjectBuildBackend::Uv) && preview.is_disabled() {
+        warn_user_once!("The uv build backend is experimental and may change without warning");
+    }
     match init_kind {
         InitKind::Script => {
             let Some(path) = explicit_path.as_deref() else {
@@ -68,7 +74,7 @@ pub(crate) async fn init(
                 path,
                 python,
                 install_mirrors,
-                connectivity,
+                network_settings,
                 python_preference,
                 python_downloads,
                 cache,
@@ -76,10 +82,8 @@ pub(crate) async fn init(
                 no_workspace,
                 no_readme,
                 author_from,
-                no_pin_python,
+                pin_python,
                 package,
-                native_tls,
-                allow_insecure_host,
                 no_config,
             )
             .await?;
@@ -116,7 +120,10 @@ pub(crate) async fn init(
                         .and_then(|path| path.to_str())
                         .context("Missing directory name")?;
 
-                    PackageName::new(name.to_string())?
+                    // Pre-normalize the package name by removing any leading or trailing
+                    // whitespace, and replacing any internal whitespace with hyphens.
+                    let name = name.trim().replace(' ', "-");
+                    PackageName::from_owned(name)?
                 }
             };
 
@@ -125,19 +132,20 @@ pub(crate) async fn init(
                 &name,
                 package,
                 project_kind,
+                bare,
+                description,
+                no_description,
                 vcs,
                 build_backend,
                 no_readme,
                 author_from,
-                no_pin_python,
+                pin_python,
                 python,
                 install_mirrors,
                 no_workspace,
+                network_settings,
                 python_preference,
                 python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
                 no_config,
                 cache,
                 printer,
@@ -180,7 +188,7 @@ async fn init_script(
     script_path: &Path,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
-    connectivity: Connectivity,
+    network_settings: &NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
@@ -188,10 +196,8 @@ async fn init_script(
     no_workspace: bool,
     no_readme: bool,
     author_from: Option<AuthorFrom>,
-    no_pin_python: bool,
+    pin_python: bool,
     package: bool,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
 ) -> Result<()> {
     if no_workspace {
@@ -207,9 +213,9 @@ async fn init_script(
         warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
     }
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -238,9 +244,9 @@ async fn init_script(
 
     let requires_python = init_script_python_requirement(
         python.as_deref(),
-        install_mirrors,
+        &install_mirrors,
         &CWD,
-        no_pin_python,
+        pin_python,
         python_preference,
         python_downloads,
         no_config,
@@ -266,32 +272,35 @@ async fn init_project(
     name: &PackageName,
     package: bool,
     project_kind: InitProjectKind,
+    bare: bool,
+    description: Option<String>,
+    no_description: bool,
     vcs: Option<VersionControlSystem>,
     build_backend: Option<ProjectBuildBackend>,
     no_readme: bool,
     author_from: Option<AuthorFrom>,
-    no_pin_python: bool,
+    pin_python: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
+    network_settings: &NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<()> {
     // Discover the current workspace, if it exists.
+    let workspace_cache = WorkspaceCache::default();
     let workspace = {
         let parent = path.parent().expect("Project path has no parent");
         match Workspace::discover(
             parent,
             &DiscoveryOptions {
-                members: MemberDiscovery::Ignore(std::iter::once(path).collect()),
+                members: MemberDiscovery::Ignore(std::iter::once(path.to_path_buf()).collect()),
                 ..DiscoveryOptions::default()
             },
+            &workspace_cache,
         )
         .await
         {
@@ -328,9 +337,9 @@ async fn init_project(
 
     let reporter = PythonDownloadReporter::single(printer);
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // First, determine if there is an request for Python
     let python_request = if let Some(request) = python {
@@ -371,14 +380,14 @@ async fn init_project(
                     u64::from(minor),
                 ]));
 
-                let python_request = if no_pin_python {
-                    None
-                } else {
+                let python_request = if pin_python {
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
                         major,
                         minor,
                         PythonVariant::Default,
                     )))
+                } else {
+                    None
                 };
 
                 (requires_python, python_request)
@@ -395,15 +404,15 @@ async fn init_project(
                     u64::from(patch),
                 ]));
 
-                let python_request = if no_pin_python {
-                    None
-                } else {
+                let python_request = if pin_python {
                     Some(PythonRequest::Version(VersionRequest::MajorMinorPatch(
                         major,
                         minor,
                         patch,
                         PythonVariant::Default,
                     )))
+                } else {
+                    None
                 };
 
                 (requires_python, python_request)
@@ -412,9 +421,7 @@ async fn init_project(
             python_request @ PythonRequest::Version(VersionRequest::Range(ref specifiers, _)) => {
                 let requires_python = RequiresPython::from_specifiers(specifiers);
 
-                let python_request = if no_pin_python {
-                    None
-                } else {
+                let python_request = if pin_python {
                     let interpreter = PythonInstallation::find_or_download(
                         Some(python_request),
                         EnvironmentPreference::OnlySystem,
@@ -434,6 +441,8 @@ async fn init_project(
                         interpreter.python_minor(),
                         PythonVariant::Default,
                     )))
+                } else {
+                    None
                 };
 
                 (requires_python, python_request)
@@ -456,14 +465,14 @@ async fn init_project(
                 let requires_python =
                     RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
 
-                let python_request = if no_pin_python {
-                    None
-                } else {
+                let python_request = if pin_python {
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
                         interpreter.python_major(),
                         interpreter.python_minor(),
                         PythonVariant::Default,
                     )))
+                } else {
+                    None
                 };
 
                 (requires_python, python_request)
@@ -478,18 +487,23 @@ async fn init_project(
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
 
         // Pin to the minor version.
-        let python_request = if no_pin_python {
-            None
-        } else {
+        let python_request = if pin_python {
             Some(PythonRequest::Version(VersionRequest::MajorMinor(
                 interpreter.python_major(),
                 interpreter.python_minor(),
                 PythonVariant::Default,
             )))
+        } else {
+            None
         };
 
         (requires_python, python_request)
-    } else if let Some(requires_python) = workspace.as_ref().and_then(find_requires_python) {
+    } else if let Some(requires_python) = workspace
+        .as_ref()
+        .map(find_requires_python)
+        .transpose()?
+        .flatten()
+    {
         // (3) `requires-python` from the workspace
         debug!("Using Python version from project workspace");
         let python_request = PythonRequest::Version(VersionRequest::Range(
@@ -498,9 +512,7 @@ async fn init_project(
         ));
 
         // Pin to the minor version.
-        let python_request = if no_pin_python {
-            None
-        } else {
+        let python_request = if pin_python {
             let interpreter = PythonInstallation::find_or_download(
                 Some(&python_request),
                 EnvironmentPreference::OnlySystem,
@@ -520,6 +532,8 @@ async fn init_project(
                 interpreter.python_minor(),
                 PythonVariant::Default,
             )))
+        } else {
+            None
         };
 
         (requires_python, python_request)
@@ -543,14 +557,14 @@ async fn init_project(
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
 
         // Pin to the minor version.
-        let python_request = if no_pin_python {
-            None
-        } else {
+        let python_request = if pin_python {
             Some(PythonRequest::Version(VersionRequest::MajorMinor(
                 interpreter.python_major(),
                 interpreter.python_minor(),
                 PythonVariant::Default,
             )))
+        } else {
+            None
         };
 
         (requires_python, python_request)
@@ -560,6 +574,9 @@ async fn init_project(
         name,
         path,
         &requires_python,
+        description.as_deref(),
+        no_description,
+        bare,
         vcs,
         build_backend,
         author_from,
@@ -678,11 +695,15 @@ impl InitKind {
 
 impl InitProjectKind {
     /// Initialize this project kind at the target path.
+    #[allow(clippy::fn_params_excessive_bools)]
     fn init(
         self,
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
+        description: Option<&str>,
+        no_description: bool,
+        bare: bool,
         vcs: Option<VersionControlSystem>,
         build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
@@ -694,6 +715,9 @@ impl InitProjectKind {
                 name,
                 path,
                 requires_python,
+                description,
+                no_description,
+                bare,
                 vcs,
                 build_backend,
                 author_from,
@@ -704,6 +728,9 @@ impl InitProjectKind {
                 name,
                 path,
                 requires_python,
+                description,
+                no_description,
+                bare,
                 vcs,
                 build_backend,
                 author_from,
@@ -714,10 +741,14 @@ impl InitProjectKind {
     }
 
     /// Initialize a Python application at the target path.
+    #[allow(clippy::fn_params_excessive_bools)]
     fn init_application(
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
+        description: Option<&str>,
+        no_description: bool,
+        bare: bool,
         vcs: Option<VersionControlSystem>,
         build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
@@ -737,13 +768,22 @@ impl InitProjectKind {
         let author = get_author_info(path, author_from);
 
         // Create the `pyproject.toml`
-        let mut pyproject = pyproject_project(name, requires_python, author.as_ref(), no_readme);
+        let mut pyproject = pyproject_project(
+            name,
+            requires_python,
+            author.as_ref(),
+            description,
+            no_description,
+            no_readme,
+        );
 
         // Include additional project configuration for packaged applications
         if package {
             // Since it'll be packaged, we can add a `[project.scripts]` entry
-            pyproject.push('\n');
-            pyproject.push_str(&pyproject_project_scripts(name, name.as_str(), "main"));
+            if !bare {
+                pyproject.push('\n');
+                pyproject.push_str(&pyproject_project_scripts(name, name.as_str(), "main"));
+            }
 
             // Add a build system
             let build_backend = build_backend.unwrap_or_default();
@@ -751,15 +791,18 @@ impl InitProjectKind {
             pyproject.push_str(&pyproject_build_system(name, build_backend));
             pyproject_build_backend_prerequisites(name, path, build_backend)?;
 
-            // Generate `src` files
-            generate_package_scripts(name, path, build_backend, false)?;
+            if !bare {
+                // Generate `src` files
+                generate_package_scripts(name, path, build_backend, false)?;
+            }
         } else {
-            // Create `hello.py` if it doesn't exist
-            // TODO(zanieb): Only create `hello.py` if there are no other Python files?
-            let hello_py = path.join("hello.py");
-            if !hello_py.try_exists()? {
+            // Create `main.py` if it doesn't exist
+            // (This isn't intended to be a particularly special or magical filename, just nice)
+            // TODO(zanieb): Only create `main.py` if there are no other Python files?
+            let main_py = path.join("main.py");
+            if !main_py.try_exists()? && !bare {
                 fs_err::write(
-                    path.join("hello.py"),
+                    path.join("main.py"),
                     indoc::formatdoc! {r#"
                     def main():
                         print("Hello from {name}!")
@@ -780,10 +823,14 @@ impl InitProjectKind {
     }
 
     /// Initialize a library project at the target path.
+    #[allow(clippy::fn_params_excessive_bools)]
     fn init_library(
         name: &PackageName,
         path: &Path,
         requires_python: &RequiresPython,
+        description: Option<&str>,
+        no_description: bool,
+        bare: bool,
         vcs: Option<VersionControlSystem>,
         build_backend: Option<ProjectBuildBackend>,
         author_from: Option<AuthorFrom>,
@@ -799,7 +846,14 @@ impl InitProjectKind {
         let author = get_author_info(path, author_from.unwrap_or_default());
 
         // Create the `pyproject.toml`
-        let mut pyproject = pyproject_project(name, requires_python, author.as_ref(), no_readme);
+        let mut pyproject = pyproject_project(
+            name,
+            requires_python,
+            author.as_ref(),
+            description,
+            no_description,
+            no_readme,
+        );
 
         // Always include a build system if the project is packaged.
         let build_backend = build_backend.unwrap_or_default();
@@ -810,7 +864,9 @@ impl InitProjectKind {
         fs_err::write(path.join("pyproject.toml"), pyproject)?;
 
         // Generate `src` files
-        generate_package_scripts(name, path, build_backend, true)?;
+        if !bare {
+            generate_package_scripts(name, path, build_backend, true)?;
+        };
 
         // Initialize the version control system.
         init_vcs(path, vcs)?;
@@ -843,17 +899,23 @@ fn pyproject_project(
     name: &PackageName,
     requires_python: &RequiresPython,
     author: Option<&Author>,
+    description: Option<&str>,
+    no_description: bool,
     no_readme: bool,
 ) -> String {
     indoc::formatdoc! {r#"
         [project]
         name = "{name}"
-        version = "0.1.0"
-        description = "Add your description here"{readme}{authors}
+        version = "0.1.0"{description}{readme}{authors}
         requires-python = "{requires_python}"
         dependencies = []
     "#,
         readme = if no_readme { "" } else { "\nreadme = \"README.md\"" },
+        description = if no_description {
+            String::new()
+        } else {
+            format!("\ndescription = \"{description}\"", description = description.unwrap_or("Add your description here"))
+        },
         authors = author.map_or_else(String::new, |author| format!("\nauthors = [\n    {}\n]", author.to_toml_string())),
         requires_python = requires_python.specifiers(),
     }
@@ -864,6 +926,21 @@ fn pyproject_project(
 fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBackend) -> String {
     let module_name = package.as_dist_info_name();
     match build_backend {
+        ProjectBuildBackend::Uv => {
+            // Limit to the stable version range.
+            let min_version = Version::from_str(uv_version::version()).unwrap();
+            debug_assert!(
+                min_version.release()[0] == 0,
+                "migrate to major version bumps"
+            );
+            let max_version = Version::new([0, min_version.release()[1] + 1]);
+            indoc::formatdoc! {r#"
+                [build-system]
+                requires = ["uv_build>={min_version},<{max_version}"]
+                build-backend = "uv_build"
+            "#}
+        }
+        .to_string(),
         // Pure-python backends
         ProjectBuildBackend::Hatch => indoc::indoc! {r#"
                 [build-system]
@@ -961,7 +1038,7 @@ fn pyproject_build_backend_prerequisites(
             if !build_file.try_exists()? {
                 fs_err::write(
                     build_file,
-                    indoc::formatdoc! {r#"
+                    indoc::formatdoc! {r"
                     cmake_minimum_required(VERSION 3.15)
                     project(${{SKBUILD_PROJECT_NAME}} LANGUAGES CXX)
 
@@ -970,7 +1047,7 @@ fn pyproject_build_backend_prerequisites(
 
                     pybind11_add_module(_core MODULE src/main.cpp)
                     install(TARGETS _core DESTINATION ${{SKBUILD_PROJECT_NAME}})
-                "#},
+                "},
                 )?;
             }
         }
@@ -1007,25 +1084,25 @@ fn generate_package_scripts(
 
     // Python script for binary-based packaged apps or libs
     let binary_call_script = if is_lib {
-        indoc::formatdoc! {r#"
+        indoc::formatdoc! {r"
         from {module_name}._core import hello_from_bin
+
 
         def hello() -> str:
             return hello_from_bin()
-        "#}
+        "}
     } else {
-        indoc::formatdoc! {r#"
+        indoc::formatdoc! {r"
         from {module_name}._core import hello_from_bin
+
 
         def main() -> None:
             print(hello_from_bin())
-        "#}
+        "}
     };
 
     // .pyi file for binary script
     let pyi_contents = indoc::indoc! {r"
-        from __future__ import annotations
-
         def hello_from_bin() -> str: ...
     "};
 
