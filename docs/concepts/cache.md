@@ -26,6 +26,9 @@ If you're running into caching issues, uv includes a few escape hatches:
 - To force uv to ignore existing installed versions, pass `--reinstall` to any installation command
   (e.g., `uv sync --reinstall` or `uv pip install --reinstall ...`).
 
+As a special case, uv will always rebuild and reinstall any local directory dependencies passed
+explicitly on the command-line (e.g., `uv pip install .`).
+
 ## Dynamic metadata
 
 By default, uv will _only_ rebuild and reinstall local directory dependencies (e.g., editables) if

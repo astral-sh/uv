@@ -176,8 +176,8 @@ pub(crate) async fn pip_uninstall(
         }
 
         // Deduplicate, since a package could be listed both by name and editable URL.
-        distributions.sort_unstable_by_key(|dist| dist.path());
-        distributions.dedup_by_key(|dist| dist.path());
+        distributions.sort_unstable_by_key(|dist| dist.install_path());
+        distributions.dedup_by_key(|dist| dist.install_path());
         distributions
     };
 

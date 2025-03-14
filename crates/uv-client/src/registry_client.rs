@@ -341,7 +341,7 @@ impl RegistryClient {
         let cache_control = match self.connectivity {
             Connectivity::Online => CacheControl::from(
                 self.cache
-                    .freshness(&cache_entry, Some(package_name))
+                    .freshness(&cache_entry, Some(package_name), None)
                     .map_err(ErrorKind::Io)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,
@@ -626,7 +626,7 @@ impl RegistryClient {
             let cache_control = match self.connectivity {
                 Connectivity::Online => CacheControl::from(
                     self.cache
-                        .freshness(&cache_entry, Some(&filename.name))
+                        .freshness(&cache_entry, Some(&filename.name), None)
                         .map_err(ErrorKind::Io)?,
                 ),
                 Connectivity::Offline => CacheControl::AllowStale,
@@ -696,7 +696,7 @@ impl RegistryClient {
         let cache_control = match self.connectivity {
             Connectivity::Online => CacheControl::from(
                 self.cache
-                    .freshness(&cache_entry, Some(&filename.name))
+                    .freshness(&cache_entry, Some(&filename.name), None)
                     .map_err(ErrorKind::Io)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,

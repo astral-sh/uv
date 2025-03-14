@@ -14,7 +14,7 @@ impl Exclusions {
     }
 
     pub fn reinstall(&self, package: &PackageName) -> bool {
-        self.reinstall.contains(package)
+        self.reinstall.contains_package(package)
     }
 
     pub fn upgrade(&self, package: &PackageName) -> bool {

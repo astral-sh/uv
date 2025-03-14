@@ -202,9 +202,9 @@ impl SitePackages {
                 // There are multiple installed distributions for the same package.
                 diagnostics.push(SitePackagesDiagnostic::DuplicatePackage {
                     package: package.clone(),
-                    paths: std::iter::once(distribution.path().to_owned())
-                        .chain(std::iter::once(conflict.path().to_owned()))
-                        .chain(distributions.map(|dist| dist.path().to_owned()))
+                    paths: std::iter::once(distribution.install_path().to_owned())
+                        .chain(std::iter::once(conflict.install_path().to_owned()))
+                        .chain(distributions.map(|dist| dist.install_path().to_owned()))
                         .collect(),
                 });
                 continue;
@@ -219,7 +219,7 @@ impl SitePackages {
                 let Ok(metadata) = distribution.metadata() else {
                     diagnostics.push(SitePackagesDiagnostic::MetadataUnavailable {
                         package: package.clone(),
-                        path: distribution.path().to_owned(),
+                        path: distribution.install_path().to_owned(),
                     });
                     continue;
                 };
