@@ -895,21 +895,29 @@ impl PubGrubReportFormatter<'_> {
         // Add hints due to the package being available on an index, but not at the correct version,
         // with subsequent indexes that were _not_ queried.
         if matches!(selector.index_strategy(), IndexStrategy::FirstIndex) {
-            if let Some(found_index) = available_indexes.get(name).and_then(BTreeSet::first) {
-                // Determine whether the index is the last-available index. If not, then some
-                // indexes were not queried, and could contain a compatible version.
-                if let Some(next_index) = index_locations
-                    .indexes()
-                    .map(Index::url)
-                    .skip_while(|url| *url != found_index)
-                    .nth(1)
-                {
-                    hints.insert(PubGrubHint::UncheckedIndex {
-                        name: name.clone(),
-                        range: set.clone(),
-                        found_index: found_index.clone(),
-                        next_index: next_index.clone(),
-                    });
+            // Do not include the hint if the set is "all versions". This is an unusual but valid
+            // case in which a package returns a 200 response, but without any versions or
+            // distributions for the package.
+            if !set
+                .iter()
+                .all(|range| matches!(range, (Bound::Unbounded, Bound::Unbounded)))
+            {
+                if let Some(found_index) = available_indexes.get(name).and_then(BTreeSet::first) {
+                    // Determine whether the index is the last-available index. If not, then some
+                    // indexes were not queried, and could contain a compatible version.
+                    if let Some(next_index) = index_locations
+                        .indexes()
+                        .map(Index::url)
+                        .skip_while(|url| *url != found_index)
+                        .nth(1)
+                    {
+                        hints.insert(PubGrubHint::UncheckedIndex {
+                            name: name.clone(),
+                            range: set.clone(),
+                            found_index: found_index.clone(),
+                            next_index: next_index.clone(),
+                        });
+                    }
                 }
             }
         }
