@@ -282,6 +282,7 @@ pub fn build_editable(
         return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
     }
     let src_root = source_tree.join(settings.module_root);
+
     let module_name = if let Some(module_name) = settings.module_name {
         module_name
     } else {
@@ -289,9 +290,9 @@ pub fn build_editable(
         // than those for identifiers
         Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
     };
-    let module_root = src_root.join(module_name.as_ref());
-
     debug!("Module name: `{:?}`", module_name);
+
+    let module_root = src_root.join(module_name.as_ref());
     if !module_root.join("__init__.py").is_file() {
         return Err(Error::MissingModule(module_root));
     }

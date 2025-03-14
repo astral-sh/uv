@@ -369,7 +369,7 @@ fn rename_module() -> Result<()> {
     Ok(())
 }
 
-/// Test `tool.uv.build-backend.module-name` for editable builds
+/// Test `tool.uv.build-backend.module-name` for editable builds.
 #[test]
 fn rename_module_editable_build() -> Result<()> {
     let context = TestContext::new("3.12");
