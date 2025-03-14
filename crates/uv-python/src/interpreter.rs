@@ -677,6 +677,14 @@ impl Display for StatusCodeError {
 pub enum Error {
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
+    #[error(
+        "Broken symlink at `{}`, was the underlying Python interpreter removed?\n{}{} To recreate the virtual environment, run `{}`.",
+        _0.user_display(),
+        "hint".bold().cyan(),
+        ":".bold(),
+        "uv venv".green(),
+    )]
+    BrokenSymlink(PathBuf),
     #[error("Python interpreter not found at `{0}`")]
     NotFound(PathBuf),
     #[error("Failed to query Python interpreter at `{path}`")]
@@ -879,7 +887,14 @@ impl InterpreterInfo {
             .and_then(Timestamp::from_path)
             .map_err(|err| {
                 if err.kind() == io::ErrorKind::NotFound {
-                    Error::NotFound(executable.to_path_buf())
+                    if absolute
+                        .symlink_metadata()
+                        .is_ok_and(|metadata| metadata.is_symlink())
+                    {
+                        Error::BrokenSymlink(executable.to_path_buf())
+                    } else {
+                        Error::NotFound(executable.to_path_buf())
+                    }
                 } else {
                     err.into()
                 }

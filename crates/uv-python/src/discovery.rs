@@ -815,7 +815,7 @@ impl Error {
                     );
                     false
                 }
-                InterpreterError::NotFound(path) => {
+                InterpreterError::NotFound(path) | InterpreterError::BrokenSymlink(path) => {
                     // If the interpreter is from an active, valid virtual environment, we should
                     // fail because it's broken
                     if let Some(Ok(true)) = matches!(source, PythonSource::ActiveEnvironment)
