@@ -678,7 +678,7 @@ pub enum Error {
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
     #[error(
-        "Broken symlink at `{}`, was the underlying Python interpreter removed?\n{}{} To recreate the virtual environment, run `{}`.",
+        "Broken symlink at `{}`, was the underlying Python interpreter removed?\n\n{}{} To recreate the virtual environment, run `{}`",
         _0.user_display(),
         "hint".bold().cyan(),
         ":".bold(),
