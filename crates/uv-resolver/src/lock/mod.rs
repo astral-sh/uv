@@ -4754,7 +4754,7 @@ impl std::fmt::Display for LockErrorHint {
                     if let Some(version) = version {
                         write!(
                             f,
-                            "{}{} You're using {}, but  `{}` ({}) only has wheels with the following Python ABI tag{s}: {}",
+                            "{}{} You're using {}, but `{}` ({}) only has wheels with the following Python ABI tag{s}: {}",
                             "hint".bold().cyan(),
                             ":".bold(),
                             best,
