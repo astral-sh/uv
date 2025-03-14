@@ -6,13 +6,14 @@ use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
 use std::{env, io};
 
-use futures::TryStreamExt;
+use futures::{StreamExt, TryStreamExt};
 use owo_colors::OwoColorize;
 use reqwest_retry::RetryPolicy;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWriteExt, BufWriter, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::either::Either;
+use tokio_util::io::{ReaderStream, StreamReader};
 use tracing::{debug, instrument};
 use url::Url;
 
@@ -688,7 +689,7 @@ impl ManagedPythonDownload {
             target_cache_file.simplified_display()
         );
 
-        let (mut reader, size) = read_url(url, client).await?;
+        let (reader, size) = read_url(url, client).await?;
         let temp_dir = tempfile::tempdir_in(python_builds_dir)?;
         let temp_file = temp_dir.path().join("download");
 
@@ -702,6 +703,17 @@ impl ManagedPythonDownload {
                     reporter.on_request_start(Direction::Download, &self.key, size),
                 )
             });
+
+            let mut other_writer = fs_err::tokio::File::create("other.bin").await?;
+            let other_writer_ref = &mut other_writer;
+
+            let mut reader = Box::pin(StreamReader::new(ReaderStream::new(reader).then(
+                |bytes| async {
+                    let bytes = bytes?;
+                    other_writer_ref.write_all(&bytes).await?;
+                    Ok::<_, io::Error>(bytes)
+                },
+            )));
 
             match progress {
                 Some((&reporter, progress)) => {
