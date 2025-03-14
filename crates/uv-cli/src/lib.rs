@@ -3289,6 +3289,16 @@ pub struct AddArgs {
     #[arg(long, short, alias = "requirement", group = "sources", value_parser = parse_file_path)]
     pub requirements: Vec<PathBuf>,
 
+    /// Constrain versions using the given requirements files.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. The constraints will _not_ be added to the project's
+    /// `pyproject.toml` file, but _will_ be respected during dependency resolution.
+    ///
+    /// This is equivalent to pip's `--constraint` option.
+    #[arg(long, short, alias = "constraint", env = EnvVars::UV_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub constraints: Vec<Maybe<PathBuf>>,
+
     /// Apply this marker to all added packages.
     #[arg(long, short, value_parser = MarkerTree::from_str)]
     pub marker: Option<MarkerTree>,

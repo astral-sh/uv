@@ -36,7 +36,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, 
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::lock::{do_safe_lock, LockMode, LockResult};
+use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, detect_conflicts, script_specification, update_environment,
@@ -327,9 +327,8 @@ pub(crate) async fn sync(
         SyncTarget::Script(script) => LockTarget::from(script),
     };
 
-    let lock = match do_safe_lock(
+    let lock = match LockOperation::new(
         mode,
-        lock_target,
         &settings.resolver,
         &network_settings,
         &state,
@@ -339,6 +338,7 @@ pub(crate) async fn sync(
         printer,
         preview,
     )
+    .execute(lock_target)
     .await
     {
         Ok(result) => {

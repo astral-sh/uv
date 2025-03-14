@@ -134,6 +134,14 @@ $ # Add a git dependency
 $ uv add git+https://github.com/psf/requests
 ```
 
+If you're migrating from a `requirements.txt` file, you can use `uv add` with the `-r` flag to add
+all dependencies from the file:
+
+```console
+$ # Add all dependencies from `requirements.txt`.
+$ uv add -r requirements.txt -c constraints.txt
+```
+
 To remove a package, you can use `uv remove`:
 
 ```console

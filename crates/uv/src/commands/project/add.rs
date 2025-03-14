@@ -1,4 +1,5 @@
 use std::collections::hash_map::Entry;
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::io;
 use std::path::Path;
@@ -21,7 +22,9 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_types::{Index, IndexName, IndexUrls, UnresolvedRequirement, VersionId};
+use uv_distribution_types::{
+    Index, IndexName, IndexUrls, NameRequirementSpecification, UnresolvedRequirement, VersionId,
+};
 use uv_fs::Simplified;
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
@@ -64,6 +67,7 @@ pub(crate) async fn add(
     active: Option<bool>,
     no_sync: bool,
     requirements: Vec<RequirementsSource>,
+    constraints: Vec<RequirementsSource>,
     marker: Option<MarkerTree>,
     editable: Option<bool>,
     dependency_type: DependencyType,
@@ -258,8 +262,18 @@ pub(crate) async fn add(
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Read the requirements.
-    let RequirementsSpecification { requirements, .. } =
-        RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
+    let RequirementsSpecification {
+        requirements,
+        constraints,
+        ..
+    } = RequirementsSpecification::from_sources(
+        &requirements,
+        &constraints,
+        &[],
+        BTreeMap::default(),
+        &client_builder,
+    )
+    .await?;
 
     // Initialize any shared state.
     let state = PlatformState::default();
@@ -646,6 +660,7 @@ pub(crate) async fn add(
         locked,
         &dependency_type,
         raw_sources,
+        constraints,
         &settings,
         &network_settings,
         installer_metadata,
@@ -682,6 +697,7 @@ async fn lock_and_sync(
     locked: bool,
     dependency_type: &DependencyType,
     raw_sources: bool,
+    constraints: Vec<NameRequirementSpecification>,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
     installer_metadata: bool,
@@ -690,13 +706,12 @@ async fn lock_and_sync(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<(), ProjectError> {
-    let mut lock = project::lock::do_safe_lock(
+    let mut lock = project::lock::LockOperation::new(
         if locked {
             LockMode::Locked(target.interpreter())
         } else {
             LockMode::Write(target.interpreter())
         },
-        (&target).into(),
         &settings.resolver,
         network_settings,
         &lock_state,
@@ -706,6 +721,8 @@ async fn lock_and_sync(
         printer,
         preview,
     )
+    .with_constraints(constraints)
+    .execute((&target).into())
     .await?
     .into_lock();
 
@@ -808,13 +825,12 @@ async fn lock_and_sync(
 
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
-            lock = project::lock::do_safe_lock(
+            lock = project::lock::LockOperation::new(
                 if locked {
                     LockMode::Locked(target.interpreter())
                 } else {
                     LockMode::Write(target.interpreter())
                 },
-                (&target).into(),
                 &settings.resolver,
                 network_settings,
                 &lock_state,
@@ -824,6 +840,7 @@ async fn lock_and_sync(
                 printer,
                 preview,
             )
+            .execute((&target).into())
             .await?
             .into_lock();
         }

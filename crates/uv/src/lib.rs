@@ -1712,6 +1712,11 @@ async fn run_project(
                         .map(Ok),
                 )
                 .collect::<Result<Vec<_>>>()?;
+            let constraints = args
+                .constraints
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
 
             Box::pin(commands::add(
                 project_dir,
@@ -1720,6 +1725,7 @@ async fn run_project(
                 args.active,
                 args.no_sync,
                 requirements,
+                constraints,
                 args.marker,
                 args.editable,
                 args.dependency_type,

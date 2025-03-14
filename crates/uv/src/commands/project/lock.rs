@@ -183,9 +183,8 @@ pub(crate) async fn lock(
     let state = UniversalState::default();
 
     // Perform the lock operation.
-    match do_safe_lock(
+    match LockOperation::new(
         mode,
-        target,
         &settings,
         &network_settings,
         &state,
@@ -195,6 +194,7 @@ pub(crate) async fn lock(
         printer,
         preview,
     )
+    .execute(target)
     .await
     {
         Ok(lock) => {
@@ -245,97 +245,139 @@ pub(super) enum LockMode<'env> {
     Frozen,
 }
 
-/// Perform a lock operation, respecting the `--locked` and `--frozen` parameters.
-#[allow(clippy::fn_params_excessive_bools)]
-pub(super) async fn do_safe_lock(
-    mode: LockMode<'_>,
-    target: LockTarget<'_>,
-    settings: &ResolverSettings,
-    network_settings: &NetworkSettings,
-    state: &UniversalState,
+/// A lock operation.
+pub(super) struct LockOperation<'env> {
+    mode: LockMode<'env>,
+    constraints: Vec<NameRequirementSpecification>,
+    settings: &'env ResolverSettings,
+    network_settings: &'env NetworkSettings,
+    state: &'env UniversalState,
     logger: Box<dyn ResolveLogger>,
     concurrency: Concurrency,
-    cache: &Cache,
+    cache: &'env Cache,
     printer: Printer,
     preview: PreviewMode,
-) -> Result<LockResult, ProjectError> {
-    match mode {
-        LockMode::Frozen => {
-            // Read the existing lockfile, but don't attempt to lock the project.
-            let existing = target
-                .read()
-                .await?
-                .ok_or_else(|| ProjectError::MissingLockfile)?;
-            Ok(LockResult::Unchanged(existing))
+}
+
+impl<'env> LockOperation<'env> {
+    /// Initialize a [`LockOperation`].
+    pub(super) fn new(
+        mode: LockMode<'env>,
+        settings: &'env ResolverSettings,
+        network_settings: &'env NetworkSettings,
+        state: &'env UniversalState,
+        logger: Box<dyn ResolveLogger>,
+        concurrency: Concurrency,
+        cache: &'env Cache,
+        printer: Printer,
+        preview: PreviewMode,
+    ) -> Self {
+        Self {
+            mode,
+            constraints: vec![],
+            settings,
+            network_settings,
+            state,
+            logger,
+            concurrency,
+            cache,
+            printer,
+            preview,
         }
-        LockMode::Locked(interpreter) => {
-            // Read the existing lockfile.
-            let existing = target
-                .read()
-                .await?
-                .ok_or_else(|| ProjectError::MissingLockfile)?;
+    }
 
-            // Perform the lock operation, but don't write the lockfile to disk.
-            let result = do_lock(
-                target,
-                interpreter,
-                Some(existing),
-                settings,
-                network_settings,
-                state,
-                logger,
-                concurrency,
-                cache,
-                printer,
-                preview,
-            )
-            .await?;
+    /// Set the external constraints for the [`LockOperation`].
+    #[must_use]
+    pub(super) fn with_constraints(
+        mut self,
+        constraints: Vec<NameRequirementSpecification>,
+    ) -> Self {
+        self.constraints = constraints;
+        self
+    }
 
-            // If the lockfile changed, return an error.
-            if matches!(result, LockResult::Changed(_, _)) {
-                return Err(ProjectError::LockMismatch);
+    /// Perform a [`LockOperation`].
+    pub(super) async fn execute(self, target: LockTarget<'_>) -> Result<LockResult, ProjectError> {
+        match self.mode {
+            LockMode::Frozen => {
+                // Read the existing lockfile, but don't attempt to lock the project.
+                let existing = target
+                    .read()
+                    .await?
+                    .ok_or_else(|| ProjectError::MissingLockfile)?;
+                Ok(LockResult::Unchanged(existing))
             }
+            LockMode::Locked(interpreter) => {
+                // Read the existing lockfile.
+                let existing = target
+                    .read()
+                    .await?
+                    .ok_or_else(|| ProjectError::MissingLockfile)?;
 
-            Ok(result)
-        }
-        LockMode::Write(interpreter) | LockMode::DryRun(interpreter) => {
-            // Read the existing lockfile.
-            let existing = match target.read().await {
-                Ok(Some(existing)) => Some(existing),
-                Ok(None) => None,
-                Err(ProjectError::Lock(err)) => {
-                    warn_user!(
-                        "Failed to read existing lockfile; ignoring locked requirements: {err}"
-                    );
-                    None
+                // Perform the lock operation, but don't write the lockfile to disk.
+                let result = do_lock(
+                    target,
+                    interpreter,
+                    Some(existing),
+                    self.constraints,
+                    self.settings,
+                    self.network_settings,
+                    self.state,
+                    self.logger,
+                    self.concurrency,
+                    self.cache,
+                    self.printer,
+                    self.preview,
+                )
+                .await?;
+
+                // If the lockfile changed, return an error.
+                if matches!(result, LockResult::Changed(_, _)) {
+                    return Err(ProjectError::LockMismatch);
                 }
-                Err(err) => return Err(err),
-            };
 
-            // Perform the lock operation.
-            let result = do_lock(
-                target,
-                interpreter,
-                existing,
-                settings,
-                network_settings,
-                state,
-                logger,
-                concurrency,
-                cache,
-                printer,
-                preview,
-            )
-            .await?;
-
-            // If the lockfile changed, write it to disk.
-            if !matches!(mode, LockMode::DryRun(_)) {
-                if let LockResult::Changed(_, lock) = &result {
-                    target.commit(lock).await?;
-                }
+                Ok(result)
             }
+            LockMode::Write(interpreter) | LockMode::DryRun(interpreter) => {
+                // Read the existing lockfile.
+                let existing = match target.read().await {
+                    Ok(Some(existing)) => Some(existing),
+                    Ok(None) => None,
+                    Err(ProjectError::Lock(err)) => {
+                        warn_user!(
+                            "Failed to read existing lockfile; ignoring locked requirements: {err}"
+                        );
+                        None
+                    }
+                    Err(err) => return Err(err),
+                };
 
-            Ok(result)
+                // Perform the lock operation.
+                let result = do_lock(
+                    target,
+                    interpreter,
+                    existing,
+                    self.constraints,
+                    self.settings,
+                    self.network_settings,
+                    self.state,
+                    self.logger,
+                    self.concurrency,
+                    self.cache,
+                    self.printer,
+                    self.preview,
+                )
+                .await?;
+
+                // If the lockfile changed, write it to disk.
+                if !matches!(self.mode, LockMode::DryRun(_)) {
+                    if let LockResult::Changed(_, lock) = &result {
+                        target.commit(lock).await?;
+                    }
+                }
+
+                Ok(result)
+            }
         }
     }
 }
@@ -345,6 +387,7 @@ async fn do_lock(
     target: LockTarget<'_>,
     interpreter: &Interpreter,
     existing_lock: Option<Lock>,
+    external: Vec<NameRequirementSpecification>,
     settings: &ResolverSettings,
     network_settings: &NetworkSettings,
     state: &UniversalState,
@@ -750,6 +793,7 @@ async fn do_lock(
                     .iter()
                     .cloned()
                     .map(NameRequirementSpecification::from)
+                    .chain(external)
                     .collect(),
                 overrides
                     .iter()
