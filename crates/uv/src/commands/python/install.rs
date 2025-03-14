@@ -11,6 +11,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 
+use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
@@ -135,6 +136,7 @@ pub(crate) async fn install(
     default: bool,
     python_downloads: PythonDownloads,
     no_config: bool,
+    cache: &Cache,
     preview: PreviewMode,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -218,7 +220,7 @@ pub(crate) async fn install(
             for installation in matching_installations {
                 changelog.existing.insert(installation.key().clone());
                 if matches!(&request.request, &PythonRequest::Any) {
-                    // Construct a install request matching the existing installation
+                    // Construct an install request matching the existing installation
                     match InstallRequest::new(PythonRequest::Key(installation.into())) {
                         Ok(request) => {
                             debug!("Will reinstall `{}`", installation.key().green());
@@ -315,6 +317,7 @@ pub(crate) async fn install(
                         reinstall,
                         python_install_mirror.as_deref(),
                         pypy_install_mirror.as_deref(),
+                        cache,
                         Some(&reporter),
                     )
                     .await,

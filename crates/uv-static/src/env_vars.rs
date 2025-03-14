@@ -252,6 +252,10 @@ impl EnvVars {
     /// Specifies the directory for storing managed Python installations.
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
 
+    /// Specifies the directory for caching the archives of managed Python installations before
+    /// installation.
+    pub const UV_PYTHON_CACHE_DIR: &'static str = "UV_PYTHON_CACHE_DIR";
+
     /// Managed Python installations are downloaded from the Astral
     /// [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project.
     ///
