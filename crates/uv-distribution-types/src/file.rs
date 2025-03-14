@@ -47,8 +47,6 @@ impl File {
             dist_info_metadata: file
                 .core_metadata
                 .as_ref()
-                .or(file.dist_info_metadata.as_ref())
-                .or(file.data_dist_info_metadata.as_ref())
                 .is_some_and(CoreMetadata::is_available),
             filename: file.filename,
             hashes: HashDigests::from(file.hashes),
