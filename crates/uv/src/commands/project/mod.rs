@@ -914,15 +914,14 @@ impl ProjectInterpreter {
                     InvalidEnvironmentKind::Empty => {}
                 }
             }
-            Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(path))) => {
-                if path.is_symlink() {
-                    let target_path = fs_err::read_link(&path)?;
-                    warn_user!(
+            Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(_))) => {}
+            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenSymlink(path))) => {
+                let target_path = fs_err::read_link(&path)?;
+                warn_user!(
                         "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
                         path.user_display().cyan(),
                         target_path.user_display().cyan(),
                     );
-                }
             }
             Err(err) => return Err(err.into()),
         }
