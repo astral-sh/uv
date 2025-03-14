@@ -66,5 +66,17 @@ need to be explicitly defined using
 
 ## Dependabot
 
-Support for uv is not yet available. Progress can be tracked at
-[dependabot/dependabot-core#10478](https://github.com/dependabot/dependabot-core/issues/10478).
+Support for uv is now available. To configure Dependabot, create a `.github/dependabot.yml` file in
+the root of your repository and copy the following configuration into it:
+
+```yaml
+version: 2
+updates:
+  # Enable version updates for uv
+  - package-ecosystem: "uv"
+    # Look for `pyproject.toml` and `uv.lock` files in the `root` directory
+    directory: "/"
+    # Check for updates every day (weekdays)
+    schedule:
+      interval: "daily"
+```
