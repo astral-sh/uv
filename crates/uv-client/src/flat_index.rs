@@ -160,7 +160,7 @@ impl<'a> FlatIndexClient<'a> {
         let cache_control = match self.client.connectivity() {
             Connectivity::Online => CacheControl::from(
                 self.cache
-                    .freshness(&cache_entry, None)
+                    .freshness(&cache_entry, None, None)
                     .map_err(ErrorKind::Io)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,

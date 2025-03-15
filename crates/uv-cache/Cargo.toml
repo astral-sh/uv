@@ -32,6 +32,7 @@ fs-err = { workspace = true, features = ["tokio"] }
 nanoid = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
+same-file = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tempfile = { workspace = true }
 tracing = { workspace = true }

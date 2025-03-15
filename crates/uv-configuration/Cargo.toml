@@ -32,6 +32,7 @@ either = { workspace = true }
 fs-err = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
+same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 serde-untagged = { workspace = true }

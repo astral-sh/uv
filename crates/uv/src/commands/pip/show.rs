@@ -142,7 +142,7 @@ pub(crate) fn pip_show(
             printer.stdout(),
             "Location: {}",
             distribution
-                .path()
+                .install_path()
                 .parent()
                 .expect("package path is not root")
                 .simplified_display()
@@ -190,7 +190,7 @@ pub(crate) fn pip_show(
 
         // If requests, show the list of installed files.
         if files {
-            let path = distribution.path().join("RECORD");
+            let path = distribution.install_path().join("RECORD");
             let record = read_record_file(&mut File::open(path)?)?;
             writeln!(printer.stdout(), "Files:")?;
             for entry in record {
