@@ -61,7 +61,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"tv_sec: \d+", "tv_sec: [TIME]"),
     (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
     // Rewrite Windows output to Unix output
-    (r"\\([\w\d]|\.\.)", "/$1"),
+    (r"\\([\w\d]|\.)", "/$1"),
     (r"uv\.exe", "uv"),
     // uv version display
     (
@@ -1417,11 +1417,16 @@ pub fn run_and_format_with_status<T: AsRef<str>>(
             if removed_packages > 0 {
                 for i in 1..20 {
                     for verb in match windows_filters {
-                        WindowsFilters::Platform => {
-                            ["Resolved", "Prepared", "Installed", "Uninstalled"].iter()
-                        }
+                        WindowsFilters::Platform => [
+                            "Resolved",
+                            "Prepared",
+                            "Installed",
+                            "Audited",
+                            "Uninstalled",
+                        ]
+                        .iter(),
                         WindowsFilters::Universal => {
-                            ["Prepared", "Installed", "Uninstalled"].iter()
+                            ["Prepared", "Installed", "Audited", "Uninstalled"].iter()
                         }
                     } {
                         snapshot = snapshot.replace(

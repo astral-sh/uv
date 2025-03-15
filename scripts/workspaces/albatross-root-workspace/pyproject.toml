@@ -2,7 +2,7 @@
 name = "albatross"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["bird-feeder", "tqdm>=4,<5"]
+dependencies = ["bird-feeder", "iniconfig>=2,<3"]
 
 [tool.uv.sources]
 bird-feeder = { workspace = true }
