@@ -144,10 +144,9 @@ pub(crate) async fn pin(
         let Some(config_dir) = user_uv_config_dir() else {
             return Err(anyhow::anyhow!("No user-level config directory found."));
         };
-        let version_file_path = config_dir.join(PYTHON_VERSION_FILENAME);
-        // Ensure uv global config directory exists
-        fs_err::tokio::create_dir_all(config_dir).await?;
-        PythonVersionFile::new(version_file_path).with_versions(vec![request])
+        fs_err::tokio::create_dir_all(&config_dir).await?;
+        PythonVersionFile::new(config_dir.join(PYTHON_VERSION_FILENAME))
+            .with_versions(vec![request])
     } else {
         PythonVersionFile::new(project_dir.join(PYTHON_VERSION_FILENAME))
             .with_versions(vec![request])
