@@ -29,22 +29,43 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: tj-actions/changed-files@v45
+      - name: "Determine changed files"
         id: changed
-        with:
-          files_yaml: |
-            code:
-              - "**/*"
-              - "!docs/**/*"
-              - "!mkdocs.*.yml"
-              - "!**/*.md"
-              - "!bin/**"
-              - "!assets/**"
-              # Generated markdown and JSON files are checked during test runs
-              - "docs/reference/cli.md"
-              - "docs/reference/settings.md"
-              - "docs/configuration/environment.md"
-              - "uv.schema.json"
+        shell: bash
+        run: |
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha || 'origin/main' }}...HEAD)
+
+          CODE_CHANGED=false
+
+          while IFS= read -r file; do
+            # Generated markdown and JSON files are checked during test runs.
+            if [[ "${file}" =~ ^docs/ && ! "${file}" =~ ^docs/reference/(cli|settings).md && ! "${file}" =~ ^docs/configuration/environment.md ]]; then
+              echo "Skipping ${file} (matches docs/ pattern)"
+              continue
+            fi
+            if [[ "${file}" =~ ^mkdocs.*\.yml$ ]]; then
+              echo "Skipping ${file} (matches mkdocs*.yml pattern)"
+              continue
+            fi
+            if [[ "${file}" =~ \.md$ ]]; then
+              echo "Skipping ${file} (matches *.md pattern)"
+              continue
+            fi
+            if [[ "${file}" =~ ^bin/ ]]; then
+              echo "Skipping ${file} (matches bin/ pattern)"
+              continue
+            fi
+            if [[ "${file}" =~ ^assets/ ]]; then
+              echo "Skipping ${file} (matches assets/ pattern)"
+              continue
+            fi
+
+            echo "Detected code change in: ${file}"
+            CODE_CHANGED=true
+            break
+
+          done <<< "${CHANGED_FILES}"
+          echo "code_any_changed=${CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
   lint:
     timeout-minutes: 10
     name: "lint"
@@ -1332,14 +1353,26 @@ jobs:
           fetch-depth: 0
 
       # Only publish a new release if the publishing code changed
-      - uses: tj-actions/changed-files@v45
+      - name: "Determine changed files"
         id: changed
-        with:
-          files_yaml: |
-            code:
-              - "crates/uv-publish/**/*"
-              - "scripts/publish/**/*"
-              - ".github/workflows/ci.yml"
+        shell: bash
+        run: |
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha || 'origin/main' }}...HEAD)
+
+          CODE_CHANGED=false
+
+          while IFS= read -r file; do
+            if [[ "${file}" =~ ^crates/uv-publish/ || "${file}" =~ ^scripts/publish/ || "${file}" == ".github/workflows/ci.yml" ]]; then
+              echo "Detected code change in: ${file}"
+              CODE_CHANGED=true
+              break
+            fi
+
+            echo "Skipping ${file} (not in watched paths)"
+            continue
+
+          done <<< "${CHANGED_FILES}"
+          echo "code_any_changed=${CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
 
   integration-test-publish:
     timeout-minutes: 10
