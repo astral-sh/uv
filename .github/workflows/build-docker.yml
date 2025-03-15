@@ -45,21 +45,21 @@ jobs:
           - linux/amd64
           - linux/arm64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           submodules: recursive
 
       # Login to DockerHub first, to avoid rate-limiting
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
         # PRs from forks don't have access to secrets, disable this step in that case.
         if: ${{ github.event.pull_request.head.repo.full_name == 'astral-sh/uv' }}
         with:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -80,7 +80,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5
         with:
           images: ${{ env.UV_BASE_IMG }}
           # Defining this makes sure the org.opencontainers.image.version OCI label becomes the actual release version and not the branch name
@@ -96,7 +96,7 @@ jobs:
       # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6
         with:
           context: .
           platforms: ${{ matrix.platform }}
@@ -129,7 +129,7 @@ jobs:
     if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
     steps:
       # Login to DockerHub first, to avoid rate-limiting
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
         with:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
@@ -141,11 +141,11 @@ jobs:
           pattern: digests-*
           merge-multiple: true
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5
         with:
           images: ${{ env.UV_BASE_IMG }}
           # Order is on purpose such that the label org.opencontainers.image.version has the first pattern with the full version
@@ -153,7 +153,7 @@ jobs:
             type=pep440,pattern={{ version }},value=${{ fromJson(inputs.plan).announcement_tag }}
             type=pep440,pattern={{ major }}.{{ minor }},value=${{ fromJson(inputs.plan).announcement_tag }}
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -211,14 +211,14 @@ jobs:
           - python:3.8-slim-bookworm,python3.8-bookworm-slim
     steps:
       # Login to DockerHub first, to avoid rate-limiting
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
         with:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -266,7 +266,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5
         # ghcr.io prefers index level annotations
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
@@ -279,7 +279,7 @@ jobs:
 
       - name: Build and push
         id: build-and-push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -292,7 +292,7 @@ jobs:
           annotations: ${{ steps.meta.outputs.annotations }}
 
       - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2
         with:
           subject-name: ${{ env.UV_BASE_IMG }}
           subject-digest: ${{ steps.build-and-push.outputs.digest }}
@@ -315,7 +315,7 @@ jobs:
       id-token: write # needed for signing the images with GitHub OIDC Token
     steps:
       # Login to DockerHub first, to avoid rate-limiting
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
         with:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
@@ -327,11 +327,11 @@ jobs:
           pattern: digests-*
           merge-multiple: true
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
@@ -341,7 +341,7 @@ jobs:
             type=pep440,pattern={{ version }},value=${{ fromJson(inputs.plan).announcement_tag }}
             type=pep440,pattern={{ major }}.{{ minor }},value=${{ fromJson(inputs.plan).announcement_tag }}
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -381,7 +381,7 @@ jobs:
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
       - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2
         with:
           subject-name: ${{ env.UV_BASE_IMG }}
           subject-digest: ${{ steps.manifest-digest.outputs.digest }}
