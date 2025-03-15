@@ -17,19 +17,20 @@ workspace = true
 
 [dependencies]
 uv-cache-info = { workspace = true, features = ["schemars"] }
-uv-configuration = { workspace = true, features = ["schemars", "clap"] }
+uv-configuration = { workspace = true, features = ["schemars"] }
 uv-dirs = { workspace = true }
 uv-distribution-types = { workspace = true, features = ["schemars"] }
 uv-fs = { workspace = true }
-uv-install-wheel = { workspace = true, features = ["schemars", "clap"] }
+uv-install-wheel = { workspace = true, features = ["schemars"] }
 uv-macros = { workspace = true }
 uv-normalize = { workspace = true, features = ["schemars"] }
 uv-options-metadata = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
-uv-python = { workspace = true, features = ["schemars", "clap"] }
-uv-resolver = { workspace = true, features = ["schemars", "clap"] }
+uv-python = { workspace = true, features = ["schemars"] }
+uv-resolver = { workspace = true, features = ["schemars"] }
 uv-static = { workspace = true }
+uv-torch = { workspace = true, features = ["schemars"] }
 uv-warnings = { workspace = true }
 
 clap = { workspace = true }
