@@ -184,7 +184,7 @@ windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Secur
 winsafe = { version = "0.0.23", features = ["kernel"] }
 wiremock = { version = "0.6.2" }
 xz2 = { version = "0.1.7" }
-zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+zip = { version = "2.2.3", default-features = false, features = ["deflate"] }
 
 [workspace.metadata.cargo-shear]
 ignored = ["flate2", "xz2"]
