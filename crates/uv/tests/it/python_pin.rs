@@ -328,6 +328,31 @@ fn python_pin_global_use_local_if_available() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn python_pin_global_creates_parent_dirs() {
+    let context: TestContext = TestContext::new_with_versions(&["3.12"]);
+    let uv_global_config_dir = context.user_config_dir.child("uv");
+
+    assert!(
+        !uv_global_config_dir.exists(),
+        "Global config directory should not exist yet."
+    );
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").arg("--global"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `[UV_USER_CONFIG_DIR]/.python-version` to `3.12`
+
+    ----- stderr -----
+    ");
+
+    assert!(
+        uv_global_config_dir.exists(),
+        "Global config directory should be automatically created (if missing) after global pin."
+    );
+}
+
 /// We do not need a Python interpreter to pin without `--resolved`
 /// (skip on Windows because the snapshot is different and the behavior is not platform dependent)
 #[cfg(unix)]
