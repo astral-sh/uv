@@ -5786,13 +5786,16 @@ fn already_installed_local_path_dependent() {
         .arg(root_path.join("first_local"))
         .arg("--reinstall-package")
         .arg("first-local"), @r###"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `x-local @ file://[WORKSPACE]/scripts/packages/dependent_locals/first_local`
-      ╰─▶ Package metadata name `first-local` does not match given name `x-local`
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
     );
 

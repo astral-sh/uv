@@ -6036,7 +6036,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <p>By default, uv uses the virtual environment in the current working directory or any parent directory, falling back to searching for a Python executable in <code>PATH</code>. The <code>--system</code> option instructs uv to avoid using a virtual environment Python and restrict its search to the system path.</p>
 
 <p>May also be set with the <code>UV_SYSTEM_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-pip-compile--torch-backend"><a href="#uv-pip-compile--torch-backend"><code>--torch-backend</code></a> <i>torch-backend</i></dt><dd><p>The backend to use when fetching packages in the <code>PyTorch</code> ecosystem (e.g., <code>cu126</code> or <code>auto</code>)</p>
+</dd><dt id="uv-pip-compile--torch-backend"><a href="#uv-pip-compile--torch-backend"><code>--torch-backend</code></a> <i>torch-backend</i></dt><dd><p>The backend to use when fetching packages in the <code>PyTorch</code> ecosystem (e.g., <code>cpu</code>, <code>cu126</code>, or <code>auto</code>).</p>
 
 <p>When set, uv will ignore the configured index URLs for packages in the <code>PyTorch</code> ecosystem, and will instead use the defined backend.</p>
 
@@ -6044,6 +6044,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>The <code>auto</code> mode will attempt to detect the appropriate <code>PyTorch</code> index based on the currently installed CUDA drivers.</p>
 
+<p>May also be set with the <code>UV_TORCH_BACKEND</code> environment variable.</p>
 <p>Possible values:</p>
 
 <ul>
@@ -6507,7 +6508,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <p>May also be set with the <code>UV_SYSTEM_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-sync--target"><a href="#uv-pip-sync--target"><code>--target</code></a> <i>target</i></dt><dd><p>Install packages into the specified directory, rather than into the virtual or system Python environment. The packages will be installed at the top-level of the directory</p>
 
-</dd><dt id="uv-pip-sync--torch-backend"><a href="#uv-pip-sync--torch-backend"><code>--torch-backend</code></a> <i>torch-backend</i></dt><dd><p>The backend to use when fetching packages in the <code>PyTorch</code> ecosystem (e.g., <code>cu126</code> or <code>auto</code>)</p>
+</dd><dt id="uv-pip-sync--torch-backend"><a href="#uv-pip-sync--torch-backend"><code>--torch-backend</code></a> <i>torch-backend</i></dt><dd><p>The backend to use when fetching packages in the <code>PyTorch</code> ecosystem (e.g., <code>cpu</code>, <code>cu126</code>, or <code>auto</code>).</p>
 
 <p>When set, uv will ignore the configured index URLs for packages in the <code>PyTorch</code> ecosystem, and will instead use the defined backend.</p>
 
@@ -6515,6 +6516,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>The <code>auto</code> mode will attempt to detect the appropriate <code>PyTorch</code> index based on the currently installed CUDA drivers.</p>
 
+<p>May also be set with the <code>UV_TORCH_BACKEND</code> environment variable.</p>
 <p>Possible values:</p>
 
 <ul>
@@ -7048,7 +7050,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>May also be set with the <code>UV_SYSTEM_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-install--target"><a href="#uv-pip-install--target"><code>--target</code></a> <i>target</i></dt><dd><p>Install packages into the specified directory, rather than into the virtual or system Python environment. The packages will be installed at the top-level of the directory</p>
 
-</dd><dt id="uv-pip-install--torch-backend"><a href="#uv-pip-install--torch-backend"><code>--torch-backend</code></a> <i>torch-backend</i></dt><dd><p>The backend to use when fetching packages in the <code>PyTorch</code> ecosystem (e.g., <code>cu126</code> or <code>auto</code>)</p>
+</dd><dt id="uv-pip-install--torch-backend"><a href="#uv-pip-install--torch-backend"><code>--torch-backend</code></a> <i>torch-backend</i></dt><dd><p>The backend to use when fetching packages in the <code>PyTorch</code> ecosystem (e.g., <code>cpu</code>, <code>cu126</code>, or <code>auto</code>)</p>
 
 <p>When set, uv will ignore the configured index URLs for packages in the <code>PyTorch</code> ecosystem, and will instead use the defined backend.</p>
 
@@ -7056,6 +7058,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <p>The <code>auto</code> mode will attempt to detect the appropriate <code>PyTorch</code> index based on the currently installed CUDA drivers.</p>
 
+<p>May also be set with the <code>UV_TORCH_BACKEND</code> environment variable.</p>
 <p>Possible values:</p>
 
 <ul>
