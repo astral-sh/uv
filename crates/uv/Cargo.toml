@@ -160,3 +160,9 @@ slow-tests = []
 test-ecosystem = []
 # Adds self-update functionality.
 self-update = ["axoupdater", "uv-cli/self-update"]
+# Build uvw binary on Windows
+windows-gui-bin = []
+
+[[bin]]
+name = "uvw"
+required-features = ["windows-gui-bin"]
