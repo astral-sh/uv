@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::env;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
@@ -12,12 +11,6 @@ use insta::{assert_json_snapshot, assert_snapshot};
 use serde::{Deserialize, Serialize};
 
 use crate::common::{copy_dir_ignore, make_project, uv_snapshot, TestContext};
-
-fn install_workspace(context: &TestContext, current_dir: &Path) -> Command {
-    let mut command = context.pip_install();
-    command.arg("-e").arg(current_dir);
-    command
-}
 
 fn workspaces_dir() -> PathBuf {
     env::current_dir()
@@ -35,7 +28,6 @@ fn test_albatross_in_examples_bird_feeder() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace
@@ -43,12 +35,14 @@ fn test_albatross_in_examples_bird_feeder() {
         .join("examples")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -56,18 +50,19 @@ fn test_albatross_in_examples_bird_feeder() {
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-in-example/examples/bird-feeder)
      + idna==3.6
      + sniffio==1.3.1
-    "###
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Resolved 4 packages in [TIME]
+    Audited 4 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
@@ -78,34 +73,36 @@ fn test_albatross_in_examples() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace.join("albatross-in-example");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-in-example)
      + tqdm==4.66.2
-    "###
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Resolved 3 packages in [TIME]
+    Audited 2 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
@@ -116,34 +113,36 @@ fn test_albatross_just_project() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace.join("albatross-just-project");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 3 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-just-project)
      + tqdm==4.66.2
-    "###
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Resolved 3 packages in [TIME]
+    Audited 2 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
@@ -154,20 +153,39 @@ fn test_albatross_project_in_excluded() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace.join("albatross-project-in-excluded");
+
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 3 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-project-in-excluded)
+     + tqdm==4.66.2
+    "
+    );
 
     let current_dir = workspace
         .join("albatross-project-in-excluded")
         .join("excluded")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -175,18 +193,19 @@ fn test_albatross_project_in_excluded() {
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-project-in-excluded/excluded/bird-feeder)
      + idna==3.6
      + sniffio==1.3.1
-    "###
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Resolved 4 packages in [TIME]
+    Audited 4 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
@@ -195,17 +214,14 @@ fn test_albatross_project_in_excluded() {
         .join("albatross-project-in-excluded")
         .join("packages")
         .join("seeds");
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-project-in-excluded/packages/seeds)
-    "###
+    error: The project is marked as unmanaged: `[TEMP_DIR]/workspace/albatross-project-in-excluded/packages/seeds`
+    "
     );
 }
 
@@ -214,18 +230,19 @@ fn test_albatross_root_workspace() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace.join("albatross-root-workspace");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 8 packages in [TIME]
     Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace)
@@ -235,18 +252,19 @@ fn test_albatross_root_workspace() {
      + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
      + sniffio==1.3.1
      + tqdm==4.66.2
-    "###
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Resolved 8 packages in [TIME]
+    Audited 7 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
@@ -257,7 +275,6 @@ fn test_albatross_root_workspace_bird_feeder() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace
@@ -265,13 +282,15 @@ fn test_albatross_root_workspace_bird_feeder() {
         .join("packages")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: [TEMP_DIR]/workspace/albatross-root-workspace/.venv
+    Resolved 8 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
@@ -279,18 +298,19 @@ fn test_albatross_root_workspace_bird_feeder() {
      + idna==3.6
      + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
      + sniffio==1.3.1
-    "###
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Resolved 8 packages in [TIME]
+    Audited 5 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
@@ -301,7 +321,6 @@ fn test_albatross_root_workspace_albatross() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace
@@ -309,13 +328,15 @@ fn test_albatross_root_workspace_albatross() {
         .join("packages")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: [TEMP_DIR]/workspace/albatross-root-workspace/.venv
+    Resolved 8 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
@@ -323,18 +344,19 @@ fn test_albatross_root_workspace_albatross() {
      + idna==3.6
      + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
      + sniffio==1.3.1
-    "###
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Resolved 8 packages in [TIME]
+    Audited 5 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
@@ -345,7 +367,6 @@ fn test_albatross_virtual_workspace() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace
@@ -353,13 +374,15 @@ fn test_albatross_virtual_workspace() {
         .join("packages")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: [TEMP_DIR]/workspace/albatross-virtual-workspace/.venv
+    Resolved 8 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
@@ -367,18 +390,19 @@ fn test_albatross_virtual_workspace() {
      + idna==3.6
      + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-virtual-workspace/packages/seeds)
      + sniffio==1.3.1
-    "###
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Resolved 8 packages in [TIME]
+    Audited 5 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
@@ -793,7 +817,7 @@ fn workspace_to_workspace_paths_dependencies() -> Result<()> {
     "#};
     make_project(&other_workspace.join("packages").join("e"), "e", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&main_workspace), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().current_dir(&main_workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -856,7 +880,7 @@ fn workspace_empty_member() -> Result<()> {
     // ... and an empty c.
     fs_err::create_dir_all(workspace.join("packages").join("c"))?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().current_dir(&workspace), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -898,7 +922,7 @@ fn workspace_hidden_files() -> Result<()> {
     // ... and a hidden c.
     fs_err::create_dir_all(workspace.join("packages").join(".c"))?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -961,7 +985,7 @@ fn workspace_hidden_member() -> Result<()> {
     "};
     make_project(&workspace.join("packages").join(".c"), "c", deps)?;
 
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1025,7 +1049,7 @@ fn workspace_non_included_member() -> Result<()> {
     make_project(&workspace.join("c"), "c", deps)?;
 
     // Locking from `c` should not include any workspace members.
-    uv_snapshot!(context.filters(), context.lock().current_dir(workspace.join("c")), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().current_dir(workspace.join("c")), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1106,7 +1130,7 @@ fn workspace_inherit_sources() -> Result<()> {
     library.child("src/__init__.py").touch()?;
 
     // As-is, resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().arg("--offline").current_dir(&workspace), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1138,7 +1162,7 @@ fn workspace_inherit_sources() -> Result<()> {
     leaf.child("src/__init__.py").touch()?;
 
     // Resolving should succeed.
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().arg("--offline").current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1181,7 +1205,7 @@ fn workspace_inherit_sources() -> Result<()> {
     "#})?;
 
     // Resolving should succeed.
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().arg("--offline").current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1273,7 +1297,7 @@ fn workspace_inherit_sources() -> Result<()> {
 
     // Resolving should succeed; the member should still use the root's source, despite defining
     // some of its own
-    uv_snapshot!(context.filters(), context.lock().arg("--offline").current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().arg("--offline").current_dir(&workspace), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1326,7 +1350,7 @@ fn workspace_unsatisfiable_member_dependencies() -> Result<()> {
     leaf.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().current_dir(&workspace), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1394,7 +1418,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting() -> Result<()> {
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().current_dir(&workspace), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1477,7 +1501,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_threeway() -> Result<
     bird.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().current_dir(&workspace), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1547,7 +1571,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_extra() -> Result<()>
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().current_dir(&workspace), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1617,7 +1641,7 @@ fn workspace_unsatisfiable_member_dependencies_conflicting_dev() -> Result<()> {
     bar.child("src/__init__.py").touch()?;
 
     // Resolving should fail.
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().current_dir(&workspace), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1688,7 +1712,7 @@ fn workspace_member_name_shadows_dependencies() -> Result<()> {
 
     // We should fail
     // TODO(zanieb): This error message is bad?
-    uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().current_dir(&workspace), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1732,7 +1756,7 @@ fn test_path_hopping() -> Result<()> {
     // ... that depends on bar, a stub project.
     make_project(&context.temp_dir.join("libs").join("bar"), "bar", "")?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&main_project_dir), @r###"
+    uv_snapshot!(context.filters(), universal_windows_filters=true, context.lock().arg("--preview").current_dir(&main_project_dir), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
