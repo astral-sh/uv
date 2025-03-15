@@ -433,7 +433,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: "Build"
-        run: cargo build
+        run: cargo build --features self-update
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
@@ -511,7 +511,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: "Build"
-        run: cargo build --bin uv --bin uvx
+        run: cargo build --features self-update --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
@@ -545,7 +545,7 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --bin uv --bin uvx
+        run: cargo build --features self-update --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
@@ -583,7 +583,7 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --target aarch64-pc-windows-msvc
+        run: cargo build --features self-update --target aarch64-pc-windows-msvc
 
       - name: "Upload binary"
         uses: actions/upload-artifact@v4
@@ -736,6 +736,7 @@ jobs:
           ./uvx -v ruff --version
           eval "$(./uv generate-shell-completion bash)"
           eval "$(./uvx --generate-shell-completion bash)"
+          ./uv self uninstall --remove-data
 
   smoke-test-linux-musl:
     timeout-minutes: 10
@@ -790,6 +791,7 @@ jobs:
           ./uvx -v ruff --version
           eval "$(./uv generate-shell-completion bash)"
           eval "$(./uvx --generate-shell-completion bash)"
+          ./uv self uninstall --remove-data
 
   smoke-test-windows-x86_64:
     timeout-minutes: 10
@@ -810,6 +812,7 @@ jobs:
           ./uvx -v ruff --version
           (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
+          ./uv self uninstall --remove-data
 
   smoke-test-windows-aarch64:
     timeout-minutes: 10
@@ -833,6 +836,7 @@ jobs:
           ./uvx -v ruff --version
           (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
+          ./uv self uninstall --remove-data
 
   integration-test-conda:
     timeout-minutes: 10
