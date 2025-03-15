@@ -527,6 +527,10 @@ See [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py
 
 Adds directories to Python module search path (e.g., `PYTHONPATH=/path/to/modules`).
 
+### `PYTHONUNBUFFERED`
+
+If this is set to a non-empty string, forces unbuffered I/O streams for stdout and stderr, equivalent to `-u` in Python.
+
 ### `RUST_LOG`
 
 If set, uv will use this value as the log level for its `--verbose` output. Accepts
