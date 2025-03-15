@@ -44,3 +44,9 @@ impl Timestamp {
         Self(std::time::SystemTime::now())
     }
 }
+
+impl From<std::time::SystemTime> for Timestamp {
+    fn from(system_time: std::time::SystemTime) -> Self {
+        Self(system_time)
+    }
+}
