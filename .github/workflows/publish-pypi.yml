@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: "Install uv"
         uses: astral-sh/setup-uv@v5
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           pattern: wheels_uv-*
           path: wheels_uv
@@ -42,7 +42,7 @@ jobs:
     steps:
       - name: "Install uv"
         uses: astral-sh/setup-uv@v5
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           pattern: wheels_uv_build-*
           path: wheels_uv_build
