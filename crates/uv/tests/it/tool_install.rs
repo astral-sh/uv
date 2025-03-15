@@ -3422,6 +3422,6 @@ fn tool_install_git_relative_submodules() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@62466a857b092f473ad4d406567fd272d819cbdc)
+     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@6d202a06d658179d3fa853be361f9d787ec50334)
     ");
 }

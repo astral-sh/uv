@@ -9315,7 +9315,7 @@ def main():
 
 #[test]
 #[cfg(feature = "git")]
-fn test_remote_git_submodule_relative_url() {
+fn remote_git_submodule_relative_url() {
     let context = TestContext::new("3.13");
 
     uv_snapshot!(context.filters(), context.pip_install()
@@ -9328,6 +9328,6 @@ fn test_remote_git_submodule_relative_url() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@62466a857b092f473ad4d406567fd272d819cbdc)
+     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@6d202a06d658179d3fa853be361f9d787ec50334)
     ");
 }
