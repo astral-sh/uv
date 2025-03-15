@@ -144,6 +144,7 @@ pub(crate) async fn pin(
         let Some(config_dir) = user_uv_config_dir() else {
             return Err(anyhow::anyhow!("No user-level config directory found."));
         };
+        fs_err::tokio::create_dir_all(&config_dir).await?;
         PythonVersionFile::new(config_dir.join(PYTHON_VERSION_FILENAME))
             .with_versions(vec![request])
     } else {
