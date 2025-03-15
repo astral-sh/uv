@@ -112,7 +112,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digests
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: digests-${{ env.PLATFORM_TUPLE }}
           path: /tmp/digests/*
@@ -135,7 +135,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           path: /tmp/digests
           pattern: digests-*
@@ -321,7 +321,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           path: /tmp/digests
           pattern: digests-*
