@@ -384,6 +384,10 @@ Specifies the "bin" directory for installing tool executables.
 
 Specifies the directory where uv stores managed tools.
 
+### `UV_TORCH_BACKEND`
+
+Equivalent to the `--torch-backend` command-line argument (e.g., `cpu`, `cu126`, or `auto`).
+
 ### `UV_UNMANAGED_INSTALL`
 
 Used ephemeral environments like CI to install uv to a specific path while preventing

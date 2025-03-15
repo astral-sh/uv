@@ -3,7 +3,6 @@ use std::path::PathBuf;
 
 use url::Url;
 
-use crate::{FilesystemOptions, Options, PipOptions};
 use uv_configuration::{
     ConfigSettings, IndexStrategy, KeyringProviderType, RequiredVersion, TargetTriple,
     TrustedPublishing,
@@ -14,6 +13,8 @@ use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_torch::TorchMode;
+
+use crate::{FilesystemOptions, Options, PipOptions};
 
 pub trait Combine {
     /// Combine two values, preferring the values in `self`.

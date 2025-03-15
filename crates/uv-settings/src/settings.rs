@@ -1554,13 +1554,14 @@ pub struct PipOptions {
     ///
     /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
     /// installed CUDA drivers.
+    ///
+    /// This option is in preview and may change in any future release.
     #[option(
         default = "null",
         value_type = "str",
         example = r#"
             torch-backend = "auto"
-        "#,
-        possible_values = true
+        "#
     )]
     pub torch_backend: Option<TorchMode>,
 }

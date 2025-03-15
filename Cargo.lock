@@ -5408,7 +5408,6 @@ dependencies = [
  "rustc-hash",
  "serde",
  "thiserror 2.0.12",
- "uv-pep440",
  "uv-small-str",
 ]
 
@@ -5782,12 +5781,16 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "either",
+ "fs-err 3.1.0",
  "schemars",
  "serde",
+ "thiserror 2.0.12",
+ "tracing",
  "uv-distribution-types",
  "uv-normalize",
  "uv-pep440",
  "uv-platform-tags",
+ "uv-static",
 ]
 
 [[package]]

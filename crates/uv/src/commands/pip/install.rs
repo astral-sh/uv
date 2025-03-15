@@ -7,7 +7,6 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
 
-
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -47,7 +46,6 @@ use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
-
 
 /// Install packages into the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -350,9 +348,8 @@ pub(crate) async fn pip_install(
                 .as_ref()
                 .unwrap_or(interpreter.platform())
                 .os(),
-            interpreter.accelerator(),
         )
-    });
+    }).transpose()?;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?

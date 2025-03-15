@@ -8506,16 +8506,20 @@ fn avoid_cached_wheel() {
         .venv()
         .arg("--python")
         .arg("3.10")
+        .arg(".venv-3.10")
         .assert()
         .success();
 
     uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python")
+        .arg(".venv-3.10")
         .arg("multiprocess"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.10.[X] environment at: .venv-3.10
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
@@ -8529,19 +8533,21 @@ fn avoid_cached_wheel() {
         .venv()
         .arg("--python")
         .arg("3.11")
+        .arg(".venv-3.11")
         .assert()
         .success();
 
     // `multiprocessing` should be re-downloaded (i.e., we should have a `Prepare` step here).
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("--python")
-        .arg("3.11")
+        .arg(".venv-3.11")
         .arg("multiprocess"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Using Python 3.11.[X] environment at: .venv-3.11
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 2 packages in [TIME]

@@ -15194,7 +15194,7 @@ fn lock_explicit_default_index() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--verbose"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--verbose"), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -15224,7 +15224,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG No compatible version found for: project
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
-    "###);
+    "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
@@ -24883,7 +24883,7 @@ fn lock_pytorch_cpu() -> Result<()> {
 
 /// Ensure that the PyTorch index-specific forks don't use the PyPI preference. If we solve a PyPI
 /// fork first, and reuse the preferences, we'll end up selecting `2.2.2` (rather than `2.2.2+cpu`)
-/// in the `PyTorch` forks.
+/// in the PyTorch forks.
 ///
 /// Regression test for: <https://github.com/astral-sh/uv/issues/10772>
 #[test]

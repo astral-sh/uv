@@ -352,9 +352,8 @@ pub(crate) async fn pip_compile(
                 .as_ref()
                 .unwrap_or(interpreter.platform())
                 .os(),
-            interpreter.accelerator(),
         )
-    });
+    }).transpose()?;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?

@@ -6,7 +6,6 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
-
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -42,7 +41,6 @@ use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
-
 
 /// Install a set of locked requirements into the current Python environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -278,9 +276,8 @@ pub(crate) async fn pip_sync(
                 .as_ref()
                 .unwrap_or(interpreter.platform())
                 .os(),
-            interpreter.accelerator(),
         )
-    });
+    }).transpose()?;
 
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
