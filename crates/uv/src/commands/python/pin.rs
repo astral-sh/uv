@@ -1,3 +1,4 @@
+use std::env::current_dir;
 use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
@@ -81,6 +82,7 @@ pub(crate) async fn pin(
         EnvironmentPreference::OnlySystem,
         python_preference,
         cache,
+        project_dir,
     ) {
         Ok(python) => Some(python),
         // If no matching Python version is found, don't fail unless `resolved` was requested
@@ -225,6 +227,14 @@ fn warn_if_existing_pin_incompatible_with_project(
         }
     }
 
+    let root_directory = match current_dir() {
+        Ok(dir) => dir,
+        Err(err) => {
+            warn_user_once!("Failed to resolve current directory: {err}");
+            return;
+        }
+    };
+
     // If there is not a version in the pinned request, attempt to resolve the pin into an
     // interpreter to check for compatibility on the current system.
     match PythonInstallation::find(
@@ -232,6 +242,7 @@ fn warn_if_existing_pin_incompatible_with_project(
         EnvironmentPreference::OnlySystem,
         python_preference,
         cache,
+        root_directory.as_path(),
     ) {
         Ok(python) => {
             let python_version = python.python_version();
