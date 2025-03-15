@@ -399,9 +399,22 @@ impl GitCheckout {
     /// *doesn't* exist, and then once we're done we create the file.
     ///
     /// [`.cargo-ok`]: CHECKOUT_READY_LOCK
+    /// `git reset --hard [<commit>]` breaks relatives urls for submodules. To fix this,
+    /// we run `git submodule update --recursive --init` before the reset.
     fn reset(&self) -> Result<()> {
         let ok_file = self.repo.path.join(CHECKOUT_READY_LOCK);
         let _ = paths::remove_file(&ok_file);
+
+        // Update submodules (`git submodule update --recursive --init`)
+        ProcessBuilder::new(GIT.as_ref()?)
+            .arg("submodule")
+            .arg("update")
+            .arg("--recursive")
+            .arg("--init")
+            .cwd(&self.repo.path)
+            .exec_with_output()
+            .map(drop)?;
+
         debug!("Reset {} to {}", self.repo.path.display(), self.revision);
 
         // Perform the hard reset.
@@ -411,16 +424,6 @@ impl GitCheckout {
             .arg(self.revision.as_str())
             .cwd(&self.repo.path)
             .exec_with_output()?;
-
-        // Update submodules (`git submodule update --recursive`).
-        ProcessBuilder::new(GIT.as_ref()?)
-            .arg("submodule")
-            .arg("update")
-            .arg("--recursive")
-            .arg("--init")
-            .cwd(&self.repo.path)
-            .exec_with_output()
-            .map(drop)?;
 
         paths::create(ok_file)?;
         Ok(())
