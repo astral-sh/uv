@@ -3409,10 +3409,11 @@ fn tool_install_mismatched_name() {
 #[test]
 #[cfg(feature = "git")]
 fn tool_install_git_relative_submodules() {
+    const TEST_REPO: &str = "Choudhry18/uv-test.git"; // Specific test repository;
     let context = TestContext::new("3.13");
 
     uv_snapshot!(context.filters(), context.tool_install()
-        .arg("git+https://github.com/Choudhry18/uv-test.git"), @r"
+        .arg(format!("git+https://github.com/{TEST_REPO}")), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3422,6 +3423,6 @@ fn tool_install_git_relative_submodules() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@ba4cb26176c00a3e65ce6101b9380aabb38729d4)
+     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@043395dfdb441ebea950ea809a0c004c1abbf385)
     ");
 }

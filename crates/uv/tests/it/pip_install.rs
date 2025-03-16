@@ -9379,7 +9379,7 @@ fn recovery_after_interruption() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@ba4cb26176c00a3e65ce6101b9380aabb38729d4)
+     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@043395dfdb441ebea950ea809a0c004c1abbf385)
     ");
 }
 
@@ -9399,6 +9399,6 @@ fn remote_git_submodule_relative_url() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@ba4cb26176c00a3e65ce6101b9380aabb38729d4)
+     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@043395dfdb441ebea950ea809a0c004c1abbf385)
     ");
 }
