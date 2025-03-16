@@ -209,6 +209,7 @@ mod resolver {
             interpreter.markers(),
             conflicts,
             Some(&TAGS),
+            None,
             &flat_index,
             &index,
             &hashes,

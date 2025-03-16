@@ -10,8 +10,9 @@ use tracing::{Level, debug, enabled, warn};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification,
-    HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy, Upgrade,
+    BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints, DryRun,
+    ExtrasSpecification, HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy,
+    Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -24,7 +25,7 @@ use uv_install_wheel::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::GroupName;
 use uv_pep508::PackageName;
-use uv_pypi_types::Conflicts;
+use uv_pypi_types::{Conflicts, VariantProviderBackend};
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
     PythonRequest, PythonVersion, Target,
@@ -36,6 +37,7 @@ use uv_resolver::{
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
+use uv_variants::{get_combinations, VariantSet};
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 
@@ -57,6 +59,7 @@ pub(crate) async fn pip_install(
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
     build_constraints_from_workspace: Vec<Requirement>,
+    variants: Vec<VariantProviderBackend>,
     extras: &ExtrasSpecification,
     groups: BTreeMap<PathBuf, Vec<GroupName>>,
     resolution_mode: ResolutionMode,
@@ -374,7 +377,7 @@ pub(crate) async fn pip_install(
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
+        FlatIndex::from_entries(entries, Some(&tags), None, &hasher, &build_options)
     };
 
     // Determine whether to enable build isolation.
@@ -449,6 +452,25 @@ pub(crate) async fn pip_install(
         // When resolving, don't take any external preferences into account.
         let preferences = Vec::default();
 
+        // Compute the set of available variants.
+        let variants = {
+            // Run all providers.
+            let mut configs = vec![];
+            for provider in variants {
+                let builder = build_dispatch
+                    .setup_variants(provider, BuildOutput::Debug)
+                    .await?;
+                let config = builder.build().await?;
+                configs.push(config);
+            }
+
+            // Compute all combinations of the variants.
+            let combinations = get_combinations(configs);
+
+            VariantSet::new(&combinations)?
+        };
+
+
         let options = OptionsBuilder::new()
             .resolution_mode(resolution_mode)
             .prerelease_mode(prerelease_mode)
@@ -475,9 +497,10 @@ pub(crate) async fn pip_install(
             &reinstall,
             &upgrade,
             Some(&tags),
-            ResolverEnvironment::specific(marker_env.clone()),
-            python_requirement,
-            interpreter.markers(),
+            Some(&variants),
+        ResolverEnvironment::specific(marker_env.clone()),
+        python_requirement,
+        interpreter.markers(),
             Conflicts::empty(),
             &client,
             &flat_index,

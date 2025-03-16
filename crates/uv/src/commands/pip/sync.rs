@@ -301,13 +301,16 @@ pub(crate) async fn pip_sync(
     // Combine the `--no-binary` and `--no-build` flags from the requirements files.
     let build_options = build_options.combine(no_binary, no_build);
 
+    // TODO(charlie): Compute available variants.
+    let variants = None;
+
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
+        FlatIndex::from_entries(entries, Some(&tags), variants, &hasher, &build_options)
     };
 
     // Determine whether to enable build isolation.
@@ -410,9 +413,10 @@ pub(crate) async fn pip_sync(
             &reinstall,
             &upgrade,
             Some(&tags),
-            ResolverEnvironment::specific(marker_env.clone()),
-            python_requirement,
-            interpreter.markers(),
+            variants,
+        ResolverEnvironment::specific(marker_env.clone()),
+        python_requirement,
+        interpreter.markers(),
             Conflicts::empty(),
             &client,
             &flat_index,
