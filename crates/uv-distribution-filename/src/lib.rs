@@ -101,6 +101,6 @@ mod tests {
 
     #[test]
     fn wheel_filename_size() {
-        assert_eq!(size_of::<WheelFilename>(), 48);
+        assert_eq!(size_of::<WheelFilename>(), 64);
     }
 }

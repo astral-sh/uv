@@ -1874,13 +1874,16 @@ pub(crate) async fn resolve_environment(
         None => vec![],
     };
 
+    // TODO(charlie): Compute available variants.
+    let variants = None;
+
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(tags), None, &hasher, build_options)
     };
 
     let workspace_cache = WorkspaceCache::default();
@@ -1924,6 +1927,7 @@ pub(crate) async fn resolve_environment(
         &reinstall,
         &upgrade,
         Some(tags),
+        variants,
         ResolverEnvironment::specific(marker_env),
         python_requirement,
         interpreter.markers(),
@@ -2011,13 +2015,16 @@ pub(crate) async fn sync_environment(
     let hasher = HashStrategy::default();
     let workspace_cache = WorkspaceCache::default();
 
+    // TODO(charlie): Compute available variants.
+    let variants = None;
+
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(tags), variants, &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -2231,13 +2238,16 @@ pub(crate) async fn update_environment(
     let tags = venv.interpreter().tags()?;
     let python_requirement = PythonRequirement::from_interpreter(interpreter);
 
+    // TODO(charlie): Compute available variants.
+    let variants = None;
+
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
         let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
         let entries = client
             .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, Some(tags), &hasher, build_options)
+        FlatIndex::from_entries(entries, Some(tags), variants, &hasher, build_options)
     };
 
     // Create a build dispatch.
@@ -2263,6 +2273,9 @@ pub(crate) async fn update_environment(
         preview,
     );
 
+    // TODO(charlie): Compute available variants.
+    let variants = None;
+
     // Resolve the requirements.
     let resolution = match pip::operations::resolve(
         requirements,
@@ -2279,6 +2292,7 @@ pub(crate) async fn update_environment(
         reinstall,
         upgrade,
         Some(tags),
+        variants,
         ResolverEnvironment::specific(marker_env.clone()),
         python_requirement,
         venv.interpreter().markers(),
