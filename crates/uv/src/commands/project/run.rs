@@ -1563,20 +1563,19 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
 
 
 /// Matches valid Python executable names:
-/// - ✅ "python", "python3", "python3.9", "python4", "python3.10"
-/// - ❌ "python39", "python3abc", "python3.12b3", "python3.13.3"
+/// - ✅ "python", "python3", "python3.9", "python4", "python3.10", "python3.13.3"
+/// - ❌ "python39", "python3abc", "python3.12b3", "", "python-foo"
 fn is_python_executable(executable_command: &str) -> bool {
     executable_command
         .strip_prefix("python")
         .map_or(false, |version| version.len() == 0 || is_valid_python_version(version))
 }
 
-/// Checks if a version string is a valid Python major.minor version (without patch).
+/// Checks if a version string is a valid Python major.minor.patch version.
 fn is_valid_python_version(version: &str) -> bool {
     PythonVersion::from_str(version)
         .map_or(false, 
             |ver| 
-            ver.patch().is_none() && 
             ver.is_stable() &&
             // Should not contain post info. E.g. "3.12b3"
             !ver.is_post()
@@ -1605,6 +1604,7 @@ mod tests {
     fn valid_is_python_executable() {
         let valid_cases = [
             "python3", "python3.9", "python3.10", "python4", "python",
+            "python3.11.3",
             "python39", // Still a valid executable, although likely a typo
         ];
         assert_cases(&valid_cases, is_python_executable, "valid_is_python_executable", true);
@@ -1613,7 +1613,7 @@ mod tests {
     #[test]
     fn invalid_is_python_executable() {
         let invalid_cases = [
-            "python-foo", "python3abc", "python3.12b3", "python3.13.3", 
+            "python-foo", "python3abc", "python3.12b3",
             "pyth0n3", "", "Python3.9", "python.3.9"
         ];
         assert_cases(&invalid_cases, is_python_executable, "invalid_is_python_executable", false);
@@ -1621,15 +1621,15 @@ mod tests {
 
     #[test]
     fn valid_python_versions() {
-        let valid_cases = ["3", "3.9", "4", "3.10", "49"];
+        let valid_cases = ["3", "3.9", "4", "3.10", "49", "3.11.3"];
         assert_cases(&valid_cases, is_valid_python_version, "valid_python_versions", true);
     }
 
     #[test]
     fn invalid_python_versions() {
         let invalid_cases = [
-            "3.9.1", "3.12b3", "3.12rc1", "3.12a1",
-            "3.12.post1", "3.12-foo", "3abc", "..", ""
+            "3.12b3", "3.12rc1", "3.12a1",
+            "3.12.post1", "3.12.1-foo", "3abc", "..", ""
         ];
         assert_cases(&invalid_cases, is_valid_python_version, "invalid_python_versions", false);
     }
