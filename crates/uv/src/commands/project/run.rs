@@ -1088,16 +1088,34 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     // Ensure `VIRTUAL_ENV` is set.
     if interpreter.is_virtualenv() {
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
-    }
-
-    let is_executable = is_python_executable(command.display_executable().as_ref());
-    println!("Is executable: {}, {}", command.display_executable(), is_executable);
+    };
     
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
     // TODO(zanieb): Throw a nicer error message if the command is not found
     let handle = process
         .spawn()
+        .map_err(|err| {
+            let executable: Cow<'_, str> = command.display_executable();  
+            // Special case for providing meaningful error message when users 
+            // attempt to invoke python. E.g. "python3.11". 
+            // Will not work if patch version is provided. I.E. "python3.11.9"
+            if err.kind() == std::io::ErrorKind::NotFound && is_python_executable(&executable) {
+                // Get version from python command string
+                // e.g. python3.12 -> "3.12" or "" if python version not specified. 
+                let version_part = executable.strip_prefix("python").unwrap_or("");
+                anyhow!(
+                    "`{}` not available in the current environment, which uses python `{}`. 
+                    Did you mean `uv run -p {} python` or `uvx python@{}`?",
+                    executable,
+                    base_interpreter.python_version().only_release(),
+                    version_part,
+                    version_part
+                )
+            } else {
+                err.into()
+            }
+        })
         .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
 
     run_to_completion(handle).await
