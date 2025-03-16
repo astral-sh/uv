@@ -144,6 +144,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     let lock_state = UniversalState::default();
     let sync_state = lock_state.fork();
     let workspace_cache = WorkspaceCache::default();
+    let mut project_found = true;
 
     // Read from the `.env` file, if necessary.
     if !no_env_file {
@@ -805,6 +806,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             venv.into_interpreter()
         } else {
             debug!("No project found; searching for Python interpreter");
+            project_found = false;
 
             let interpreter = {
                 let client_builder = BaseClientBuilder::new()
@@ -1104,13 +1106,28 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // Get version from python command string
                 // e.g. python3.12 -> "3.12" or "" if python version not specified. 
                 let version_part = executable.strip_prefix("python").unwrap_or("");
+                let current_executable_python_version = base_interpreter.python_version().only_release();
+                // Determine the environment type
+                let env_type = if project_found { "the project" } else { "the" };
+
+                // Construct the message dynamically
+                let message_suffix = if project_found {
+                    format!(
+                        "Did you mean to change the environment to Python {} with `uv run -p {} python`?",
+                        version_part, version_part
+                    )
+                } else {
+                    format!(
+                        "Did you mean to search for a Python {} environment with `uv run -p {} python`?",
+                        version_part, version_part
+                    )
+                };
                 anyhow!(
-                    "`{}` not available in the current environment, which uses python `{}`. 
-                    Did you mean `uv run -p {} python` or `uvx python@{}`?",
+                    "`{}` not available in {} environment, which uses python `{}`. {}",
                     executable,
-                    base_interpreter.python_version().only_release(),
-                    version_part,
-                    version_part
+                    env_type,
+                    current_executable_python_version,
+                    message_suffix
                 )
             } else {
                 err.into()
