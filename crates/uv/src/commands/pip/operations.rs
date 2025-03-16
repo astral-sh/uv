@@ -42,6 +42,7 @@ use uv_resolver::{
 };
 use uv_tool::InstalledTools;
 use uv_types::{BuildContext, HashStrategy, InFlight, InstalledPackagesProvider};
+use uv_variants::VariantSet;
 use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, ResolveLogger};
@@ -118,6 +119,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     reinstall: &Reinstall,
     upgrade: &Upgrade,
     tags: Option<&Tags>,
+    variants: Option<&VariantSet>,
     resolver_env: ResolverEnvironment,
     python_requirement: PythonRequirement,
     current_environment: &MarkerEnvironment,
@@ -348,6 +350,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             current_environment,
             conflicts,
             tags,
+            variants,
             flat_index,
             index,
             hasher,

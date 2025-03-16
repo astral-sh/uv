@@ -82,6 +82,7 @@ use crate::{
 };
 pub(crate) use provider::MetadataUnavailable;
 use uv_torch::TorchStrategy;
+use uv_variants::VariantSet;
 
 mod availability;
 mod batch_prefetch;
@@ -168,6 +169,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         current_environment: &MarkerEnvironment,
         conflicts: Conflicts,
         tags: Option<&'a Tags>,
+        variants: Option<&'a VariantSet>,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
         hasher: &'a HashStrategy,
@@ -179,6 +181,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             database,
             flat_index,
             tags,
+            variants,
             python_requirement.target(),
             AllowedYanks::from_manifest(&manifest, &env, options.dependency_mode),
             hasher,
