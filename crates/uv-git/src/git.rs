@@ -482,16 +482,16 @@ impl GitCheckout {
         self
     }
 
-    /// This performs `git reset --hard` to the revision of this checkout, with
-    /// additional interrupt protection by a dummy file [`CHECKOUT_READY_LOCK`].
+    /// This performs `git reset --hard` to the revision of this checkout and updates submodules,
+    /// with additional interrupt protection by a dummy file [`CHECKOUT_READY_LOCK`].
     ///
-    /// If we're interrupted while performing a `git reset` (e.g., we die
+    /// If we're interrupted while performing any of the processes in this method (e.g., we die
     /// because of a signal) uv needs to be sure to try to check out this
     /// repo again on the next go-round.
     ///
     /// To enable this we have a dummy file in our checkout, [`.ok`],
-    /// which if present means that the repo has been successfully reset and is
-    /// ready to go. Hence, if we start to do a reset, we make sure this file
+    /// which if present means that the repo has been successfully checked out and is
+    /// ready to go. Hence if we start to update submodules, we make sure this file
     /// *doesn't* exist, and then once we're done we create the file.
     ///
     /// [`.ok`]: CHECKOUT_READY_LOCK
@@ -505,7 +505,6 @@ impl GitCheckout {
         // as smudge filters can trigger on a reset even if lfs artifacts
         // were not originally "fetched".
         let lfs_skip_smudge = if with_lfs == Some(true) { "0" } else { "1" };
-
         // Store the current origin URL
         let current_origin = ProcessBuilder::new(GIT.as_ref()?)
             .arg("config")
@@ -520,7 +519,7 @@ impl GitCheckout {
 
         debug!("Reset {} to {}", self.repo.path.display(), self.revision);
 
-        // Perform the hard reset.
+        // Perform the hard reset (`git reset --hard <rev>`).
         ProcessBuilder::new(GIT.as_ref()?)
             .arg("reset")
             .arg("--hard")
