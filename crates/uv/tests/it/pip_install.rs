@@ -9258,6 +9258,12 @@ def main():
 "#,
     )?;
 
+    // Set helper as a submodule
+    Command::new("git")
+        .args(["submodule", "add", "../utilities/helpers", "mylib/helpers"])
+        .current_dir(mylib_dir.path())
+        .output()?;
+
     // Add and commit in mylib
     Command::new("git")
         .args(["add", "."])
@@ -9273,32 +9279,13 @@ def main():
         .env("GIT_COMMITTER_EMAIL", "test@example.com")
         .output()?;
 
-    // Attempt to install from the git repository with uv
-    // Create a simple file in helpers
-    helpers_dir
-        .child("second.py")
-        .write_str("def help():\n    return 'I am a helper'")?;
-
-    // Add and commit in helpers
-    Command::new("git")
-        .args(["add", "."])
-        .current_dir(helpers_dir.path())
-        .output()?;
-
-    Command::new("git")
-        .args(["commit", "-m", "submodule commit"])
-        .current_dir(helpers_dir.path())
-        .env("GIT_AUTHOR_NAME", "Test")
-        .env("GIT_AUTHOR_EMAIL", "test@example.com")
-        .env("GIT_COMMITTER_NAME", "Test")
-        .env("GIT_COMMITTER_EMAIL", "test@example.com")
-        .output()?;
-
     let mut filters = context.filters();
     filters.push((r"@[0-9a-f]{40}", "@COMMIT_HASH"));
 
     uv_snapshot!(filters, context.pip_install()
-        .arg(format!("git+file://{}", mylib_dir.path().display())), @r"
+        .arg(format!("git+file://{}", mylib_dir.path().display()))
+        // Pass through environment variable to allow file:// URLs in Git subprocesses
+        .env("GIT_ALLOW_PROTOCOL", "file:ext:http:https:ssh"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9314,12 +9301,76 @@ def main():
 }
 
 #[test]
+#[cfg(unix)] // Unix-only due to signal handling
 #[cfg(feature = "git")]
-fn remote_git_submodule_relative_url() {
+fn recovery_after_interruption() {
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+    use std::time::Duration;
+
+    // Create a custom environment marker
+    // This allows the test to run concurrently with other tests
+    const MARKER_ENV: &str = "UV_TEST_INTERRUPT_MARKER";
+    const TEST_REPO: &str = "Choudhry18/uv-test.git"; // Specific test repository
+
     let context = TestContext::new("3.13");
 
+    // Set up a flag to track when we should simulate an interruption
+    let interrupt_sent = Arc::new(Mutex::new(false));
+
+    // Set up the interruption hook in a separate thread
+    thread::spawn(move || {
+        let max_attempts = 500;
+        let mut attempt = 0;
+
+        // Keep checking until we find our specific git process or exhaust attempts
+        while attempt < max_attempts {
+            attempt += 1;
+
+            thread::sleep(Duration::from_millis(150));
+            // Find git submodule processes
+            if let Ok(output) = Command::new("pgrep").args(["-f", "git submodule"]).output() {
+                let output_str = String::from_utf8_lossy(&output.stdout).into_owned();
+                let pids: Vec<_> = output_str
+                    .trim()
+                    .lines()
+                    .filter(|s| !s.is_empty())
+                    .collect();
+
+                // For each PID, check if it has our environment marker
+                for pid in pids {
+                    if let Ok(output) = Command::new("ps").args(["e", "-p", pid]).output() {
+                        let ps_output = String::from_utf8_lossy(&output.stdout);
+
+                        if ps_output.contains(MARKER_ENV) {
+                            // Send SIGINT only to our specific process
+                            let mut lock = interrupt_sent.lock().unwrap();
+                            *lock = true;
+                            let _ = Command::new("kill").args(["-SIGINT", pid]).output();
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    });
+    // First attempt should fail due to interruption
+    let output = context
+        .pip_install()
+        .arg("git+https://github.com/Choudhry18/uv-test.git")
+        .env(MARKER_ENV, "1")
+        .output();
+
+    // Check that we got a SIGINT error
+    if let Ok(output) = output {
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("SIGINT: terminal interrupt signal")
+        );
+    }
+
+    // Second attempt should succeed
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("git+https://github.com/Choudhry18/uv-test.git"), @r"
+        .arg(format!("git+https://github.com/{TEST_REPO}")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9328,6 +9379,26 @@ fn remote_git_submodule_relative_url() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@6d202a06d658179d3fa853be361f9d787ec50334)
+     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@ba4cb26176c00a3e65ce6101b9380aabb38729d4)
+    ");
+}
+
+#[test]
+#[cfg(feature = "git")]
+fn remote_git_submodule_relative_url() {
+    const TEST_REPO: &str = "Choudhry18/uv-test.git"; // Specific test repository;
+    let context = TestContext::new("3.13");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("git+https://github.com/{TEST_REPO}")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@ba4cb26176c00a3e65ce6101b9380aabb38729d4)
     ");
 }
