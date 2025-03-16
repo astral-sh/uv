@@ -506,6 +506,14 @@ fn wheel_subdir_from_globs(
             root: src.to_path_buf(),
             err,
         })?;
+
+        // Skip the root path, which is already included as `target` prior to the loop.
+        // (If `entry.path() == src`, then `relative` is empty, and `relative_licenses` is
+        // `target`.)
+        if entry.path() == src {
+            continue;
+        }
+
         // TODO(konsti): This should be prettier.
         let relative = entry
             .path()
