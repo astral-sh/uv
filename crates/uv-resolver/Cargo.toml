@@ -37,6 +37,7 @@ uv-requirements-txt = { workspace = true }
 uv-small-str = { workspace = true }
 uv-static = { workspace = true }
 uv-types = { workspace = true }
+uv-variants = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 

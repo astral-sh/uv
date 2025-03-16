@@ -32,7 +32,7 @@ use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl}
 use uv_install_wheel::LinkMode;
 use uv_normalize::{PackageName, PipGroupName};
 use uv_pep508::{ExtraName, MarkerTree, RequirementOrigin};
-use uv_pypi_types::{Requirement, SupportedEnvironments};
+use uv_pypi_types::{Requirement, SupportedEnvironments, VariantProviderBackend};
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_resolver::{
     AnnotationStyle, DependencyMode, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode,
@@ -1850,6 +1850,7 @@ pub(crate) struct PipInstallSettings {
     pub(crate) overrides: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) dry_run: DryRun,
+    pub(crate) variants_from_workspace: Vec<VariantProviderBackend>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
@@ -1900,6 +1901,12 @@ impl PipInstallSettings {
             dry_run,
             compat_args: _,
         } = args;
+
+        let variants_from_workspace = if let Some(configuration) = &filesystem {
+            configuration.variant.clone().unwrap_or_default()
+        } else {
+            Vec::new()
+        };
 
         let constraints_from_workspace = if let Some(configuration) = &filesystem {
             configuration
@@ -1960,6 +1967,7 @@ impl PipInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             dry_run: DryRun::from_args(dry_run),
+            variants_from_workspace,
             constraints_from_workspace,
             overrides_from_workspace,
             build_constraints_from_workspace,

@@ -645,6 +645,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.constraints_from_workspace,
                 args.overrides_from_workspace,
                 args.build_constraints_from_workspace,
+                args.variants_from_workspace,
                 &args.settings.extras,
                 groups,
                 args.settings.resolution,

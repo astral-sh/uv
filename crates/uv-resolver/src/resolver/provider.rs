@@ -8,6 +8,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy};
+use uv_variants::VariantSet;
 
 use crate::flat_index::FlatIndex;
 use crate::version_map::VersionMap;
@@ -110,6 +111,7 @@ pub struct DefaultResolverProvider<'a, Context: BuildContext> {
     /// These are the entries from `--find-links` that act as overrides for index responses.
     flat_index: FlatIndex,
     tags: Option<Tags>,
+    variants: Option<VariantSet>,
     requires_python: RequiresPython,
     allowed_yanks: AllowedYanks,
     hasher: HashStrategy,
@@ -124,6 +126,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
         fetcher: DistributionDatabase<'a, Context>,
         flat_index: &'a FlatIndex,
         tags: Option<&'a Tags>,
+        variants: Option<&'a VariantSet>,
         requires_python: &'a RequiresPython,
         allowed_yanks: AllowedYanks,
         hasher: &'a HashStrategy,
@@ -135,6 +138,7 @@ impl<'a, Context: BuildContext> DefaultResolverProvider<'a, Context> {
             fetcher,
             flat_index: flat_index.clone(),
             tags: tags.cloned(),
+            variants: variants.cloned(),
             requires_python: requires_python.clone(),
             allowed_yanks,
             hasher: hasher.clone(),
@@ -170,6 +174,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             package_name,
                             index,
                             self.tags.as_ref(),
+                            self.variants.as_ref(),
                             &self.requires_python,
                             &self.allowed_yanks,
                             &self.hasher,

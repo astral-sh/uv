@@ -697,7 +697,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2024,6 +2024,15 @@ checksum = "72bbdfd737a243da3dfc1f99ee8d6e166480f17ab4ac84d7c34aacd73fc7bd16"
 dependencies = [
  "scopeguard",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "keccak"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ecc2af9a1119c51f12a14607e783cb977bde58bc069ff0c3da1095e635d70654"
+dependencies = [
+ "cpufeatures",
 ]
 
 [[package]]
@@ -3587,6 +3596,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha3"
+version = "0.10.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
+dependencies = [
+ "digest",
+ "keccak",
+]
+
+[[package]]
 name = "sharded-slab"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3865,15 +3884,14 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.17.1"
+version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22e5a0acb1f3f55f65cc4a866c361b2fb2a0ff6366785ae6fbb5f85df07ba230"
+checksum = "488960f40a3fd53d72c2a29a58722561dee8afdd175bd88e3db4677d7b2ba600"
 dependencies = [
- "cfg-if",
  "fastrand",
  "getrandom 0.3.1",
  "once_cell",
- "rustix 0.38.44",
+ "rustix 1.0.1",
  "windows-sys 0.59.0",
 ]
 
@@ -4095,9 +4113,9 @@ source = "git+https://github.com/astral-sh/tl.git?rev=6e25b2ee2513d75385101a8ff9
 
 [[package]]
 name = "tokio"
-version = "1.43.0"
+version = "1.44.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d61fa4ffa3de412bfea335c6ecff681de2b609ba3c77ef3e00e521813a9ed9e"
+checksum = "f382da615b842244d4b8738c82ed1275e6c5dd90c459a30941cd07080b06c91a"
 dependencies = [
  "backtrace",
  "bytes",
@@ -4634,6 +4652,7 @@ dependencies = [
  "uv-tool",
  "uv-trampoline-builder",
  "uv-types",
+ "uv-variants",
  "uv-version",
  "uv-virtualenv",
  "uv-warnings",
@@ -5028,6 +5047,7 @@ dependencies = [
  "uv-python",
  "uv-resolver",
  "uv-types",
+ "uv-variant-frontend",
  "uv-version",
  "uv-workspace",
 ]
@@ -5095,6 +5115,7 @@ dependencies = [
  "uv-pep440",
  "uv-platform-tags",
  "uv-small-str",
+ "uv-variants",
 ]
 
 [[package]]
@@ -5129,6 +5150,7 @@ dependencies = [
  "uv-platform-tags",
  "uv-pypi-types",
  "uv-small-str",
+ "uv-variants",
  "version-ranges",
 ]
 
@@ -5458,6 +5480,7 @@ dependencies = [
  "anyhow",
  "hashbrown 0.15.2",
  "indexmap",
+ "indoc",
  "insta",
  "itertools 0.14.0",
  "jiff",
@@ -5658,6 +5681,7 @@ dependencies = [
  "uv-small-str",
  "uv-static",
  "uv-types",
+ "uv-variants",
  "uv-warnings",
  "uv-workspace",
 ]
@@ -5812,6 +5836,42 @@ dependencies = [
  "uv-pypi-types",
  "uv-python",
  "uv-workspace",
+]
+
+[[package]]
+name = "uv-variant-frontend"
+version = "0.1.0"
+dependencies = [
+ "anstream",
+ "fs-err 3.1.0",
+ "indoc",
+ "owo-colors",
+ "rustc-hash",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "uv-configuration",
+ "uv-fs",
+ "uv-pypi-types",
+ "uv-python",
+ "uv-static",
+ "uv-types",
+ "uv-variants",
+ "uv-virtualenv",
+]
+
+[[package]]
+name = "uv-variants"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "itertools 0.14.0",
+ "rkyv",
+ "serde",
+ "sha3",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -6118,7 +6178,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

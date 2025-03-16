@@ -208,6 +208,7 @@ mod resolver {
             markers,
             conflicts,
             Some(&TAGS),
+            None,
             &flat_index,
             &index,
             &hashes,

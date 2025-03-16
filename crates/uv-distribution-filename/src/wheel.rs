@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use std::str::FromStr;
@@ -7,6 +8,9 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 use url::Url;
 
+use crate::splitter::MemchrSplitter;
+use crate::wheel_tag::{WheelTag, WheelTagLarge, WheelTagSmall};
+use crate::{BuildTag, BuildTagError};
 use uv_cache_key::cache_digest;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::{Version, VersionParseError};
@@ -14,10 +18,7 @@ use uv_platform_tags::{
     AbiTag, LanguageTag, ParseAbiTagError, ParseLanguageTagError, ParsePlatformTagError,
     PlatformTag, TagCompatibility, Tags,
 };
-
-use crate::splitter::MemchrSplitter;
-use crate::wheel_tag::{WheelTag, WheelTagLarge, WheelTagSmall};
-use crate::{BuildTag, BuildTagError};
+use uv_variants::VariantTag;
 
 #[derive(
     Debug,
@@ -35,6 +36,7 @@ use crate::{BuildTag, BuildTagError};
 pub struct WheelFilename {
     pub name: PackageName,
     pub version: Version,
+    variant: Option<VariantTag>,
     tags: WheelTag,
 }
 
@@ -54,13 +56,24 @@ impl FromStr for WheelFilename {
 
 impl Display for WheelFilename {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}-{}-{}.whl",
-            self.name.as_dist_info_name(),
-            self.version,
-            self.tags,
-        )
+        if let Some(variant) = &self.variant {
+            write!(
+                f,
+                "{}-{}-~{}~-{}.whl",
+                self.name.as_dist_info_name(),
+                self.version,
+                variant,
+                self.tags
+            )
+        } else {
+            write!(
+                f,
+                "{}-{}-{}.whl",
+                self.name.as_dist_info_name(),
+                self.version,
+                self.tags
+            )
+        }
     }
 }
 
@@ -76,6 +89,7 @@ impl WheelFilename {
         Self {
             name,
             version,
+            variant: None,
             tags: WheelTag::Small {
                 small: WheelTagSmall {
                     python_tag,
@@ -98,14 +112,23 @@ impl WheelFilename {
 
     /// The wheel filename without the extension.
     pub fn stem(&self) -> String {
-        format!(
-            "{}-{}-{}",
-            self.name.as_dist_info_name(),
-            self.version,
-            self.tags
-        )
+        if let Some(variant) = &self.variant {
+            format!(
+                "{}-{}-~{}~-{}",
+                self.name.as_dist_info_name(),
+                self.version,
+                variant,
+                self.tags
+            )
+        } else {
+            format!(
+                "{}-{}-{}",
+                self.name.as_dist_info_name(),
+                self.version,
+                self.tags
+            )
+        }
     }
-
     /// Returns a consistent cache key with a maximum length of 64 characters.
     ///
     /// Prefers `{version}-{tags}` if such an identifier fits within the maximum allowed length;
@@ -113,14 +136,24 @@ impl WheelFilename {
     pub fn cache_key(&self) -> String {
         const CACHE_KEY_MAX_LEN: usize = 64;
 
-        let full = format!("{}-{}", self.version, self.tags);
+        // Include variant in the cache key if it exists
+        let full = if let Some(variant) = &self.variant {
+            format!("{}-{}-{}", self.version, variant, self.tags)
+        } else {
+            format!("{}-{}", self.version, self.tags)
+        };
+
         if full.len() <= CACHE_KEY_MAX_LEN {
             return full;
         }
 
-        // Create a digest of the tag string (instead of its individual fields) to retain
+        // Create a digest of the tag string (and variant if it exists) to retain
         // compatibility across platforms, Rust versions, etc.
-        let digest = cache_digest(&format!("{}", self.tags));
+        let digest = if let Some(variant) = &self.variant {
+            cache_digest(&format!("{}-{}", variant, self.tags))
+        } else {
+            cache_digest(&format!("{}", self.tags))
+        };
 
         // Truncate the version, but avoid trailing dots, plus signs, etc. to avoid ambiguity.
         let version_width = CACHE_KEY_MAX_LEN - 1 /* dash */ - 16 /* digest */;
@@ -131,6 +164,11 @@ impl WheelFilename {
         let version = version.trim_end_matches(['.', '+']);
 
         format!("{version}-{digest}")
+    }
+
+    /// Return the wheel's variant tag, if present.
+    pub fn variant(&self) -> Option<&VariantTag> {
+        self.variant.as_ref()
     }
 
     /// Return the wheel's Python tags.
@@ -181,6 +219,38 @@ impl WheelFilename {
     ///
     /// The originating `filename` is used for high-fidelity error messages.
     fn parse(stem: &str, filename: &str) -> Result<Self, WheelFilenameError> {
+        // Extract variant from filenames with the format, e.g., `dummy_project-0.0.1-~36266d4d~-py3-none-any.whl`.
+        // TODO(charlie): Integrate this into the filename parsing; it's just easier to do it upfront
+        // for now.
+        let mut variant: Option<VariantTag> = None;
+        let stem = if let Some(tilde_start) = stem.find("-~") {
+            if let Some(tilde_end) = stem[tilde_start + 1..].find("~-") {
+                // Skip the "-~".
+                let variant_start = tilde_start + 2;
+                // End before the "~-".
+                let variant_end = tilde_start + 1 + tilde_end;
+                // Validate that the variant is exactly 8 bytes.
+                let variant_str = &stem[variant_start..variant_end];
+                if variant_str.len() == 8 && variant_str.as_bytes().iter().all(|&b| b.is_ascii()) {
+                    variant = Some(VariantTag::new(variant_str.to_string()));
+                } else {
+                    return Err(WheelFilenameError::InvalidWheelFileName(
+                        filename.to_string(),
+                        format!("Variant must be exactly 8 ASCII characters, got: '{variant_str}'"),
+                    ));
+                }
+
+                // Create a new stem without the variant.
+                let before_variant = &stem[..tilde_start];
+                let after_variant = &stem[variant_end + 1..];
+                Cow::Owned(format!("{before_variant}{after_variant}"))
+            } else {
+                Cow::Borrowed(stem)
+            }
+        } else {
+            Cow::Borrowed(stem)
+        };
+
         // The wheel filename should contain either five or six entries. If six, then the third
         // entry is the build tag. If five, then the third entry is the Python tag.
         // https://www.python.org/dev/peps/pep-0427/#file-name-convention
@@ -295,6 +365,7 @@ impl WheelFilename {
         Ok(Self {
             name,
             version,
+            variant,
             tags,
         })
     }
@@ -466,11 +537,19 @@ mod tests {
     }
 
     #[test]
+    fn ok_variant_tag() {
+        insta::assert_debug_snapshot!(WheelFilename::from_str(
+            "dummy_project-0.0.1-~36266d4d~-py3-none-any.whl"
+        ));
+    }
+
+    #[test]
     fn from_and_to_string() {
         let wheel_names = &[
             "django_allauth-0.51.0-py3-none-any.whl",
             "osm2geojson-0.2.4-py3-none-any.whl",
             "numpy-1.26.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+            "dummy_project-0.0.1-~36266d4d~-py3-none-any.whl",
         ];
         for wheel_name in wheel_names {
             assert_eq!(
@@ -505,5 +584,10 @@ mod tests {
             "example-1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2.1.2.3.4.5.6.7.8.9.0.1.1.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
         ).unwrap();
         insta::assert_snapshot!(filename.cache_key(), @"1.2.3.4.5.6.7.8.9.0.1.2.3.4.5.6.7.8.9.0.1.2.1.2-80bf8598e9647cf7");
+
+        // Variant tags should be included in the cache key.
+        let filename =
+            WheelFilename::from_str("dummy_project-0.0.1-~36266d4d~-py3-none-any.whl").unwrap();
+        insta::assert_snapshot!(filename.cache_key(), @"0.0.1-36266d4d-py3-none-any");
     }
 }

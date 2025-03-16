@@ -1,3 +1,6 @@
+# Vendored dependencies for the variant prototype.
+/vendor/
+
 # Insta snapshots.
 *.pending-snap
 

@@ -11,6 +11,7 @@ pub use requirement::*;
 pub use scheme::*;
 pub use simple_json::*;
 pub use supported_environments::*;
+pub use variants::*;
 
 mod base_url;
 mod conflicts;
@@ -25,3 +26,4 @@ mod requirement;
 mod scheme;
 mod simple_json;
 mod supported_environments;
+mod variants;

@@ -15,7 +15,7 @@ use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
-use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{SupportedEnvironments, VariantProviderBackend, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
@@ -98,6 +98,9 @@ pub struct Options {
         "#
     )]
     cache_keys: Option<Vec<CacheKey>>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub variant: Option<Vec<VariantProviderBackend>>,
 
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -1800,6 +1803,8 @@ pub struct OptionsWire {
     pip: Option<PipOptions>,
     cache_keys: Option<Vec<CacheKey>>,
 
+    variant: Option<Vec<VariantProviderBackend>>,
+
     // NOTE(charlie): These fields are shared with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
     // They're respected in both `pyproject.toml` and `uv.toml` files.
@@ -1870,6 +1875,7 @@ impl From<OptionsWire> for Options {
             no_binary_package,
             pip,
             cache_keys,
+            variant,
             override_dependencies,
             constraint_dependencies,
             build_constraint_dependencies,
@@ -1935,6 +1941,7 @@ impl From<OptionsWire> for Options {
             },
             pip,
             cache_keys,
+            variant,
             override_dependencies,
             constraint_dependencies,
             build_constraint_dependencies,

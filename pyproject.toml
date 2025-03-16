@@ -97,3 +97,7 @@ files = [
 
 [tool.uv]
 managed = false
+
+[[tool.uv.variant]]
+backend = "provider_fictional_hw.plugin:build"
+requires = ["provider_fictional_hw"]

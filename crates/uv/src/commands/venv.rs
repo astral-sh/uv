@@ -314,6 +314,7 @@ async fn venv_impl(
             FlatIndex::from_entries(
                 entries,
                 Some(tags),
+                None,
                 &HashStrategy::None,
                 &BuildOptions::new(NoBinary::None, NoBuild::All),
             )

@@ -18,6 +18,7 @@ use uv_pep440::Version;
 use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_pypi_types::{HashDigest, Yanked};
 use uv_types::HashStrategy;
+use uv_variants::{VariantCompatibility, VariantSet};
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
@@ -46,6 +47,7 @@ impl VersionMap {
         package_name: &PackageName,
         index: &IndexUrl,
         tags: Option<&Tags>,
+        variants: Option<&VariantSet>,
         requires_python: &RequiresPython,
         allowed_yanks: &AllowedYanks,
         hasher: &HashStrategy,
@@ -108,6 +110,7 @@ impl VersionMap {
                 no_build: build_options.no_build_package(package_name),
                 index: index.clone(),
                 tags: tags.cloned(),
+                variants: variants.cloned(),
                 allowed_yanks: allowed_yanks.clone(),
                 hasher: hasher.clone(),
                 requires_python: requires_python.clone(),
@@ -339,6 +342,8 @@ struct VersionMapLazy {
     /// The set of compatibility tags that determines whether a wheel is usable
     /// in the current environment.
     tags: Option<Tags>,
+    /// The set of active variants in the environment.
+    variants: Option<VariantSet>,
     /// Whether files newer than this timestamp should be excluded or not.
     exclude_newer: Option<ExcludeNewer>,
     /// Which yanked versions are allowed
@@ -539,8 +544,8 @@ impl VersionMapLazy {
             }
         }
 
-        // Determine a compatibility for the wheel based on tags.
-        let priority = if let Some(tags) = &self.tags {
+        // Determine a priority for the wheel based on tags.
+        let tag_priority = if let Some(tags) = &self.tags {
             match filename.compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
                     return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
@@ -555,6 +560,22 @@ impl VersionMapLazy {
                     IncompatibleTag::AbiPythonVersion,
                 ));
             }
+            None
+        };
+
+        // Determine a priority for the wheel based on variants.
+        let variant_priority = if let Some(variants) = &self.variants {
+            if let Some(variant) = filename.variant() {
+                match variants.compatibility(variant) {
+                    VariantCompatibility::Incompatible => {
+                        return WheelCompatibility::Incompatible(IncompatibleWheel::Variant);
+                    }
+                    VariantCompatibility::Compatible(priority) => Some(priority),
+                }
+            } else {
+                None
+            }
+        } else {
             None
         };
 
@@ -576,7 +597,7 @@ impl VersionMapLazy {
         // Break ties with the build tag.
         let build_tag = filename.build_tag().cloned();
 
-        WheelCompatibility::Compatible(hash, priority, build_tag)
+        WheelCompatibility::Compatible(hash, tag_priority, variant_priority, build_tag)
     }
 }
 
