@@ -9,7 +9,7 @@ a maintainer much longer to identify the root cause of the problem.
 
 ## How to write a reproducible example
 
-When writing a reproducible examaple, the goal is to provide all of the context necessary for
+When writing a reproducible example, the goal is to provide all of the context necessary for
 someone else to reproduce your example. This includes:
 
 - The platform you're using (e.g., the operating system and architecture)
