@@ -224,35 +224,16 @@ specifying `uv run` before the filename.
 
 For example, create a file called `do-thing` with the following contents
 
-```python title="do-thing"
+```python title="greet"
 #!/usr/bin/env -S uv run --script
 
-# /// script
-# dependencies = ["rich"]
-# ///
-
-from rich import print
-
-
-print("[bold]Hello, world![/bold]")
+print("Hello")
 ```
 
-Now allow the script to be executed
+Ensure that your script is executable, typically with `chmod +x greet`, and run the script
 
 ```
-chmod +x do-thing
-```
-
-Optionally, place the script in a folder that is on your `PATH`, e.g. `~/scripts/do-thing`
-
-Finally run the script
-
-```
-do-thing
-
-# or
-#   ./do-thing
-# if the file is in your current folder
+./greet
 ```
 
 Output
