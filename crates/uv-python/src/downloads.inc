@@ -13,6 +13,510 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             major: 3,
             minor: 14,
             patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("b1c606c1f6dc41b10aff6f44c4771f8cf4b7129a6bd22d45ba286657d9ff3979")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("460d33a1c37c2d21aa5fcdb313f9492370eaf0362aa73150a5e8149d3b0a78b5")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("719f2dfc51a65ef669afd8c6878c01ff181767abbd5108a7f027216c0779920e")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
+            variant: PythonVariant::Default
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("29abb861dbfc939d4acd10bc11cc6d61bc4f951759c5b2d9b628c7ea605145a9")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
+            variant: PythonVariant::Default
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("bfcca870d530507e465149ed12a8a2a831ffc19aedf025d608986dec3c7d8061")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::Powerpc64le,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("7712c953d101bfd8c657b58c8d20a18505f3bdb3314597a33fca6c4b7991b552")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::Riscv64(target_lexicon::Riscv64Architecture::Riscv64gc),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-riscv64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("94951dcc3eaf92c29e20f989a029f760f127842917d3b8337f7dc893f99cd6f4")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::S390x,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("90e23e110ee5d809edc1d3d83e0b4e4fdc36792f369443f6785003e70f98638b")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("4e5740dd6bd23bfe4d18abadb8d7e2fad329374a1f024f3dec95bd4df24b0089")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: Some(ArchVariant::V2),
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("a5452a947ecb1876e92cdaa4e646f66f278224996d4ebdf3b91213740a7b6468")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: Some(ArchVariant::V3),
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-x86_64_v3-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("06ddfdf1db227ce7e6187cb22216bc67fadf51934ec6806f73ad31061eb8fd0c")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: Some(ArchVariant::V4),
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Default
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("b86620089291d0aee27ac87faf7e4f93ae5d818af235074cf21935f6fbd8bc9f")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("e66a908aaee79c1c6304aef03c4081987ac0f8fe66e0fc7608e7b6555b441e70")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Default
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("4d74f16dfe1de5b102f2f642bb4167d22881764399e70abda19f5b3abe18c254")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
+            libc: Libc::None,
+            variant: PythonVariant::Freethreaded
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-aarch64-apple-darwin-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("1717ea0797600dd77e7f054ee4e2e064cb5235865c9b9948f5ca453e79e80880")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Darwin(None)),
+            libc: Libc::None,
+            variant: PythonVariant::Freethreaded
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-x86_64-apple-darwin-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("b4c83a7d6fe90a6d9dfa71fd4b8fb8a670a5c65f54763081439f99bdf60628bc")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::Aarch64(target_lexicon::Aarch64Architecture::Aarch64),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Freethreaded
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-aarch64-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
+        sha256: Some("2afdc6d2661dee6f789bd8f0736eef2e7130b66af4837e172fa9d85f977d01a9")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabi),
+            variant: PythonVariant::Freethreaded
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-armv7-unknown-linux-gnueabi-freethreaded%2Blto-full.tar.zst",
+        sha256: Some("da13ba89adb491a93a1b8a8ca5a14b682691443c0374f0f984b8cc8fe402899d")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv7),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
+            variant: PythonVariant::Freethreaded
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-armv7-unknown-linux-gnueabihf-freethreaded%2Blto-full.tar.zst",
+        sha256: Some("321b281e2a8270319134391209bdf20c922a5c33a3195564d633fd0e7e18d710")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::Powerpc64le,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Freethreaded
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-ppc64le-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
+        sha256: Some("02a0b821fa9ebd91e9bd2bc00ba57634c1c0bff7a9cb2853165e1c6be489f47d")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::Riscv64(target_lexicon::Riscv64Architecture::Riscv64gc),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Freethreaded
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-riscv64-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
+        sha256: Some("bcd0233f16600ae1972aaee96ee96bb07fc873b6738f7fbf60529c4e1fec15c6")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::S390x,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Freethreaded
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-s390x-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
+        sha256: Some("1b05cb88970130b4ab0af2ffcc2211f86de42ff1b3e1e82a99f616dd910ecaf9")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Freethreaded
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-x86_64-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("5bb4f9f8d8424c8ac7609ac9fd093fe8698d878ecb379483a15a2c80d29d085d")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: Some(ArchVariant::V2),
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Freethreaded
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-x86_64_v2-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("9230b2df3782f53f02c7cf208f9bdbaf46d16f6ca280666995967b2a40b7924d")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: Some(ArchVariant::V3),
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Freethreaded
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-x86_64_v3-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("ce45cf12bfb8429b21545183245f356ad1d1e0e5c01b0a1d8ceb7b5f3c0c2790")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: Some(ArchVariant::V4),
+            },
+            os: Os(target_lexicon::OperatingSystem::Linux),
+            libc: Libc::Some(target_lexicon::Environment::Gnu),
+            variant: PythonVariant::Freethreaded
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-x86_64_v4-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("83007ff8f6485fb58d5ae7fb3221ef9109f688555f8defb144d81830fcd59a77")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_32(target_lexicon::X86_32Architecture::I686),
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Freethreaded
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-i686-pc-windows-msvc-freethreaded%2Bpgo-full.tar.zst",
+        sha256: Some("b52bcfb2179745ba8145c15c4268316aa93bc629f92967846c2b6eb00509c7c3")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
+            prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 6 }),
+            implementation: LenientImplementationName::Known(ImplementationName::CPython),
+            arch: Arch{
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            os: Os(target_lexicon::OperatingSystem::Windows),
+            libc: Libc::None,
+            variant: PythonVariant::Freethreaded
+        },
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.14.0a6%2B20250317-x86_64-pc-windows-msvc-freethreaded%2Bpgo-full.tar.zst",
+        sha256: Some("aa769abb5bee837a69a71f0a285d5ab3fb066bf8b60cf537b497f25a0d738143")
+    },
+    ManagedPythonDownload {
+        key: PythonInstallationKey {
+            major: 3,
+            minor: 14,
+            patch: 0,
             prerelease: Some(Prerelease { kind: PrereleaseKind::Alpha, number: 5 }),
             implementation: LenientImplementationName::Known(ImplementationName::CPython),
             arch: Arch{
@@ -1427,8 +1931,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-aarch64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("9a7750bdb63c8ee7b71e98f00671506c7867736ec5de00c5c83a949369fc62af")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("9002e620e4113e7439b2de0db5ff9b2dc914cde4fba2f10134cce3a5cdebac81")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1445,8 +1949,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("817298b9879b4b4188d86c1e7dc53480f05f3059bf5709e4abf9094f3d20ed4e")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("e5a904ecfb4061389773dd655d3b5665447c80cbf2948fcb1c07e92716eed955")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1463,8 +1967,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("02d8794ce9fa5d6a6259f8b10bb64c3793878eae5b999697409926a919399908")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("106bf4f243a2d02a1e3995ad0551bf15bdfb33abfc18f85138e6b8dd0d1923fc")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1481,8 +1985,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnueabi),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
-        sha256: Some("605f2a0c93da73bad8091b43d0fa4c6253475928fa40775000db273277a5ef23")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("a8533410ec878cd1cc24ea2ed61b01bdc68aade47f231cdfda4930889f806a27")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1499,8 +2003,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
-        sha256: Some("69e83f0fa43ded2cbccb6a8211d18cee477624e23354ec847335f98de17fd6e9")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("e1bf8ada8b78b0b5e8eb679ae9e0d1ebfdf8137087da10af4180614b644ffe33")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1517,8 +2021,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("d62a9b323f0221c357e7f0cffe9f2330bb78767cbe558ee8676e68817d538ed2")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("7af566235456fc055e58062c10c342bc96337f92331484598ccef62526b11785")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1535,8 +2039,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-riscv64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("c147d87a3ef425e244819a1fff92ddff793a5393156ac608783ad940fc58f7e3")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-riscv64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("6099d9173cdea1cea3dfd34b1f9de6790f074384d7d585216c8834ac5dff791c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1553,8 +2057,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("c518544512215b792fe77679e2bf10d99c1af2285f1a5feeb638518ef7238762")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("b96d91b9cdacfe3a4b6d4831bf46ca56690fce4086b0179a700aa66ec04095c6")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1571,8 +2075,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("4956d94f1283871e9e54762fc74bb8f90ebb955829087cd427cd240c9863da65")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("ee909a9d0fb16375ebd3b3ca0322fd9cac0904b304e28ad68527036858e301e9")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1589,8 +2093,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("f545dd397cc05cc2dd7e844274aca75d1d91d9652dc856352e799d6c60f7deea")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("78d114a43b7e11bd8fec41149f5a8f67adea2d086253275f010f001fa9e3614e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1607,8 +2111,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("8e518023204c9d596d3b5d364f308da63267f4658cced89b693e2310c6a20124")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("0fbccc0127e58fb5e6f99ef77afe23fc596c46390c689d57eebb87a179fae7c6")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1625,8 +2129,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("f4bed09beb84e7ea01cf7a33c9279cae9368f7de5a5d1d148da39fc023aaa7bd")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("78b06d4337d7a5274e10a0e5df0709af65663e05f598f3727813c888c23f0914")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1643,8 +2147,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64_v3-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("eae418d958f16a8e976b1445b48af11b5058a77d8bcff8e9f4a9f7ae3a3e89bf")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64_v3-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("ff6c294d22f1633d9f7caa47850ca358f0e59b0692c21bd04140196d8eb8d7b7")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1661,8 +2165,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("8e9f73a627a9c0ac708250d2a7f7e8ee54a2309186912df6f5da7a4aed120356")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("5ac5a840950f593048e3272de91e6d91ff2b84748cf93583156d3ed9d9832ca6")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1679,8 +2183,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("bbde853f2485b5eaeb4a459c2ce1b6d1375b3878a9e3639c2f45dbfa523aa92e")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("cd52af6a6449fa56c3ba7cd66cce0c0c4efc18fc63ae115badf39fae67c71f79")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1697,8 +2201,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("8fa5c39b796d3cbbc5697801b19d2cecf3b7c1bbd579718a245390f8f6b94374")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("24584c0bc472969358ce686e990a7c3ef51c6cead5110675e68cf51315d4fe9f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1715,8 +2219,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("c242ad2e194f5b550a74fd92c04731f89fa25d36c26d764072d2f9a1ed116f74")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("d6213591700d5ee5aeb37508c4f67cc3d751679f78962aabe6f6f5ba2170c71d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1733,8 +2237,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("39c8bff66e2d593866a0637019547dbd0daa2c0f618fd74b7ac2c7b1b38b1a09")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("1d948860b5ddeff67a6fece81cc3354f9144161968d2128186d4e1a3562a4e76")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1751,8 +2255,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-aarch64-apple-darwin-freethreaded%2Bpgo%2Blto-full.tar.zst",
-        sha256: Some("ea91fd59592f62961a61edad3bbaa917fbdb661cb6d55b3c98027398bd4bee99")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-aarch64-apple-darwin-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("c98c9c977e6fa05c3813bd49f3553904d89d60fed27e2e36468da7afa1d6d5e2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1769,8 +2273,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64-apple-darwin-freethreaded%2Bpgo%2Blto-full.tar.zst",
-        sha256: Some("989aabe336f2c9148b1945be7fba461b1e3d21e108f062f8da4bd683e54d527c")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64-apple-darwin-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("0d73e4348d8d4b5159058609d2303705190405b485dd09ad05d870d7e0f36e0f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1787,8 +2291,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-aarch64-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
-        sha256: Some("1640b5fd736269980624bb4fcf66dc6b827569b0ecccded6bf8db46f2416a52f")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-aarch64-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
+        sha256: Some("b8635e59e3143fd17f19a3dfe8ccc246ee6587c87da359bd1bcab35eefbb5f19")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1805,8 +2309,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnueabi),
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-armv7-unknown-linux-gnueabi-freethreaded%2Blto-full.tar.zst",
-        sha256: Some("58403e35c38d2e3b11303c8b17836897631b11b24fbd218ebf7d2801b08b87de")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-armv7-unknown-linux-gnueabi-freethreaded%2Blto-full.tar.zst",
+        sha256: Some("e742103e141278b926d530adda61f892dc483e4229bfe0f31ff4e5980adca8b0")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1823,8 +2327,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-armv7-unknown-linux-gnueabihf-freethreaded%2Blto-full.tar.zst",
-        sha256: Some("4e9d38d130dc8bd6b7de07802d099eca8afe25644bc7526c2437d30baa536976")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-armv7-unknown-linux-gnueabihf-freethreaded%2Blto-full.tar.zst",
+        sha256: Some("c8998db8e4f2e3798b29aa29587d391b2d0e32b81620a25b5850c359ca7edbf5")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1841,8 +2345,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-ppc64le-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
-        sha256: Some("c0b138d4a8c1b11197c8f1d9b235f52dfb3b3be822398864d0399ce66ed7218f")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-ppc64le-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
+        sha256: Some("6ae8fa44cb2edf4ab49cff1820b53c40c10349c0f39e11b8cd76ce7f3e7e1def")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1859,8 +2363,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-riscv64-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
-        sha256: Some("61f7b84ac918719e43842b69bd6e5b0365b09d130cb29b017b6adb183b2bf1ad")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-riscv64-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
+        sha256: Some("2af1b8850c52801fb6189e7a17a51e0c93d9e46ddefcca72247b76329c97d02a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1877,8 +2381,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-s390x-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
-        sha256: Some("ff47312d23da14ad2ecee4e8ef4dd4450526e10668a3f6bb1e8a59b475e051c2")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-s390x-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
+        sha256: Some("c074144cc80c2af32c420b79a9df26e8db405212619990c1fbdd308bd75afe3f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1895,8 +2399,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
-        sha256: Some("e6a280e899e86808d7dd8949f815c68bf1f6b1ecf0c0c2ceca64db8f23597b7e")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("1aea5062614c036904b55c1cc2fb4b500b7f6f7a4cacc263f4888889d355eef8")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1913,8 +2417,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64_v2-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
-        sha256: Some("2caf89f3c878a82db58f7e58c137c3ea62c21f2e116cc33df95e8511e2beaeb0")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64_v2-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("682057a0e3dffb20bab9dee66c9c90f332bdba86489d09a0418b43359451d67b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1931,8 +2435,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64_v3-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
-        sha256: Some("8e413418222bf601cd9558a769f23dbbc4a25180867b630c751f47bd4458b0f3")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64_v3-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("39d6e7b4ad867fcf799517916bd6e4c60a5c0605c0b286965ae22954fba7a11a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1949,8 +2453,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64_v4-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
-        sha256: Some("38dd1e9fd005d0d67a62e408cc83168e3297340fa6315685adc3c2de3f6cab13")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64_v4-unknown-linux-gnu-freethreaded%2Bpgo%2Blto-full.tar.zst",
+        sha256: Some("50cf1fac7f302a3e9b93ec3ad95f341c59efe26e75a046817df0dcff2d43860a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1967,8 +2471,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-i686-pc-windows-msvc-freethreaded%2Bpgo-full.tar.zst",
-        sha256: Some("f74d1e7d95235e9d58cc2ea64ea4f407c8078bffac9a4ce7f266c46f15c7792d")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-i686-pc-windows-msvc-freethreaded%2Bpgo-full.tar.zst",
+        sha256: Some("7d319278eebd7628ce7e86951dba6894eb92ec798fccf903b449df6825f13bf4")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -1985,8 +2489,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Freethreaded
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.13.2%2B20250311-x86_64-pc-windows-msvc-freethreaded%2Bpgo-full.tar.zst",
-        sha256: Some("5a7c7210d86c947d3f2b457a23b468f2b335b9b3a45f525b93cb0e603eb05944")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.13.2%2B20250317-x86_64-pc-windows-msvc-freethreaded%2Bpgo-full.tar.zst",
+        sha256: Some("c51b4845fda5421e044067c111192f645234081d704313f74ee77fa013a186ea")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3443,8 +3947,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-aarch64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("c3ce29cf19535a53a757da826fff52e3aa7a36dec3e5749204c980fd10f34452")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("0a4647b7df3c8eca11071d6cea68a14a4b102bd6fc6afae314e9852510654b7d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3461,8 +3965,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("b296808b7ae0806f63158b4d583fb416a8a9c1cc9c720efb64cce7b9aae7d5ca")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("1a414bf392a7afe08c742502a82edd41893a1144ccbceb184dc5ee6ee9c069c0")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3479,8 +3983,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("48360f6dc6667bddb616e50d934a531e94308606c40ee94e3a9901d1f6bea85e")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("0354f70e7d3e2d0c36308edc1815c563d9bae1a3221830f7e222f6bb0a7e1a3a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3497,8 +4001,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnueabi),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
-        sha256: Some("7f0d9f639e9247305ce87e7001b53dce5f072c01ef4ca4999dab8e8257b606c2")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("bb127964657f1a3c596efbb35d7a1c87386672d9b686419162661a96618c2e59")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3515,8 +4019,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
-        sha256: Some("8497dbf02cb9cabebc86f5beed6048a0d9697e13899fb45a5eb2438686ca80d2")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("5c5dd5237712f0e5edf88b886df005887a408d453a6829bb6a16da3bb1c3a755")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3533,8 +4037,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("ccd249c58deacdb3dd40ab77c7face76621e7ea4e61869e91cc2a723e983c84c")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("35ac37b97eb6747a938cc9470f8c70e43a51a8bdf2d5fc4213d0b959bda0f8f1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3551,8 +4055,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-riscv64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("8416594d9a8ffb1392f4ca08aea8e1d7be3964f77418e3a41b40e147d50ce317")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-riscv64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("0b32a54256321e76adc7a1bcabc43150a312de16f13ddccc32ad0bf303336f50")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3569,8 +4073,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("503cbd9565fd7f842770d0a28a703dff6f5a8f1fbc23e5c5a0715035f374d5fe")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("d777efab7bb38c463a6b00735fe8346d05c714f7ae65cf12a749f19160b51b9b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3587,8 +4091,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("7e9dbabb35d74bce59f2e5a11904668f2b8463319309de3539fd4c22dda470ac")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("a36bc60c38fe146e908e2e71fc21266c8558b24a9407226b1d887212839437ef")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3605,8 +4109,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("9f1134cf2339e85cbec4b9861f19d970e9c98a195868a5f0e382252aa7268f21")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("cb0a1b8e34692b49059ac78c0eda5b5c137262ba5d9b5898dcbeb03c0e6116a3")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3623,8 +4127,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("83b0ae7ad0a1b9c1b52b431810f6807b348a36fcd967a2bcb39983f50729f5bd")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("b612fdf180a6d8e0f0a4d1cc49a25b2df80125d44caf60f6dbed4aa2760d69bc")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3641,8 +4145,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("96879f5db0fac6def1ca2148abac5cd505d6b56b29328ee564991773cd55157c")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("822489b7694b07a41e54ac22edcbc65adc20dc0db4c37fb9161134bbd58cc059")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3659,8 +4163,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-x86_64_v3-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("81ee17d72f77f7ebe52bea34643c77492dd92431861660b72c057acc7e13ad06")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-x86_64_v3-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("18234dd6104551530d176baf7f06ae83736ffc4100827e6d577d11b53c96a91e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3677,8 +4181,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("6d3b45f6d4496ac5f66f46bf67ca806f1a53420de2ba891ce63aa438505afc07")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("d4c7044ea2433bb0f00773d7c35e6fa48db2376700772b3a94b8bb1dd227febf")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3695,8 +4199,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("00fb50870cb7389d61d7940d76676f7e71531814b2b3f861a1b4862f42c04076")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("ab728d4df31263dc5b460f72de5de8782ba3c0168c8c18df6626a3875d023a03")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3713,8 +4217,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("28fbb6d328a860616533b619022f75361268d3a9c495c0986d2b94c7c4149c26")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("7858490938d821b7b7501f1d6f1e4c02757b5b0ac9e771686c17711fd4595665")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3731,8 +4235,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("9ac8dd4d4183afc2bb11e52f258e32bc4c554074af3c1d692476dca162b76e18")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("327b5b0a918d9707728cc2850f9295778ed44efb17ddf11fc03ccd822d85f26e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -3749,8 +4253,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.12.9%2B20250311-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("04df1f563fd02005a05b3c9f194d7009ebdb0b22af8f4ee141111557e8896416")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("ee338839315bdd8af5fc935f9595eca20ebebdd250726c5816b2d0cf94d1e661")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5783,8 +6287,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-aarch64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("ee94cb7508c6d2bdcf3788c779cd9c9950f6b0397fb188185d7839115d6901f2")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("f8df308b918750a466bf585b14befd4349e69d5135b83090254e6f2ee65b1bf1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5801,8 +6305,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("9b671b25d0f479576ca6333f6ec5a100bcd1f76dd7c21eb92f3c59907555f526")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("7b7b393c53c8371509087a60d858ee2567bc439bda13c81564647f79f3905224")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5819,8 +6323,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("ef9642e489f4f583e2a5edadbd121f80f566979325b8e757d72978faa0327925")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("3a81577e9b1cddf3d91796d7c22657aadccada8f78fb9e3e64ce8d2bbb95c73a")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5837,8 +6341,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnueabi),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
-        sha256: Some("3f1560fce58c9c1641e7dd3c1704c0c7ea443094f40e8e1a0a2b218b81e19d19")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("a195cb2ffffe41a1c48b48da1b8e71ee84ffdd78f4203ff3e7b2054de0c58fd2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5855,8 +6359,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
-        sha256: Some("0c64ff74fc0f6e7a1c811cefe3ef39a53a5b3307598d92d01d372b485193f12f")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("1b40187836c7299d43ca58221208081a7d9b6b9e36f5ef2ae767bb5745fa88fe")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5873,8 +6377,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("cf6f02ffc9d79382c76341d52e1f358428b7b24a6f6aebc8286e21ae623f21f8")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("fd4946a41ff3e4502f4cdc4f288065aeb455a26a106f8fa5b1bed3d9ecb249c0")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5891,8 +6395,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-riscv64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("cabca561452da1729beefd3cfff3885e586fe5c3d66b6bc3556fe7774f43ea84")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-riscv64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("4370a53adedb105e430aa46ec027d1841cf49aae5ea32b930a3775a9df4b9783")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5909,8 +6413,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("3badec22ef1b348364e6ec0bdae6dfa5b0087931bbc0c63d3e09ab4b44450a0b")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("63f1a628267c47e3fc3d7ba86f47c72cb89f54510d24d9b58196953d7b0eab68")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5927,8 +6431,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("2252c6076676f34c9c689043e88be6b4f17c320c5d9a713da66f1889e76ab6e3")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("b0736ee681f88bf487687b5248ca9fb15fe5f7d584f7d1ed2bc9c9578300b097")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5945,8 +6449,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("6e4783a6631c7051cd8094e5f1497dc371bd5495dc089a9d16b354a935048c43")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("3f22be1386b169dbce0e524344e8c028019bc916d09b656cedc073412497d643")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5963,8 +6467,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("962bd39aca05126245b53851a41b9c97ccea8da542e98a338ec8c0745d0db9af")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("b6e0a26160a4a953d895347516369669ad6d3125841d4f65d7ad945a0dd79915")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5981,8 +6485,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("fd0f7943704f6920ce9b9a1e90f199ef39ad4c16f0937b515cdfa39a384638a2")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("de5abeb69cd592a2b3e06ae90bbe2e668d249594b1765ae38191735c8bed6453")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -5999,8 +6503,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-x86_64_v3-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("8e1125aed1061e86b3209afcb1c63c636b971e652445c3addd47c0c7902baa3f")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-x86_64_v3-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("68bc5741082c556dac14cc29a1b1e84502049272836c5e6384d9702b0b78febd")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6017,8 +6521,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("ee2f5971298aee6e8e6f8e657b74c63b57f792f284c6a19b5f514a1f04ac7d81")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("8337e967cb34c71842e082dc77cb4aca85b5942c2d1570c75138a83d07a30746")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6035,8 +6539,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("dbd01cc493f4f90e8269287a1fc8371d06f5c672dc199b620b2e2fcf4b4734af")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("d0efee8c810519529c7f61f9fec1ef79a09947e781cd1a2ad63771a6f1c7b930")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6053,8 +6557,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("57a94a663d774a8bb3039e118f4c38c8f4626921bf46226e06e52cdb4f8e4757")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("63053424bfce652821982195085507109fcd20cff16356c5481eb5f27e137c55")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6071,8 +6575,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("364f95fc8a1f0b1d407314be58356543efeb9b421c113b9c7c7b530660188754")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("b5a9d08ac29d3b2a07e458b23a0829909b4822602699e2829924d2a43641afbd")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -6089,8 +6593,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.11.11%2B20250311-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("d83d736d365658cecdc76e1c5c5b197e64f1c144398cfb0a75fb219b8c6fcaf2")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.11.11%2B20250317-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("4a9409fedb95312eabbe2285c836f688742a0ea4e6ccab7f0d68cb0e0cbb2fe4")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -7979,8 +8483,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-aarch64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("2867d119e88761148af5b0e803f54a646797b6b4c70f9dabcf834a92fe80c8e7")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("2d3f07542882f08534e9d4e533a4c73d1707ee355cf7b2a204d4b8d6f8fd8f8e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -7997,8 +8501,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("36d59049abc75b3a44d32811c135b88028fa18737b94c0527534fd240150573e")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("ecd1c0e2d74f27128251f2c5f41cb107d4efd93cc7aecf76a585d75244ac4f07")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8015,8 +8519,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("42635e2b908d73a1f97dbc1af77b45968498d09be3832ca0ff80d78186c15d14")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("5dcd0486c403d07e27a1f2c256810122ac5d153f921433d77116df5c7d09b4c9")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8033,8 +8537,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnueabi),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
-        sha256: Some("bf195555ea40358c15949c034afb87c8eed6ff50ec17f59c290bec0ceb1593c5")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("5457d55512e6e4cb7837096b10c147bd75550be7b50176b12fa294dc98b801fb")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8051,8 +8555,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
-        sha256: Some("b8fe35966fa53c01368c192c7d41fecb9c0bfae39541869011ecd3034ae1c9ed")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("ceb1739bfcf9804de679223c4826d7f2f8d8706a6a2d583c521ca95fe812fd59")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8069,8 +8573,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("98f61a90c34a7c2919990b33b198cff084d76e062f817bb6d380c5f90188d4be")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("3cd58ab4faf5d7bc182902e4b4b21924ee94697dc85697ebf3102fdd57888cd9")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8087,8 +8591,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-riscv64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("517ccaa26433bfa7e9cc37edfcba5f869205cd259c30e8c5cfe108e3fe441569")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-riscv64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("6b4cb58d578e58f3a54ca98fd5f081a582e5a792491b13a6b130eae1a38d4813")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8105,8 +8609,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("f0f2030afe7e72386d1863ffa50a5a24e76cdda38fe3aa598beb0ca6c146ff26")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("00d9fc97f8812ebb9e8aba5aeea0b11846ecf6cc879edd6ca0a4d8c7441151ed")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8123,8 +8627,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("86653263f968327d9ac640ddf61d3c21859ab80b1b9ec171951b34d422c20900")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("e8d7ed8c6f8c6f85cd083d5051cafd8c6c01d09eca340d1da74d0c00ff1cb897")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8141,8 +8645,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("0108c7b4a97283a0b2e462c75c54e82c0987f7bd01364fed24448835cda3911b")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("c1c4946db5c1ba23ae5f764570ffb778039b511e2938a68127b91c70dfe246f2")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8159,8 +8663,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("7f03397e6903f8d2a69af3c31110d8946db839dc1a2352832d15966abfd1946c")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("8f503904c65765f441abd33daaa70f16d2f57acda7fc07325614cfa7c13ed45f")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8177,8 +8681,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("6346c85f5b4ba5e5af125ca75eb34b2f3b8b3d5c73f0a7e5c96e8a80c4041233")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("b37996bcbe48e89cd7ab01a036b9141413dc1dcc7a870bc39230a0fa30b9d548")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8195,8 +8699,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-x86_64_v3-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("b074bd811a934cfa17c88e66f512fc7b094f9567d1ef72ad18a2f21db74ca0ce")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-x86_64_v3-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("0671d4ce7e031aedff5bcef460a9de22b9f8837e584efc253d3e93c4253776dc")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8213,8 +8717,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("5b368dcd180ce52c2889cbf551add57345e28d4545c5a807d052e3a59e1b8716")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("5009a2be92230c0d2626f415366226fd75f90e5fdf21ae9aa7e1e5204202c0bf")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8231,8 +8735,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("0ca080c499d475a026152d2322fc4c179723d5ec94f4baaa394069369ac1c00d")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("78d139ee7ef502f28642d2e6e57c508e7a909da0ab9e4295c68e6122bacc2a6d")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8249,8 +8753,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("6586bf44ce508451ec21c08e9720e3fe2c8d72396a7580839888389646a9c6c8")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("2faf344d44214a52d7236c3a99334b39ccecd011ce97b5748ef92454e7233612")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8267,8 +8771,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("9fcfa5d48bad85b70e8e96a215f66e11ffbbd347cd6aa8338dc6623e0ab4ff60")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("f4b0adfedeaaa73586e98100e4a1aa3df51f723bc83e550770342e6da9a3cced")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -8285,8 +8789,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.10.16%2B20250311-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("3877473bb2c1f71bb9e987a40087a181fa3534ce659239ec1f6252eae0050208")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.10.16%2B20250317-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("685f24e15d926a45097e805982dc52a279985f952515b9c95604ec881b40b51e")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -10967,8 +11471,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-aarch64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("be32a364538b4fedc2506cf69950ae17d9380ea91f037c270cd50aaa0f56c390")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("8d1f0245ad4e8f4051fd0e54b438a749935dc697c1f10069781fb3d2cf38d670")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -10985,8 +11489,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        sha256: Some("ded7a1cf9720381c8cb12e253945b41d3c4b48f2505542c0a85d5ae90a6e86a3")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        sha256: Some("92a6c2eb3ac2a38c5d8112acaf2163a42480ee2a378150bb2430fecd60a60543")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11003,8 +11507,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("1e6964ecaeda3c6c69963d720e71f1a2eebe329a83bc0cadd8b86f3c93c27cba")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("d77520c53d108a8f2d0247f4da90f933916e964442c95f3a8d429bea6d874678")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11021,8 +11525,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnueabi),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
-        sha256: Some("3aac6f09a04bf8612694d58e52b7244abe13e66cff48ffd83a9817980d04d2aa")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-armv7-unknown-linux-gnueabi-install_only_stripped.tar.gz",
+        sha256: Some("ffe5998e80ebcf0f49a7bc9d8ca473976be0a8e0832906db808040b3b97c104c")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11039,8 +11543,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnueabihf),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
-        sha256: Some("f50df1b3ea72b1027475d74c8b2625dc6fa02dce7df9f1bd3c1bbd9cb987da34")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-armv7-unknown-linux-gnueabihf-install_only_stripped.tar.gz",
+        sha256: Some("bbe8e60ce1d1ba069301b75ec3e776b53f82537cee5462e650eb63bd4960f550")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11057,8 +11561,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("c94349f81f8991c061915dc9cfe9c00907bbb45706a999e6ad81728de16bb03b")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-ppc64le-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("a55476d4a7def24c5f6ce1b8302668c975a3e45198549de86b4fbefae1d2b873")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11075,8 +11579,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-riscv64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("9732a56e1644a34eac7525d65d7c9b49bb5546032cc55409067a4e93395f3b82")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-riscv64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("dae5f79366186551032cf4b72e452f2727df5eff73e03c6016569c0c8cc09edd")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11093,8 +11597,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("a562c85636f8add62b01e5d393082f4626c87df655db4de9f52004e76bcc1838")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-s390x-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("8622b20b9c5d67a4f63917dd39f5e6681f802579f09295c36239c777bc621843")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11111,8 +11615,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("54c27f40a4fb330ac30c9feb61a7d492ef479d63e61d6baf73b9f687d86779c2")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("837e50734904eba4f5a385c66c31b21d880582eba7912b3ea3d71e60e56f5a60")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11129,8 +11633,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("14bc3d695f6f8bf875bcfc27f58373979ae202edbb2b2a18324dc1ea30fd0c6f")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-x86_64-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("25df2bf6e3e08006999af9c8c0ddeff99a82f04afd92174ceb6229e83680d90b")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11147,8 +11651,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("2d3f2ee18d9785691914dad29cd853612a56929d6b5cda39cc008540786e9515")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-x86_64_v2-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("c1cf07d38cf1aba785609899dba7ab6e46fdd2ef8141cb1d067917b5f1b038a4")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11165,8 +11669,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("df396bd79d8f1790915e803bd87cf368cf729d84036fb09db89375488f0610b5")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-x86_64_v2-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("ab62aac791ad3168034831348b9d68ef4bd542e19ca7ee1fa6154e798f4a8fa1")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11183,8 +11687,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-x86_64_v3-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("bd4ceef4734497994fffddea09ffe583afb40503c4606ba80bb89169bedd0571")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-x86_64_v3-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("27c2bc2218fd5fbc8dfc7b3293f44318ca3220b1fd451abf73d2079d1adc63ec")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11201,8 +11705,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("ce5cb95f3194aebcae1652ba03764f7878dd24ff1cd8b3cdbb039293ee31f62c")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-x86_64_v3-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("82e4ab20124ece698404a81e2ff4551bfebdb8e98461d41c559c8c3a0c904179")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11219,8 +11723,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Gnu),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
-        sha256: Some("df80592adf7f9cb3279e57d103292a520165afe22bf86d873385b61b67bcf0dd")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-x86_64_v4-unknown-linux-gnu-install_only_stripped.tar.gz",
+        sha256: Some("12c9f2a62d6c8791b729ba235648b1ae8577326151f0e9018e6ec278ed5655fa")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11237,8 +11741,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::Some(target_lexicon::Environment::Musl),
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
-        sha256: Some("83bfb3263a179f57da7e0d89969269c7111b9fb8f14ef6759cd23dd20d4f8b0b")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-x86_64_v4-unknown-linux-musl-install_only_stripped.tar.gz",
+        sha256: Some("f5cef4850d47a1ff86fed0d035d471120bf203e2b1d2026a2551baeea3989f03")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11255,8 +11759,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-i686-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("7c5b0ead4d094371a930297cea130649b4d1eea78d23e523956d99af5513c28b")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-i686-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("94c89914b2de94fb5764ab4c2fc97a2242e93aa1d687f40e97d234be23939dff")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
@@ -11273,8 +11777,8 @@ pub(crate) const PYTHON_DOWNLOADS: &[ManagedPythonDownload] = &[
             libc: Libc::None,
             variant: PythonVariant::Default
         },
-        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250311/cpython-3.9.21%2B20250311-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
-        sha256: Some("4062f021546a7d5b6683fc7e4dee5cf401123c2e5250632acdcb3cca6d9d63f0")
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.9.21%2B20250317-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+        sha256: Some("749f706985170981ae95f9227b1b412ae8acb33d8455cf34df427b50b0edd882")
     },
     ManagedPythonDownload {
         key: PythonInstallationKey {
