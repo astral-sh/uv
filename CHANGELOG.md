@@ -3,6 +3,56 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.6.7
+
+### Python
+
+- Add CPython 3.14.0a6
+- Fix regression where extension modules would use wrong `CXX` compiler on Linux
+- Enable FTS3 enhanced query syntax for SQLite
+
+See the [`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250317) for more details.
+
+### Enhancements
+
+- Add support for `-c` constraints in `uv add` ([#12209](https://github.com/astral-sh/uv/pull/12209))
+- Add support for `--global` default version in `uv python pin` ([#12115](https://github.com/astral-sh/uv/pull/12115))
+- Always reinstall local source trees passed to `uv pip install` ([#12176](https://github.com/astral-sh/uv/pull/12176))
+- Render token claims on publish permission error ([#12135](https://github.com/astral-sh/uv/pull/12135))
+- Add pip-compatible `--group` flag to `uv pip install` and `uv pip compile` ([#11686](https://github.com/astral-sh/uv/pull/11686))
+
+### Preview features
+
+- Avoid creating duplicate directory entries in built wheels ([#12206](https://github.com/astral-sh/uv/pull/12206))
+- Allow overriding module names for editable builds ([#12137](https://github.com/astral-sh/uv/pull/12137))
+
+### Performance
+
+- Avoid replicating core-metadata field on `File` struct ([#12159](https://github.com/astral-sh/uv/pull/12159))
+
+### Bug fixes
+
+- Add `src` to default cache keys ([#12062](https://github.com/astral-sh/uv/pull/12062))
+- Discard insufficient fork markers ([#10682](https://github.com/astral-sh/uv/pull/10682))
+- Ensure `python pin --global` creates parent directories if missing ([#12180](https://github.com/astral-sh/uv/pull/12180))
+- Fix GraalPy abi tag parsing and discovery ([#12154](https://github.com/astral-sh/uv/pull/12154))
+- Remove extraneous script packages in `uv sync --script` ([#12158](https://github.com/astral-sh/uv/pull/12158))
+- Remove redundant `activate.bat` output ([#12160](https://github.com/astral-sh/uv/pull/12160))
+- Avoid subsequent index hint when no versions are available on the first index ([#9332](https://github.com/astral-sh/uv/pull/9332))
+- Error on lockfiles with incoherent wheel versions ([#12235](https://github.com/astral-sh/uv/pull/12235))
+
+### Rust API
+
+- Update `BaseClientBuild` to accept custom proxies ([#12232](https://github.com/astral-sh/uv/pull/12232))
+
+### Documentation
+
+- Make testpypi index explicit in example snippet ([#12148](https://github.com/astral-sh/uv/pull/12148))
+- Reverse and format the archived changelogs ([#12099](https://github.com/astral-sh/uv/pull/12099))
+- Use consistent commas around i.e. and e.g. ([#12157](https://github.com/astral-sh/uv/pull/12157))
+- Fix typos in MRE docs ([#12198](https://github.com/astral-sh/uv/pull/12198))
+- Fix double space typo ([#12171](https://github.com/astral-sh/uv/pull/12171))
+
 ## 0.6.6
 
 ### Python
