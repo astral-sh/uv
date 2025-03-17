@@ -184,6 +184,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         };
         let source = SourceUrl::Directory(DirectorySourceUrl {
             url: &url,
+            version: None,
             install_path: Cow::Borrowed(source_tree),
             editable: false,
         });

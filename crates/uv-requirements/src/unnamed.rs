@@ -238,6 +238,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
 
                 SourceUrl::Directory(DirectorySourceUrl {
                     url: &requirement.url.verbatim,
+                    version: None,
                     install_path: Cow::Borrowed(&parsed_directory_url.install_path),
                     editable: parsed_directory_url.editable,
                 })
@@ -249,6 +250,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 };
                 SourceUrl::Path(PathSourceUrl {
                     url: &requirement.url.verbatim,
+                    version: None,
                     path: Cow::Borrowed(&parsed_path_url.install_path),
                     ext,
                 })
@@ -260,12 +262,14 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
                 };
                 SourceUrl::Direct(DirectSourceUrl {
                     url: &parsed_archive_url.url,
+                    version: None,
                     subdirectory: parsed_archive_url.subdirectory.as_deref(),
                     ext,
                 })
             }
             ParsedUrl::Git(parsed_git_url) => SourceUrl::Git(GitSourceUrl {
                 url: &requirement.url.verbatim,
+                version: None,
                 git: &parsed_git_url.url,
                 subdirectory: parsed_git_url.subdirectory.as_deref(),
             }),

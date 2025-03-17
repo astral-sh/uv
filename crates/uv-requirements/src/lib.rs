@@ -62,6 +62,7 @@ pub(crate) fn required_dist(
             url,
         } => Dist::Source(SourceDist::Git(GitSourceDist {
             name: requirement.name.clone(),
+            version: None,
             git: Box::new(git.clone()),
             subdirectory: subdirectory.clone(),
             url: url.clone(),

@@ -2336,6 +2336,7 @@ impl Package {
                 let install_path = absolute_path(workspace_root, path)?;
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
+                    version: self.id.version.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path,
                     editable: false,
@@ -2347,6 +2348,7 @@ impl Package {
                 let install_path = absolute_path(workspace_root, path)?;
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
+                    version: self.id.version.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path,
                     editable: true,
@@ -2358,6 +2360,7 @@ impl Package {
                 let install_path = absolute_path(workspace_root, path)?;
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
+                    version: self.id.version.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
                     install_path,
                     editable: false,
@@ -2387,6 +2390,7 @@ impl Package {
 
                 let git_dist = GitSourceDist {
                     name: self.id.name.clone(),
+                    version: self.id.version.clone(),
                     url: VerbatimUrl::from_url(url),
                     git: Box::new(git_url),
                     subdirectory: git.subdirectory.clone(),
@@ -2407,6 +2411,7 @@ impl Package {
                 });
                 let direct_dist = DirectUrlSourceDist {
                     name: self.id.name.clone(),
+                    version: self.id.version.clone(),
                     location: Box::new(location),
                     subdirectory: subdirectory.clone(),
                     ext,
