@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
@@ -391,6 +392,20 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
 
+            let mut groups = BTreeMap::new();
+            for group in args.settings.groups {
+                // If there's no path provided, expect a pyproject.toml in the project-dir
+                // (Which is typically the current working directory, matching pip's behaviour)
+                let pyproject_path = group
+                    .path
+                    .clone()
+                    .unwrap_or_else(|| project_dir.join("pyproject.toml"));
+                groups
+                    .entry(pyproject_path)
+                    .or_insert_with(Vec::new)
+                    .push(group.name.clone());
+            }
+
             commands::pip_compile(
                 &requirements,
                 &constraints,
@@ -401,7 +416,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.build_constraints_from_workspace,
                 args.environments,
                 args.settings.extras,
-                args.settings.groups,
+                groups,
                 args.settings.output_file.as_deref(),
                 args.settings.resolution,
                 args.settings.prerelease,
@@ -561,6 +576,20 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
 
+            let mut groups = BTreeMap::new();
+            for group in args.settings.groups {
+                // If there's no path provided, expect a pyproject.toml in the project-dir
+                // (Which is typically the current working directory, matching pip's behaviour)
+                let pyproject_path = group
+                    .path
+                    .clone()
+                    .unwrap_or_else(|| project_dir.join("pyproject.toml"));
+                groups
+                    .entry(pyproject_path)
+                    .or_insert_with(Vec::new)
+                    .push(group.name.clone());
+            }
+
             commands::pip_install(
                 &requirements,
                 &constraints,
@@ -570,7 +599,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.overrides_from_workspace,
                 args.build_constraints_from_workspace,
                 &args.settings.extras,
-                &args.settings.groups,
+                groups,
                 args.settings.resolution,
                 args.settings.prerelease,
                 args.settings.dependency_mode,

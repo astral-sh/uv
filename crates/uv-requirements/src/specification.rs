@@ -27,6 +27,7 @@
 //! * `setup.py` or `setup.cfg` instead of `pyproject.toml`: Directory is an entry in
 //!   `source_trees`.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -34,13 +35,13 @@ use rustc_hash::FxHashSet;
 use tracing::instrument;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{NoBinary, NoBuild};
+use uv_configuration::{DependencyGroups, NoBinary, NoBuild};
 use uv_distribution_types::{
     IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
 };
 use uv_fs::{Simplified, CWD};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::{MarkerTree, UnnamedRequirement, UnnamedRequirementUrl};
 use uv_pypi_types::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
@@ -62,6 +63,8 @@ pub struct RequirementsSpecification {
     pub overrides: Vec<UnresolvedRequirementSpecification>,
     /// The source trees from which to extract requirements.
     pub source_trees: Vec<PathBuf>,
+    /// The groups to use for `source_trees`
+    pub groups: BTreeMap<PathBuf, DependencyGroups>,
     /// The extras used to collect requirements.
     pub extras: FxHashSet<ExtraName>,
     /// The index URL to use for fetching packages.
@@ -223,15 +226,75 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
         overrides: &[RequirementsSource],
+        groups: BTreeMap<PathBuf, Vec<GroupName>>,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
         let mut spec = Self::default();
 
+        // Resolve sources into specifications so we know their `source_tree`s∂
+        let mut requirement_sources = Vec::new();
+        for source in requirements {
+            let source = Self::from_source(source, client_builder).await?;
+            requirement_sources.push(source);
+        }
+
+        // pip `--group` flags specify their own sources, which we need to process here
+        if !groups.is_empty() {
+            let mut group_specs = BTreeMap::new();
+            for (path, groups) in groups {
+                // Conceptually pip `--group` flags just add the group referred to by the file.
+                // In uv semantics this would be like `--only-group`, however if you do this:
+                //
+                //    uv pip install -r pyproject.toml --group pyproject.toml:foo
+                //
+                // We don't want to discard the package listed by `-r` in the way `--only-group`
+                // would. So we check to see if any other source wants to add this path, and use
+                // that to determine if we're doing `--group` or `--only-group` semantics.
+                //
+                // Note that it's fine if a file gets referred to multiple times by
+                // different-looking paths (like `./pyproject.toml` vs `pyproject.toml`). We're
+                // specifically trying to disambiguate in situations where the `--group` *happens*
+                // to match with an unrelated argument, and `--only-group` would be overzealous!
+                let source_exists_without_group = requirement_sources
+                    .iter()
+                    .any(|source| source.source_trees.contains(&path));
+                let (group, only_group) = if source_exists_without_group {
+                    (groups, Vec::new())
+                } else {
+                    (Vec::new(), groups)
+                };
+                let group_spec = DependencyGroups::from_args(
+                    false,
+                    false,
+                    false,
+                    group,
+                    Vec::new(),
+                    false,
+                    only_group,
+                    false,
+                );
+
+                // If we're doing `--only-group` semantics it's because only `--group` flags referred
+                // to this file, and so we need to make sure to add it to the list of sources!
+                if !source_exists_without_group {
+                    let source = Self::from_source(
+                        &RequirementsSource::PyprojectToml(path.clone()),
+                        client_builder,
+                    )
+                    .await?;
+                    requirement_sources.push(source);
+                }
+
+                group_specs.insert(path, group_spec);
+            }
+
+            spec.groups = group_specs;
+        }
+
         // Read all requirements, and keep track of all requirements _and_ constraints.
         // A `requirements.txt` can contain a `-c constraints.txt` directive within it, so reading
         // a requirements file can also add constraints.
-        for source in requirements {
-            let source = Self::from_source(source, client_builder).await?;
+        for source in requirement_sources {
             spec.requirements.extend(source.requirements);
             spec.constraints.extend(source.constraints);
             spec.overrides.extend(source.overrides);
@@ -337,7 +400,7 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
-        Self::from_sources(requirements, &[], &[], client_builder).await
+        Self::from_sources(requirements, &[], &[], BTreeMap::default(), client_builder).await
     }
 
     /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`].

@@ -1,5 +1,6 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use itertools::Itertools;
@@ -9,9 +10,8 @@ use tracing::{debug, enabled, Level};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, DryRun,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy,
-    Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification,
+    HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -22,6 +22,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
+use uv_normalize::GroupName;
 use uv_pep508::PackageName;
 use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{
@@ -55,7 +56,7 @@ pub(crate) async fn pip_install(
     overrides_from_workspace: Vec<Requirement>,
     build_constraints_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
-    groups: &DependencyGroups,
+    groups: BTreeMap<PathBuf, Vec<GroupName>>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
@@ -107,6 +108,7 @@ pub(crate) async fn pip_install(
         constraints,
         overrides,
         source_trees,
+        groups,
         index_url,
         extra_index_urls,
         no_index,
@@ -424,7 +426,7 @@ pub(crate) async fn pip_install(
         project,
         BTreeSet::default(),
         extras,
-        groups,
+        &groups,
         preferences,
         site_packages.clone(),
         &hasher,

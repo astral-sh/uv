@@ -13,8 +13,7 @@ use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DryRun, ExtrasSpecification, PreviewMode,
-    Reinstall, Upgrade,
+    Concurrency, Constraints, DryRun, ExtrasSpecification, PreviewMode, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -588,7 +587,7 @@ async fn do_lock(
     // optional on the downstream APIs.
     let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
-    let groups = DependencyGroups::default();
+    let groups = BTreeMap::new();
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {

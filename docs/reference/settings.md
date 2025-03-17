@@ -2308,6 +2308,32 @@ Include distribution hashes in the output file.
 
 ---
 
+#### [`group`](#pip_group) {: #pip_group }
+<span id="group"></span>
+
+Include the following dependency groups.
+
+**Default value**: `None`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    group = ["dev", "docs"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    group = ["dev", "docs"]
+    ```
+
+---
+
 #### [`index-strategy`](#pip_index-strategy) {: #pip_index-strategy }
 <span id="index-strategy"></span>
 

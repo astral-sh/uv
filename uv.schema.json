@@ -880,6 +880,24 @@
       "type": "string",
       "pattern": "^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
     },
+    "PipGroupName": {
+      "description": "The pip-compatible variant of a [`GroupName`].\n\nEither <groupname> or <path>:<groupname>. If <path> is omitted it defaults to \"pyproject.toml\".",
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/GroupName"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
     "PipOptions": {
       "description": "Settings that are specific to the `uv pip` command-line interface.\n\nThese values will be ignored when running commands outside the `uv pip` namespace (e.g., `uv lock`, `uvx`).",
       "type": "object",
@@ -1044,6 +1062,16 @@
             "boolean",
             "null"
           ]
+        },
+        "group": {
+          "description": "Include the following dependency groups.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/PipGroupName"
+          }
         },
         "index-strategy": {
           "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-index`). This prevents \"dependency confusion\" attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.",
