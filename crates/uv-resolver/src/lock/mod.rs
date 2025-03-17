@@ -2877,6 +2877,8 @@ impl PackageWire {
                 if version != &wheel.filename.version {
                     return Err(LockError::from(LockErrorKind::InconsistentVersions {
                         name: self.id.name,
+                        version: version.clone(),
+                        wheel: wheel.clone(),
                     }));
                 }
             }
@@ -5171,10 +5173,14 @@ enum LockErrorKind {
     },
     /// A package has inconsistent versions in a single entry
     // Using name instead of id since the version in the id is part of the conflict.
-    #[error("Locked package and file versions are inconsistent for `{name}`", name = name.cyan())]
+    #[error("The entry for package `{name}` v{version} has wheel `{wheel_filename}` with inconsistent version: v{wheel_version} ", name = name.cyan(), wheel_filename = wheel.filename, wheel_version = wheel.filename.version)]
     InconsistentVersions {
         /// The name of the package with the inconsistent entry.
         name: PackageName,
+        /// The version of the package with the inconsistent entry.
+        version: Version,
+        /// The wheel with the inconsistent version.
+        wheel: Wheel,
     },
     #[error(
         "Found conflicting extras `{package1}[{extra1}]` \
