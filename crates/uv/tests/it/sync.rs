@@ -8549,7 +8549,7 @@ fn locked_version_coherence() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse `uv.lock`
-      Caused by: Locked package and file versions are inconsistent for `iniconfig`
+      Caused by: The entry for package `iniconfig` v1.0.0 has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version: v2.0.0
     ");
 
     // Without `--locked`, we could fail or recreate the lockfile, currently, we fail.
@@ -8560,7 +8560,7 @@ fn locked_version_coherence() -> Result<()> {
 
     ----- stderr -----
     error: Failed to parse `uv.lock`
-      Caused by: Locked package and file versions are inconsistent for `iniconfig`
+      Caused by: The entry for package `iniconfig` v1.0.0 has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version: v2.0.0
     ");
 
     Ok(())
