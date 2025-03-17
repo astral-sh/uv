@@ -103,7 +103,7 @@ impl GitSource {
                     reporter.on_checkout_start(remote.url(), self.git.reference().as_rev())
                 });
 
-                let (db, actual_rev) = remote.checkout(
+                let (db, actual_rev) = remote.clone().checkout(
                     &db_path,
                     db,
                     self.git.reference(),

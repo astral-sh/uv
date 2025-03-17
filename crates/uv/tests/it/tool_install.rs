@@ -3516,3 +3516,24 @@ fn tool_install_mismatched_name() {
     error: Package name (`black`) provided with `--from` does not match install request (`flask`)
     "###);
 }
+
+#[test]
+#[cfg(feature = "git")]
+fn tool_install_git_relative_submodules() {
+    const TEST_REPO: &str = "Choudhry18/uv-test.git"; // Specific test repository;
+    let context = TestContext::new("3.13");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg(format!("git+https://github.com/{TEST_REPO}")), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+    No executables are provided by `uv-test`
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-test==0.1.0 (from git+https://github.com/Choudhry18/uv-test.git@043395dfdb441ebea950ea809a0c004c1abbf385)
+    ");
+}
