@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use reqwest::{Client, ClientBuilder, Response};
+use reqwest::{Client, ClientBuilder, Proxy, Response};
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
@@ -56,6 +56,7 @@ pub struct BaseClientBuilder<'a> {
     url_auth_policies: Option<UrlAuthPolicies>,
     default_timeout: Duration,
     extra_middleware: Option<ExtraMiddleware>,
+    proxies: Vec<Proxy>,
 }
 
 /// A list of user-defined middlewares to be applied to the client.
@@ -90,6 +91,7 @@ impl BaseClientBuilder<'_> {
             url_auth_policies: None,
             default_timeout: Duration::from_secs(30),
             extra_middleware: None,
+            proxies: vec![],
         }
     }
 }
@@ -158,6 +160,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn extra_middleware(mut self, middleware: ExtraMiddleware) -> Self {
         self.extra_middleware = Some(middleware);
+        self
+    }
+
+    #[must_use]
+    pub fn proxy(mut self, proxy: Proxy) -> Self {
+        self.proxies.push(proxy);
         self
     }
 
@@ -300,6 +308,13 @@ impl<'a> BaseClientBuilder<'a> {
         } else {
             client_builder
         };
+
+        // apply proxies
+        let mut client_builder = client_builder;
+        for p in &self.proxies {
+            client_builder = client_builder.proxy(p.clone());
+        }
+        let client_builder = client_builder;
 
         client_builder
             .build()
