@@ -265,10 +265,11 @@ fn find_module_root(src_root: &Path, module_name: Identifier) -> Result<PathBuf,
             project_src: src_root.to_path_buf(),
         }),
         [module_root] => Ok(module_root.clone()),
-        multiple => Err(Error::MultipleModules {
-            module_name,
-            paths: multiple.to_vec(),
-        }),
+        multiple => {
+            let mut paths = multiple.to_vec();
+            paths.sort();
+            Err(Error::MultipleModules { module_name, paths })
+        }
     }
 }
 
