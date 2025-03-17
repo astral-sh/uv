@@ -2871,6 +2871,19 @@ impl PackageWire {
         requires_python: &RequiresPython,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Package, LockError> {
+        // Consistency check
+        if let Some(version) = &self.id.version {
+            for wheel in &self.wheels {
+                if version != &wheel.filename.version {
+                    return Err(LockError::from(LockErrorKind::InconsistentVersions {
+                        name: self.id.name,
+                    }));
+                }
+            }
+            // We can't check the source dist version since it does not need to contain the version
+            // in the filename.
+        }
+
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
                 .map(|dep| dep.unwire(requires_python, unambiguous_package_ids))
@@ -5155,6 +5168,13 @@ enum LockErrorKind {
         /// The inner error we forward.
         #[source]
         err: uv_distribution::Error,
+    },
+    /// A package has inconsistent versions in a single entry
+    // Using name instead of id since the version in the id is part of the conflict.
+    #[error("Locked package and file versions are inconsistent for `{name}`", name = name.cyan())]
+    InconsistentVersions {
+        /// The name of the package with the inconsistent entry.
+        name: PackageName,
     },
     #[error(
         "Found conflicting extras `{package1}[{extra1}]` \
