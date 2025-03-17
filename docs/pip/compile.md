@@ -67,6 +67,10 @@ group `foo`:
 $ uv pip compile --group foo
 ```
 
+!!! important
+
+    A `--group` flag has to be added to pip-tools' `pip compile`, [although they're considering it](https://github.com/jazzband/pip-tools/issues/2062). We expect to support whatever syntax and semantics they adopt.
+
 To specify the project directory where groups should be sourced from:
 
 ```console
@@ -84,8 +88,6 @@ $ uv pip compile --group some/path/pyproject.toml:foo --group other/pyproject.to
     `--group` flags do not apply to other specified sources. For instance,
     `uv pip compile some/path/pyproject.toml --group foo` sources `foo`
     from `./pyproject.toml` and **not** `some/path/pyproject.toml`.
-    This is an attempt to make `uv pip compile` and `uv pip install` behave similarly.
-    A `--group` flag has to be added to pip-tools' `pip compile`, [although they're considering it](https://github.com/jazzband/pip-tools/issues/2062). We expect to support whatever syntax and semantics they adopt.
 
 ## Upgrading requirements
 

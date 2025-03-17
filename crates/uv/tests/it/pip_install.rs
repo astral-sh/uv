@@ -9573,7 +9573,7 @@ fn invalid_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The dependency group 'bar' was not found in the project at pyproject.toml
+    error: The dependency group 'bar' was not found in the project: pyproject.toml
     ");
 
     Ok(())

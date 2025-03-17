@@ -135,7 +135,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         for name in groups.explicit_names() {
             if !metadata.dependency_groups.contains_key(name) {
                 return Err(anyhow::anyhow!(
-                    "The dependency group '{name}' was not found in the project at {}",
+                    "The dependency group '{name}' was not found in the project: {}",
                     path.user_display()
                 ));
             }
