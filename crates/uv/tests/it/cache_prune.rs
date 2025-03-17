@@ -375,6 +375,7 @@ fn prune_stale_revision() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);

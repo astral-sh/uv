@@ -27,7 +27,10 @@ use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLeve
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use uv_fs::{Simplified, CWD};
+use uv_pep508::VersionOrUrl;
+use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_requirements::RequirementsSource;
+use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_static::EnvVars;
@@ -538,23 +541,18 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipInstallSettings::resolve(args, filesystem);
+            let mut args = PipInstallSettings::resolve(args, filesystem);
             show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
-                args.refresh
-                    .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
-            );
 
             let mut requirements = Vec::with_capacity(
                 args.package.len() + args.editables.len() + args.requirements.len(),
             );
             for package in args.package {
-                requirements.push(RequirementsSource::from_package(package)?);
+                requirements.push(RequirementsSource::from_package_argument(&package)?);
             }
-            requirements.extend(args.editables.into_iter().map(RequirementsSource::Editable));
+            for package in args.editables {
+                requirements.push(RequirementsSource::from_editable(&package)?);
+            }
             requirements.extend(
                 args.requirements
                     .into_iter()
@@ -589,6 +587,55 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .or_insert_with(Vec::new)
                     .push(group.name.clone());
             }
+
+            // Special-case: any source trees specified on the command-line are automatically
+            // reinstalled. This matches user expectations: `uv pip install .` should always
+            // re-build and re-install the package in the current working directory.
+            for requirement in &requirements {
+                let requirement = match requirement {
+                    RequirementsSource::Package(requirement) => requirement,
+                    RequirementsSource::Editable(requirement) => requirement,
+                    _ => continue,
+                };
+                match requirement {
+                    RequirementsTxtRequirement::Named(requirement) => {
+                        if let Some(VersionOrUrl::Url(url)) = requirement.version_or_url.as_ref() {
+                            if let ParsedUrl::Directory(ParsedDirectoryUrl {
+                                install_path, ..
+                            }) = &url.parsed_url
+                            {
+                                debug!(
+                                    "Marking explicit source tree for reinstall: `{}`",
+                                    install_path.display()
+                                );
+                                args.settings.reinstall = args
+                                    .settings
+                                    .reinstall
+                                    .with_package(requirement.name.clone());
+                            }
+                        }
+                    }
+                    RequirementsTxtRequirement::Unnamed(requirement) => {
+                        if let ParsedUrl::Directory(ParsedDirectoryUrl { install_path, .. }) =
+                            &requirement.url.parsed_url
+                        {
+                            debug!(
+                                "Marking explicit source tree for reinstall: `{}`",
+                                install_path.display()
+                            );
+                            args.settings.reinstall =
+                                args.settings.reinstall.with_path(install_path.clone());
+                        }
+                    }
+                }
+            }
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
 
             commands::pip_install(
                 &requirements,
@@ -650,7 +697,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             let mut sources = Vec::with_capacity(args.package.len() + args.requirements.len());
             for package in args.package {
-                sources.push(RequirementsSource::from_package(package)?);
+                sources.push(RequirementsSource::from_package_argument(&package)?);
             }
             sources.extend(
                 args.requirements
@@ -1003,13 +1050,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     args.with.len() + args.with_editable.len() + args.with_requirements.len(),
                 );
                 for package in args.with {
-                    requirements.push(RequirementsSource::from_with_package(package)?);
+                    requirements.push(RequirementsSource::from_with_package_argument(&package)?);
                 }
-                requirements.extend(
-                    args.with_editable
-                        .into_iter()
-                        .map(RequirementsSource::Editable),
-                );
+                for package in args.with_editable {
+                    requirements.push(RequirementsSource::from_editable(&package)?);
+                }
                 requirements.extend(
                     args.with_requirements
                         .into_iter()
@@ -1070,13 +1115,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.with.len() + args.with_editable.len() + args.with_requirements.len(),
             );
             for package in args.with {
-                requirements.push(RequirementsSource::from_with_package(package)?);
+                requirements.push(RequirementsSource::from_with_package_argument(&package)?);
             }
-            requirements.extend(
-                args.with_editable
-                    .into_iter()
-                    .map(RequirementsSource::Editable),
-            );
+            for package in args.with_editable {
+                requirements.push(RequirementsSource::from_editable(&package)?);
+            }
             requirements.extend(
                 args.with_requirements
                     .into_iter()
@@ -1493,13 +1536,11 @@ async fn run_project(
                 args.with.len() + args.with_editable.len() + args.with_requirements.len(),
             );
             for package in args.with {
-                requirements.push(RequirementsSource::from_with_package(package)?);
+                requirements.push(RequirementsSource::from_with_package_argument(&package)?);
             }
-            requirements.extend(
-                args.with_editable
-                    .into_iter()
-                    .map(RequirementsSource::Editable),
-            );
+            for package in args.with_editable {
+                requirements.push(RequirementsSource::from_editable(&package)?);
+            }
             requirements.extend(
                 args.with_requirements
                     .into_iter()
@@ -1661,14 +1702,16 @@ async fn run_project(
 
             let requirements = args
                 .packages
-                .into_iter()
-                .map(RequirementsSource::Package)
+                .iter()
+                .map(String::as_str)
+                .map(RequirementsSource::from_package_argument)
                 .chain(
                     args.requirements
                         .into_iter()
-                        .map(RequirementsSource::from_requirements_file),
+                        .map(RequirementsSource::from_requirements_file)
+                        .map(Ok),
                 )
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>>>()?;
 
             Box::pin(commands::add(
                 project_dir,

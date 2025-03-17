@@ -514,7 +514,7 @@ pub(crate) async fn install(
                 )) => {
                     warn_user!(
                         "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
-                        dist_info.path().user_display().cyan(),
+                        dist_info.install_path().user_display().cyan(),
                     );
                 }
                 Err(uv_installer::UninstallError::Uninstall(
@@ -522,7 +522,7 @@ pub(crate) async fn install(
                 )) => {
                     warn_user!(
                         "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",
-                        dist_info.path().user_display().cyan(),
+                        dist_info.install_path().user_display().cyan(),
                     );
                 }
                 Err(err) => return Err(err.into()),
