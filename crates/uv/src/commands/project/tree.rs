@@ -20,7 +20,7 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
-use crate::commands::project::lock::{do_safe_lock, LockMode};
+use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
@@ -132,9 +132,8 @@ pub(crate) async fn tree(
     let state = UniversalState::default();
 
     // Update the lockfile, if necessary.
-    let lock = match do_safe_lock(
+    let lock = match LockOperation::new(
         mode,
-        target,
         &settings,
         network_settings,
         &state,
@@ -144,6 +143,7 @@ pub(crate) async fn tree(
         printer,
         preview,
     )
+    .execute(target)
     .await
     {
         Ok(result) => result.into_lock(),
