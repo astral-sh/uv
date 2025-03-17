@@ -90,6 +90,15 @@ static DEFAULT_VARIABLE_UPDATES: LazyLock<BTreeMap<String, ReplacementEntry>> =
                 },
             ),
             (
+                "CXX".to_string(),
+                ReplacementEntry {
+                    mode: ReplacementMode::Partial {
+                        from: "/usr/bin/x86_64-linux-gnu-g++".to_string(),
+                    },
+                    to: "c++".to_string(),
+                },
+            ),
+            (
                 "BLDSHARED".to_string(),
                 ReplacementEntry {
                     mode: ReplacementMode::Partial {
