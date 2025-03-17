@@ -8,7 +8,7 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::HeaderMap;
 use itertools::Either;
-use reqwest::{Response, StatusCode};
+use reqwest::{Proxy, Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
 use tokio::sync::Semaphore;
 use tracing::{info_span, instrument, trace, warn, Instrument};
@@ -130,6 +130,12 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn platform(mut self, platform: &'a Platform) -> Self {
         self.base_client_builder = self.base_client_builder.platform(platform);
+        self
+    }
+
+    #[must_use]
+    pub fn proxy(mut self, proxy: Proxy) -> Self {
+        self.base_client_builder = self.base_client_builder.proxy(proxy);
         self
     }
 
