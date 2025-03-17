@@ -294,6 +294,8 @@ pub struct DirectUrlSourceDist {
     /// Unlike [`DirectUrlBuiltDist`], we can't require a full filename with a version here, people
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
+    /// The expected version, if known.
+    pub version: Option<Version>,
     /// The URL without the subdirectory fragment.
     pub location: Box<Url>,
     /// The subdirectory within the archive in which the source distribution is located.
@@ -308,6 +310,8 @@ pub struct DirectUrlSourceDist {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct GitSourceDist {
     pub name: PackageName,
+    /// The expected version, if known.
+    pub version: Option<Version>,
     /// The URL without the revision and subdirectory fragment.
     pub git: Box<GitUrl>,
     /// The subdirectory within the Git repository in which the source distribution is located.
@@ -333,6 +337,8 @@ pub struct PathSourceDist {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DirectorySourceDist {
     pub name: PackageName,
+    /// The expected version, if known.
+    pub version: Option<Version>,
     /// The absolute path to the distribution which we use for installing.
     pub install_path: PathBuf,
     /// Whether the package should be installed in editable mode.
@@ -374,6 +380,7 @@ impl Dist {
             DistExtension::Source(ext) => {
                 Ok(Self::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
                     name,
+                    version: None,
                     location: Box::new(location),
                     subdirectory,
                     ext,
@@ -462,6 +469,7 @@ impl Dist {
         // Determine whether the path represents an archive or a directory.
         Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {
             name,
+            version: None,
             install_path,
             editable,
             r#virtual,
@@ -478,6 +486,7 @@ impl Dist {
     ) -> Result<Dist, Error> {
         Ok(Self::Source(SourceDist::Git(GitSourceDist {
             name,
+            version: None,
             git: Box::new(git),
             subdirectory,
             url,

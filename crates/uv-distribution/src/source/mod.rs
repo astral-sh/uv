@@ -138,6 +138,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             source,
                             &PathSourceUrl {
                                 url: &url,
+                                version: Some(&dist.version),
                                 path: Cow::Owned(path),
                                 ext: dist.ext,
                             },
@@ -287,6 +288,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             source,
                             &PathSourceUrl {
                                 url: &url,
+                                version: Some(&dist.version),
                                 path: Cow::Owned(path),
                                 ext: dist.ext,
                             },

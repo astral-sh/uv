@@ -37,8 +37,13 @@ impl BuildableSource<'_> {
         match self {
             Self::Dist(SourceDist::Registry(dist)) => Some(&dist.version),
             Self::Dist(SourceDist::Path(dist)) => dist.version.as_ref(),
-            Self::Dist(_) => None,
-            Self::Url(_) => None,
+            Self::Dist(SourceDist::Directory(dist)) => dist.version.as_ref(),
+            Self::Dist(SourceDist::Git(dist)) => dist.version.as_ref(),
+            Self::Dist(SourceDist::DirectUrl(dist)) => dist.version.as_ref(),
+            Self::Url(SourceUrl::Git(url)) => url.version,
+            Self::Url(SourceUrl::Direct(url)) => url.version,
+            Self::Url(SourceUrl::Path(url)) => url.version,
+            Self::Url(SourceUrl::Directory(url)) => url.version,
         }
     }
 
@@ -132,6 +137,7 @@ impl std::fmt::Display for SourceUrl<'_> {
 #[derive(Debug, Clone)]
 pub struct DirectSourceUrl<'a> {
     pub url: &'a Url,
+    pub version: Option<&'a Version>,
     pub subdirectory: Option<&'a Path>,
     pub ext: SourceDistExtension,
 }
@@ -146,6 +152,7 @@ impl std::fmt::Display for DirectSourceUrl<'_> {
 pub struct GitSourceUrl<'a> {
     /// The URL with the revision and subdirectory fragment.
     pub url: &'a VerbatimUrl,
+    pub version: Option<&'a Version>,
     pub git: &'a GitUrl,
     /// The URL without the revision and subdirectory fragment.
     pub subdirectory: Option<&'a Path>,
@@ -161,6 +168,7 @@ impl<'a> From<&'a GitSourceDist> for GitSourceUrl<'a> {
     fn from(dist: &'a GitSourceDist) -> Self {
         Self {
             url: &dist.url,
+            version: dist.version.as_ref(),
             git: &dist.git,
             subdirectory: dist.subdirectory.as_deref(),
         }
@@ -170,6 +178,7 @@ impl<'a> From<&'a GitSourceDist> for GitSourceUrl<'a> {
 #[derive(Debug, Clone)]
 pub struct PathSourceUrl<'a> {
     pub url: &'a Url,
+    pub version: Option<&'a Version>,
     pub path: Cow<'a, Path>,
     pub ext: SourceDistExtension,
 }
@@ -184,6 +193,7 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
     fn from(dist: &'a PathSourceDist) -> Self {
         Self {
             url: &dist.url,
+            version: dist.version.as_ref(),
             path: Cow::Borrowed(&dist.install_path),
             ext: dist.ext,
         }
@@ -193,6 +203,7 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
 #[derive(Debug, Clone)]
 pub struct DirectorySourceUrl<'a> {
     pub url: &'a Url,
+    pub version: Option<&'a Version>,
     pub install_path: Cow<'a, Path>,
     pub editable: bool,
 }
@@ -207,6 +218,7 @@ impl<'a> From<&'a DirectorySourceDist> for DirectorySourceUrl<'a> {
     fn from(dist: &'a DirectorySourceDist) -> Self {
         Self {
             url: &dist.url,
+            version: dist.version.as_ref(),
             install_path: Cow::Borrowed(&dist.install_path),
             editable: dist.editable,
         }

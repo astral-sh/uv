@@ -264,7 +264,11 @@ impl<'a> Planner<'a> {
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
                     if let Some(wheel) = built_index.url(sdist)? {
-                        if wheel.filename.name == sdist.name {
+                        if wheel.filename.name == sdist.name
+                            && dist
+                                .version()
+                                .is_some_and(|version| version == &wheel.filename.version)
+                        {
                             let cached_dist = wheel.into_url_dist(sdist);
                             debug!("URL source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
@@ -282,7 +286,11 @@ impl<'a> Planner<'a> {
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
                     if let Some(wheel) = built_index.git(sdist) {
-                        if wheel.filename.name == sdist.name {
+                        if wheel.filename.name == sdist.name
+                            && dist
+                                .version()
+                                .is_some_and(|version| version == &wheel.filename.version)
+                        {
                             let cached_dist = wheel.into_git_dist(sdist);
                             debug!("Git source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
@@ -305,7 +313,11 @@ impl<'a> Planner<'a> {
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
                     if let Some(wheel) = built_index.path(sdist)? {
-                        if wheel.filename.name == sdist.name {
+                        if wheel.filename.name == sdist.name
+                            && dist
+                                .version()
+                                .is_some_and(|version| version == &wheel.filename.version)
+                        {
                             let cached_dist = wheel.into_path_dist(sdist);
                             debug!("Path source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
@@ -328,7 +340,11 @@ impl<'a> Planner<'a> {
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
                     if let Some(wheel) = built_index.directory(sdist)? {
-                        if wheel.filename.name == sdist.name {
+                        if wheel.filename.name == sdist.name
+                            && dist
+                                .version()
+                                .is_some_and(|version| version == &wheel.filename.version)
+                        {
                             let cached_dist = wheel.into_directory_dist(sdist);
                             debug!("Directory source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));

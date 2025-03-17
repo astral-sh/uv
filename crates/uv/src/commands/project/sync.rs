@@ -742,11 +742,16 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
 
         // Filter out any editable distributions.
         EditableMode::NonEditable => resolution.map(|dist| {
-            let ResolvedDist::Installable { dist, version } = dist else {
+            let ResolvedDist::Installable {
+                dist,
+                version: installable_version,
+            } = dist
+            else {
                 return None;
             };
             let Dist::Source(SourceDist::Directory(DirectorySourceDist {
                 name,
+                version,
                 install_path,
                 editable: true,
                 r#virtual: false,
@@ -759,12 +764,13 @@ fn apply_editable_mode(resolution: Resolution, editable: EditableMode) -> Resolu
             Some(ResolvedDist::Installable {
                 dist: Arc::new(Dist::Source(SourceDist::Directory(DirectorySourceDist {
                     name: name.clone(),
+                    version: version.clone(),
                     install_path: install_path.clone(),
                     editable: false,
                     r#virtual: false,
                     url: url.clone(),
                 }))),
-                version: version.clone(),
+                version: installable_version.clone(),
             })
         }),
     }
