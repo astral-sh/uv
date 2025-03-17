@@ -222,7 +222,7 @@ more details.
 With a shebang line, you can run scripts that are on your `PATH` or in the current folder without
 specifying `uv run` before the filename.
 
-For example, create a file called `do-thing` with the following contents
+For example, create a file called `greet` with the following contents
 
 ```python title="greet"
 #!/usr/bin/env -S uv run --script
@@ -233,13 +233,13 @@ print("Hello")
 Ensure that your script is executable, typically with `chmod +x greet`, and run the script
 
 ```
-./greet
+$ ./greet
 ```
 
 Output
 
 ```
-Reading inline script metadata from `./do-thing`
+Reading inline script metadata from `./greet`
 Hello, world!
 ```
 
