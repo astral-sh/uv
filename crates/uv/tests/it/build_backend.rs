@@ -509,7 +509,7 @@ fn build_module_name_normalization() -> Result<()> {
 
     // Error case 2: Multiple modules a matching name.
     // Requires a case-sensitive filesystem.
-    #[cfg(linux)]
+    #[cfg(target_os = "linux")]
     {
         context
             .temp_dir
