@@ -9544,7 +9544,7 @@ fn invalid_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value './:foo' for '--group <GROUP>': The --group path is required to end in pyproject.toml for compatibility with pip; got: ./
+    error: invalid value './:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: ./
 
     For more information, try '--help'.
     ");
@@ -9557,7 +9557,7 @@ fn invalid_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: invalid value 'subdir/:foo' for '--group <GROUP>': The --group path is required to end in pyproject.toml for compatibility with pip; got: subdir/
+    error: invalid value 'subdir/:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: subdir/
 
     For more information, try '--help'.
     ");
@@ -9573,7 +9573,7 @@ fn invalid_group() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The dependency group 'bar' was not found in pyproject.toml
+    error: The dependency group 'bar' was not found in the project at pyproject.toml
     ");
 
     Ok(())

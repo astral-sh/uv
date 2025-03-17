@@ -107,17 +107,31 @@ Install from a `pyproject.toml` file with all optional dependencies enabled:
 $ uv pip install -r pyproject.toml --all-extras
 ```
 
-To install dependency groups in the current project directory's pyproject.toml:
+To install dependency groups in the current project directory's `pyproject.toml`, for example the
+group `foo`:
 
 ```console
 $ uv pip install --group foo
 ```
 
-To install dependency groups for an arbitrary pyproject.toml:
+To specify the project directory where groups should be sourced from:
 
 ```console
-$ uv pip install --group some/path/pyproject.toml:foo
+$ uv pip install --project some/path/ --group foo --group bar
 ```
+
+Alternatively, you can specify a path to a `pyproject.toml` for each group:
+
+```console
+$ uv pip install --group some/path/pyproject.toml:foo --group other/pyproject.toml:bar
+```
+
+!!! note
+
+    `--group` flags do not apply to other sources specified with flags like `-r` or -e`.
+    For instance, `uv pip install -r some/path/pyproject.toml --group foo` sources `foo`
+    from `./pyproject.toml` and **not** `some/path/pyproject.toml`.
+    This matches the behaviour that `pip install` is shipping.
 
 ## Uninstalling a package
 

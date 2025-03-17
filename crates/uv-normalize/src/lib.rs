@@ -136,7 +136,7 @@ impl Display for InvalidPipGroupPathError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "The --group path is required to end in pyproject.toml for compatibility with pip; got: {}",
+            "The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: {}",
             self.0,
         )
     }
