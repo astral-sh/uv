@@ -532,6 +532,38 @@ fn python_find_venv() {
         ----- stderr -----
         "###);
     }
+
+    // If we query from outside the project, but specify the project via the --project flag, we find the executable in the project's virtual environment
+    #[cfg(not(windows))]
+    {
+        let child_dir = context.temp_dir.child("child-project");
+        child_dir.create_dir_all().unwrap();
+        let pyproject_toml = child_dir.child("pyproject.toml");
+        pyproject_toml
+            .write_str(indoc! {r#"
+        [project]
+        name = "child-project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["anyio==3.7.0"]
+    "#})
+            .unwrap();
+        uv_snapshot!(context.filters(), context.venv().current_dir(child_dir).arg("-q"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    "###);
+        uv_snapshot!(context.filters(), context.python_find().arg("--project").arg("child-project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/child-project/.venv/[BIN]/python
+
+    ----- stderr -----
+    "###);
+    }
 }
 
 #[cfg(unix)]

@@ -64,6 +64,7 @@ pub(crate) async fn find(
         environment_preference,
         python_preference,
         cache,
+        project_dir,
     )?;
 
     // Warn if the discovered Python version is incompatible with the current workspace
