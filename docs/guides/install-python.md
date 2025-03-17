@@ -116,7 +116,7 @@ command invocation. See the
 [Python discovery](../concepts/python-versions.md#discovery-of-python-versions) documentation for
 details.
 
-To force uv to use the system Python, provide the `--python-preference only-system` option. See the
+To force uv to use the system Python, provide the `--no-managed-python` flag. See the
 [Python version preference](../concepts/python-versions.md#adjusting-python-version-preferences)
 documentation for more details.
 

@@ -140,8 +140,7 @@ impl EnvVars {
     /// exclude distributions published after the specified date.
     pub const UV_EXCLUDE_NEWER: &'static str = "UV_EXCLUDE_NEWER";
 
-    /// Equivalent to the `--python-preference` command-line argument. Whether uv
-    /// should prefer system or managed Python versions.
+    /// Whether uv should prefer system or managed Python versions.
     pub const UV_PYTHON_PREFERENCE: &'static str = "UV_PYTHON_PREFERENCE";
 
     /// Equivalent to the

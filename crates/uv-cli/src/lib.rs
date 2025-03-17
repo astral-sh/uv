@@ -134,20 +134,39 @@ pub struct TopLevelArgs {
 #[command(next_help_heading = "Global options", next_display_order = 1000)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct GlobalArgs {
-    /// Whether to prefer uv-managed or system Python installations.
-    ///
-    /// By default, uv prefers using Python versions it manages. However, it
-    /// will use system Python installations if a uv-managed Python is not
-    /// installed. This option allows prioritizing or ignoring system Python
-    /// installations.
     #[arg(
         global = true,
         long,
         help_heading = "Python options",
         display_order = 700,
-        env = EnvVars::UV_PYTHON_PREFERENCE
+        env = EnvVars::UV_PYTHON_PREFERENCE,
+        hide = true
     )]
     pub python_preference: Option<PythonPreference>,
+
+    /// Whether to require uv-managed Python installations.
+    ///
+    /// By default, uv prefers using Python versions it manages. However, it
+    /// will use system Python installations if a uv-managed Python is not
+    /// installed. This option disables this system Python installation fallback.
+    #[arg(
+        global = true,
+        long,
+        help_heading = "Python options",
+        conflicts_with = "no_managed_python",
+        conflicts_with = "python_preference"
+    )]
+    pub managed_python: bool,
+
+    /// Whether to disable uv-managed Python installations.
+    #[arg(
+        global = true,
+        long,
+        help_heading = "Python options",
+        conflicts_with = "managed_python",
+        conflicts_with = "python_preference"
+    )]
+    pub no_managed_python: bool,
 
     #[allow(clippy::doc_markdown)]
     /// Allow automatically downloading Python when required. [env: "UV_PYTHON_DOWNLOADS=auto"]
@@ -4392,8 +4411,9 @@ pub enum PythonCommand {
     /// By default, installed Python versions and the downloads for latest available patch version
     /// of each supported Python major version are shown.
     ///
-    /// The displayed versions are filtered by the `--python-preference` option, i.e., if using
-    /// `only-system`, no managed Python versions will be shown.
+    /// Use `--managed-python` to view only managed Python versions.
+    ///
+    /// Use `--no-managed-python` to omit managed Python versions.
     ///
     /// Use `--all-versions` to view all available patch versions.
     ///

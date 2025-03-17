@@ -343,8 +343,7 @@ Distributions can be read from a local directory by using the `file://` URL sche
 
 ### `UV_PYTHON_PREFERENCE`
 
-Equivalent to the `--python-preference` command-line argument. Whether uv
-should prefer system or managed Python versions.
+Whether uv should prefer system or managed Python versions.
 
 ### `UV_REQUEST_TIMEOUT`
 
