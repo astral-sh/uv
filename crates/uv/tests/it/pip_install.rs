@@ -9988,3 +9988,217 @@ fn unsupported_git_scheme() {
     "###
     );
 }
+
+/// Modify a project to use a `src` layout.
+#[test]
+fn change_layout_src() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e .")?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Installing should build the package.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Reinstalling should have no effect.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Replace the `src` layout with a flat layout.
+    fs_err::remove_dir_all(context.temp_dir.child("src").path())?;
+
+    context
+        .temp_dir
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Installing should rebuild the package.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Reinstalling should have no effect.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+/// Modify a custom directory in the cache keys.
+#[test]
+fn change_layout_custom_directory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e .")?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        cache-keys = [{ dir = "build" }]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Installing should build the package.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Reinstalling should have no effect.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "
+    );
+
+    // Create the `build` directory.
+    fs_err::create_dir(context.temp_dir.child("build"))?;
+
+    // Installing should rebuild the package.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Reinstalling should have no effect.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "
+    );
+
+    // Remove the `build` directory.
+    fs_err::remove_dir(context.temp_dir.child("build"))?;
+
+    // Installing should rebuild the package.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Reinstalling should have no effect.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "
+    );
+
+    Ok(())
+}

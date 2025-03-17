@@ -32,8 +32,9 @@ explicitly on the command-line (e.g., `uv pip install .`).
 ## Dynamic metadata
 
 By default, uv will _only_ rebuild and reinstall local directory dependencies (e.g., editables) if
-the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the directory root has changed. This is a
-heuristic and, in some cases, may lead to fewer re-installs than desired.
+the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the directory root has changed, or if a
+`src` directory is added or removed. This is a heuristic and, in some cases, may lead to fewer
+re-installs than desired.
 
 To incorporate additional information into the cache key for a given package, you can add cache key
 entries under [`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys),
@@ -68,7 +69,7 @@ the following to the project's `pyproject.toml`:
 cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }]
 ```
 
-Globs are supported, following the syntax of the
+Globs are supported for `file` keys, following the syntax of the
 [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html) crate. For example, to invalidate the
 cache whenever a `.toml` file in the project directory or any of its subdirectories is modified, use
 the following:
@@ -90,6 +91,17 @@ project's `pyproject.toml` to invalidate the cache whenever the environment vari
 [tool.uv]
 cache-keys = [{ file = "pyproject.toml" }, { env = "MY_ENV_VAR" }]
 ```
+
+Finally, to invalidate a project whenever a specific directory (like `src`) is created or removed,
+add the following to the project's `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { dir = "src" }]
+```
+
+Note that the `dir` key will only track changes to the directory itself, and not arbitrary changes
+within the directory.
 
 As an escape hatch, if a project uses `dynamic` metadata that isn't covered by `tool.uv.cache-keys`,
 you can instruct uv to _always_ rebuild and reinstall it by adding the project to the

@@ -31,8 +31,11 @@ pub struct CacheInfo {
     /// The Git tags present at the time of the build.
     tags: Option<Tags>,
     /// Environment variables to include in the cache key.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default)]
     env: BTreeMap<String, Option<String>>,
+    /// The timestamp or inode of any directories that should be considered in the cache key.
+    #[serde(default)]
+    directories: BTreeMap<String, Option<DirectoryTimestamp>>,
 }
 
 impl CacheInfo {
@@ -59,6 +62,7 @@ impl CacheInfo {
         let mut commit = None;
         let mut tags = None;
         let mut timestamp = None;
+        let mut directories = BTreeMap::new();
         let mut env = BTreeMap::new();
 
         // Read the cache keys.
@@ -82,6 +86,9 @@ impl CacheInfo {
                 CacheKey::Path("pyproject.toml".to_string()),
                 CacheKey::Path("setup.py".to_string()),
                 CacheKey::Path("setup.cfg".to_string()),
+                CacheKey::Directory {
+                    dir: "src".to_string(),
+                },
             ]
         });
 
@@ -116,6 +123,51 @@ impl CacheInfo {
                         continue;
                     }
                     timestamp = max(timestamp, Some(Timestamp::from_metadata(&metadata)));
+                }
+                CacheKey::Directory { dir } => {
+                    // Treat the path as a directory.
+                    let path = directory.join(&dir);
+                    let metadata = match path.metadata() {
+                        Ok(metadata) => metadata,
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                            directories.insert(dir, None);
+                            continue;
+                        }
+                        Err(err) => {
+                            warn!("Failed to read metadata for directory: {err}");
+                            continue;
+                        }
+                    };
+                    if !metadata.is_dir() {
+                        warn!(
+                            "Expected directory for cache key, but found file: `{}`",
+                            path.display()
+                        );
+                        continue;
+                    }
+
+                    if let Ok(created) = metadata.created() {
+                        // Prefer the creation time.
+                        directories.insert(
+                            dir,
+                            Some(DirectoryTimestamp::Timestamp(Timestamp::from(created))),
+                        );
+                    } else {
+                        // Fall back to the inode.
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::fs::MetadataExt;
+                            directories
+                                .insert(dir, Some(DirectoryTimestamp::Inode(metadata.ino())));
+                        }
+                        #[cfg(not(unix))]
+                        {
+                            warn!(
+                                "Failed to read creation time for directory: `{}`",
+                                path.display()
+                            );
+                        }
+                    }
                 }
                 CacheKey::Git {
                     git: GitPattern::Bool(true),
@@ -186,11 +238,16 @@ impl CacheInfo {
             }
         }
 
+        debug!(
+            "Computed cache info: {timestamp:?}, {commit:?}, {tags:?}, {env:?}, {directories:?}"
+        );
+
         Ok(Self {
             timestamp,
             commit,
             tags,
             env,
+            directories,
         })
     }
 
@@ -211,6 +268,7 @@ impl CacheInfo {
             && self.commit.is_none()
             && self.tags.is_none()
             && self.env.is_empty()
+            && self.directories.is_empty()
     }
 }
 
@@ -241,6 +299,8 @@ pub enum CacheKey {
     Path(String),
     /// Ex) `{ file = "Cargo.lock" }` or `{ file = "**/*.toml" }`
     File { file: String },
+    /// Ex) `{ dir = "src" }`
+    Directory { dir: String },
     /// Ex) `{ git = true }` or `{ git = { commit = true, tags = false } }`
     Git { git: GitPattern },
     /// Ex) `{ env = "UV_CACHE_INFO" }`
@@ -266,4 +326,12 @@ pub struct GitSet {
 pub enum FilePattern {
     Glob(String),
     Path(PathBuf),
+}
+
+/// A timestamp used to measure changes to a directory.
+#[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(untagged, rename_all = "kebab-case", deny_unknown_fields)]
+enum DirectoryTimestamp {
+    Timestamp(Timestamp),
+    Inode(u64),
 }
