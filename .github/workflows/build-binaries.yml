@@ -301,8 +301,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        # Use patch for https://github.com/PyO3/maturin-action/issues/331
-        uses: PyO3/maturin-action@ac4fe6ed80d382f96d3456076766a4fdbe284bf9
+        uses: PyO3/maturin-action@36db84001d74475ad1b8e6613557ae4ee2dc3598 # v1
         with:
           target: ${{ matrix.target }}
           manylinux: auto
