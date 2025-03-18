@@ -1,5 +1,8 @@
 use std::future::Future;
 use std::sync::Arc;
+
+use reqwest::StatusCode;
+
 use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
@@ -61,6 +64,8 @@ pub enum MetadataUnavailable {
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
     RequiresPython(VersionSpecifiers, Version),
+    /// The wheel metadata could not be fetched due to a network error.
+    Network(StatusCode),
 }
 
 impl MetadataUnavailable {
@@ -72,7 +77,7 @@ impl MetadataUnavailable {
             Self::InvalidMetadata(err) => Some(err),
             Self::InconsistentMetadata(err) => Some(err),
             Self::InvalidStructure(err) => Some(err),
-            Self::RequiresPython(_, _) => None,
+            Self::RequiresPython(..) | Self::Network(..) => None,
         }
     }
 }
@@ -291,6 +296,20 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             Ok(MetadataResponse::Unavailable(
                                 MetadataUnavailable::InvalidStructure(Arc::new(err)),
                             ))
+                        }
+                        uv_client::ErrorKind::WrappedReqwestError(url, err) => {
+                            let Some(status) = err.status().filter(StatusCode::is_client_error)
+                            else {
+                                return Err(uv_client::Error::new(
+                                    uv_client::ErrorKind::WrappedReqwestError(url, err),
+                                    retries,
+                                    duration,
+                                )
+                                .into());
+                            };
+                            Ok(MetadataResponse::Unavailable(MetadataUnavailable::Network(
+                                status,
+                            )))
                         }
                         kind => Err(uv_client::Error::new(kind, retries, duration).into()),
                     }

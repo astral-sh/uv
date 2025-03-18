@@ -1,6 +1,9 @@
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::iter;
 use std::sync::Arc;
+
+use reqwest::StatusCode;
 
 use uv_distribution_types::IncompatibleDist;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -46,6 +49,8 @@ pub enum UnavailableVersion {
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
     RequiresPython(VersionSpecifiers),
+    /// The network request failed with the given status code.
+    Network(StatusCode),
 }
 
 impl UnavailableVersion {
@@ -59,6 +64,7 @@ impl UnavailableVersion {
             Self::RequiresPython(requires_python) => {
                 format!("Python {requires_python}")
             }
+            Self::Network(status) => status.to_string(),
         }
     }
 
@@ -70,6 +76,7 @@ impl UnavailableVersion {
             Self::InvalidStructure => format!("has {self}"),
             Self::Offline => format!("needs {self}"),
             Self::RequiresPython(..) => format!("requires {self}"),
+            Self::Network(..) => format!("could not be fetched from the network (`{self}`)"),
         }
     }
 
@@ -81,6 +88,7 @@ impl UnavailableVersion {
             Self::InvalidStructure => format!("have {self}"),
             Self::Offline => format!("need {self}"),
             Self::RequiresPython(..) => format!("require {self}"),
+            Self::Network(..) => format!("could not be fetched from the network (`{self}`)"),
         }
     }
 
@@ -98,6 +106,7 @@ impl UnavailableVersion {
             Self::InvalidStructure => None,
             Self::Offline => None,
             Self::RequiresPython(..) => None,
+            Self::Network(..) => None,
         }
     }
 }
@@ -118,6 +127,7 @@ impl From<&MetadataUnavailable> for UnavailableVersion {
             MetadataUnavailable::RequiresPython(requires_python, _python_version) => {
                 Self::RequiresPython(requires_python.clone())
             }
+            MetadataUnavailable::Network(status) => Self::Network(*status),
         }
     }
 }
@@ -158,16 +168,19 @@ pub enum UnavailablePackage {
     InvalidMetadata(UnavailableErrorChain),
     /// The package has an invalid structure.
     InvalidStructure(UnavailableErrorChain),
+    /// The network request failed with the given status code.
+    Network(StatusCode),
 }
 
 impl UnavailablePackage {
-    fn message(&self) -> &'static str {
+    fn message(&self) -> Cow<'static, str> {
         match self {
-            Self::NoIndex => "not found in the provided package locations",
-            Self::Offline => "not found in the cache",
-            Self::NotFound => "not found in the package registry",
-            Self::InvalidMetadata(_) => "invalid metadata",
-            Self::InvalidStructure(_) => "an invalid package format",
+            Self::NoIndex => Cow::Borrowed("not found in the provided package locations"),
+            Self::Offline => Cow::Borrowed("not found in the cache"),
+            Self::NotFound => Cow::Borrowed("not found in the package registry"),
+            Self::InvalidMetadata(_) => Cow::Borrowed("invalid metadata"),
+            Self::InvalidStructure(_) => Cow::Borrowed("an invalid package format"),
+            Self::Network(status) => Cow::Owned(status.to_string()),
         }
     }
 
@@ -178,13 +191,14 @@ impl UnavailablePackage {
             Self::NotFound => format!("was {self}"),
             Self::InvalidMetadata(_) => format!("has {self}"),
             Self::InvalidStructure(_) => format!("has {self}"),
+            Self::Network(_) => format!("could not be fetched from the network (`{self}`)"),
         }
     }
 }
 
 impl Display for UnavailablePackage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.message())
+        f.write_str(self.message().as_ref())
     }
 }
 
@@ -204,6 +218,7 @@ impl From<&MetadataUnavailable> for UnavailablePackage {
             MetadataUnavailable::RequiresPython(..) => {
                 unreachable!("`requires-python` is only known upfront for registry distributions")
             }
+            MetadataUnavailable::Network(status) => Self::Network(*status),
         }
     }
 }

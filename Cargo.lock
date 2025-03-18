@@ -7181,6 +7181,7 @@ dependencies = [
  "papaya",
  "percent-encoding",
  "petgraph",
+ "reqwest",
  "rkyv",
  "rustc-hash",
  "same-file",
