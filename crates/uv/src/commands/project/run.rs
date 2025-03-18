@@ -1110,9 +1110,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 let version_part = executable.strip_prefix("python").unwrap_or("");
                 let current_executable_python_version = base_interpreter.python_version().only_release();
                 // Determine the environment type
-                let env_type = if project_found { "the project" } else { "the" };
+                let env_type = if project_found { "project" } else { "virtual" };
 
-                // Construct the message dynamically
                 let message_suffix = if project_found {
                     format!(
                         "Did you mean to change the environment to Python {version_part} with `uv run -p {version_part} python`?"
@@ -1123,7 +1122,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     )
                 };
                 anyhow!(
-                    "`{}` not available in {} environment, which uses python `{}`. {}",
+                    "`{}` not available in the {} environment, which uses python `{}`. {}",
                     executable,
                     env_type,
                     current_executable_python_version,
