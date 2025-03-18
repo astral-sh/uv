@@ -214,9 +214,9 @@ impl<'de> serde::Deserialize<'de> for DefaultGroups {
                 E: serde::de::Error,
             {
                 if value != "all" {
-                    return Err(serde::de::Error::custom(format!(
-                        r#"default-groups must be "all" or a ["list", "of", "groups"]"#
-                    )));
+                    return Err(serde::de::Error::custom(
+                        r#"default-groups must be "all" or a ["list", "of", "groups"]"#,
+                    ));
                 }
                 Ok(DefaultGroups::All)
             }
