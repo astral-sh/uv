@@ -179,6 +179,10 @@ Add additional context and structure to log messages.
 
 If logging is not enabled, e.g., with `RUST_LOG` or `-v`, this has no effect.
 
+### `UV_MANAGED_PYTHON`
+
+Require use of uv-managed Python versions.
+
 ### `UV_NATIVE_TLS`
 
 Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
@@ -228,6 +232,10 @@ Ignore `.env` files when executing `uv run` commands.
 ### `UV_NO_INSTALLER_METADATA`
 
 Skip writing `uv` installer metadata files (e.g., `INSTALLER`, `REQUESTED`, and `direct_url.json`) to site-packages `.dist-info` directories.
+
+### `UV_NO_MANAGED_PYTHON`
+
+Disable use of uv-managed Python versions.
 
 ### `UV_NO_PROGRESS`
 

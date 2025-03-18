@@ -288,6 +288,7 @@ uv run [OPTIONS] [COMMAND]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-run--module"><a href="#uv-run--module"><code>--module</code></a>, <code>-m</code></dt><dd><p>Run a Python module.</p>
 
 <p>Equivalent to <code>python -m &lt;module&gt;</code>.</p>
@@ -363,6 +364,7 @@ uv run [OPTIONS] [COMMAND]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-run--no-progress"><a href="#uv-run--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -619,6 +621,7 @@ uv init [OPTIONS] [PATH]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-init--name"><a href="#uv-init--name"><code>--name</code></a> <i>name</i></dt><dd><p>The name of the project.</p>
 
 <p>Defaults to the name of the directory.</p>
@@ -644,6 +647,7 @@ uv init [OPTIONS] [PATH]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-init--no-package"><a href="#uv-init--no-package"><code>--no-package</code></a></dt><dd><p>Do not set up the project to be built as a Python package.</p>
 
 <p>Does not include a <code>[build-system]</code> for the project.</p>
@@ -939,6 +943,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-add--marker"><a href="#uv-add--marker"><code>--marker</code></a>, <code>-m</code> <i>marker</i></dt><dd><p>Apply this marker to all added packages</p>
 
 </dd><dt id="uv-add--native-tls"><a href="#uv-add--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
@@ -987,6 +992,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-add--no-progress"><a href="#uv-add--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -1298,6 +1304,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-remove--native-tls"><a href="#uv-remove--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -1344,6 +1351,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-remove--no-progress"><a href="#uv-remove--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -1667,6 +1675,7 @@ uv sync [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-sync--native-tls"><a href="#uv-sync--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -1745,6 +1754,7 @@ uv sync [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-sync--no-progress"><a href="#uv-sync--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -2034,6 +2044,7 @@ uv lock [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-lock--native-tls"><a href="#uv-lock--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -2080,6 +2091,7 @@ uv lock [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-lock--no-progress"><a href="#uv-lock--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -2375,6 +2387,7 @@ uv export [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-export--native-tls"><a href="#uv-export--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -2457,6 +2470,7 @@ uv export [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-export--no-progress"><a href="#uv-export--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -2749,6 +2763,7 @@ uv tree [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tree--native-tls"><a href="#uv-tree--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -2811,6 +2826,7 @@ uv tree [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tree--no-progress"><a href="#uv-tree--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -3225,6 +3241,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tool-run--native-tls"><a href="#uv-tool-run--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -3271,6 +3288,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tool-run--no-progress"><a href="#uv-tool-run--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -3557,6 +3575,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tool-install--native-tls"><a href="#uv-tool-install--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -3603,6 +3622,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tool-install--no-progress"><a href="#uv-tool-install--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -3876,6 +3896,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tool-upgrade--native-tls"><a href="#uv-tool-upgrade--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -3922,6 +3943,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tool-upgrade--no-progress"><a href="#uv-tool-upgrade--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -4055,6 +4077,7 @@ uv tool list [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tool-list--native-tls"><a href="#uv-tool-list--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -4074,6 +4097,7 @@ uv tool list [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tool-list--no-progress"><a href="#uv-tool-list--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -4174,6 +4198,7 @@ uv tool uninstall [OPTIONS] <NAME>...
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tool-uninstall--native-tls"><a href="#uv-tool-uninstall--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -4193,6 +4218,7 @@ uv tool uninstall [OPTIONS] <NAME>...
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tool-uninstall--no-progress"><a href="#uv-tool-uninstall--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -4289,6 +4315,7 @@ uv tool update-shell [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tool-update-shell--native-tls"><a href="#uv-tool-update-shell--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -4308,6 +4335,7 @@ uv tool update-shell [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tool-update-shell--no-progress"><a href="#uv-tool-update-shell--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -4422,6 +4450,7 @@ uv tool dir [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tool-dir--native-tls"><a href="#uv-tool-dir--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -4441,6 +4470,7 @@ uv tool dir [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-tool-dir--no-progress"><a href="#uv-tool-dir--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -4617,6 +4647,7 @@ uv python list [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-python-list--native-tls"><a href="#uv-python-list--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -4636,6 +4667,7 @@ uv python list [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-python-list--no-progress"><a href="#uv-python-list--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -4789,6 +4821,7 @@ uv python install [OPTIONS] [TARGETS]...
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-python-install--mirror"><a href="#uv-python-install--mirror"><code>--mirror</code></a> <i>mirror</i></dt><dd><p>Set the URL to use as the source for downloading Python installations.</p>
 
 <p>The provided URL will replace <code>https://github.com/astral-sh/python-build-standalone/releases/download</code> in, e.g., <code>https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz</code>.</p>
@@ -4815,6 +4848,7 @@ uv python install [OPTIONS] [TARGETS]...
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-python-install--no-progress"><a href="#uv-python-install--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -4928,6 +4962,7 @@ uv python find [OPTIONS] [REQUEST]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-python-find--native-tls"><a href="#uv-python-find--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -4947,6 +4982,7 @@ uv python find [OPTIONS] [REQUEST]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-python-find--no-progress"><a href="#uv-python-find--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -5074,6 +5110,7 @@ uv python pin [OPTIONS] [REQUEST]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-python-pin--native-tls"><a href="#uv-python-pin--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -5093,6 +5130,7 @@ uv python pin [OPTIONS] [REQUEST]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-python-pin--no-progress"><a href="#uv-python-pin--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -5215,6 +5253,7 @@ uv python dir [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-python-dir--native-tls"><a href="#uv-python-dir--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -5234,6 +5273,7 @@ uv python dir [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-python-dir--no-progress"><a href="#uv-python-dir--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -5337,6 +5377,7 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-python-uninstall--native-tls"><a href="#uv-python-uninstall--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -5356,6 +5397,7 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-python-uninstall--no-progress"><a href="#uv-python-uninstall--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -5638,6 +5680,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-compile--native-tls"><a href="#uv-pip-compile--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -5683,6 +5726,7 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-compile--no-progress"><a href="#uv-pip-compile--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -6078,6 +6122,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-sync--native-tls"><a href="#uv-pip-sync--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -6111,6 +6156,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-sync--no-progress"><a href="#uv-pip-sync--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -6494,6 +6540,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-install--native-tls"><a href="#uv-pip-install--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -6538,6 +6585,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-install--no-progress"><a href="#uv-pip-install--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -6849,6 +6897,7 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-uninstall--native-tls"><a href="#uv-pip-uninstall--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -6868,6 +6917,7 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>>
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-uninstall--no-progress"><a href="#uv-pip-uninstall--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -6980,6 +7030,7 @@ uv pip freeze [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-freeze--native-tls"><a href="#uv-pip-freeze--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -6999,6 +7050,7 @@ uv pip freeze [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-freeze--no-progress"><a href="#uv-pip-freeze--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -7193,6 +7245,7 @@ uv pip list [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-list--native-tls"><a href="#uv-pip-list--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -7214,6 +7267,7 @@ uv pip list [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-list--no-progress"><a href="#uv-pip-list--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -7332,6 +7386,7 @@ uv pip show [OPTIONS] [PACKAGE]...
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-show--native-tls"><a href="#uv-pip-show--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -7351,6 +7406,7 @@ uv pip show [OPTIONS] [PACKAGE]...
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-show--no-progress"><a href="#uv-pip-show--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -7530,6 +7586,7 @@ uv pip tree [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-tree--native-tls"><a href="#uv-pip-tree--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -7553,6 +7610,7 @@ uv pip tree [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-tree--no-progress"><a href="#uv-pip-tree--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -7667,6 +7725,7 @@ uv pip check [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-check--native-tls"><a href="#uv-pip-check--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -7686,6 +7745,7 @@ uv pip check [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-pip-check--no-progress"><a href="#uv-pip-check--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -7900,6 +7960,7 @@ uv venv [OPTIONS] [PATH]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-venv--native-tls"><a href="#uv-venv--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -7921,6 +7982,7 @@ uv venv [OPTIONS] [PATH]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-venv--no-progress"><a href="#uv-venv--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -8182,6 +8244,7 @@ uv build [OPTIONS] [SRC]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-build--native-tls"><a href="#uv-build--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -8230,6 +8293,7 @@ uv build [OPTIONS] [SRC]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-build--no-progress"><a href="#uv-build--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -8443,6 +8507,7 @@ With these settings, the following two calls are equivalent:</code></pre>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-publish--native-tls"><a href="#uv-publish--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -8462,6 +8527,7 @@ With these settings, the following two calls are equivalent:</code></pre>
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-publish--no-progress"><a href="#uv-publish--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -8609,6 +8675,7 @@ uv cache clean [OPTIONS] [PACKAGE]...
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-cache-clean--native-tls"><a href="#uv-cache-clean--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -8628,6 +8695,7 @@ uv cache clean [OPTIONS] [PACKAGE]...
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-cache-clean--no-progress"><a href="#uv-cache-clean--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -8724,6 +8792,7 @@ uv cache prune [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-cache-prune--native-tls"><a href="#uv-cache-prune--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -8743,6 +8812,7 @@ uv cache prune [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-cache-prune--no-progress"><a href="#uv-cache-prune--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -8841,6 +8911,7 @@ uv cache dir [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-cache-dir--native-tls"><a href="#uv-cache-dir--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -8860,6 +8931,7 @@ uv cache dir [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-cache-dir--no-progress"><a href="#uv-cache-dir--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -8972,6 +9044,7 @@ uv self update [OPTIONS] [TARGET_VERSION]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-self-update--native-tls"><a href="#uv-self-update--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -8991,6 +9064,7 @@ uv self update [OPTIONS] [TARGET_VERSION]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-self-update--no-progress"><a href="#uv-self-update--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -9084,6 +9158,7 @@ uv version [OPTIONS]
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-version--native-tls"><a href="#uv-version--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -9103,6 +9178,7 @@ uv version [OPTIONS]
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-version--no-progress"><a href="#uv-version--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
 
 <p>For example, spinners or progress bars.</p>
@@ -9172,10 +9248,12 @@ uv generate-shell-completion [OPTIONS] <SHELL>
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-generate-shell-completion--no-managed-python"><a href="#uv-generate-shell-completion--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-generate-shell-completion--project"><a href="#uv-generate-shell-completion--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
 
 <p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
@@ -9250,6 +9328,7 @@ uv help [OPTIONS] [COMMAND]...
 
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
 
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-help--native-tls"><a href="#uv-help--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
 
 <p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
@@ -9269,6 +9348,7 @@ uv help [OPTIONS] [COMMAND]...
 
 <p>Instead, uv will search for a suitable Python version on the system.</p>
 
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
 </dd><dt id="uv-help--no-pager"><a href="#uv-help--no-pager"><code>--no-pager</code></a></dt><dd><p>Disable pager when printing help</p>
 
 </dd><dt id="uv-help--no-progress"><a href="#uv-help--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>

@@ -143,6 +143,12 @@ impl EnvVars {
     /// Whether uv should prefer system or managed Python versions.
     pub const UV_PYTHON_PREFERENCE: &'static str = "UV_PYTHON_PREFERENCE";
 
+    /// Require use of uv-managed Python versions.
+    pub const UV_MANAGED_PYTHON: &'static str = "UV_MANAGED_PYTHON";
+
+    /// Disable use of uv-managed Python versions.
+    pub const UV_NO_MANAGED_PYTHON: &'static str = "UV_NO_MANAGED_PYTHON";
+
     /// Equivalent to the
     /// [`python-downloads`](../reference/settings.md#python-downloads) setting and, when disabled, the
     /// `--no-python-downloads` option. Whether uv should allow Python downloads.
