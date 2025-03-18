@@ -98,18 +98,18 @@ impl<'a> Planner<'a> {
                     [installed] => {
                         let source = RequirementSource::from(dist);
                         match RequirementSatisfaction::check(installed, &source) {
-                            Ok(RequirementSatisfaction::Mismatch) => {
+                            RequirementSatisfaction::Mismatch => {
                                 debug!("Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}");
                             }
-                            Ok(RequirementSatisfaction::Satisfied) => {
+                            RequirementSatisfaction::Satisfied => {
                                 debug!("Requirement already installed: {installed}");
                                 continue;
                             }
-                            Ok(RequirementSatisfaction::OutOfDate) => {
+                            RequirementSatisfaction::OutOfDate => {
                                 debug!("Requirement installed, but not fresh: {installed}");
                             }
-                            Err(err) => {
-                                debug!("Failed to deserialize cached requirements for: {installed} ({err})");
+                            RequirementSatisfaction::CacheInvalid => {
+                                // Already logged
                             }
                         }
                         reinstalls.push(installed.clone());
