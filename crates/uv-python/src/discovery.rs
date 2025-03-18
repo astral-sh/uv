@@ -796,7 +796,7 @@ impl Error {
                     );
                     false
                 }
-                InterpreterError::NotFound(path) => {
+                InterpreterError::NotFound(path) | InterpreterError::BrokenSymlink(path) => {
                     // If the interpreter is from an active, valid virtual environment, we should
                     // fail because it's broken
                     if let Some(Ok(true)) = matches!(source, PythonSource::ActiveEnvironment)
@@ -875,11 +875,13 @@ pub fn find_python_installations<'a>(
                 debug!("Checking for Python interpreter at {request}");
                 match python_installation_from_executable(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_)) => Ok(Err(PythonNotFound {
-                        request: request.clone(),
-                        python_preference: preference,
-                        environment_preference: environments,
-                    })),
+                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
+                        Ok(Err(PythonNotFound {
+                            request: request.clone(),
+                            python_preference: preference,
+                            environment_preference: environments,
+                        }))
+                    }
                     Err(err) => Err(Error::Query(
                         Box::new(err),
                         path.clone(),
@@ -899,11 +901,13 @@ pub fn find_python_installations<'a>(
                 debug!("Checking for Python interpreter in {request}");
                 match python_installation_from_directory(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_)) => Ok(Err(PythonNotFound {
-                        request: request.clone(),
-                        python_preference: preference,
-                        environment_preference: environments,
-                    })),
+                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
+                        Ok(Err(PythonNotFound {
+                            request: request.clone(),
+                            python_preference: preference,
+                            environment_preference: environments,
+                        }))
+                    }
                     Err(err) => Err(Error::Query(
                         Box::new(err),
                         path.clone(),
