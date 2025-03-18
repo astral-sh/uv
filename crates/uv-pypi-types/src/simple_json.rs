@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::str::FromStr;
 
 use jiff::Timestamp;
@@ -86,9 +87,11 @@ impl<'de> Deserialize<'de> for File {
                         "filename" => filename = Some(access.next_value()?),
                         "hashes" => hashes = Some(access.next_value()?),
                         "requires-python" => {
-                            requires_python = access.next_value::<Option<&str>>()?.map(|s| {
-                                LenientVersionSpecifiers::from_str(s).map(VersionSpecifiers::from)
-                            });
+                            requires_python =
+                                access.next_value::<Option<Cow<'_, str>>>()?.map(|s| {
+                                    LenientVersionSpecifiers::from_str(s.as_ref())
+                                        .map(VersionSpecifiers::from)
+                                });
                         }
                         "size" => size = Some(access.next_value()?),
                         "upload-time" => upload_time = Some(access.next_value()?),
