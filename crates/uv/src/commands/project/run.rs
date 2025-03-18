@@ -1578,8 +1578,8 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
 }
 
 /// Matches valid Python executable names:
-/// - ✅ "python", "python3", "python3.9", "python4", "python3.10", "python3.13.3"
-/// - ❌ "python39", "python3abc", "python3.12b3", "", "python-foo"
+/// - ✅ "python", "python39", "python3", "python3.9", "python4", "python3.10", "python3.13.3"
+/// - ❌ "python3abc", "python3.12b3", "", "python-foo"
 fn is_python_executable(executable_command: &str) -> bool {
     executable_command
         .strip_prefix("python")
