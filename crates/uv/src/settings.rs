@@ -56,7 +56,7 @@ const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
 #[derive(Debug, Clone)]
 pub(crate) struct GlobalSettings {
     pub(crate) required_version: Option<RequiredVersion>,
-    pub(crate) quiet: bool,
+    pub(crate) quiet: u8,
     pub(crate) verbose: u8,
     pub(crate) color: ColorChoice,
     pub(crate) network_settings: NetworkSettings,

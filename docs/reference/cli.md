@@ -441,7 +441,9 @@ uv run [OPTIONS] [COMMAND]
 <p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-run--quiet"><a href="#uv-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-run--quiet"><a href="#uv-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-run--refresh"><a href="#uv-run--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
@@ -699,7 +701,9 @@ uv init [OPTIONS] [PATH]
 <p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-init--quiet"><a href="#uv-init--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-init--quiet"><a href="#uv-init--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-init--script"><a href="#uv-init--script"><code>--script</code></a></dt><dd><p>Create a script.</p>
 
@@ -1058,7 +1062,9 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-add--quiet"><a href="#uv-add--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-add--quiet"><a href="#uv-add--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-add--raw-sources"><a href="#uv-add--raw-sources"><code>--raw-sources</code></a></dt><dd><p>Add source requirements to <code>project.dependencies</code>, rather than <code>tool.uv.sources</code>.</p>
 
@@ -1413,7 +1419,9 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-remove--quiet"><a href="#uv-remove--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-remove--quiet"><a href="#uv-remove--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-remove--refresh"><a href="#uv-remove--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
@@ -1831,7 +1839,9 @@ uv sync [OPTIONS]
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-sync--quiet"><a href="#uv-sync--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-sync--quiet"><a href="#uv-sync--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-sync--refresh"><a href="#uv-sync--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
@@ -2150,7 +2160,9 @@ uv lock [OPTIONS]
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-lock--quiet"><a href="#uv-lock--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-lock--quiet"><a href="#uv-lock--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-lock--refresh"><a href="#uv-lock--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
@@ -2551,7 +2563,9 @@ uv export [OPTIONS]
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-export--quiet"><a href="#uv-export--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-export--quiet"><a href="#uv-export--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-export--refresh"><a href="#uv-export--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
@@ -2990,7 +3004,9 @@ uv tree [OPTIONS]
 
 <p>Defaults to the version of the discovered Python interpreter.</p>
 
-</dd><dt id="uv-tree--quiet"><a href="#uv-tree--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-tree--quiet"><a href="#uv-tree--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-tree--resolution"><a href="#uv-tree--resolution"><code>--resolution</code></a> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 
@@ -3350,7 +3366,9 @@ uv tool run [OPTIONS] [COMMAND]
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-tool-run--quiet"><a href="#uv-tool-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-tool-run--quiet"><a href="#uv-tool-run--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-tool-run--refresh"><a href="#uv-tool-run--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
@@ -3684,7 +3702,9 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-tool-install--quiet"><a href="#uv-tool-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-tool-install--quiet"><a href="#uv-tool-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-tool-install--refresh"><a href="#uv-tool-install--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
@@ -3998,7 +4018,9 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-tool-upgrade--quiet"><a href="#uv-tool-upgrade--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-tool-upgrade--quiet"><a href="#uv-tool-upgrade--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-tool-upgrade--reinstall"><a href="#uv-tool-upgrade--reinstall"><code>--reinstall</code></a></dt><dd><p>Reinstall all packages, regardless of whether they&#8217;re already installed. Implies <code>--refresh</code></p>
 
@@ -4125,7 +4147,9 @@ uv tool list [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-tool-list--quiet"><a href="#uv-tool-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-tool-list--quiet"><a href="#uv-tool-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-tool-list--show-paths"><a href="#uv-tool-list--show-paths"><code>--show-paths</code></a></dt><dd><p>Whether to display the path to each tool environment and installed executable</p>
 
@@ -4248,7 +4272,9 @@ uv tool uninstall [OPTIONS] <NAME>...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-tool-uninstall--quiet"><a href="#uv-tool-uninstall--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-tool-uninstall--quiet"><a href="#uv-tool-uninstall--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-tool-uninstall--verbose"><a href="#uv-tool-uninstall--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -4365,7 +4391,9 @@ uv tool update-shell [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-tool-update-shell--quiet"><a href="#uv-tool-update-shell--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-tool-update-shell--quiet"><a href="#uv-tool-update-shell--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-tool-update-shell--verbose"><a href="#uv-tool-update-shell--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -4500,7 +4528,9 @@ uv tool dir [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-tool-dir--quiet"><a href="#uv-tool-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-tool-dir--quiet"><a href="#uv-tool-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-tool-dir--verbose"><a href="#uv-tool-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -4715,7 +4745,9 @@ uv python list [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-python-list--quiet"><a href="#uv-python-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-python-list--quiet"><a href="#uv-python-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-python-list--show-urls"><a href="#uv-python-list--show-urls"><code>--show-urls</code></a></dt><dd><p>Show the URLs of available Python downloads.</p>
 
@@ -4885,7 +4917,9 @@ uv python install [OPTIONS] [TARGETS]...
 <p>Distributions can be read from a local directory by using the <code>file://</code> URL scheme.</p>
 
 <p>May also be set with the <code>UV_PYPY_INSTALL_MIRROR</code> environment variable.</p>
-</dd><dt id="uv-python-install--quiet"><a href="#uv-python-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-python-install--quiet"><a href="#uv-python-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-python-install--reinstall"><a href="#uv-python-install--reinstall"><code>--reinstall</code></a>, <code>-r</code></dt><dd><p>Reinstall the requested Python version, if it&#8217;s already installed.</p>
 
@@ -5016,7 +5050,9 @@ uv python find [OPTIONS] [REQUEST]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-python-find--quiet"><a href="#uv-python-find--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-python-find--quiet"><a href="#uv-python-find--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-python-find--system"><a href="#uv-python-find--system"><code>--system</code></a></dt><dd><p>Only find system Python interpreters.</p>
 
@@ -5164,7 +5200,9 @@ uv python pin [OPTIONS] [REQUEST]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-python-pin--quiet"><a href="#uv-python-pin--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-python-pin--quiet"><a href="#uv-python-pin--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-python-pin--resolved"><a href="#uv-python-pin--resolved"><code>--resolved</code></a></dt><dd><p>Write the resolved Python interpreter path instead of the request.</p>
 
@@ -5303,7 +5341,9 @@ uv python dir [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-python-dir--quiet"><a href="#uv-python-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-python-dir--quiet"><a href="#uv-python-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-python-dir--verbose"><a href="#uv-python-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -5427,7 +5467,9 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-python-uninstall--quiet"><a href="#uv-python-uninstall--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-python-uninstall--quiet"><a href="#uv-python-uninstall--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-python-uninstall--verbose"><a href="#uv-python-uninstall--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -5910,7 +5952,9 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 
 <p>If a patch version is omitted, the minimum patch version is assumed. For example, <code>3.8</code> is mapped to <code>3.8.0</code>.</p>
 
-</dd><dt id="uv-pip-compile--quiet"><a href="#uv-pip-compile--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-pip-compile--quiet"><a href="#uv-pip-compile--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-pip-compile--refresh"><a href="#uv-pip-compile--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
@@ -6305,7 +6349,9 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>If a patch version is omitted, the minimum patch version is assumed. For example, <code>3.7</code> is mapped to <code>3.7.0</code>.</p>
 
-</dd><dt id="uv-pip-sync--quiet"><a href="#uv-pip-sync--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-pip-sync--quiet"><a href="#uv-pip-sync--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-pip-sync--refresh"><a href="#uv-pip-sync--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
@@ -6765,7 +6811,9 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <p>If a patch version is omitted, the minimum patch version is assumed. For example, <code>3.7</code> is mapped to <code>3.7.0</code>.</p>
 
-</dd><dt id="uv-pip-install--quiet"><a href="#uv-pip-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-pip-install--quiet"><a href="#uv-pip-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-pip-install--refresh"><a href="#uv-pip-install--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
@@ -6968,7 +7016,9 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-pip-uninstall--quiet"><a href="#uv-pip-uninstall--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-pip-uninstall--quiet"><a href="#uv-pip-uninstall--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-pip-uninstall--requirements"><a href="#uv-pip-uninstall--requirements"><code>--requirements</code></a>, <code>-r</code> <i>requirements</i></dt><dd><p>Uninstall all packages listed in the given requirements files</p>
 
@@ -7101,7 +7151,9 @@ uv pip freeze [OPTIONS]
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-pip-freeze--quiet"><a href="#uv-pip-freeze--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-pip-freeze--quiet"><a href="#uv-pip-freeze--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-pip-freeze--strict"><a href="#uv-pip-freeze--strict"><code>--strict</code></a></dt><dd><p>Validate the Python environment, to detect packages with missing dependencies and other issues</p>
 
@@ -7320,7 +7372,9 @@ uv pip list [OPTIONS]
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-pip-list--quiet"><a href="#uv-pip-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-pip-list--quiet"><a href="#uv-pip-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-pip-list--strict"><a href="#uv-pip-list--strict"><code>--strict</code></a></dt><dd><p>Validate the Python environment, to detect packages with missing dependencies and other issues</p>
 
@@ -7455,7 +7509,9 @@ uv pip show [OPTIONS] [PACKAGE]...
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-pip-show--quiet"><a href="#uv-pip-show--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-pip-show--quiet"><a href="#uv-pip-show--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-pip-show--strict"><a href="#uv-pip-show--strict"><code>--strict</code></a></dt><dd><p>Validate the Python environment, to detect packages with missing dependencies and other issues</p>
 
@@ -7665,7 +7721,9 @@ uv pip tree [OPTIONS]
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-pip-tree--quiet"><a href="#uv-pip-tree--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-pip-tree--quiet"><a href="#uv-pip-tree--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-pip-tree--show-version-specifiers"><a href="#uv-pip-tree--show-version-specifiers"><code>--show-version-specifiers</code></a></dt><dd><p>Show the version constraint(s) imposed on each package</p>
 
@@ -7794,7 +7852,9 @@ uv pip check [OPTIONS]
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-pip-check--quiet"><a href="#uv-pip-check--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-pip-check--quiet"><a href="#uv-pip-check--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-pip-check--system"><a href="#uv-pip-check--system"><code>--system</code></a></dt><dd><p>Check packages in the system Python environment.</p>
 
@@ -8041,7 +8101,9 @@ uv venv [OPTIONS] [PATH]
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-venv--quiet"><a href="#uv-venv--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-venv--quiet"><a href="#uv-venv--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-venv--refresh"><a href="#uv-venv--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
@@ -8377,7 +8439,9 @@ uv build [OPTIONS] [SRC]
 <p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
 
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-build--quiet"><a href="#uv-build--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-build--quiet"><a href="#uv-build--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-build--refresh"><a href="#uv-build--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
@@ -8579,7 +8643,9 @@ With these settings, the following two calls are equivalent:</code></pre>
 <p>Defaults to PyPI&#8217;s publish URL (&lt;https://upload.pypi.org/legacy/&gt;).</p>
 
 <p>May also be set with the <code>UV_PUBLISH_URL</code> environment variable.</p>
-</dd><dt id="uv-publish--quiet"><a href="#uv-publish--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-publish--quiet"><a href="#uv-publish--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-publish--token"><a href="#uv-publish--token"><code>--token</code></a>, <code>-t</code> <i>token</i></dt><dd><p>The token for the upload.</p>
 
@@ -8737,7 +8803,9 @@ uv cache clean [OPTIONS] [PACKAGE]...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-cache-clean--quiet"><a href="#uv-cache-clean--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-cache-clean--quiet"><a href="#uv-cache-clean--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-cache-clean--verbose"><a href="#uv-cache-clean--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -8854,7 +8922,9 @@ uv cache prune [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-cache-prune--quiet"><a href="#uv-cache-prune--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-cache-prune--quiet"><a href="#uv-cache-prune--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-cache-prune--verbose"><a href="#uv-cache-prune--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -8973,7 +9043,9 @@ uv cache dir [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-cache-dir--quiet"><a href="#uv-cache-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-cache-dir--quiet"><a href="#uv-cache-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-cache-dir--verbose"><a href="#uv-cache-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -9106,7 +9178,9 @@ uv self update [OPTIONS] [TARGET_VERSION]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-self-update--quiet"><a href="#uv-self-update--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-self-update--quiet"><a href="#uv-self-update--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-self-update--token"><a href="#uv-self-update--token"><code>--token</code></a> <i>token</i></dt><dd><p>A GitHub token for authentication. A token is not required but can be used to reduce the chance of encountering rate limits</p>
 
@@ -9220,7 +9294,9 @@ uv version [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-version--quiet"><a href="#uv-version--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-version--quiet"><a href="#uv-version--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-version--verbose"><a href="#uv-version--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
@@ -9392,7 +9468,9 @@ uv help [OPTIONS] [COMMAND]...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
-</dd><dt id="uv-help--quiet"><a href="#uv-help--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
+</dd><dt id="uv-help--quiet"><a href="#uv-help--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p><code>-q</code> will produce less stdout output while <code>-qq</code> will produce no stdout output.</p>
 
 </dd><dt id="uv-help--verbose"><a href="#uv-help--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 

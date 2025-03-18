@@ -186,9 +186,11 @@ pub struct GlobalArgs {
     #[arg(global = true, long, hide = true)]
     pub python_fetch: Option<PythonDownloads>,
 
-    /// Do not print any output.
-    #[arg(global = true, long, short, conflicts_with = "verbose")]
-    pub quiet: bool,
+    /// Use quiet output.
+    ///
+    /// `-q` will produce less stdout output while `-qq` will produce no stdout output.
+    #[arg(global = true, action = clap::ArgAction::Count, long, short, conflicts_with = "verbose")]
+    pub quiet: u8,
 
     /// Use verbose output.
     ///
