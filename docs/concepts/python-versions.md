@@ -280,7 +280,9 @@ during `uv python install`.
 By default, uv will attempt to use Python versions found on the system and only download managed
 interpreters when necessary.
 
-The `python-preference` option can be used to adjust this behavior. By default, it is set to
+The `--managed-python` flag is passed, uv will only use managed interpreters. If the `--no-managed-python` flag is passed, uv will never use managed interpreters.
+
+The [`python-preference`](../reference/settings.md#python-preference) option can also be used to adjust this behavior. By default, it is set to
 `managed` which prefers managed Python installations over system Python installations. However,
 system Python installations are still preferred over downloading a managed Python version.
 

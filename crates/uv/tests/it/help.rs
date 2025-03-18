@@ -42,8 +42,8 @@ fn help() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Whether to require uv-managed Python installations
-          --no-managed-python    Whether to disable uv-managed Python installations
+          --managed-python       Require use of uv-managed Python versions
+          --no-managed-python    Disable use of uv-managed Python versions
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -121,8 +121,8 @@ fn help_flag() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Whether to require uv-managed Python installations
-          --no-managed-python    Whether to disable uv-managed Python installations
+          --managed-python       Require use of uv-managed Python versions
+          --no-managed-python    Disable use of uv-managed Python versions
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -199,8 +199,8 @@ fn help_short_flag() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Whether to require uv-managed Python installations
-          --no-managed-python    Whether to disable uv-managed Python installations
+          --managed-python       Require use of uv-managed Python versions
+          --no-managed-python    Disable use of uv-managed Python versions
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -316,14 +316,16 @@ fn help_subcommand() {
 
     Python options:
           --managed-python
-              Whether to require uv-managed Python installations.
+              Require use of uv-managed Python versions.
               
               By default, uv prefers using Python versions it manages. However, it will use system
-              Python installations if a uv-managed Python is not installed. This option disables this
-              system Python installation fallback.
+              Python versions if a uv-managed Python is not installed. This option disables use of
+              system Python versions.
 
           --no-managed-python
-              Whether to disable uv-managed Python installations
+              Disable use of uv-managed Python versions.
+              
+              Instead, uv will search for a suitable Python version on the system.
 
           --no-python-downloads
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
@@ -558,14 +560,16 @@ fn help_subsubcommand() {
 
     Python options:
           --managed-python
-              Whether to require uv-managed Python installations.
+              Require use of uv-managed Python versions.
               
               By default, uv prefers using Python versions it manages. However, it will use system
-              Python installations if a uv-managed Python is not installed. This option disables this
-              system Python installation fallback.
+              Python versions if a uv-managed Python is not installed. This option disables use of
+              system Python versions.
 
           --no-managed-python
-              Whether to disable uv-managed Python installations
+              Disable use of uv-managed Python versions.
+              
+              Instead, uv will search for a suitable Python version on the system.
 
           --no-python-downloads
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
@@ -706,8 +710,8 @@ fn help_flag_subcommand() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Whether to require uv-managed Python installations
-          --no-managed-python    Whether to disable uv-managed Python installations
+          --managed-python       Require use of uv-managed Python versions
+          --no-managed-python    Disable use of uv-managed Python versions
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -778,8 +782,8 @@ fn help_flag_subsubcommand() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Whether to require uv-managed Python installations
-          --no-managed-python    Whether to disable uv-managed Python installations
+          --managed-python       Require use of uv-managed Python versions
+          --no-managed-python    Disable use of uv-managed Python versions
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -934,8 +938,8 @@ fn help_with_global_option() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Whether to require uv-managed Python installations
-          --no-managed-python    Whether to disable uv-managed Python installations
+          --managed-python       Require use of uv-managed Python versions
+          --no-managed-python    Disable use of uv-managed Python versions
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 
@@ -1049,8 +1053,8 @@ fn help_with_no_pager() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Whether to require uv-managed Python installations
-          --no-managed-python    Whether to disable uv-managed Python installations
+          --managed-python       Require use of uv-managed Python versions
+          --no-managed-python    Disable use of uv-managed Python versions
           --no-python-downloads  Disable automatic downloads of Python. [env:
                                  "UV_PYTHON_DOWNLOADS=never"]
 

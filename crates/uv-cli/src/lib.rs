@@ -144,26 +144,28 @@ pub struct GlobalArgs {
     )]
     pub python_preference: Option<PythonPreference>,
 
-    /// Whether to require uv-managed Python installations.
+    /// Require use of uv-managed Python versions.
     ///
     /// By default, uv prefers using Python versions it manages. However, it
-    /// will use system Python installations if a uv-managed Python is not
-    /// installed. This option disables this system Python installation fallback.
+    /// will use system Python versions if a uv-managed Python is not
+    /// installed. This option disables use of system Python versions.
     #[arg(
         global = true,
         long,
         help_heading = "Python options",
-        conflicts_with = "no_managed_python",
+        overrides_with = "no_managed_python",
         conflicts_with = "python_preference"
     )]
     pub managed_python: bool,
 
-    /// Whether to disable uv-managed Python installations.
+    /// Disable use of uv-managed Python versions.
+    ///
+    /// Instead, uv will search for a suitable Python version on the system.
     #[arg(
         global = true,
         long,
         help_heading = "Python options",
-        conflicts_with = "managed_python",
+        overrides_with = "managed_python",
         conflicts_with = "python_preference"
     )]
     pub no_managed_python: bool,
