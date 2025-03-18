@@ -2343,7 +2343,7 @@ fn sync_default_groups_all() -> Result<()> {
     pyproject_toml.write_str(
         r#"
         [project]
-        name = "project"
+        name = "myproject"
         version = "0.1.0"
         requires-python = ">=3.12"
         dependencies = ["typing-extensions"]
@@ -2360,6 +2360,7 @@ fn sync_default_groups_all() -> Result<()> {
 
     context.lock().assert().success();
 
+    // groups = "all" should behave like --all-groups in contexts where defaults exist
     uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
@@ -2378,6 +2379,85 @@ fn sync_default_groups_all() -> Result<()> {
      + sniffio==1.3.1
      + typing-extensions==4.10.0
      + urllib3==2.2.1
+    ");
+
+    // Using `--no-default-groups` should still work
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-groups"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 8 packages in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - iniconfig==2.0.0
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - urllib3==2.2.1
+    ");
+
+    // Using `--all-groups` should be redundant and work fine
+    uv_snapshot!(context.filters(), context.sync().arg("--all-groups"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--no-dev` should exclude just the dev group
+    uv_snapshot!(context.filters(), context.sync().arg("--no-dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    ");
+
+    // Using `--group` should be redundant and still work fine
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // Using `--only-group` should still disable defaults
+    uv_snapshot!(context.filters(), context.sync().arg("--only-group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 6 packages in [TIME]
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - iniconfig==2.0.0
+     - requests==2.31.0
+     - typing-extensions==4.10.0
+     - urllib3==2.2.1
     ");
 
     Ok(())
