@@ -2874,7 +2874,9 @@ impl PackageWire {
         // Consistency check
         if let Some(version) = &self.id.version {
             for wheel in &self.wheels {
-                if version != &wheel.filename.version {
+                if *version != wheel.filename.version
+                    && *version != wheel.filename.version.clone().without_local()
+                {
                     return Err(LockError::from(LockErrorKind::InconsistentVersions {
                         name: self.id.name,
                         version: version.clone(),
