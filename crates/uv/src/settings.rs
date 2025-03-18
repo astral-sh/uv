@@ -73,6 +73,7 @@ impl GlobalSettings {
     /// Resolve the [`GlobalSettings`] from the CLI and filesystem configuration.
     pub(crate) fn resolve(args: &GlobalArgs, workspace: Option<&FilesystemOptions>) -> Self {
         let network_settings = NetworkSettings::resolve(args, workspace);
+        let python_preference = resolve_python_preference(args, workspace);
         Self {
             required_version: workspace
                 .and_then(|workspace| workspace.globals.required_version.clone()),
@@ -120,10 +121,7 @@ impl GlobalSettings {
                     .combine(workspace.and_then(|workspace| workspace.globals.preview))
                     .unwrap_or(false),
             ),
-            python_preference: args
-                .python_preference
-                .combine(workspace.and_then(|workspace| workspace.globals.python_preference))
-                .unwrap_or_default(),
+            python_preference,
             python_downloads: flag(args.allow_python_downloads, args.no_python_downloads)
                 .map(PythonDownloads::from)
                 .combine(env(env::UV_PYTHON_DOWNLOADS))
@@ -134,6 +132,21 @@ impl GlobalSettings {
             no_progress: args.no_progress || std::env::var_os(EnvVars::RUST_LOG).is_some(),
             installer_metadata: !args.no_installer_metadata,
         }
+    }
+}
+
+fn resolve_python_preference(
+    args: &GlobalArgs,
+    workspace: Option<&FilesystemOptions>,
+) -> PythonPreference {
+    if args.managed_python {
+        PythonPreference::OnlyManaged
+    } else if args.no_managed_python {
+        PythonPreference::OnlySystem
+    } else {
+        args.python_preference
+            .combine(workspace.and_then(|workspace| workspace.globals.python_preference))
+            .unwrap_or_default()
     }
 }
 
