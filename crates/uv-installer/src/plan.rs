@@ -180,24 +180,31 @@ impl<'a> Planner<'a> {
                         .entry(format!("{}.http", wheel.filename.cache_key()));
 
                     // Read the HTTP pointer.
-                    if let Some(pointer) = HttpArchivePointer::read_from(&cache_entry)? {
-                        let cache_info = pointer.to_cache_info();
-                        let archive = pointer.into_archive();
-                        if archive.satisfies(hasher.get(dist.as_ref())) {
-                            let cached_dist = CachedDirectUrlDist {
-                                filename: wheel.filename.clone(),
-                                url: VerbatimParsedUrl {
-                                    parsed_url: wheel.parsed_url(),
-                                    verbatim: wheel.url.clone(),
-                                },
-                                hashes: archive.hashes,
-                                cache_info,
-                                path: cache.archive(&archive.id),
-                            };
-
-                            debug!("URL wheel requirement already cached: {cached_dist}");
-                            cached.push(CachedDist::Url(cached_dist));
-                            continue;
+                    match HttpArchivePointer::read_from(&cache_entry) {
+                        Ok(Some(pointer)) => {
+                            let cache_info = pointer.to_cache_info();
+                            let archive = pointer.into_archive();
+                            if archive.satisfies(hasher.get(dist.as_ref())) {
+                                let cached_dist = CachedDirectUrlDist {
+                                    filename: wheel.filename.clone(),
+                                    url: VerbatimParsedUrl {
+                                        parsed_url: wheel.parsed_url(),
+                                        verbatim: wheel.url.clone(),
+                                    },
+                                    hashes: archive.hashes,
+                                    cache_info,
+                                    path: cache.archive(&archive.id),
+                                };
+    
+                                debug!("URL wheel requirement already cached: {cached_dist}");
+                                cached.push(CachedDist::Url(cached_dist));
+                                continue;
+                            }
+                            debug!("Cached URL wheel requirement does not match expected hash policy for: {wheel}");
+                        }
+                        Ok(None) => {}
+                        Err(err) => {
+                            debug!("Failed to deserialize cached URL wheel requirement for: {wheel} ({err})");
                         }
                     }
                 }
@@ -230,27 +237,34 @@ impl<'a> Planner<'a> {
                         )
                         .entry(format!("{}.rev", wheel.filename.cache_key()));
 
-                    if let Some(pointer) = LocalArchivePointer::read_from(&cache_entry)? {
-                        let timestamp = Timestamp::from_path(&wheel.install_path)?;
-                        if pointer.is_up_to_date(timestamp) {
-                            let cache_info = pointer.to_cache_info();
-                            let archive = pointer.into_archive();
-                            if archive.satisfies(hasher.get(dist.as_ref())) {
-                                let cached_dist = CachedDirectUrlDist {
-                                    filename: wheel.filename.clone(),
-                                    url: VerbatimParsedUrl {
-                                        parsed_url: wheel.parsed_url(),
-                                        verbatim: wheel.url.clone(),
-                                    },
-                                    hashes: archive.hashes,
-                                    cache_info,
-                                    path: cache.archive(&archive.id),
-                                };
+                    match LocalArchivePointer::read_from(&cache_entry) {
+                        Ok(Some(pointer)) => {
+                            let timestamp = Timestamp::from_path(&wheel.install_path)?;
+                            if pointer.is_up_to_date(timestamp) {
+                                let cache_info = pointer.to_cache_info();
+                                let archive = pointer.into_archive();
+                                if archive.satisfies(hasher.get(dist.as_ref())) {
+                                    let cached_dist = CachedDirectUrlDist {
+                                        filename: wheel.filename.clone(),
+                                        url: VerbatimParsedUrl {
+                                            parsed_url: wheel.parsed_url(),
+                                            verbatim: wheel.url.clone(),
+                                        },
+                                        hashes: archive.hashes,
+                                        cache_info,
+                                        path: cache.archive(&archive.id),
+                                    };
 
-                                debug!("Path wheel requirement already cached: {cached_dist}");
-                                cached.push(CachedDist::Url(cached_dist));
-                                continue;
+                                    debug!("Path wheel requirement already cached: {cached_dist}");
+                                    cached.push(CachedDist::Url(cached_dist));
+                                    continue;
+                                }
+                                debug!("Cached path wheel requirement does not match expected hash policy for: {wheel}");
                             }
+                        }
+                        Ok(None) => {}
+                        Err(err) => {
+                            debug!("Failed to deserialize cached path wheel requirement for: {wheel} ({err})");
                         }
                     }
                 }
