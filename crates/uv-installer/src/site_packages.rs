@@ -437,9 +437,10 @@ impl SitePackages {
                 [distribution] => {
                     // Validate that the requirement is satisfied.
                     if requirement.evaluate_markers(Some(markers), &[]) {
-                        match RequirementSatisfaction::check(distribution, &requirement.source)? {
+                        match RequirementSatisfaction::check(distribution, &requirement.source) {
                             RequirementSatisfaction::Mismatch
-                            | RequirementSatisfaction::OutOfDate => {
+                            | RequirementSatisfaction::OutOfDate
+                            | RequirementSatisfaction::CacheInvalid => {
                                 return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()))
                             }
                             RequirementSatisfaction::Satisfied => {}
@@ -449,10 +450,10 @@ impl SitePackages {
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints.get(name).into_iter().flatten() {
                         if constraint.evaluate_markers(Some(markers), &[]) {
-                            match RequirementSatisfaction::check(distribution, &constraint.source)?
-                            {
+                            match RequirementSatisfaction::check(distribution, &constraint.source) {
                                 RequirementSatisfaction::Mismatch
-                                | RequirementSatisfaction::OutOfDate => {
+                                | RequirementSatisfaction::OutOfDate
+                                | RequirementSatisfaction::CacheInvalid => {
                                     return Ok(SatisfiesResult::Unsatisfied(
                                         requirement.to_string(),
                                     ))
