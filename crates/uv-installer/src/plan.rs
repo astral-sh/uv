@@ -267,7 +267,7 @@ impl<'a> Planner<'a> {
                                     }
                                 }
                                 Err(err) => {
-                                    debug!("failed to get timestamp for wheel {wheel} ({err})");
+                                    debug!("Failed to get timestamp for wheel {wheel} ({err})");
                                 }
                             }
                         }
