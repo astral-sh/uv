@@ -683,8 +683,7 @@ By default, uv includes the `dev` dependency group in the environment (e.g., dur
 default-groups = ["dev", "foo"]
 ```
 
-For projects that want to ensure all dependency groups are default-enabled, even if new ones get
-added, the `default-groups = "all"` sugar can be used:
+To enable all dependencies groups by default, use `"all"` instead of listing group names:
 
 ```toml title="pyproject.toml"
 [tool.uv]
