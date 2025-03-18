@@ -20,7 +20,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
-use uv_normalize::PackageName;
+use uv_normalize::{DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -117,7 +117,7 @@ pub(crate) async fn sync(
     // Determine the default groups to include.
     let defaults = match &target {
         SyncTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
-        SyncTarget::Script(..) => Vec::new(),
+        SyncTarget::Script(..) => DefaultGroups::default(),
     };
 
     // Discover or create the virtual environment.

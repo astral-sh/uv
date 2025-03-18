@@ -1,6 +1,6 @@
 use std::{borrow::Cow, sync::Arc};
 
-use uv_normalize::{GroupName, DEV_DEPENDENCIES};
+use uv_normalize::{DefaultGroups, GroupName, DEV_DEPENDENCIES};
 
 /// Manager of all dependency-group decisions and settings history.
 ///
@@ -63,10 +63,18 @@ impl DependencyGroups {
         } else {
             // Merge all these lists, they're equivalent now
             group.append(&mut only_group);
+            // Resolve default groups potentially also setting All
             if default_groups {
-                group.append(&mut defaults);
+                match &mut defaults {
+                    DefaultGroups::All => IncludeGroups::All,
+                    DefaultGroups::List(defaults) => {
+                        group.append(defaults);
+                        IncludeGroups::Some(group)
+                    }
+                }
+            } else {
+                IncludeGroups::Some(group)
             }
-            IncludeGroups::Some(group)
         };
 
         Self(Arc::new(DependencyGroupsInner {
@@ -112,7 +120,7 @@ impl DependencyGroups {
             all_groups,
             no_default_groups,
             // This is unknown at CLI-time, use `.with_defaults(...)` to apply this later!
-            defaults: Vec::new(),
+            defaults: DefaultGroups::default(),
         })
     }
 
@@ -135,7 +143,7 @@ impl DependencyGroups {
     /// Apply defaults to a base [`DependencyGroups`].
     ///
     /// This is appropriate in projects, where the `dev` group is synced by default.
-    pub fn with_defaults(&self, defaults: Vec<GroupName>) -> DependencyGroupsWithDefaults {
+    pub fn with_defaults(&self, defaults: DefaultGroups) -> DependencyGroupsWithDefaults {
         // Explicitly clone the inner history and set the defaults, then remake the result.
         let mut history = self.0.history.clone();
         history.defaults = defaults;
@@ -220,7 +228,7 @@ pub struct DependencyGroupsHistory {
     pub no_group: Vec<GroupName>,
     pub all_groups: bool,
     pub no_default_groups: bool,
-    pub defaults: Vec<GroupName>,
+    pub defaults: DefaultGroups,
 }
 
 impl DependencyGroupsHistory {

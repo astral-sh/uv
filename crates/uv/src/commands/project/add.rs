@@ -28,7 +28,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
-use uv_normalize::{PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{DefaultGroups, PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{ExtraName, MarkerTree, Requirement, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -897,7 +897,7 @@ async fn lock_and_sync(
         target,
         venv,
         &extras,
-        &dev.with_defaults(Vec::new()),
+        &dev.with_defaults(DefaultGroups::default()),
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,

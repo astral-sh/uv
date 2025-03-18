@@ -2334,6 +2334,96 @@ fn sync_default_groups() -> Result<()> {
     Ok(())
 }
 
+/// default-groups = "all" sugar works
+#[test]
+fn sync_default_groups_all() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        foo = ["anyio"]
+        bar = ["requests"]
+
+        [tool.uv]
+        default-groups = "all"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Prepared 9 packages in [TIME]
+    Installed 9 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+    ");
+
+    Ok(())
+}
+
+/// default-groups = "gibberish" error
+#[test]
+fn sync_default_groups_gibberish() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        dev = ["iniconfig"]
+        foo = ["anyio"]
+        bar = ["requests"]
+
+        [tool.uv]
+        default-groups = "gibberish"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 14, column 26
+       |
+    14 |         default-groups = "gibberish"
+       |                          ^^^^^^^^^^^
+    default-groups must be "all" or a ["list", "of", "groups"]
+    "#);
+
+    Ok(())
+}
+
 /// Sync with `--only-group`, where the group includes a workspace member.
 #[test]
 fn sync_group_member() -> Result<()> {

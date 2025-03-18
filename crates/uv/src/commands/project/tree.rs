@@ -10,6 +10,7 @@ use uv_cache_info::Timestamp;
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroups, PreviewMode, TargetTriple};
 use uv_distribution_types::IndexCapabilities;
+use uv_normalize::DefaultGroups;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::{PackageMap, TreeDisplay};
@@ -74,7 +75,7 @@ pub(crate) async fn tree(
     // Determine the default groups to include.
     let defaults = match target {
         LockTarget::Workspace(workspace) => default_dependency_groups(workspace.pyproject_toml())?,
-        LockTarget::Script(_) => vec![],
+        LockTarget::Script(_) => DefaultGroups::default(),
     };
 
     let native_tls = network_settings.native_tls;
