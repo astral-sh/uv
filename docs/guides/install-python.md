@@ -117,7 +117,7 @@ command invocation. See the
 details.
 
 To force uv to use the system Python, provide the `--no-managed-python` flag. See the
-[Python version preference](../concepts/python-versions.md#adjusting-python-version-preferences)
+[Python version preference](../concepts/python-versions.md#requiring-or-disabling-managed-python-versions)
 documentation for more details.
 
 ## Next steps
