@@ -65,6 +65,7 @@ if __name__ == "__main__":
 Python files can be executed with `uv run`:
 
 ```console
+$ cd example-app
 $ uv run main.py
 Hello from example-project!
 ```
@@ -90,7 +91,7 @@ example-pkg
 ├── README.md
 ├── pyproject.toml
 └── src
-    └── example_packaged_app
+    └── example_pkg
         └── __init__.py
 ```
 
@@ -107,7 +108,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-example-pkg = "example_packaged_app:main"
+example-pkg = "example_pkg:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -130,7 +131,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-example-pkg = "example_packaged_app:main"
+example-pkg = "example_pkg:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -140,7 +141,8 @@ build-backend = "hatchling.build"
 The command can be executed with `uv run`:
 
 ```console
-$ uv run --directory src/example_pkg example-pkg
+$ cd example-pkg
+$ uv run example-pkg
 Hello from example-pkg!
 ```
 
@@ -213,7 +215,8 @@ def hello() -> str:
 And you can import and execute it using `uv run`:
 
 ```console
-$ uv run --directory src/example_lib python -c "import example_lib; print(example_lib.hello())"
+$ cd example-lib
+$ uv run python -c "import example_lib; print(example_lib.hello())"
 Hello from example-lib!
 ```
 
@@ -291,7 +294,8 @@ def main() -> None:
 The command can be executed with `uv run`:
 
 ```console
-$ uv run --directory src/example_ext example-ext
+$ cd example-ext
+$ uv run example-ext
 Hello from example-ext!
 ```
 
