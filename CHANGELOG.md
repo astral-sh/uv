@@ -3,6 +3,23 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.6.8
+
+### Enhancements
+
+- Add support for enabling all groups by default with `default-groups = "all"` ([#12289](https://github.com/astral-sh/uv/pull/12289))
+- Add simpler `--managed-python` and `--no-managed-python` flags for toggling Python preferences ([#12246](https://github.com/astral-sh/uv/pull/12246))
+
+### Performance
+
+- Avoid allocations for default cache keys ([#12063](https://github.com/astral-sh/uv/pull/12063))
+
+### Bug fixes
+
+- Allow local version mismatches when validating lockfile ([#12285](https://github.com/astral-sh/uv/pull/12285))
+- Allow owned string when deserializing `requires-python` ([#12278](https://github.com/astral-sh/uv/pull/12278))
+- Make cache errors non-fatal in `Planner::build` ([#12281](https://github.com/astral-sh/uv/pull/12281))
+
 ## 0.6.7
 
 ### Python
