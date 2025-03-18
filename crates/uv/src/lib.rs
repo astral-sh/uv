@@ -895,6 +895,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &args.settings,
                 &globals.network_settings,
                 cli.top_level.no_config,
+                args.keep_on_error,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.concurrency,

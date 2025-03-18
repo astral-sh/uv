@@ -2242,6 +2242,10 @@ pub struct BuildArgs {
     #[arg(long, overrides_with("build_logs"))]
     pub no_build_logs: bool,
 
+    /// Don't delete the sdist directory upon a build error.
+    #[arg(long)]
+    pub keep_on_error: bool,
+
     /// Always build through PEP 517, don't use the fast path for the uv build backend.
     ///
     /// By default, uv won't create a PEP 517 build environment for packages using the uv build
