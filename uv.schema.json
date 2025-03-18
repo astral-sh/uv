@@ -119,14 +119,15 @@
       }
     },
     "default-groups": {
-      "description": "The list of `dependency-groups` to install by default.",
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "$ref": "#/definitions/GroupName"
-      }
+      "description": "The list of `dependency-groups` to install by default.\n\nCan also be the literal \"all\" to default enable all groups.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/DefaultGroups"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "dependency-metadata": {
       "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When provided, enables the resolver to use the specified metadata instead of querying the registry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) standard, though only the following fields are respected:\n\n- `name`: The name of the package. - (Optional) `version`: The version of the package. If omitted, the metadata will be applied to all versions of the package. - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`). - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`). - (Optional) `provides-extras`: The extras provided by the package.",
@@ -682,6 +683,34 @@
       "additionalProperties": {
         "$ref": "#/definitions/ConfigSettingValue"
       }
+    },
+    "DefaultGroups": {
+      "description": "Either the literal \"all\" or a list of groups",
+      "oneOf": [
+        {
+          "description": "All groups are defaulted",
+          "type": "string",
+          "enum": [
+            "All"
+          ]
+        },
+        {
+          "description": "A list of groups",
+          "type": "object",
+          "required": [
+            "List"
+          ],
+          "properties": {
+            "List": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/GroupName"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     },
     "ExcludeNewer": {
       "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`).",

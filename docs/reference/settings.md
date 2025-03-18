@@ -112,9 +112,11 @@ constraint-dependencies = ["grpcio<1.65"]
 
 The list of `dependency-groups` to install by default.
 
+Can also be the literal "all" to default enable all groups.
+
 **Default value**: `["dev"]`
 
-**Type**: `list[str]`
+**Type**: `str | list[str]`
 
 **Example usage**:
 

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::LazyLock;
 
+use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use uv_small_str::SmallString;
@@ -161,6 +162,87 @@ impl Display for PipGroupName {
         } else {
             self.name.fmt(f)
         }
+    }
+}
+
+/// Either the literal "all" or a list of groups
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum DefaultGroups {
+    /// All groups are defaulted
+    All,
+    /// A list of groups
+    List(Vec<GroupName>),
+}
+
+/// Serialize a [`DefaultGroups`] struct into a list of marker strings.
+impl serde::Serialize for DefaultGroups {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            DefaultGroups::All => serializer.serialize_str("all"),
+            DefaultGroups::List(groups) => {
+                let mut seq = serializer.serialize_seq(Some(groups.len()))?;
+                for group in groups {
+                    seq.serialize_element(&group)?;
+                }
+                seq.end()
+            }
+        }
+    }
+}
+
+/// Deserialize a "all" or list of [`GroupName`] into a [`DefaultGroups`] enum.
+impl<'de> serde::Deserialize<'de> for DefaultGroups {
+    fn deserialize<D>(deserializer: D) -> Result<DefaultGroups, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct StringOrVecVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for StringOrVecVisitor {
+            type Value = DefaultGroups;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str(r#"the string "all" or a list of strings"#)
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                if value != "all" {
+                    return Err(serde::de::Error::custom(
+                        r#"default-groups must be "all" or a ["list", "of", "groups"]"#,
+                    ));
+                }
+                Ok(DefaultGroups::All)
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut groups = Vec::new();
+
+                while let Some(elem) = seq.next_element::<GroupName>()? {
+                    groups.push(elem);
+                }
+
+                Ok(DefaultGroups::List(groups))
+            }
+        }
+
+        deserializer.deserialize_any(StringOrVecVisitor)
+    }
+}
+
+impl Default for DefaultGroups {
+    /// Note this is an "empty" default unlike other contexts where `["dev"]` is the default
+    fn default() -> Self {
+        DefaultGroups::List(Vec::new())
     }
 }
 

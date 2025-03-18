@@ -11,7 +11,7 @@ use uv_configuration::{
     Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
     PreviewMode,
 };
-use uv_normalize::PackageName;
+use uv_normalize::{DefaultGroups, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::RequirementsTxtExport;
 use uv_scripts::{Pep723ItemRef, Pep723Script};
@@ -110,7 +110,7 @@ pub(crate) async fn export(
     // Determine the default groups to include.
     let defaults = match &target {
         ExportTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
-        ExportTarget::Script(_) => vec![],
+        ExportTarget::Script(_) => DefaultGroups::default(),
     };
     let dev = dev.with_defaults(defaults);
 

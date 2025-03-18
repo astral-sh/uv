@@ -24,7 +24,7 @@ use uv_distribution_types::{
 use uv_fs::{LockedFile, Simplified, CWD};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts, Requirement};
@@ -2276,24 +2276,26 @@ pub(crate) async fn init_script_python_requirement(
 #[allow(clippy::result_large_err)]
 pub(crate) fn default_dependency_groups(
     pyproject_toml: &PyProjectToml,
-) -> Result<Vec<GroupName>, ProjectError> {
+) -> Result<DefaultGroups, ProjectError> {
     if let Some(defaults) = pyproject_toml
         .tool
         .as_ref()
         .and_then(|tool| tool.uv.as_ref().and_then(|uv| uv.default_groups.as_ref()))
     {
-        for group in defaults {
-            if !pyproject_toml
-                .dependency_groups
-                .as_ref()
-                .is_some_and(|groups| groups.contains_key(group))
-            {
-                return Err(ProjectError::MissingDefaultGroup(group.clone()));
+        if let DefaultGroups::List(defaults) = defaults {
+            for group in defaults {
+                if !pyproject_toml
+                    .dependency_groups
+                    .as_ref()
+                    .is_some_and(|groups| groups.contains_key(group))
+                {
+                    return Err(ProjectError::MissingDefaultGroup(group.clone()));
+                }
             }
         }
         Ok(defaults.clone())
     } else {
-        Ok(vec![DEV_DEPENDENCIES.clone()])
+        Ok(DefaultGroups::List(vec![DEV_DEPENDENCIES.clone()]))
     }
 }
 

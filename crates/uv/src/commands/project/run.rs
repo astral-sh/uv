@@ -23,7 +23,7 @@ use uv_configuration::{
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::PackageName;
+use uv_normalize::{DefaultGroups, PackageName};
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
@@ -284,7 +284,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 target,
                 &environment,
                 &extras,
-                &dev.with_defaults(Vec::new()),
+                &dev.with_defaults(DefaultGroups::default()),
                 editable,
                 install_options,
                 modifications,
