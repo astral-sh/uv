@@ -13,7 +13,7 @@ use uv_distribution_types::{
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
@@ -59,10 +59,11 @@ pub struct Options {
     ///
     /// Cache keys enable you to specify the files or directories that should trigger a rebuild when
     /// modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`,
-    /// or `setup.cfg` files in the project directory are modified, i.e.:
+    /// or `setup.cfg` files in the project directory are modified, or if a `src` directory is
+    /// added or removed, i.e.:
     ///
     /// ```toml
-    /// cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]
+    /// cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }, { dir = "src" }]
     /// ```
     ///
     /// As an example: if a project uses dynamic metadata to read its dependencies from a
@@ -1127,6 +1128,15 @@ pub struct PipOptions {
         "#
     )]
     pub no_deps: Option<bool>,
+    /// Include the following dependency groups.
+    #[option(
+        default = "None",
+        value_type = "list[str]",
+        example = r#"
+            group = ["dev", "docs"]
+        "#
+    )]
+    pub group: Option<Vec<PipGroupName>>,
     /// Allow `uv pip sync` with empty requirements, which will clear the environment of all
     /// packages.
     #[option(

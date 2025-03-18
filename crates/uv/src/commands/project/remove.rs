@@ -276,9 +276,8 @@ pub(crate) async fn remove(
     let state = UniversalState::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = match project::lock::do_safe_lock(
+    let lock = match project::lock::LockOperation::new(
         mode,
-        (&target).into(),
         &settings.resolver,
         &network_settings,
         &state,
@@ -288,6 +287,7 @@ pub(crate) async fn remove(
         printer,
         preview,
     )
+    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),

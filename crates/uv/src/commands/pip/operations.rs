@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -28,7 +28,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
@@ -54,7 +54,7 @@ pub(crate) async fn read_requirements(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification,
-    groups: &DependencyGroups,
+    groups: BTreeMap<PathBuf, Vec<GroupName>>,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
@@ -75,19 +75,13 @@ pub(crate) async fn read_requirements(
         )
         .into());
     }
-    if !groups.is_empty() && !requirements.iter().any(RequirementsSource::allows_groups) {
-        let flags = groups.history().as_flags_pretty().join(" ");
-        return Err(anyhow!(
-            "Requesting groups requires a `pyproject.toml`. Requested via: {flags}"
-        )
-        .into());
-    }
 
     // Read all requirements from the provided sources.
     Ok(RequirementsSpecification::from_sources(
         requirements,
         constraints,
         overrides,
+        groups,
         client_builder,
     )
     .await?)
@@ -98,11 +92,15 @@ pub(crate) async fn read_constraints(
     constraints: &[RequirementsSource],
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<Vec<NameRequirementSpecification>, Error> {
-    Ok(
-        RequirementsSpecification::from_sources(&[], constraints, &[], client_builder)
-            .await?
-            .constraints,
+    Ok(RequirementsSpecification::from_sources(
+        &[],
+        constraints,
+        &[],
+        BTreeMap::default(),
+        client_builder,
     )
+    .await?
+    .constraints)
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
@@ -114,7 +112,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
     extras: &ExtrasSpecification,
-    groups: &DependencyGroups,
+    groups: &BTreeMap<PathBuf, DependencyGroups>,
     preferences: Vec<Preference>,
     installed_packages: InstalledPackages,
     hasher: &HashStrategy,
@@ -516,7 +514,7 @@ pub(crate) async fn install(
                 )) => {
                     warn_user!(
                         "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
-                        dist_info.path().user_display().cyan(),
+                        dist_info.install_path().user_display().cyan(),
                     );
                 }
                 Err(uv_installer::UninstallError::Uninstall(
@@ -524,7 +522,7 @@ pub(crate) async fn install(
                 )) => {
                     warn_user!(
                         "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",
-                        dist_info.path().user_display().cyan(),
+                        dist_info.install_path().user_display().cyan(),
                     );
                 }
                 Err(err) => return Err(err.into()),

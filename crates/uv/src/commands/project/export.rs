@@ -19,7 +19,7 @@ use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace,
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::lock::{do_safe_lock, LockMode};
+use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, detect_conflicts, ProjectError, ProjectInterpreter,
@@ -169,9 +169,8 @@ pub(crate) async fn export(
     let state = UniversalState::default();
 
     // Lock the project.
-    let lock = match do_safe_lock(
+    let lock = match LockOperation::new(
         mode,
-        (&target).into(),
         &settings,
         &network_settings,
         &state,
@@ -181,6 +180,7 @@ pub(crate) async fn export(
         printer,
         preview,
     )
+    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),

@@ -242,9 +242,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             };
 
             // Generate a lockfile.
-            let lock = match project::lock::do_safe_lock(
+            let lock = match project::lock::LockOperation::new(
                 mode,
-                target,
                 &settings.resolver,
                 &network_settings,
                 &lock_state,
@@ -258,6 +257,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 printer,
                 preview,
             )
+            .execute(target)
             .await
             {
                 Ok(result) => result.into_lock(),
@@ -661,9 +661,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     LockMode::Write(venv.interpreter())
                 };
 
-                let result = match project::lock::do_safe_lock(
+                let result = match project::lock::LockOperation::new(
                     mode,
-                    project.workspace().into(),
                     &settings.resolver,
                     &network_settings,
                     &lock_state,
@@ -677,6 +676,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     printer,
                     preview,
                 )
+                .execute(project.workspace().into())
                 .await
                 {
                     Ok(result) => result,

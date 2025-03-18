@@ -506,6 +506,14 @@ fn wheel_subdir_from_globs(
             root: src.to_path_buf(),
             err,
         })?;
+
+        // Skip the root path, which is already included as `target` prior to the loop.
+        // (If `entry.path() == src`, then `relative` is empty, and `relative_licenses` is
+        // `target`.)
+        if entry.path() == src {
+            continue;
+        }
+
         // TODO(konsti): This should be prettier.
         let relative = entry
             .path()
@@ -636,7 +644,7 @@ impl ZipDirectoryWriter {
     ) -> Result<Box<dyn Write + 'slf>, Error> {
         // 644 is the default of the zip crate.
         let permissions = if executable_bit { 775 } else { 664 };
-        let options = zip::write::FileOptions::default()
+        let options = zip::write::SimpleFileOptions::default()
             .unix_permissions(permissions)
             .compression_method(self.compression);
         self.writer.start_file(path, options)?;
@@ -647,7 +655,7 @@ impl ZipDirectoryWriter {
 impl DirectoryWriter for ZipDirectoryWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
-        let options = zip::write::FileOptions::default().compression_method(self.compression);
+        let options = zip::write::SimpleFileOptions::default().compression_method(self.compression);
         self.writer.start_file(path, options)?;
         self.writer.write_all(bytes)?;
 
@@ -682,7 +690,7 @@ impl DirectoryWriter for ZipDirectoryWriter {
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
         trace!("Adding directory {}", directory);
-        let options = zip::write::FileOptions::default().compression_method(self.compression);
+        let options = zip::write::SimpleFileOptions::default().compression_method(self.compression);
         Ok(self.writer.add_directory(directory, options)?)
     }
 

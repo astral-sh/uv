@@ -367,16 +367,14 @@ fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
         members = ["child"]
         "#,
     )?;
-
-    let src = context.temp_dir.child("src").child("albatross");
-    src.create_dir_all()?;
-
-    let init = src.child("__init__.py");
-    init.touch()?;
+    context
+        .temp_dir
+        .child("src")
+        .child("albatross")
+        .child("__init__.py")
+        .touch()?;
 
     let child = context.temp_dir.child("child");
-    fs_err::create_dir_all(&child)?;
-
     let pyproject_toml = child.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -387,16 +385,15 @@ fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
         dependencies = ["iniconfig>=1"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
-
-    let src = child.child("src").child("albatross");
-    src.create_dir_all()?;
-
-    let init = src.child("__init__.py");
-    init.touch()?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
 
     // Syncing with `--no-dev` should omit all dependencies except `iniconfig`.
     uv_snapshot!(context.filters(), context.sync().arg("--no-dev"), @r###"
@@ -521,15 +518,14 @@ fn sync_legacy_non_project_group() -> Result<()> {
         "#,
     )?;
 
-    let src = context.temp_dir.child("src").child("albatross");
-    src.create_dir_all()?;
-
-    let init = src.child("__init__.py");
-    init.touch()?;
+    context
+        .temp_dir
+        .child("src")
+        .child("albatross")
+        .child("__init__.py")
+        .touch()?;
 
     let child = context.temp_dir.child("child");
-    fs_err::create_dir_all(&child)?;
-
     let pyproject_toml = child.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"
@@ -543,16 +539,15 @@ fn sync_legacy_non_project_group() -> Result<()> {
         baz = ["typing-extensions"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
-
-    let src = child.child("src").child("albatross");
-    src.create_dir_all()?;
-
-    let init = src.child("__init__.py");
-    init.touch()?;
+    child
+        .child("src")
+        .child("child")
+        .child("__init__.py")
+        .touch()?;
 
     uv_snapshot!(context.filters(), context.sync(), @r###"
     success: true
@@ -4669,7 +4664,7 @@ fn sync_wheel_url_source_error() -> Result<()> {
     Resolved 3 packages in [TIME]
     error: Distribution `cffi==1.17.1 @ direct+https://files.pythonhosted.org/packages/08/fd/cc2fedbd887223f9f5d170c96e57cbf655df9831a6546c1727ae13fa977a/cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl` can't be installed because the binary distribution is incompatible with the current platform
 
-    hint: You're using CPython 3.12 (`cp312`), but  `cffi` (v1.17.1) only has wheels with the following Python ABI tag: `cp310`
+    hint: You're using CPython 3.12 (`cp312`), but `cffi` (v1.17.1) only has wheels with the following Python ABI tag: `cp310`
     "###);
 
     Ok(())
@@ -4720,7 +4715,7 @@ fn sync_wheel_path_source_error() -> Result<()> {
     Resolved 3 packages in [TIME]
     error: Distribution `cffi==1.17.1 @ path+cffi-1.17.1-cp310-cp310-macosx_11_0_arm64.whl` can't be installed because the binary distribution is incompatible with the current platform
 
-    hint: You're using CPython 3.12 (`cp312`), but  `cffi` (v1.17.1) only has wheels with the following Python ABI tag: `cp310`
+    hint: You're using CPython 3.12 (`cp312`), but `cffi` (v1.17.1) only has wheels with the following Python ABI tag: `cp310`
     "###);
 
     Ok(())
@@ -5911,8 +5906,8 @@ fn sync_all_extras() -> Result<()> {
         testing = ["packaging>=24"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
     child
@@ -6028,8 +6023,8 @@ fn sync_all_extras_dynamic() -> Result<()> {
         async = ["anyio>3"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
 
         [tool.uv.workspace]
         members = ["child"]
@@ -6057,6 +6052,9 @@ fn sync_all_extras_dynamic() -> Result<()> {
 
         [tool.setuptools.dynamic.optional-dependencies]
         dev = { file = "requirements-dev.txt" }
+
+        [tool.uv]
+        cache-keys = ["pyproject.toml"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -6168,8 +6166,8 @@ fn sync_all_groups() -> Result<()> {
         testing = ["packaging>=24"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
         "#,
     )?;
     child
@@ -8470,6 +8468,100 @@ fn prune_cache_url_subdirectory() -> Result<()> {
      + root==0.0.1 (from https://github.com/user-attachments/files/18216295/subdirectory-test.tar.gz#subdirectory=packages/root)
      + sniffio==1.3.1
     "###);
+
+    Ok(())
+}
+
+/// Test that incoherence in the versions in a package entry of the lockfile versions is caught.
+///
+/// See <https://github.com/astral-sh/uv/issues/12164>
+#[test]
+fn locked_version_coherence() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig" }]
+        "#);
+    });
+
+    // Write an inconsistent iniconfig entry
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&lock.replace(r#"version = "2.0.0""#, r#"version = "1.0.0""#))?;
+
+    // An inconsistent lockfile should fail with `--locked`
+    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      Caused by: The entry for package `iniconfig` v1.0.0 has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version: v2.0.0
+    ");
+
+    // Without `--locked`, we could fail or recreate the lockfile, currently, we fail.
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      Caused by: The entry for package `iniconfig` v1.0.0 has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version: v2.0.0
+    ");
 
     Ok(())
 }

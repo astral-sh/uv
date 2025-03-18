@@ -542,6 +542,14 @@ impl Dist {
         }
     }
 
+    /// Return the source tree of the distribution, if available.
+    pub fn source_tree(&self) -> Option<&Path> {
+        match self {
+            Self::Built { .. } => None,
+            Self::Source(source) => source.source_tree(),
+        }
+    }
+
     /// Returns the version of the distribution, if it is known.
     pub fn version(&self) -> Option<&Version> {
         match self {
@@ -653,6 +661,14 @@ impl SourceDist {
     pub fn as_path(&self) -> Option<&Path> {
         match self {
             Self::Path(dist) => Some(&dist.install_path),
+            Self::Directory(dist) => Some(&dist.install_path),
+            _ => None,
+        }
+    }
+
+    /// Return the source tree of the distribution, if available.
+    pub fn source_tree(&self) -> Option<&Path> {
+        match self {
             Self::Directory(dist) => Some(&dist.install_path),
             _ => None,
         }
@@ -1305,11 +1321,11 @@ impl Identifier for BuiltDist {
 
 impl Identifier for InstalledDist {
     fn distribution_id(&self) -> DistributionId {
-        self.path().distribution_id()
+        self.install_path().distribution_id()
     }
 
     fn resource_id(&self) -> ResourceId {
-        self.path().resource_id()
+        self.install_path().resource_id()
     }
 }
 

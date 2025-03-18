@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.6.6"
+version = "0.6.7"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -44,6 +44,7 @@ uv-publish = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["schemars"] }
 uv-requirements = { workspace = true }
+uv-requirements-txt = { workspace = true }
 uv-resolver = { workspace = true }
 uv-scripts = { workspace = true }
 uv-settings = { workspace = true, features = ["schemars"] }
@@ -52,8 +53,8 @@ uv-static = { workspace = true }
 uv-tool = { workspace = true }
 uv-trampoline-builder = { workspace = true }
 uv-types = { workspace = true }
-uv-virtualenv = { workspace = true }
 uv-version = { workspace = true }
+uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 

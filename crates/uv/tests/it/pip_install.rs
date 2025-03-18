@@ -1137,7 +1137,7 @@ fn install_editable() {
     "###
     );
 
-    // Install it again (no-op).
+    // Install it again.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(context.workspace_root.join("scripts/packages/poetry_editable")), @r###"
@@ -1146,7 +1146,11 @@ fn install_editable() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
     "###
     );
 
@@ -1161,14 +1165,16 @@ fn install_editable() {
 
     ----- stderr -----
     Resolved 10 packages in [TIME]
-    Prepared 6 packages in [TIME]
-    Installed 6 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 7 packages in [TIME]
      + black==24.3.0
      + click==8.1.7
      + mypy-extensions==1.0.0
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
+     ~ poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
     "###
     );
 }
@@ -3631,13 +3637,22 @@ fn config_settings_registry() {
 }
 
 #[test]
-fn config_settings_path() {
+fn config_settings_path() -> Result<()> {
     let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(&format!(
+        "-e {}",
+        context
+            .workspace_root
+            .join("scripts/packages/setuptools_editable")
+            .display()
+    ))?;
 
     // Install the editable package.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/setuptools_editable")), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3660,8 +3675,8 @@ fn config_settings_path() {
     // Reinstalling with `--editable_mode=compat` should be a no-op; changes in build configuration
     // don't invalidate the environment.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/setuptools_editable"))
+        .arg("-r")
+        .arg("requirements.txt")
         .arg("-C")
         .arg("editable_mode=compat")
         , @r###"
@@ -3689,8 +3704,8 @@ fn config_settings_path() {
     // Install the editable package with `--editable_mode=compat`. We should ignore the cached
     // build configuration and rebuild.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("-e")
-        .arg(context.workspace_root.join("scripts/packages/setuptools_editable"))
+        .arg("-r")
+        .arg("requirements.txt")
         .arg("-C")
         .arg("editable_mode=compat")
         , @r###"
@@ -3711,6 +3726,8 @@ fn config_settings_path() {
         .site_packages()
         .join("__editable___setuptools_editable_0_1_0_finder.py");
     assert!(!finder.exists());
+
+    Ok(())
 }
 
 /// Reinstall a duplicate package in a virtual environment.
@@ -3813,6 +3830,9 @@ fn install_symlink() {
 fn invalidate_editable_on_change() -> Result<()> {
     let context = TestContext::new("3.12");
 
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e ./editable")?;
+
     // Create an editable package.
     let editable_dir = context.temp_dir.child("editable");
     editable_dir.create_dir_all()?;
@@ -3829,8 +3849,8 @@ requires-python = ">=3.8"
     )?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--editable")
-        .arg(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3848,8 +3868,8 @@ requires-python = ">=3.8"
 
     // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--editable")
-        .arg(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3873,8 +3893,8 @@ requires-python = ">=3.8"
 
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--editable")
-        .arg(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3897,6 +3917,9 @@ requires-python = ">=3.8"
 fn editable_dynamic() -> Result<()> {
     let context = TestContext::new("3.12");
 
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e ./editable")?;
+
     // Create an editable package with dynamic metadata.
     let editable_dir = context.temp_dir.child("editable");
     editable_dir.create_dir_all()?;
@@ -3910,16 +3933,16 @@ dynamic = ["dependencies"]
 requires-python = ">=3.11,<3.13"
 
 [tool.setuptools.dynamic]
-dependencies = {file = ["requirements.txt"]}
+dependencies = {file = ["dependencies.txt"]}
 "#,
     )?;
 
-    let requirements_txt = editable_dir.child("requirements.txt");
-    requirements_txt.write_str("anyio==4.0.0")?;
+    let dependencies_txt = editable_dir.child("dependencies.txt");
+    dependencies_txt.write_str("anyio==4.0.0")?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--editable")
-        .arg(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3937,8 +3960,8 @@ dependencies = {file = ["requirements.txt"]}
 
     // Installing again should not re-install, as we don't special-case dynamic metadata.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("--editable")
-        .arg(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3954,6 +3977,9 @@ dependencies = {file = ["requirements.txt"]}
 #[test]
 fn invalidate_path_on_change() -> Result<()> {
     let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("example @ ./editable")?;
 
     // Create a local package.
     let editable_dir = context.temp_dir.child("editable");
@@ -3971,14 +3997,13 @@ requires-python = ">=3.8"
     )?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -3991,14 +4016,13 @@ requires-python = ">=3.8"
 
     // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -4017,14 +4041,13 @@ requires-python = ">=3.8"
 
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 2 packages in [TIME]
     Uninstalled 2 packages in [TIME]
@@ -4042,6 +4065,9 @@ requires-python = ">=3.8"
 fn invalidate_path_on_cache_key() -> Result<()> {
     let context = TestContext::new("3.12");
 
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("example @ ./editable")?;
+
     // Create a local package.
     let editable_dir = context.temp_dir.child("editable");
     editable_dir.create_dir_all()?;
@@ -4054,25 +4080,24 @@ fn invalidate_path_on_cache_key() -> Result<()> {
         requires-python = ">=3.8"
 
         [tool.uv]
-        cache-keys = ["constraints.txt", { file = "requirements.txt" }]
+        cache-keys = ["constraints.txt", { file = "overrides.txt" }]
 "#,
     )?;
 
-    let requirements_txt = editable_dir.child("requirements.txt");
-    requirements_txt.write_str("idna")?;
+    let overrides_txt = editable_dir.child("overrides.txt");
+    overrides_txt.write_str("idna")?;
 
     let constraints_txt = editable_dir.child("constraints.txt");
     constraints_txt.write_str("idna<3.4")?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -4085,14 +4110,13 @@ fn invalidate_path_on_cache_key() -> Result<()> {
 
     // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -4102,14 +4126,13 @@ fn invalidate_path_on_cache_key() -> Result<()> {
 
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4119,18 +4142,17 @@ fn invalidate_path_on_cache_key() -> Result<()> {
     );
 
     // Modify the requirements file.
-    requirements_txt.write_str("flask")?;
+    overrides_txt.write_str("flask")?;
 
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4148,20 +4170,19 @@ fn invalidate_path_on_cache_key() -> Result<()> {
         requires-python = ">=3.8"
 
         [tool.uv]
-        cache-keys = [{ file = "requirements.txt" }, "constraints.txt"]
+        cache-keys = [{ file = "overrides.txt" }, "constraints.txt"]
 "#,
     )?;
 
     // Installing again should be a no-op, since `pyproject.toml` was not included as a cache key.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -4187,14 +4208,13 @@ fn invalidate_path_on_cache_key() -> Result<()> {
 
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4208,14 +4228,13 @@ fn invalidate_path_on_cache_key() -> Result<()> {
 
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4230,6 +4249,9 @@ fn invalidate_path_on_cache_key() -> Result<()> {
 #[test]
 fn invalidate_path_on_commit() -> Result<()> {
     let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("example @ ./editable")?;
 
     // Create a local package.
     let editable_dir = context.temp_dir.child("editable");
@@ -4264,14 +4286,13 @@ fn invalidate_path_on_commit() -> Result<()> {
         .write_str("1b6638fdb424e993d8354e75c55a3e524050c857")?;
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 4 packages in [TIME]
     Installed 4 packages in [TIME]
@@ -4284,14 +4305,13 @@ fn invalidate_path_on_commit() -> Result<()> {
 
     // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Audited 1 package in [TIME]
     "###
     );
@@ -4307,14 +4327,13 @@ fn invalidate_path_on_commit() -> Result<()> {
 
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg("example @ .")
-        .current_dir(editable_dir.path()), @r###"
+        .arg("-r")
+        .arg("requirements.txt"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using Python 3.12.[X] environment at: [VENV]/
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
@@ -4329,6 +4348,9 @@ fn invalidate_path_on_commit() -> Result<()> {
 #[test]
 fn invalidate_path_on_env_var() -> Result<()> {
     let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(".")?;
 
     // Create a local package.
     context.temp_dir.child("pyproject.toml").write_str(
@@ -4345,7 +4367,8 @@ fn invalidate_path_on_env_var() -> Result<()> {
 
     // Install the package.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(".")
+        .arg("-r")
+        .arg("requirements.txt")
         .env_remove("FOO"), @r###"
     success: true
     exit_code: 0
@@ -4364,7 +4387,8 @@ fn invalidate_path_on_env_var() -> Result<()> {
 
     // Installing again should be a no-op.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(".")
+        .arg("-r")
+        .arg("requirements.txt")
         .env_remove("FOO"), @r###"
     success: true
     exit_code: 0
@@ -4377,7 +4401,8 @@ fn invalidate_path_on_env_var() -> Result<()> {
 
     // Installing again should update the package.
     uv_snapshot!(context.filters(), context.pip_install()
-        .arg(".")
+        .arg("-r")
+        .arg("requirements.txt")
         .env("FOO", "BAR"), @r###"
     success: true
     exit_code: 0
@@ -5646,7 +5671,7 @@ fn already_installed_dependent_editable() {
     );
 
     // Request install of the first editable by full path again
-    // We should audit the installed package
+    // We should reinstall the package because it was explicitly requested
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-e")
         .arg(root_path.join("first_local")), @r###"
@@ -5655,7 +5680,11 @@ fn already_installed_dependent_editable() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
     );
 
@@ -5745,8 +5774,8 @@ fn already_installed_local_path_dependent() {
     "###
     );
 
-    // Request install of the first local by full path again
-    // We should audit the installed package
+    // Request install of the first local by full path again.
+    // We should rebuild and reinstall it.
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(root_path.join("first_local")), @r###"
     success: true
@@ -5754,7 +5783,28 @@ fn already_installed_local_path_dependent() {
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+    "###
+    );
+
+    // Request install of the first local by full path again, along with its name.
+    // We should rebuild and reinstall it.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(format!("first-local @ {}", root_path.join("first_local").display())), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
     "###
     );
 
@@ -5792,10 +5842,11 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     ~ second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
     "###
     );
 
@@ -5815,12 +5866,16 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
     "###
     );
 
     // Request upgrade of the first package
-    // A full path is specified and there's nothing to upgrade to so we should just audit
+    // A full path is specified and there's nothing to upgrade, but because it was passed
+    // explicitly, we reinstall
     uv_snapshot!(context.filters(), context.pip_install()
         .arg(root_path.join("first_local"))
         .arg(root_path.join("second_local"))
@@ -5836,7 +5891,11 @@ fn already_installed_local_path_dependent() {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Audited 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     ~ first-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/first_local)
+     ~ second-local==0.1.0 (from file://[WORKSPACE]/scripts/packages/dependent_locals/second_local)
     "###
     );
 }
@@ -5957,6 +6016,7 @@ fn already_installed_local_version_of_remote_package() {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
      - anyio==4.3.0
@@ -9060,6 +9120,749 @@ fn direct_url_json_direct_url() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn dependency_group() -> Result<()> {
+    // testing basic `uv pip install --group` functionality
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            bar = ["iniconfig"]
+            dev = ["sniffio"]
+            "#,
+        )?;
+
+        context.lock().assert().success();
+        Ok(context)
+    }
+
+    let mut context;
+
+    // 'bar' using path sugar
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // 'bar' using path sugar
+    // and also pulling in the same pyproject.toml with -r
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    ");
+
+    // 'bar' with an explicit path
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("pyproject.toml:bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // 'bar' using explicit path
+    // and also pulling in the same pyproject.toml with -r
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--group").arg("pyproject.toml:bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    ");
+
+    // 'bar' using path sugar
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sortedcontainers==2.4.0
+    ");
+
+    // 'foo' using path sugar
+    // 'bar' using path sugar
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + sortedcontainers==2.4.0
+    ");
+
+    // all together now!
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + iniconfig==2.0.0
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn many_pyproject_group() -> Result<()> {
+    // `uv pip install --group` tests with multiple projects
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        context.lock().assert().success();
+        Ok(context)
+    }
+
+    let mut context;
+
+    // 'foo' from main toml
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sortedcontainers==2.4.0
+    ");
+
+    // 'foo' from subtoml
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("subdir/pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // 'foo' from main toml
+    // 'foo' from sub toml
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("pyproject.toml:foo")
+        .arg("--group").arg("subdir/pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + sortedcontainers==2.4.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn other_sources_group() -> Result<()> {
+    // `uv pip install --group` tests just slamming random other sources like -e and .
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let mut context;
+
+    // 'foo' from main toml
+    // and install '.'
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(".")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + myproject==0.1.0 (from file://[TEMP_DIR]/)
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    ");
+
+    // 'foo' from main toml
+    // and install an editable
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-e").arg(context.workspace_root.join("scripts/packages/poetry_editable"))
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + poetry-editable==0.1.0 (from file://[WORKSPACE]/scripts/packages/poetry_editable)
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn suspicious_group() -> Result<()> {
+    // uv pip compile --group tests, where the invocations are suspicious
+    // and we might want to add warnings
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let mut context;
+
+    // Another variant of "both" but with the path sugar applied to the one in cwd
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("subdir/pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + sortedcontainers==2.4.0
+    ");
+
+    // Using the path sugar for "foo" but requesting "bar" for the subtoml
+    // Although you would be forgiven for thinking "foo" should be used from
+    // the subtoml, that's not what should happen.
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("subdir/pyproject.toml:bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+    ");
+
+    // Using the path sugar to request pyproject.toml:foo
+    // while also importing subdir/pyproject.toml's dependencies
+    // Although you would be forgiven for thinking "foo" should be used from
+    // the subtoml, that's not what should happen.
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("subdir/pyproject.toml")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sortedcontainers==2.4.0
+     + typing-extensions==4.10.0
+    ");
+
+    // An inversion of the previous -- this one isn't terribly ambiguous
+    // but we should have it in the suite too in case it should be distinguished!
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("-r").arg("pyproject.toml")
+        .arg("--group").arg("subdir/pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + typing-extensions==4.10.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn invalid_group() -> Result<()> {
+    // uv pip compile --group tests, where the invocations should fail
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let context = new_context()?;
+
+    // Hey you passed a path and not a group!
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("subdir/"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'subdir/' for '--group <GROUP>': Not a valid package or extra name: "subdir/". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+
+    For more information, try '--help'.
+    "#);
+
+    // Hey this path needs to end with "pyproject.toml"!
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("./:foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value './:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: ./
+
+    For more information, try '--help'.
+    ");
+
+    // Hey this path needs to end with "pyproject.toml"!
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("subdir/:foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'subdir/:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: subdir/
+
+    For more information, try '--help'.
+    ");
+
+    // Another invocation that Looks Weird but is asking for bar from two
+    // different tomls. In this case the main one doesn't define it and
+    // we should error!
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("bar")
+        .arg("--group").arg("subdir/pyproject.toml:bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The dependency group 'bar' was not found in the project: pyproject.toml
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn project_and_group() -> Result<()> {
+    // Checking that --project is handled properly with --group
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let mut context;
+
+    // 'foo' from subtoml, by implicit-sugar + --project
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--project").arg("subdir")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    // 'foo' from subtoml, by implicit-sugar + --project
+    // 'bar' from subtoml, by explicit relpath from cwd
+    // (explicit relpaths are not affected by --project)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--project").arg("subdir")
+        .arg("--group").arg("subdir/pyproject.toml:bar")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    ");
+
+    // 'bar' from subtoml, by implicit-sugar + --project
+    // 'foo' from main toml, by explicit relpath from cwd
+    // (explicit relpaths are not affected by --project)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--project").arg("subdir")
+        .arg("--group").arg("bar")
+        .arg("--group").arg("pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+    ");
+
+    // 'bar' from subtoml, by explicit relpath from cwd
+    // 'foo' from main toml, by explicit relpath from cwd
+    // (explicit relpaths are not affected by --project)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--project").arg("subdir")
+        .arg("--group").arg("subdir/pyproject.toml:bar")
+        .arg("--group").arg("pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn directory_and_group() -> Result<()> {
+    // Checking that --directory is handled properly with --group
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let mut context;
+
+    // 'bar' from subtoml, by implicit-sugar + --directory
+    // 'foo' from main toml, by explicit relpath from --directory
+    // (explicit relpaths ARE affected by --directory)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--directory").arg("subdir")
+        .arg("--group").arg("bar")
+        .arg("--group").arg("../pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: [VENV]/
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+    ");
+
+    // 'bar' from subtoml, by explicit relpath from --directory
+    // 'foo' from main toml, by explicit relpath from --directory
+    // (explicit relpaths ARE affected by --directory)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--directory").arg("subdir")
+        .arg("--group").arg("pyproject.toml:bar")
+        .arg("--group").arg("../pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: [VENV]/
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+    ");
+
+    // 'bar' from subtoml, by explicit relpath from --directory
+    // 'foo' from main toml, by implicit path + --project + --directory
+    // (explicit relpaths ARE affected by --directory)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--directory").arg("subdir")
+        .arg("--project").arg("../")
+        .arg("--group").arg("pyproject.toml:bar")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using Python 3.12.[X] environment at: [VENV]/
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + sortedcontainers==2.4.0
+    ");
+
+    Ok(())
+}
+
 /// Regression test that we don't discover workspaces with `--no-sources`.
 ///
 /// We have a workspace dependency shadowing a PyPI package and using this package's version to
@@ -9135,11 +9938,12 @@ fn no_sources_workspace_discovery() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 3 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 4 packages in [TIME]
      - anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
      + anyio==4.3.0
+     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
      + idna==3.6
      + sniffio==1.3.1
     "###
@@ -9155,11 +9959,12 @@ fn no_sources_workspace_discovery() -> Result<()> {
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Uninstalled 1 package in [TIME]
-    Installed 1 package in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      - anyio==4.3.0
      + anyio==2.0.0 (from file://[TEMP_DIR]/anyio)
+     ~ foo==1.0.0 (from file://[TEMP_DIR]/)
     "###
     );
 
@@ -9182,4 +9987,218 @@ fn unsupported_git_scheme() {
     ^^^^^^^^^^^^^^^^^
     "###
     );
+}
+
+/// Modify a project to use a `src` layout.
+#[test]
+fn change_layout_src() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e .")?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Installing should build the package.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Reinstalling should have no effect.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    // Replace the `src` layout with a flat layout.
+    fs_err::remove_dir_all(context.temp_dir.child("src").path())?;
+
+    context
+        .temp_dir
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Installing should rebuild the package.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Reinstalling should have no effect.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    Ok(())
+}
+
+/// Modify a custom directory in the cache keys.
+#[test]
+fn change_layout_custom_directory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("-e .")?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+
+        [tool.uv]
+        cache-keys = [{ dir = "build" }]
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    // Installing should build the package.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + iniconfig==2.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Reinstalling should have no effect.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "
+    );
+
+    // Create the `build` directory.
+    fs_err::create_dir(context.temp_dir.child("build"))?;
+
+    // Installing should rebuild the package.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Reinstalling should have no effect.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "
+    );
+
+    // Remove the `build` directory.
+    fs_err::remove_dir(context.temp_dir.child("build"))?;
+
+    // Installing should rebuild the package.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project==0.1.0 (from file://[TEMP_DIR]/)
+    "###
+    );
+
+    // Reinstalling should have no effect.
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("requirements.txt"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "
+    );
+
+    Ok(())
 }

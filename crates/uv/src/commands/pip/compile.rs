@@ -1,6 +1,6 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -13,8 +13,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, ExtrasSpecification,
-    IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy,
+    NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -24,7 +24,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName};
 use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
@@ -60,7 +60,7 @@ pub(crate) async fn pip_compile(
     build_constraints_from_workspace: Vec<Requirement>,
     environments: SupportedEnvironments,
     extras: ExtrasSpecification,
-    groups: DependencyGroups,
+    groups: BTreeMap<PathBuf, Vec<GroupName>>,
     output_file: Option<&Path>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
@@ -148,6 +148,7 @@ pub(crate) async fn pip_compile(
         constraints,
         overrides,
         source_trees,
+        groups,
         extras: used_extras,
         index_url,
         extra_index_urls,
@@ -159,6 +160,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        groups,
         &client_builder,
     )
     .await?;

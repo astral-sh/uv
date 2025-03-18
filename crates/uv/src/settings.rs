@@ -30,7 +30,7 @@ use uv_configuration::{
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
 use uv_install_wheel::LinkMode;
-use uv_normalize::PackageName;
+use uv_normalize::{PackageName, PipGroupName};
 use uv_pep508::{ExtraName, MarkerTree, RequirementOrigin};
 use uv_pypi_types::{Requirement, SupportedEnvironments};
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
@@ -1170,6 +1170,7 @@ pub(crate) struct AddSettings {
     pub(crate) no_sync: bool,
     pub(crate) packages: Vec<String>,
     pub(crate) requirements: Vec<PathBuf>,
+    pub(crate) constraints: Vec<PathBuf>,
     pub(crate) marker: Option<MarkerTree>,
     pub(crate) dependency_type: DependencyType,
     pub(crate) editable: Option<bool>,
@@ -1194,6 +1195,7 @@ impl AddSettings {
         let AddArgs {
             packages,
             requirements,
+            constraints,
             marker,
             dev,
             optional,
@@ -1285,6 +1287,10 @@ impl AddSettings {
             no_sync,
             packages,
             requirements,
+            constraints: constraints
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             marker,
             dependency_type,
             raw_sources,
@@ -1605,6 +1611,7 @@ impl PipCompileSettings {
             refresh,
             no_deps,
             deps,
+            group,
             output_file,
             no_strip_extras,
             strip_extras,
@@ -1721,6 +1728,7 @@ impl PipCompileSettings {
                     extra,
                     all_extras: flag(all_extras, no_all_extras),
                     no_deps: flag(no_deps, deps),
+                    group: Some(group),
                     output_file,
                     no_strip_extras: flag(no_strip_extras, strip_extras),
                     no_strip_markers: flag(no_strip_markers, strip_markers),
@@ -1867,6 +1875,7 @@ impl PipInstallSettings {
             refresh,
             no_deps,
             deps,
+            group,
             require_hashes,
             no_require_hashes,
             verify_hashes,
@@ -1973,6 +1982,7 @@ impl PipInstallSettings {
                     strict: flag(strict, no_strict),
                     extra,
                     all_extras: flag(all_extras, no_all_extras),
+                    group: Some(group),
                     no_deps: flag(no_deps, deps),
                     python_version,
                     python_platform,
@@ -2592,7 +2602,7 @@ pub(crate) struct PipSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) system: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) groups: DependencyGroups,
+    pub(crate) groups: Vec<PipGroupName>,
     pub(crate) break_system_packages: bool,
     pub(crate) target: Option<Target>,
     pub(crate) prefix: Option<Prefix>,
@@ -2669,6 +2679,7 @@ impl PipSettings {
             extra,
             all_extras,
             no_extra,
+            group,
             no_deps,
             allow_empty_requirements,
             resolution,
@@ -2786,16 +2797,7 @@ impl PipSettings {
                 args.no_extra.combine(no_extra).unwrap_or_default(),
                 args.extra.combine(extra).unwrap_or_default(),
             ),
-            groups: DependencyGroups::from_args(
-                false,
-                false,
-                false,
-                Vec::new(),
-                Vec::new(),
-                false,
-                Vec::new(),
-                false,
-            ),
+            groups: args.group.combine(group).unwrap_or_default(),
             dependency_mode: if args.no_deps.combine(no_deps).unwrap_or_default() {
                 DependencyMode::Direct
             } else {

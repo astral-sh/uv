@@ -382,7 +382,7 @@ fn find_dist_info<'a>(
         .get_packages(package_name)
         .iter()
         .find(|package| package.version() == package_version)
-        .map(|dist| dist.path())
+        .map(|dist| dist.install_path())
         .ok_or_else(|| Error::MissingToolPackage(package_name.clone()))
 }
 

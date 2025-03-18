@@ -2871,6 +2871,21 @@ impl PackageWire {
         requires_python: &RequiresPython,
         unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
     ) -> Result<Package, LockError> {
+        // Consistency check
+        if let Some(version) = &self.id.version {
+            for wheel in &self.wheels {
+                if version != &wheel.filename.version {
+                    return Err(LockError::from(LockErrorKind::InconsistentVersions {
+                        name: self.id.name,
+                        version: version.clone(),
+                        wheel: wheel.clone(),
+                    }));
+                }
+            }
+            // We can't check the source dist version since it does not need to contain the version
+            // in the filename.
+        }
+
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
                 .map(|dep| dep.unwire(requires_python, unambiguous_package_ids))
@@ -4754,7 +4769,7 @@ impl std::fmt::Display for LockErrorHint {
                     if let Some(version) = version {
                         write!(
                             f,
-                            "{}{} You're using {}, but  `{}` ({}) only has wheels with the following Python ABI tag{s}: {}",
+                            "{}{} You're using {}, but `{}` ({}) only has wheels with the following Python ABI tag{s}: {}",
                             "hint".bold().cyan(),
                             ":".bold(),
                             best,
@@ -5155,6 +5170,17 @@ enum LockErrorKind {
         /// The inner error we forward.
         #[source]
         err: uv_distribution::Error,
+    },
+    /// A package has inconsistent versions in a single entry
+    // Using name instead of id since the version in the id is part of the conflict.
+    #[error("The entry for package `{name}` v{version} has wheel `{wheel_filename}` with inconsistent version: v{wheel_version} ", name = name.cyan(), wheel_filename = wheel.filename, wheel_version = wheel.filename.version)]
+    InconsistentVersions {
+        /// The name of the package with the inconsistent entry.
+        name: PackageName,
+        /// The version of the package with the inconsistent entry.
+        version: Version,
+        /// The wheel with the inconsistent version.
+        wheel: Wheel,
     },
     #[error(
         "Found conflicting extras `{package1}[{extra1}]` \

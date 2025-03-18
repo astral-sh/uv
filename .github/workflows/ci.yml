@@ -25,34 +25,55 @@ jobs:
       # Flag that is raised when any code is changed
       code: ${{ steps.changed.outputs.code_any_changed }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
 
-      - uses: tj-actions/changed-files@v45
+      - name: "Determine changed files"
         id: changed
-        with:
-          files_yaml: |
-            code:
-              - "**/*"
-              - "!docs/**/*"
-              - "!mkdocs.*.yml"
-              - "!**/*.md"
-              - "!bin/**"
-              - "!assets/**"
-              # Generated markdown and JSON files are checked during test runs
-              - "docs/reference/cli.md"
-              - "docs/reference/settings.md"
-              - "docs/configuration/environment.md"
-              - "uv.schema.json"
+        shell: bash
+        run: |
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha || 'origin/main' }}...HEAD)
+
+          CODE_CHANGED=false
+
+          while IFS= read -r file; do
+            # Generated markdown and JSON files are checked during test runs.
+            if [[ "${file}" =~ ^docs/ && ! "${file}" =~ ^docs/reference/(cli|settings).md && ! "${file}" =~ ^docs/configuration/environment.md ]]; then
+              echo "Skipping ${file} (matches docs/ pattern)"
+              continue
+            fi
+            if [[ "${file}" =~ ^mkdocs.*\.yml$ ]]; then
+              echo "Skipping ${file} (matches mkdocs*.yml pattern)"
+              continue
+            fi
+            if [[ "${file}" =~ \.md$ ]]; then
+              echo "Skipping ${file} (matches *.md pattern)"
+              continue
+            fi
+            if [[ "${file}" =~ ^bin/ ]]; then
+              echo "Skipping ${file} (matches bin/ pattern)"
+              continue
+            fi
+            if [[ "${file}" =~ ^assets/ ]]; then
+              echo "Skipping ${file} (matches assets/ pattern)"
+              continue
+            fi
+
+            echo "Detected code change in: ${file}"
+            CODE_CHANGED=true
+            break
+
+          done <<< "${CHANGED_FILES}"
+          echo "code_any_changed=${CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
   lint:
     timeout-minutes: 10
     name: "lint"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: 3.12
 
@@ -60,7 +81,7 @@ jobs:
         run: rustup component add rustfmt
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5
 
       - name: "rustfmt"
         run: cargo fmt --all --check
@@ -86,7 +107,7 @@ jobs:
         run: uvx --from 'validate-pyproject[all,store]' validate-pyproject pyproject.toml
 
       - name: "Lint shell scripts"
-        uses: ludeeus/action-shellcheck@2.0.0
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
         env:
           # renovate: datasource=github-tags depName=koalaman/shellcheck
           SHELLCHECK_VERSION: "v0.10.0"
@@ -103,12 +124,12 @@ jobs:
     runs-on: ubuntu-latest
     name: "cargo clippy | ubuntu"
     steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Check uv_build dependencies"
-        uses: EmbarkStudios/cargo-deny-action@v1
+        uses: EmbarkStudios/cargo-deny-action@3f4a782664881cf5725d0ffd23969fcce89fd868 # v1
         with:
           command: check bans
           manifest-path: crates/uv-build/Cargo.toml
@@ -124,7 +145,7 @@ jobs:
     runs-on: windows-latest
     name: "cargo clippy | windows"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
@@ -134,7 +155,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
 
@@ -152,8 +173,8 @@ jobs:
     runs-on: ubuntu-latest
     name: "cargo dev generate-all"
     steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Generate all"
@@ -164,9 +185,9 @@ jobs:
     name: "cargo shear"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@2c41309d51ede152b6f2ee6bf3b71e6dc9a8b7df # v2
         with:
           tool: cargo-shear
       - run: cargo shear
@@ -182,21 +203,21 @@ jobs:
     runs-on: depot-ubuntu-22.04-16
     name: "cargo test | ubuntu"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - uses: rui314/setup-mold@v1
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
 
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@2c41309d51ede152b6f2ee6bf3b71e6dc9a8b7df # v2
         with:
           tool: cargo-nextest
 
@@ -214,21 +235,21 @@ jobs:
     runs-on: macos-latest-xlarge # github-macos-14-aarch64-6
     name: "cargo test | macos"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - uses: rui314/setup-mold@v1
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
 
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@2c41309d51ede152b6f2ee6bf3b71e6dc9a8b7df # v2
         with:
           tool: cargo-nextest
 
@@ -247,7 +268,7 @@ jobs:
     runs-on: github-windows-2025-x86_64-16
     name: "cargo test | windows"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
@@ -257,11 +278,11 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5
       - name: "Install required Python versions"
         run: uv python install
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
 
@@ -270,7 +291,7 @@ jobs:
         run: rustup show
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@2c41309d51ede152b6f2ee6bf3b71e6dc9a8b7df # v2
         with:
           tool: cargo-nextest
 
@@ -300,7 +321,7 @@ jobs:
       matrix:
         target-arch: ["x86_64", "i686", "aarch64"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
@@ -310,7 +331,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
 
@@ -321,7 +342,7 @@ jobs:
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
 
       - name: "Install cargo-bloat"
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@2c41309d51ede152b6f2ee6bf3b71e6dc9a8b7df # v2
         with:
           tool: cargo-bloat
 
@@ -355,14 +376,14 @@ jobs:
         # Note, we exclude `aarch64` because it's not supported by the GitHub runner
         target-arch: ["x86_64", "i686"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
       # actions/checkout does not let us clone into anywhere outside ${{ github.workspace }}, so we have to copy the clone...
       - name: Copy Git Repo to Dev Drive
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
       - name: "Install Rust toolchain"
@@ -391,7 +412,7 @@ jobs:
   typos:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - uses: crate-ci/typos@master
 
   docs:
@@ -401,14 +422,14 @@ jobs:
     env:
       MKDOCS_INSIDERS_SSH_KEY_EXISTS: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v5
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
       - name: "Add SSH key"
         if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
         with:
           ssh-private-key: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY }}
 
@@ -426,17 +447,17 @@ jobs:
     runs-on: github-ubuntu-24.04-x86_64-8
     name: "build binary | linux libc"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - uses: rui314/setup-mold@v1
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
 
       - name: "Build"
         run: cargo build
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: uv-linux-libc-${{ github.sha }}
           path: |
@@ -451,7 +472,7 @@ jobs:
     runs-on: github-ubuntu-24.04-x86_64-8
     name: "build binary | linux musl"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - uses: rui314/setup-mold@v1
 
@@ -460,13 +481,13 @@ jobs:
           sudo apt-get install musl-tools
           rustup target add x86_64-unknown-linux-musl
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
 
       - name: "Build"
         run: cargo build --target x86_64-unknown-linux-musl --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: uv-linux-musl-${{ github.sha }}
           path: |
@@ -481,16 +502,16 @@ jobs:
     runs-on: macos-14 # github-macos-14-aarch64-3
     name: "build binary | macos aarch64"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - uses: rui314/setup-mold@v1
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
       - name: "Build"
         run: cargo build --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: uv-macos-aarch64-${{ github.sha }}
           path: |
@@ -505,16 +526,16 @@ jobs:
     runs-on: macos-latest-large # github-macos-14-x86_64-12
     name: "build binary | macos x86_64"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - uses: rui314/setup-mold@v1
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
       - name: "Build"
         run: cargo build --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: uv-macos-x86_64-${{ github.sha }}
           path: |
@@ -529,7 +550,7 @@ jobs:
     runs-on: windows-latest
     name: "build binary | windows x86_64"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Setup Dev Drive
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
@@ -539,7 +560,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
 
@@ -548,7 +569,7 @@ jobs:
         run: cargo build --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: uv-windows-x86_64-${{ github.sha }}
           path: |
@@ -564,7 +585,7 @@ jobs:
       labels: windows-latest
     name: "build binary | windows aarch64"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Create Dev Drive using ReFS
         run: ${{ github.workspace }}/.github/workflows/setup-dev-drive.ps1
@@ -574,7 +595,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
 
@@ -586,7 +607,7 @@ jobs:
         run: cargo build --target aarch64-pc-windows-msvc
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: uv-windows-aarch64-${{ github.sha }}
           path: |
@@ -601,8 +622,8 @@ jobs:
     runs-on: github-ubuntu-24.04-x86_64-8
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: SebRollen/toml-action@v1.2.0
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: SebRollen/toml-action@b1b3628f55fc3a28208d4203ada8b737e9687876 # v1.2.0
         id: msrv
         with:
           file: "Cargo.toml"
@@ -611,7 +632,7 @@ jobs:
         run: rustup default ${{ steps.msrv.outputs.value }}
       - name: "Install mold"
         uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
       - run: cargo +${{ steps.msrv.outputs.value }} build
       - run: ./target/debug/uv --version
 
@@ -623,8 +644,8 @@ jobs:
     name: "build binary | freebsd"
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
       - name: "Cross build"
         run: |
           # Install cross from `freebsd-firecracker`
@@ -635,7 +656,7 @@ jobs:
           cross build --target x86_64-unknown-freebsd
 
       - name: Test in Firecracker VM
-        uses: acj/freebsd-firecracker-action@v0.3.0
+        uses: acj/freebsd-firecracker-action@4d93174d9eea32cd2b2650f964af69f8c72eaff2 # v0.3.0
         with:
           verbose: false
           checkout: false
@@ -686,16 +707,16 @@ jobs:
             python: "3.12"
       fail-fast: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           repository: ${{ matrix.repo }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: ${{ matrix.python }}
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -720,7 +741,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -744,10 +765,10 @@ jobs:
     runs-on: ubuntu-latest
     container: alpine:latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-musl-${{ github.sha }}
 
@@ -774,7 +795,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-macos-x86_64-${{ github.sha }}
 
@@ -798,7 +819,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-windows-x86_64-${{ github.sha }}
 
@@ -818,7 +839,7 @@ jobs:
     runs-on: github-windows-11-aarch64-4
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-windows-aarch64-${{ github.sha }}
 
@@ -840,15 +861,15 @@ jobs:
     name: "integration test | conda on ubuntu"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: conda-incubator/setup-miniconda@v3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: conda-incubator/setup-miniconda@505e6394dae86d6a5c7fbb6e3fb8938e3e863830 # v3
         with:
           miniconda-version: latest
           activate-environment: uv
           python-version: "3.12"
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -878,7 +899,7 @@ jobs:
           sudo apt-get install python3.9
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -920,7 +941,7 @@ jobs:
           sudo apt-get install python3.13-nogil
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -968,7 +989,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-windows-x86_64-${{ github.sha }}
 
@@ -1011,10 +1032,10 @@ jobs:
     name: "integration test | pypy on ubuntu"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -1077,7 +1098,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-windows-x86_64-${{ github.sha }}
 
@@ -1135,14 +1156,14 @@ jobs:
     name: "integration test | graalpy on ubuntu"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: "graalpy24.1"
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -1210,7 +1231,7 @@ jobs:
           python-version: "graalpy24.1"
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-windows-x86_64-${{ github.sha }}
 
@@ -1264,12 +1285,12 @@ jobs:
     name: "integration test | github actions"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: "3.12.7"
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -1327,19 +1348,31 @@ jobs:
     # Only the main repository is a trusted publisher
     if: github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
 
       # Only publish a new release if the publishing code changed
-      - uses: tj-actions/changed-files@v45
+      - name: "Determine changed files"
         id: changed
-        with:
-          files_yaml: |
-            code:
-              - "crates/uv-publish/**/*"
-              - "scripts/publish/**/*"
-              - ".github/workflows/ci.yml"
+        shell: bash
+        run: |
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha || 'origin/main' }}...HEAD)
+
+          CODE_CHANGED=false
+
+          while IFS= read -r file; do
+            if [[ "${file}" =~ ^crates/uv-publish/ || "${file}" =~ ^scripts/publish/ || "${file}" == ".github/workflows/ci.yml" ]]; then
+              echo "Detected code change in: ${file}"
+              CODE_CHANGED=true
+              break
+            fi
+
+            echo "Skipping ${file} (not in watched paths)"
+            continue
+
+          done <<< "${CHANGED_FILES}"
+          echo "code_any_changed=${CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
 
   integration-test-publish:
     timeout-minutes: 10
@@ -1356,16 +1389,16 @@ jobs:
       # For trusted publishing
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: "${{ env.PYTHON_VERSION }}"
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -1398,14 +1431,14 @@ jobs:
     name: "integration test | uv_build"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: "${{ env.PYTHON_VERSION }}"
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -1446,14 +1479,14 @@ jobs:
     name: "check cache | ubuntu"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: "3.12"
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -1472,10 +1505,10 @@ jobs:
     name: "check cache | macos aarch64"
     runs-on: macos-14 # github-macos-14-aarch64-3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-macos-aarch64-${{ github.sha }}
 
@@ -1495,13 +1528,13 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:bookworm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Install Python"
         run: apt-get update && apt-get install -y python3.11 python3-pip python3.11-venv
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-musl-${{ github.sha }}
 
@@ -1521,13 +1554,13 @@ jobs:
     runs-on: ubuntu-latest
     container: fedora:42
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Install Python"
         run: dnf install python3 which -y && python3 -m ensurepip
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -1546,14 +1579,14 @@ jobs:
     name: "check system | python on ubuntu"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: "3.12"
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -1573,7 +1606,7 @@ jobs:
     runs-on: ubuntu-latest
     container: opensuse/tumbleweed
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Install Python"
         run: >
@@ -1586,7 +1619,7 @@ jobs:
           # The above will not sleep forever due to the job level timeout
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -1613,7 +1646,7 @@ jobs:
       matrix:
         rocky-version: ["8", "9"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Install Python"
         if: matrix.rocky-version == '8'
@@ -1626,7 +1659,7 @@ jobs:
           dnf install python3.9 python3.9-pip which -y
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-musl-${{ github.sha }}
 
@@ -1645,14 +1678,14 @@ jobs:
     name: "check system | pypy on ubuntu"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: "pypy3.9"
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -1672,10 +1705,10 @@ jobs:
     runs-on: ubuntu-latest
     container: pyston/pyston:2.3.5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-musl-${{ github.sha }}
 
@@ -1695,13 +1728,13 @@ jobs:
     runs-on: ubuntu-latest
     container: alpine:latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Install Python"
         run: apk add --update --no-cache python3 py3-pip
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-musl-${{ github.sha }}
 
@@ -1720,10 +1753,10 @@ jobs:
     name: "check system | python on macos aarch64"
     runs-on: macos-14 # github-macos-14-aarch64-3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-macos-aarch64-${{ github.sha }}
 
@@ -1744,13 +1777,13 @@ jobs:
     name: "check system | homebrew python on macos aarch64"
     runs-on: macos-14 # github-macos-14-aarch64-3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Install Python"
         run: brew install python3
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-macos-aarch64-${{ github.sha }}
 
@@ -1769,14 +1802,14 @@ jobs:
     name: "check system | python on macos x86-64"
     runs-on: macos-13 # github-macos-13-x86_64-4
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       # We test with GitHub's Python as a regression test for
       # https://github.com/astral-sh/uv/issues/2450
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-macos-x86_64-${{ github.sha }}
 
@@ -1795,14 +1828,14 @@ jobs:
     name: "check system | python3.10 on windows x86-64"
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: "3.10"
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-windows-x86_64-${{ github.sha }}
 
@@ -1818,15 +1851,15 @@ jobs:
     name: "check system | python3.10 on windows x86"
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: "3.10"
           architecture: "x86"
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-windows-x86_64-${{ github.sha }}
 
@@ -1842,15 +1875,15 @@ jobs:
     name: "check system | python3.13 on windows x86-64"
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: "3.13"
           allow-prereleases: true
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-windows-x86_64-${{ github.sha }}
 
@@ -1866,16 +1899,16 @@ jobs:
     name: "check system | x86-64 python3.13 on windows aarch64"
     runs-on: github-windows-11-aarch64-4
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: "3.13"
           architecture: "x64"
           allow-prereleases: true
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-windows-aarch64-${{ github.sha }}
 
@@ -1889,10 +1922,10 @@ jobs:
     name: "check system | windows registry"
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-windows-x86_64-${{ github.sha }}
 
@@ -1906,13 +1939,13 @@ jobs:
     name: "check system | python3.12 via chocolatey"
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Install Python"
         run: choco install python3 --verbose --version=3.9.13
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-windows-x86_64-${{ github.sha }}
 
@@ -1928,7 +1961,7 @@ jobs:
     name: "check system | python3.9 via pyenv"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Install pyenv"
         run: |
@@ -1950,7 +1983,7 @@ jobs:
           echo "$HOME/.pyenv/shims" >> $GITHUB_PATH
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -1969,15 +2002,15 @@ jobs:
     name: "check system | python3.13"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
         with:
           python-version: 3.13
           allow-prereleases: true
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -2025,9 +2058,9 @@ jobs:
               arch: "aarch64",
             }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: conda-incubator/setup-miniconda@v3
+      - uses: conda-incubator/setup-miniconda@505e6394dae86d6a5c7fbb6e3fb8938e3e863830 # v3
         with:
           miniconda-version: "latest"
           activate-environment: uv
@@ -2042,7 +2075,7 @@ jobs:
         run: conda list
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-${{ matrix.target }}-${{ github.sha }}
 
@@ -2069,12 +2102,12 @@ jobs:
         run: |
           # Needed for `actions/checkout`
           yum install tar gzip which -y
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: "Install Python"
         run: yum install python3 python3-pip -y
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-linux-musl-${{ github.sha }}
 
@@ -2093,10 +2126,10 @@ jobs:
     name: "check system | embedded python3.10 on windows x86-64"
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: "Download binary"
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: uv-windows-x86_64-${{ github.sha }}
 
@@ -2126,15 +2159,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: "Checkout Branch"
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
 
       - name: "Install Rust toolchain"
         run: rustup show
 
       - name: "Install codspeed"
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@2c41309d51ede152b6f2ee6bf3b71e6dc9a8b7df # v2
         with:
           tool: cargo-codspeed
 
@@ -2150,7 +2183,7 @@ jobs:
         run: cargo codspeed build --profile profiling --features "codspeed,performance" -p uv-bench
 
       - name: "Run benchmarks"
-        uses: CodSpeedHQ/action@v3
+        uses: CodSpeedHQ/action@0010eb0ca6e89b80c88e8edaaa07cfe5f3e6664d # v3.5.0
         with:
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}

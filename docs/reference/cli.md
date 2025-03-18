@@ -819,6 +819,13 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
 </dd><dt id="uv-add--config-setting"><a href="#uv-add--config-setting"><code>--config-setting</code></a>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
 
+</dd><dt id="uv-add--constraints"><a href="#uv-add--constraints"><code>--constraints</code></a>, <code>-c</code> <i>constraints</i></dt><dd><p>Constrain versions using the given requirements files.</p>
+
+<p>Constraints files are <code>requirements.txt</code>-like files that only control the <em>version</em> of a requirement that&#8217;s installed. The constraints will <em>not</em> be added to the project&#8217;s <code>pyproject.toml</code> file, but <em>will</em> be respected during dependency resolution.</p>
+
+<p>This is equivalent to pip&#8217;s <code>--constraint</code> option.</p>
+
+<p>May also be set with the <code>UV_CONSTRAINT</code> environment variable.</p>
 </dd><dt id="uv-add--default-index"><a href="#uv-add--default-index"><code>--default-index</code></a> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
 
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
@@ -5577,7 +5584,7 @@ Compile a `requirements.in` file to a `requirements.txt` file
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv pip compile [OPTIONS] <SRC_FILE>...
+uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 ```
 
 <h3 class="cli-reference">Arguments</h3>
@@ -5721,6 +5728,12 @@ uv pip compile [OPTIONS] <SRC_FILE>...
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
 </ul>
 </dd><dt id="uv-pip-compile--generate-hashes"><a href="#uv-pip-compile--generate-hashes"><code>--generate-hashes</code></a></dt><dd><p>Include distribution hashes in the output file</p>
+
+</dd><dt id="uv-pip-compile--group"><a href="#uv-pip-compile--group"><code>--group</code></a> <i>group</i></dt><dd><p>Install the specified dependency group from a <code>pyproject.toml</code>.</p>
+
+<p>If no path is provided, the <code>pyproject.toml</code> in the working directory is used.</p>
+
+<p>May be provided multiple times.</p>
 
 </dd><dt id="uv-pip-compile--help"><a href="#uv-pip-compile--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
@@ -6461,7 +6474,7 @@ Install packages into an environment
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDITABLE>>
+uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDITABLE>|--group <GROUP>>
 ```
 
 <h3 class="cli-reference">Arguments</h3>
@@ -6596,6 +6609,12 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
 </ul>
+</dd><dt id="uv-pip-install--group"><a href="#uv-pip-install--group"><code>--group</code></a> <i>group</i></dt><dd><p>Install the specified dependency group from a <code>pyproject.toml</code>.</p>
+
+<p>If no path is provided, the <code>pyproject.toml</code> in the working directory is used.</p>
+
+<p>May be provided multiple times.</p>
+
 </dd><dt id="uv-pip-install--help"><a href="#uv-pip-install--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt id="uv-pip-install--index"><a href="#uv-pip-install--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>

@@ -184,7 +184,7 @@ windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Secur
 winsafe = { version = "0.0.23", features = ["kernel"] }
 wiremock = { version = "0.6.2" }
 xz2 = { version = "0.1.7" }
-zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+zip = { version = "2.2.3", default-features = false, features = ["deflate"] }
 
 [workspace.metadata.cargo-shear]
 ignored = ["flate2", "xz2"]
@@ -345,6 +345,9 @@ github-custom-job-permissions = { "build-docker" = { packages = "write", content
 install-updater = false
 # Path that installers should place binaries in
 install-path = ["$XDG_BIN_HOME/", "$XDG_DATA_HOME/../bin", "~/.local/bin"]
+# Temporarily allow changes to the `release` workflow, in which we pin actions
+# to a SHA instead of a tag
+allow-dirty = ["ci"]
 
 [workspace.metadata.dist.github-custom-runners]
 global = "depot-ubuntu-latest-4"

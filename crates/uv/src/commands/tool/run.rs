@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::Path;
@@ -750,9 +751,14 @@ async fn get_or_create_environment(
     };
 
     // Read the `--with` requirements.
-    let spec =
-        RequirementsSpecification::from_sources(with, constraints, overrides, &client_builder)
-            .await?;
+    let spec = RequirementsSpecification::from_sources(
+        with,
+        constraints,
+        overrides,
+        BTreeMap::default(),
+        &client_builder,
+    )
+    .await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
