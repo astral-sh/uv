@@ -275,27 +275,43 @@ during `uv python install`.
     [persistent configuration file](../configuration/files.md) to change the default behavior, or
     the `--no-python-downloads` flag can be passed to any uv command.
 
-## Adjusting Python version preferences
+## Requiring or disabling managed Python versions
 
 By default, uv will attempt to use Python versions found on the system and only download managed
-interpreters when necessary.
+Python versions when necessary. To ignore system Python versions, and only use managed Python
+versions, use the `--managed-python` flag:
 
-The `--managed-python` flag is passed, uv will only use managed interpreters. If the
-`--no-managed-python` flag is passed, uv will never use managed interpreters.
+```console
+$ uv python list --managed-python
+```
 
-The [`python-preference`](../reference/settings.md#python-preference) option can also be used to
-adjust this behavior. By default, it is set to `managed` which prefers managed Python installations
+Similarly, to ignore managed Python versions and only use system Python versions, use the
+`--no-managed-python` flag:
+
+```console
+$ uv python list --no-managed-python
+```
+
+To change uv's default behavior in a configuration file, use the
+[`python-preference` setting](#adjusting-python-version-preferences).
+
+## Adjusting Python version preferences
+
+The [`python-preference`](../reference/settings.md#python-preference) setting determines whether to
+prefer using Python installations that are already present on the system, or those that are
+downloaded and installed by uv.
+
+By default, the `python-preference` is set to `managed` which prefers managed Python installations
 over system Python installations. However, system Python installations are still preferred over
 downloading a managed Python version.
 
 The following alternative options are available:
 
-- `only-managed`: Only use managed Python installations; never use system Python installations
-- `system`: Prefer system Python installations over managed Python installations
-- `only-system`: Only use system Python installations; never use managed Python installations
-
-These options allow disabling uv's managed Python versions entirely or always using them and
-ignoring any existing system installations.
+- `only-managed`: Only use managed Python installations; never use system Python installations.
+  Equivalent to `--managed-python`.
+- `system`: Prefer system Python installations over managed Python installations.
+- `only-system`: Only use system Python installations; never use managed Python installations.
+  Equivalent to `--no-managed-python`.
 
 !!! note
 
