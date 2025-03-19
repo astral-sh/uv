@@ -554,7 +554,7 @@ async fn build_package(
         let entries = client
             .fetch(index_locations.flat_indexes().map(Index::url))
             .await?;
-        FlatIndex::from_entries(entries, None, &hasher, build_options)
+        FlatIndex::from_entries(entries, None, None, &hasher, build_options)
     };
 
     // Initialize any shared state.

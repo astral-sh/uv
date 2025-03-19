@@ -63,10 +63,6 @@ use crate::resolver::environment::{
     fork_version_by_marker, fork_version_by_python_requirement, ForkingPossibility,
 };
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
-pub(crate) use crate::resolver::urls::Urls;
-use crate::universal_marker::{ConflictMarker, UniversalMarker};
-pub(crate) use provider::MetadataUnavailable;
-
 pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::indexes::Indexes;
 pub use crate::resolver::provider::{
@@ -74,8 +70,12 @@ pub use crate::resolver::provider::{
     VersionsResponse, WheelMetadataResult,
 };
 pub use crate::resolver::reporter::{BuildId, Reporter};
+pub(crate) use crate::resolver::urls::Urls;
+use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::yanks::AllowedYanks;
 use crate::{marker, DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap};
+pub(crate) use provider::MetadataUnavailable;
+use uv_variants::VariantSet;
 
 mod availability;
 mod batch_prefetch;
@@ -158,6 +158,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         env: ResolverEnvironment,
         conflicts: Conflicts,
         tags: Option<&'a Tags>,
+        variants: Option<&'a VariantSet>,
         flat_index: &'a FlatIndex,
         index: &'a InMemoryIndex,
         hasher: &'a HashStrategy,
@@ -169,6 +170,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             database,
             flat_index,
             tags,
+            variants,
             python_requirement.target(),
             AllowedYanks::from_manifest(&manifest, &env, options.dependency_mode),
             hasher,

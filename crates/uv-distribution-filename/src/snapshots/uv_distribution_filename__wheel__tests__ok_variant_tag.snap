@@ -1,0 +1,36 @@
+---
+source: crates/uv-distribution-filename/src/wheel.rs
+expression: "WheelFilename::from_str(\"dummy_project-0.0.1-~36266d4d~-py3-none-any.whl\")"
+---
+Ok(
+    WheelFilename {
+        name: PackageName(
+            "dummy-project",
+        ),
+        version: "0.0.1",
+        variant: Some(
+            VariantTag {
+                data: [
+                    51,
+                    54,
+                    50,
+                    54,
+                    54,
+                    100,
+                    52,
+                    100,
+                ],
+            },
+        ),
+        tags: Small {
+            small: WheelTagSmall {
+                python_tag: Python {
+                    major: 3,
+                    minor: None,
+                },
+                abi_tag: None,
+                platform_tag: Any,
+            },
+        },
+    },
+)

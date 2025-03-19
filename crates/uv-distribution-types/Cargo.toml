@@ -28,6 +28,7 @@ uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-small-str = { workspace = true }
+uv-variants = { workspace = true }
 
 arcstr = { workspace = true }
 bitflags = { workspace = true }

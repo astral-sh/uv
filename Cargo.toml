@@ -65,6 +65,8 @@ uv-static = { path = "crates/uv-static" }
 uv-tool = { path = "crates/uv-tool" }
 uv-trampoline-builder = { path = "crates/uv-trampoline-builder" }
 uv-types = { path = "crates/uv-types" }
+uv-variants = { path = "crates/uv-variants" }
+uv-variant-frontend = { path = "crates/uv-variant-frontend" }
 uv-version = { path = "crates/uv-version" }
 uv-virtualenv = { path = "crates/uv-virtualenv" }
 uv-warnings = { path = "crates/uv-warnings" }
@@ -153,6 +155,7 @@ serde = { version = "1.0.210", features = ["derive", "rc"] }
 serde-untagged = { version = "0.1.6" }
 serde_json = { version = "1.0.128" }
 sha2 = { version = "0.10.8" }
+sha3 = { version = "0.10.8" }
 smallvec = { version = "1.13.2" }
 spdx = { version = "0.10.6" }
 syn = { version = "2.0.77" }

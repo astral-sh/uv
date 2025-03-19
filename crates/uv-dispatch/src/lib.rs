@@ -28,7 +28,7 @@ use uv_distribution_types::{
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
-use uv_pypi_types::{Conflicts, Requirement};
+use uv_pypi_types::{Conflicts, Requirement, VariantProviderBackend};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
     ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
@@ -38,6 +38,7 @@ use uv_types::{
     AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages, HashStrategy,
     InFlight,
 };
+use uv_variant_frontend::VariantBuild;
 use uv_workspace::WorkspaceCache;
 
 #[derive(Debug, Error)]
@@ -161,6 +162,24 @@ impl<'a> BuildDispatch<'a> {
             .collect();
         self
     }
+
+    pub async fn setup_variants<'data>(
+        &'data self,
+        backend: VariantProviderBackend,
+        build_output: BuildOutput,
+    ) -> Result<VariantBuild, uv_variant_frontend::Error> {
+        let builder = VariantBuild::setup(
+            backend,
+            self.interpreter,
+            self,
+            self.build_extra_env_vars.clone(),
+            build_output,
+            self.concurrency.builds,
+        )
+        .boxed_local()
+        .await?;
+        Ok(builder)
+    }
 }
 
 #[allow(refining_impl_trait)]
@@ -229,6 +248,7 @@ impl BuildContext for BuildDispatch<'_> {
             // Conflicting groups only make sense when doing universal resolution.
             Conflicts::empty(),
             Some(tags),
+            None,
             self.flat_index,
             &self.shared_state.index,
             self.hasher,
