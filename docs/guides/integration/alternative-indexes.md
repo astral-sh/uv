@@ -84,7 +84,7 @@ export UV_INDEX_PRIVATE_REGISTRY_USERNAME=VssSessionToken
 
 !!! note
 
-    The [`tool.uv.keyring-provider`](../../reference/settings.md#keyring-provider--keyring-provider-)
+    The [`tool.uv.keyring-provider`](../../reference/settings.md#keyring-provider)
     setting can be used to enable keyring in your `uv.toml` or `pyproject.toml`.
 
     Similarly, the username for the index can be added directly to the index URL.
@@ -204,7 +204,7 @@ export UV_INDEX_PRIVATE_REGISTRY_USERNAME=oauth2accesstoken
 
 !!! note
 
-    The [`tool.uv.keyring-provider`](../../reference/settings.md#keyring-provider--keyring-provider-)
+    The [`tool.uv.keyring-provider`](../../reference/settings.md#keyring-provider)
     setting can be used to enable keyring in your `uv.toml` or `pyproject.toml`.
 
     Similarly, the username for the index can be added directly to the index URL.
@@ -326,7 +326,7 @@ export UV_INDEX_PRIVATE_REGISTRY_USERNAME=aws
 
 !!! note
 
-    The [`tool.uv.keyring-provider`](../../reference/settings.md#keyring-provider--keyring-provider-)
+    The [`tool.uv.keyring-provider`](../../reference/settings.md#keyring-provider)
     setting can be used to enable keyring in your `uv.toml` or `pyproject.toml`.
 
     Similarly, the username for the index can be added directly to the index URL.
