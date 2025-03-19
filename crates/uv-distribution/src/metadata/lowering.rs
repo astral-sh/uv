@@ -8,6 +8,7 @@ use thiserror::Error;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
     Index, IndexLocations, IndexMetadata, IndexName, Origin, Requirement, RequirementSource,
+    RequiresPython,
 };
 use uv_git_types::{GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -16,7 +17,7 @@ use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository
 use uv_pypi_types::{ConflictItem, ParsedUrlError, VerbatimParsedUrl};
 use uv_redacted::DisplaySafeUrl;
 use uv_workspace::Workspace;
-use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
+use uv_workspace::pyproject::{DependencyGroupSettings, PyProjectToml, Source, Sources};
 
 use crate::metadata::GitWorkspaceMember;
 
@@ -34,7 +35,7 @@ enum RequirementOrigin {
 impl LoweredRequirement {
     /// Combine `project.dependencies` or `project.optional-dependencies` with `tool.uv.sources`.
     pub(crate) fn from_requirement<'data>(
-        requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
+        mut requirement: uv_pep508::Requirement<VerbatimParsedUrl>,
         project_name: Option<&'data PackageName>,
         project_dir: &'data Path,
         project_sources: &'data BTreeMap<PackageName, Sources>,
@@ -45,6 +46,21 @@ impl LoweredRequirement {
         workspace: &'data Workspace,
         git_member: Option<&'data GitWorkspaceMember<'data>>,
     ) -> impl Iterator<Item = Result<Self, LoweringError>> + use<'data> + 'data {
+        let empty_settings = DependencyGroupSettings::default();
+        let group_settings = workspace
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.dependency_groups.as_ref())
+            .and_then(|settings| settings.inner().get(group?))
+            .unwrap_or(&empty_settings);
+
+        if let Some(python_versions) = &group_settings.requires_python {
+            let extra_markers = RequiresPython::from_specifiers(python_versions).to_marker_tree();
+            requirement.marker.and(extra_markers);
+        }
+
         // Identify the source from the `tool.uv.sources` table.
         let (sources, origin) = if let Some(source) = project_sources.get(&requirement.name) {
             (Some(source), RequirementOrigin::Project)
