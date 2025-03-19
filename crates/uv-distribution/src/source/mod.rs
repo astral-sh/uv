@@ -1363,9 +1363,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .map_err(Error::CacheRead)?
             .is_fresh()
         {
-            if let Some(pointer) = LocalRevisionPointer::read_from(&entry)? {
-                if *pointer.cache_info() == cache_info {
-                    return Ok(pointer);
+            match LocalRevisionPointer::read_from(&entry) {
+                Ok(Some(pointer)) => {
+                    if *pointer.cache_info() == cache_info {
+                        return Ok(pointer);
+                    }
+
+                    debug!("Cached revision does not match expected cache info for: {source}");
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    debug!("Failed to deserialize cached revision for: {source} ({err})",);
                 }
             }
         }
