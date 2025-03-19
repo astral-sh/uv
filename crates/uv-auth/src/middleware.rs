@@ -196,6 +196,7 @@ impl Middleware for AuthMiddleware {
                         extensions,
                         next,
                         &url,
+                        auth_policy,
                     )
                     .await;
             }
@@ -212,7 +213,9 @@ impl Middleware for AuthMiddleware {
                 // If it's fully authenticated, finish the request
                 if credentials.password().is_some() {
                     trace!("Request for {url} is fully authenticated");
-                    return self.complete_request(None, request, extensions, next).await;
+                    return self
+                        .complete_request(None, request, extensions, next, auth_policy)
+                        .await;
                 }
 
                 // If we just found a username, we'll make the request then look for password elsewhere
@@ -286,7 +289,7 @@ impl Middleware for AuthMiddleware {
                 trace!("Retrying request for {url} with credentials from cache {credentials:?}");
                 retry_request = credentials.authenticate(retry_request);
                 return self
-                    .complete_request(None, retry_request, extensions, next)
+                    .complete_request(None, retry_request, extensions, next, auth_policy)
                     .await;
             }
         }
@@ -300,7 +303,13 @@ impl Middleware for AuthMiddleware {
             retry_request = credentials.authenticate(retry_request);
             trace!("Retrying request for {url} with {credentials:?}");
             return self
-                .complete_request(Some(credentials), retry_request, extensions, next)
+                .complete_request(
+                    Some(credentials),
+                    retry_request,
+                    extensions,
+                    next,
+                    auth_policy,
+                )
                 .await;
         }
 
@@ -309,7 +318,7 @@ impl Middleware for AuthMiddleware {
                 trace!("Retrying request for {url} with username from cache {credentials:?}");
                 retry_request = credentials.authenticate(retry_request);
                 return self
-                    .complete_request(None, retry_request, extensions, next)
+                    .complete_request(None, retry_request, extensions, next, auth_policy)
                     .await;
             }
         }
@@ -334,13 +343,16 @@ impl AuthMiddleware {
         request: Request,
         extensions: &mut Extensions,
         next: Next<'_>,
+        auth_policy: AuthPolicy,
     ) -> reqwest_middleware::Result<Response> {
         let Some(credentials) = credentials else {
             // Nothing to insert into the cache if we don't have credentials
             return next.run(request, extensions).await;
         };
-
         let url = request.url().clone();
+        if matches!(auth_policy, AuthPolicy::Always) && credentials.password().is_none() {
+            return Err(Error::Middleware(format_err!("Missing password for {url}")));
+        }
         let result = next.run(request, extensions).await;
 
         // Update the cache with new credentials on a successful request
@@ -363,6 +375,7 @@ impl AuthMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
         url: &str,
+        auth_policy: AuthPolicy,
     ) -> reqwest_middleware::Result<Response> {
         let credentials = Arc::new(credentials);
 
@@ -370,7 +383,7 @@ impl AuthMiddleware {
         if credentials.password().is_some() {
             trace!("Request for {url} is already fully authenticated");
             return self
-                .complete_request(Some(credentials), request, extensions, next)
+                .complete_request(Some(credentials), request, extensions, next, auth_policy)
                 .await;
         }
 
@@ -402,7 +415,7 @@ impl AuthMiddleware {
         };
 
         return self
-            .complete_request(credentials, request, extensions, next)
+            .complete_request(credentials, request, extensions, next, auth_policy)
             .await;
     }
 
