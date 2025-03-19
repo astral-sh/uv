@@ -15,12 +15,6 @@ use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 use uv_auth::UrlAuthPolicies;
 
-use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
-use crate::cached_client::CacheControl;
-use crate::html::SimpleHtml;
-use crate::remote_metadata::wheel_metadata_from_remote_zip;
-use crate::rkyvutil::OwnedArchive;
-use crate::{BaseClient, CachedClient, CachedClientError, Error, ErrorKind};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
@@ -35,12 +29,21 @@ use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_pypi_types::{ResolutionMetadata, SimpleJson};
 use uv_small_str::SmallString;
+use uv_torch::TorchStrategy;
+
+use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
+use crate::cached_client::CacheControl;
+use crate::html::SimpleHtml;
+use crate::remote_metadata::wheel_metadata_from_remote_zip;
+use crate::rkyvutil::OwnedArchive;
+use crate::{BaseClient, CachedClient, CachedClientError, Error, ErrorKind};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
     index_strategy: IndexStrategy,
+    torch_backend: Option<TorchStrategy>,
     cache: Cache,
     base_client_builder: BaseClientBuilder<'a>,
 }
@@ -50,6 +53,7 @@ impl RegistryClientBuilder<'_> {
         Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
+            torch_backend: None,
             cache,
             base_client_builder: BaseClientBuilder::new(),
         }
@@ -66,6 +70,12 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn index_strategy(mut self, index_strategy: IndexStrategy) -> Self {
         self.index_strategy = index_strategy;
+        self
+    }
+
+    #[must_use]
+    pub fn torch_backend(mut self, torch_backend: Option<TorchStrategy>) -> Self {
+        self.torch_backend = torch_backend;
         self
     }
 
@@ -154,6 +164,7 @@ impl<'a> RegistryClientBuilder<'a> {
         RegistryClient {
             index_urls: self.index_urls,
             index_strategy: self.index_strategy,
+            torch_backend: self.torch_backend,
             cache: self.cache,
             connectivity,
             client,
@@ -175,6 +186,7 @@ impl<'a> RegistryClientBuilder<'a> {
         RegistryClient {
             index_urls: self.index_urls,
             index_strategy: self.index_strategy,
+            torch_backend: self.torch_backend,
             cache: self.cache,
             connectivity,
             client,
@@ -190,6 +202,7 @@ impl<'a> TryFrom<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
         Ok(Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
+            torch_backend: None,
             cache: Cache::temp()?,
             base_client_builder: value,
         })
@@ -203,6 +216,8 @@ pub struct RegistryClient {
     index_urls: IndexUrls,
     /// The strategy to use when fetching across multiple indexes.
     index_strategy: IndexStrategy,
+    /// The strategy to use when selecting a PyTorch backend, if any.
+    torch_backend: Option<TorchStrategy>,
     /// The underlying HTTP client.
     client: CachedClient,
     /// Used for the remote wheel METADATA cache.
@@ -239,6 +254,15 @@ impl RegistryClient {
         self.timeout
     }
 
+    /// Return the appropriate index URLs for the given [`PackageName`].
+    fn index_urls_for(&self, package_name: &PackageName) -> impl Iterator<Item = &IndexUrl> {
+        self.torch_backend
+            .as_ref()
+            .and_then(|torch_backend| torch_backend.index_urls(package_name))
+            .map(Either::Left)
+            .unwrap_or_else(|| Either::Right(self.index_urls.indexes().map(Index::url)))
+    }
+
     /// Fetch a package from the `PyPI` simple API.
     ///
     /// "simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
@@ -252,23 +276,24 @@ impl RegistryClient {
         capabilities: &IndexCapabilities,
         download_concurrency: &Semaphore,
     ) -> Result<Vec<(&'index IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
+        // If `--no-index` is specified, avoid fetching regardless of whether the index is implicit,
+        // explicit, etc.
+        if self.index_urls.no_index() {
+            return Err(ErrorKind::NoIndex(package_name.to_string()).into());
+        }
+
         let indexes = if let Some(index) = index {
             Either::Left(std::iter::once(index))
         } else {
-            Either::Right(self.index_urls.indexes().map(Index::url))
+            Either::Right(self.index_urls_for(package_name))
         };
-
-        let mut it = indexes.peekable();
-        if it.peek().is_none() {
-            return Err(ErrorKind::NoIndex(package_name.to_string()).into());
-        }
 
         let mut results = Vec::new();
 
         match self.index_strategy {
             // If we're searching for the first index that contains the package, fetch serially.
             IndexStrategy::FirstIndex => {
-                for index in it {
+                for index in indexes {
                     let _permit = download_concurrency.acquire().await;
                     if let Some(metadata) = self
                         .simple_single_index(package_name, index, capabilities)
@@ -282,7 +307,7 @@ impl RegistryClient {
 
             // Otherwise, fetch concurrently.
             IndexStrategy::UnsafeBestMatch | IndexStrategy::UnsafeFirstMatch => {
-                results = futures::stream::iter(it)
+                results = futures::stream::iter(indexes)
                     .map(|index| async move {
                         let _permit = download_concurrency.acquire().await;
                         let metadata = self

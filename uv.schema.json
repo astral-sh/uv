@@ -1382,6 +1382,17 @@
             "null"
           ]
         },
+        "torch-backend": {
+          "description": "The backend to use when fetching packages in the PyTorch ecosystem.\n\nWhen set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem, and will instead use the defined backend.\n\nFor example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`, uv will use the PyTorch index for CUDA 12.6.\n\nThe `auto` mode will attempt to detect the appropriate PyTorch index based on the currently installed CUDA drivers.\n\nThis option is in preview and may change in any future release.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TorchMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "universal": {
           "description": "Perform a universal resolution, attempting to generate a single `requirements.txt` output file that is compatible with all operating systems, architectures, and Python implementations.\n\nIn universal mode, the current Python version (or user-provided `--python-version`) will be treated as a lower bound. For example, `--universal --python-version 3.7` would produce a universal resolution for Python 3.7 and later.",
           "type": [
@@ -2200,6 +2211,186 @@
         }
       },
       "additionalProperties": false
+    },
+    "TorchMode": {
+      "description": "The strategy to use when determining the appropriate PyTorch index.",
+      "oneOf": [
+        {
+          "description": "Select the appropriate PyTorch index based on the operating system and CUDA driver version.",
+          "type": "string",
+          "enum": [
+            "auto"
+          ]
+        },
+        {
+          "description": "Use the CPU-only PyTorch index.",
+          "type": "string",
+          "enum": [
+            "cpu"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.6.",
+          "type": "string",
+          "enum": [
+            "cu126"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.5.",
+          "type": "string",
+          "enum": [
+            "cu125"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.4.",
+          "type": "string",
+          "enum": [
+            "cu124"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.3.",
+          "type": "string",
+          "enum": [
+            "cu123"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.2.",
+          "type": "string",
+          "enum": [
+            "cu122"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.1.",
+          "type": "string",
+          "enum": [
+            "cu121"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.0.",
+          "type": "string",
+          "enum": [
+            "cu120"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.8.",
+          "type": "string",
+          "enum": [
+            "cu118"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.7.",
+          "type": "string",
+          "enum": [
+            "cu117"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.6.",
+          "type": "string",
+          "enum": [
+            "cu116"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.5.",
+          "type": "string",
+          "enum": [
+            "cu115"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.4.",
+          "type": "string",
+          "enum": [
+            "cu114"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.3.",
+          "type": "string",
+          "enum": [
+            "cu113"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.2.",
+          "type": "string",
+          "enum": [
+            "cu112"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.1.",
+          "type": "string",
+          "enum": [
+            "cu111"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.0.",
+          "type": "string",
+          "enum": [
+            "cu110"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 10.2.",
+          "type": "string",
+          "enum": [
+            "cu102"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 10.1.",
+          "type": "string",
+          "enum": [
+            "cu101"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 10.0.",
+          "type": "string",
+          "enum": [
+            "cu100"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 9.2.",
+          "type": "string",
+          "enum": [
+            "cu92"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 9.1.",
+          "type": "string",
+          "enum": [
+            "cu91"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 9.0.",
+          "type": "string",
+          "enum": [
+            "cu90"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 8.0.",
+          "type": "string",
+          "enum": [
+            "cu80"
+          ]
+        }
+      ]
     },
     "TrustedHost": {
       "description": "A host or host-port pair.",

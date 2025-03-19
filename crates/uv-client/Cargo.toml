@@ -25,6 +25,7 @@ uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-small-str = { workspace = true }
 uv-static = { workspace = true }
+uv-torch = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 

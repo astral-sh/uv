@@ -15223,9 +15223,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Searching for a compatible version of project @ file://[TEMP_DIR]/ (<0.1.0 | >0.1.0)
     DEBUG No compatible version found for: project
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the provided package locations and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
-
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
     "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -24883,9 +24881,9 @@ fn lock_pytorch_cpu() -> Result<()> {
     Ok(())
 }
 
-/// Ensure that the `PyTorch` index-specific forks don't use the PyPI preference. If we solve a PyPI
+/// Ensure that the PyTorch index-specific forks don't use the PyPI preference. If we solve a PyPI
 /// fork first, and reuse the preferences, we'll end up selecting `2.2.2` (rather than `2.2.2+cpu`)
-/// in the `PyTorch` forks.
+/// in the PyTorch forks.
 ///
 /// Regression test for: <https://github.com/astral-sh/uv/issues/10772>
 #[test]

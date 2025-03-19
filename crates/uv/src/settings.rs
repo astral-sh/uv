@@ -42,6 +42,7 @@ use uv_settings::{
     ResolverInstallerOptions, ResolverOptions,
 };
 use uv_static::EnvVars;
+use uv_torch::TorchMode;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 
@@ -1661,6 +1662,7 @@ impl PipCompileSettings {
             no_emit_marker_expression,
             emit_index_annotation,
             no_emit_index_annotation,
+            torch_backend,
             compat_args: _,
         } = args;
 
@@ -1759,6 +1761,7 @@ impl PipCompileSettings {
                     emit_marker_expression: flag(emit_marker_expression, no_emit_marker_expression),
                     emit_index_annotation: flag(emit_index_annotation, no_emit_index_annotation),
                     annotation_style,
+                    torch_backend,
                     ..PipOptions::from(resolver)
                 },
                 filesystem,
@@ -1810,6 +1813,7 @@ impl PipSyncSettings {
             strict,
             no_strict,
             dry_run,
+            torch_backend,
             compat_args: _,
         } = *args;
 
@@ -1844,6 +1848,7 @@ impl PipSyncSettings {
                     python_version,
                     python_platform,
                     strict: flag(strict, no_strict),
+                    torch_backend,
                     ..PipOptions::from(installer)
                 },
                 filesystem,
@@ -1911,6 +1916,7 @@ impl PipInstallSettings {
             strict,
             no_strict,
             dry_run,
+            torch_backend,
             compat_args: _,
         } = args;
 
@@ -2001,6 +2007,7 @@ impl PipInstallSettings {
                     python_platform,
                     require_hashes: flag(require_hashes, no_require_hashes),
                     verify_hashes: flag(verify_hashes, no_verify_hashes),
+                    torch_backend,
                     ..PipOptions::from(installer)
                 },
                 filesystem,
@@ -2621,6 +2628,7 @@ pub(crate) struct PipSettings {
     pub(crate) prefix: Option<Prefix>,
     pub(crate) index_strategy: IndexStrategy,
     pub(crate) keyring_provider: KeyringProviderType,
+    pub(crate) torch_backend: Option<TorchMode>,
     pub(crate) no_build_isolation: bool,
     pub(crate) no_build_isolation_package: Vec<PackageName>,
     pub(crate) build_options: BuildOptions,
@@ -2682,6 +2690,7 @@ impl PipSettings {
             no_index,
             find_links,
             index_strategy,
+            torch_backend,
             keyring_provider,
             no_build,
             no_binary,
@@ -2871,6 +2880,7 @@ impl PipSettings {
                 .config_settings
                 .combine(config_settings)
                 .unwrap_or_default(),
+            torch_backend: args.torch_backend.combine(torch_backend),
             python_version: args.python_version.combine(python_version),
             python_platform: args.python_platform.combine(python_platform),
             universal: args.universal.combine(universal).unwrap_or_default(),

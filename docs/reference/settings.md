@@ -3275,6 +3275,43 @@ environment. The packages will be installed at the top-level of the directory.
 
 ---
 
+#### [`torch-backend`](#pip_torch-backend) {: #pip_torch-backend }
+<span id="torch-backend"></span>
+
+The backend to use when fetching packages in the PyTorch ecosystem.
+
+When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+and will instead use the defined backend.
+
+For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+uv will use the PyTorch index for CUDA 12.6.
+
+The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+installed CUDA drivers.
+
+This option is in preview and may change in any future release.
+
+**Default value**: `null`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    torch-backend = "auto"
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    torch-backend = "auto"
+    ```
+
+---
+
 #### [`universal`](#pip_universal) {: #pip_universal }
 <span id="universal"></span>
 

@@ -51,6 +51,7 @@ uv-settings = { workspace = true, features = ["schemars"] }
 uv-shell = { workspace = true }
 uv-static = { workspace = true }
 uv-tool = { workspace = true }
+uv-torch = { workspace = true }
 uv-trampoline-builder = { workspace = true }
 uv-types = { workspace = true }
 uv-version = { workspace = true }
