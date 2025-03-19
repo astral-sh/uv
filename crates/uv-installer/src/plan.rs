@@ -142,9 +142,9 @@ impl<'a> Planner<'a> {
                         if *entry.index.url() != wheel.best_wheel().index {
                             return None;
                         }
-                        if entry.dist.filename.version != wheel.best_wheel().filename.version {
+                        if entry.dist.filename != wheel.best_wheel().filename {
                             return None;
-                        };
+                        }
                         if entry.built && no_build {
                             return None;
                         }

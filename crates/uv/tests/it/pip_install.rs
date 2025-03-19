@@ -8493,6 +8493,64 @@ fn stale_egg_info() -> Result<()> {
     Ok(())
 }
 
+/// Avoid using a compatible, cached wheel if there's another, more compatible wheel returned by
+/// the resolver.
+///
+/// See: <https://github.com/astral-sh/uv/issues/12273>
+#[test]
+fn avoid_cached_wheel() {
+    let context = TestContext::new_with_versions(&["3.10", "3.11"]);
+
+    // Create a Python 3.10 environment.
+    context
+        .venv()
+        .arg("--python")
+        .arg("3.10")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("multiprocess"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + dill==0.3.8
+     + multiprocess==0.70.16
+    "
+    );
+
+    // Create a Python 3.11 environment.
+    context
+        .venv()
+        .arg("--python")
+        .arg("3.11")
+        .assert()
+        .success();
+
+    // `multiprocessing` should be re-downloaded (i.e., we should have a `Prepare` step here).
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--python")
+        .arg("3.11")
+        .arg("multiprocess"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + dill==0.3.8
+     + multiprocess==0.70.16
+    "
+    );
+}
+
 /// `suds-community` has an incorrect layout whereby the wheel includes `suds_community.egg-info` at
 /// the top-level. We're then under the impression that `suds` is installed twice, but when we go to
 /// uninstall the second "version", we can't find the `egg-info` directory.
