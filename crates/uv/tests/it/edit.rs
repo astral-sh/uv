@@ -10081,6 +10081,41 @@ fn add_auth_policy_always_without_credentials() -> Result<()> {
     Ok(())
 }
 
+/// In authentication "always", authenticated requests with a username but
+/// no discoverable password will fail.
+#[test]
+fn add_auth_policy_always_with_username_no_password() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "https://public@pypi.org/simple"
+        authenticate = "always"
+        default = true
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("anyio"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch: `https://pypi.org/simple/anyio/`
+      Caused by: Missing password for https://pypi.org/simple/anyio/
+    "
+    );
+    Ok(())
+}
+
 /// In authentication "never", even if the correct credentials are supplied
 /// in the URL, no authenticated requests will be allowed.
 #[test]
