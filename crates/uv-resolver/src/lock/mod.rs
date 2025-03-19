@@ -2196,8 +2196,11 @@ impl Package {
             };
         }
 
-        if !no_build {
-            if let Some(sdist) = self.to_source_dist(workspace_root)? {
+        if let Some(sdist) = self.to_source_dist(workspace_root)? {
+            // Even with `--no-build`, allow virtual packages. (In the future, we may want to allow
+            // any local source tree, or at least editable source trees, which we allow in
+            // `uv pip`.)
+            if !no_build || sdist.is_virtual() {
                 return Ok(Dist::Source(sdist));
             }
         }

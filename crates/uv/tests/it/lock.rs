@@ -22844,14 +22844,16 @@ fn lock_no_build_static_metadata() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build").arg("--frozen"), @r###"
-    success: false
-    exit_code: 2
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build").arg("--frozen"), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    error: Distribution `dummy==0.1.0 @ virtual+.` can't be installed because it is marked as `--no-build` but has no binary distribution
-    "###);
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
 
     Ok(())
 }

@@ -3482,6 +3482,133 @@ fn no_install_project_no_build() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn virtual_no_build() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // Clear the cache.
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    // `--no-build` should not raise an error, since we don't install virtual projects.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn virtual_no_build_dynamic_cached() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+
+        [tool.setuptools.dynamic]
+        dependencies = {file = ["requirements.txt"]}
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("anyio==3.7.0")?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // `--no-build` should not raise an error, since we don't build or install the project (given
+    // that it's virtual and the metadata is cached).
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn virtual_no_build_dynamic_no_cache() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+
+        [tool.setuptools.dynamic]
+        dependencies = {file = ["requirements.txt"]}
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("anyio==3.7.0")?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // Clear the cache.
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    // `--no-build` should raise an error, since we need to build the project.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to generate package metadata for `project==0.1.0 @ virtual+.`
+      Caused by: Building source distributions for `project` is disabled
+    ");
+
+    Ok(())
+}
+
 /// Convert from a package to a virtual project.
 #[test]
 fn convert_to_virtual() -> Result<()> {
@@ -4753,25 +4880,25 @@ fn no_build_error() -> Result<()> {
     error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
     "###);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    error: Distribution `project==0.1.0 @ virtual+.` can't be installed because it is marked as `--no-build` but has no binary distribution
-    "###);
+    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD", "1"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD", "1"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    error: Distribution `project==0.1.0 @ virtual+.` can't be installed because it is marked as `--no-build` but has no binary distribution
-    "###);
+    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD_PACKAGE", "django-allauth"), @r###"
     success: false
