@@ -13,6 +13,7 @@ workspace = true
 uv-once-map = { workspace = true }
 uv-small-str = { workspace = true }
 uv-static = { workspace = true }
+uv-warnings = { workspace = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
