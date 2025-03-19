@@ -128,25 +128,36 @@ impl KeyringProvider {
             // user feedback.
             std::io::stderr().write_all(&output.stderr).ok();
 
-            // On success, parse the newline terminated password
+            // On success, parse the newline terminated credentials
             let output = String::from_utf8(output.stdout)
                 .inspect_err(|err| warn!("Failed to parse response from `keyring` command: {err}"))
-                .ok();
+                .ok()?;
 
-            if let Some(username) = username {
+            let (username, password) = if let Some(username) = username {
                 // We're only expecting a password
-                output.map(|password| (username.to_string(), password.trim_end().to_string()))
+                let password = output.trim_end();
+                (username, password)
             } else {
                 // We're expecting a username and password
-                output.and_then(|output| {
-                    let mut lines = output.lines();
-                    lines.next().and_then(|username| {
-                        lines
-                            .next()
-                            .map(|password| (username.to_string(), password.to_string()))
-                    })
-                })
+                let mut lines = output.lines();
+                let username = lines.next()?;
+                let Some(password) = lines.next() else {
+                    warn!(
+                        "Got username without password for `{service_name}` from `keyring` command"
+                    );
+                    return None;
+                };
+                (username, password)
+            };
+
+            if password.is_empty() {
+                // We allow this for backwards compatibility, but it might be better to return
+                // `None` instead if there's confusion from users — we haven't seen this in practice
+                // yet.
+                warn!("Got empty password for `{username}@{service_name}` from `keyring` command");
             }
+
+            Some((username.to_string(), password.to_string()))
         } else {
             // On failure, no password was available
             let stderr = std::str::from_utf8(&output.stderr).ok()?;
@@ -171,8 +182,7 @@ impl KeyringProvider {
         username: Option<&str>,
     ) -> Option<(String, String)> {
         store.iter().find_map(|(service, user, password)| {
-            if service == service_name && username.map(|username| username == *user).unwrap_or(true)
-            {
+            if service == service_name && username.is_none_or(|username| username == *user) {
                 Some(((*user).to_string(), (*password).to_string()))
             } else {
                 None
