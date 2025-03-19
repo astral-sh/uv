@@ -18312,6 +18312,167 @@ fn lock_keyring_credentials() -> Result<()> {
     Ok(())
 }
 
+/// Fetch credentials (including a username) for a named index via the keyring using `authenticate =
+/// always`
+#[test]
+fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()> {
+    let keyring_context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    keyring_context
+        .pip_install()
+        .arg(
+            keyring_context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        // We need a newer version of keyring that supports `--mode`, so unset `EXCLUDE_NEWER` and
+        // pin the dependencies
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        // (from `echo "keyring==v25.6.0" | uv pip compile - --no-annotate --no-header -q`)
+        .arg("jaraco-classes==3.4.0")
+        .arg("jaraco-context==6.0.1")
+        .arg("jaraco-functools==4.1.0")
+        .arg("keyring==25.6.0")
+        .arg("more-itertools==10.6.0")
+        .assert()
+        .success();
+
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv]
+        keyring-provider = "subprocess"
+
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        default = true
+        authenticate = "always"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Request for https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/
+    Request for pypi-proxy.fly.dev
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    // The lockfile shout omit the credentials.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "foo"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
+        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Fetch credentials (including a username) for a named index via the keyring using `authenticate =
+/// always` — but the keyring version installed does not support `--mode creds`
+#[test]
+fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()> {
+    let keyring_context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    keyring_context
+        .pip_install()
+        .arg(
+            keyring_context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv]
+        keyring-provider = "subprocess"
+
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        default = true
+        authenticate = "always"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Attempted to fetch credentials using the `keyring` command, but it does not support `--mode creds`; upgrade to `keyring>=v25.2.1` for support or provide a username
+    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/`
+      Caused by: Missing credentials for https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn lock_multiple_sources() -> Result<()> {
     let context = TestContext::new("3.12");
