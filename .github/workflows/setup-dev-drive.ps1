@@ -6,11 +6,12 @@
 # the test suite) and we need to create a dev drive. This script automatically
 # configures the appropriate drive.
 
-# Note we use `Get-PSDrive` is not sufficient because the drive letter is assigned.
+# Note `Get-PSDrive` is not sufficient because the drive letter is assigned.
 if (Test-Path "D:\") {
     Write-Output "Using existing drive at D:"
     $Drive = "D:"
-} else {
+# If `New-VHD` is available (as it is on GitHub runners), create a virtual drive
+} elseif (Get-Command New-VHD -ErrorAction SilentlyContinue) {
 	# The size (20 GB) is chosen empirically to be large enough for our
 	# workflows; larger drives can take longer to set up.
 	$Volume = New-VHD -Path C:/uv_dev_drive.vhdx -SizeBytes 20GB |
@@ -38,6 +39,11 @@ if (Test-Path "D:\") {
 	fsutil devdrv query $Drive
 
     Write-Output "Using Dev Drive at $Volume"
+# On some runners, i.e., Depot's beta Windows runners — Hyper-V is not available
+# and we can't create an optimized drive
+} else {
+	Write-Output "Hyper-V is not available, using existing drive at C:"
+    $Drive = "C:"
 }
 
 $Tmp = "$($Drive)\uv-tmp"
