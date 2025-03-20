@@ -3285,6 +3285,8 @@ pub struct SyncArgs {
     pub python: Option<Maybe<String>>,
 
     /// Check if the Python environment is synchronized with the project.
+    ///
+    /// If the environment is not up to do, uv will exit with an error.
     #[arg(long, overrides_with("no_check"))]
     pub check: bool,
 
