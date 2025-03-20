@@ -155,6 +155,7 @@ pub struct GlobalArgs {
         long,
         help_heading = "Python options",
         env = EnvVars::UV_MANAGED_PYTHON,
+        value_parser = clap::builder::BoolishValueParser::new(),
         overrides_with = "no_managed_python",
         conflicts_with = "python_preference"
     )]
@@ -168,6 +169,7 @@ pub struct GlobalArgs {
         long,
         help_heading = "Python options",
         env = EnvVars::UV_NO_MANAGED_PYTHON,
+        value_parser = clap::builder::BoolishValueParser::new(),
         overrides_with = "managed_python",
         conflicts_with = "python_preference"
     )]
