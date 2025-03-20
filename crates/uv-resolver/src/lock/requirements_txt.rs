@@ -5,6 +5,8 @@ use std::fmt::Formatter;
 use std::path::{Component, Path, PathBuf};
 
 use either::Either;
+use itertools::Itertools;
+use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::EdgeRef;
 use petgraph::visit::IntoNodeReferences;
@@ -312,6 +314,20 @@ impl<'lock> RequirementsTxtExport<'lock> {
             .map(|(index, package)| Requirement {
                 package,
                 marker: reachability.remove(&index).unwrap_or_default(),
+                dependents: graph
+                    .edges_directed(index, Direction::Incoming)
+                    .filter_map(|edge| {
+                        let src = edge.source();
+                        if src == root {
+                            None
+                        } else if let Some(Node::Package(dependent)) = graph.node_weight(src) {
+                            Some(*dependent)
+                        } else {
+                            None
+                        }
+                    })
+                    .unique_by(|&p| &p.id.name)
+                    .collect(),
             })
             .filter(|requirement| !requirement.marker.is_false())
             .collect::<Vec<_>>();
@@ -496,7 +512,12 @@ fn conflict_marker_reachability<'lock>(
 impl std::fmt::Display for RequirementsTxtExport<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Write out each package.
-        for Requirement { package, marker } in &self.nodes {
+        for Requirement {
+            package,
+            marker,
+            dependents,
+        } in &self.nodes
+        {
             match &package.id.source {
                 Source::Registry(_) => {
                     let version = package
@@ -587,6 +608,24 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
             }
 
             writeln!(f)?;
+
+            // Add "via ..." comments for all dependents
+            if !dependents.is_empty() {
+                write!(f, "{}", "    # via".green())?;
+            }
+            let via_prefix = if dependents.len() > 1 {
+                writeln!(f)?;
+                "    #   "
+            } else {
+                " "
+            };
+            for &dependent in dependents {
+                writeln!(
+                    f,
+                    "{}",
+                    format!("{}{}", via_prefix, dependent.id.name).green()
+                )?;
+            }
         }
 
         Ok(())
@@ -638,6 +677,7 @@ impl Reachable<MarkerTree> for Edge<'_> {
 struct Requirement<'lock> {
     package: &'lock Package,
     marker: MarkerTree,
+    dependents: Vec<&'lock Package>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
