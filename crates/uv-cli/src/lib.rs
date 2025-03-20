@@ -3283,6 +3283,13 @@ pub struct SyncArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// Check if the Python environment is synchronized with the project.
+    #[arg(long, overrides_with("no_check"))]
+    pub check: bool,
+
+    #[arg(long, overrides_with("check"), hide = true)]
+    pub no_check: bool,
 }
 
 #[derive(Args)]

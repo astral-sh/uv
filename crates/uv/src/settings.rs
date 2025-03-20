@@ -1074,6 +1074,8 @@ impl SyncSettings {
             package,
             script,
             python,
+            check,
+            no_check,
         } = args;
         let install_mirrors = filesystem
             .clone()
@@ -1085,10 +1087,17 @@ impl SyncSettings {
             filesystem,
         );
 
+        let check = flag(check, no_check).unwrap_or_default();
+        let dry_run = if check {
+            DryRun::Check
+        } else {
+            DryRun::from_args(dry_run)
+        };
+
         Self {
             locked,
             frozen,
-            dry_run: DryRun::from_args(dry_run),
+            dry_run,
             script,
             active: flag(active, no_active),
             extras: ExtrasSpecification::from_args(

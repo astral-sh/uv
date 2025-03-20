@@ -352,6 +352,68 @@ fn mixed_requires_python() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn check() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running `uv sync --check` should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--check"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Discovered existing environment at: .venv
+    Resolved 2 packages in [TIME]
+    Would create lockfile at: uv.lock
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    error: The environment is out of sync and requires updates. Run `uv sync` to install or update packages.
+    "###);
+
+    // Sync the environment.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    // Running `uv sync --check` should pass now that the environment is up to date.
+    uv_snapshot!(context.filters(), context.sync().arg("--check"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Discovered existing environment at: .venv
+    Resolved 2 packages in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Audited 1 package in [TIME]
+    Would make no changes
+    "###);
+    Ok(())
+}
+
 /// Sync development dependencies in a (legacy) non-project workspace root.
 #[test]
 fn sync_legacy_non_project_dev_dependencies() -> Result<()> {

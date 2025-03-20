@@ -438,7 +438,7 @@ pub(crate) async fn install(
         .context("Failed to determine installation plan")?;
 
     if dry_run.enabled() {
-        report_dry_run(resolution, plan, modifications, start, printer)?;
+        report_dry_run(dry_run, resolution, plan, modifications, start, printer)?;
         return Ok(Changelog::default());
     }
 
@@ -665,6 +665,7 @@ pub(crate) fn report_target_environment(
 
 /// Report on the results of a dry-run installation.
 fn report_dry_run(
+    dry_run: DryRun,
     resolution: &Resolution,
     plan: Plan,
     modifications: Modifications,
@@ -788,6 +789,10 @@ fn report_dry_run(
         }
     }
 
+    if matches!(dry_run, DryRun::Check) {
+        return Err(Error::OutOfSyncEnv);
+    }
+
     Ok(())
 }
 
@@ -859,4 +864,7 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+
+    #[error("The environment is out of sync and requires updates. Run `{}` to install or update packages.", "uv sync".cyan())]
+    OutOfSyncEnv,
 }
