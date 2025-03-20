@@ -66,9 +66,22 @@ pub(crate) async fn init(
     }
     match init_kind {
         InitKind::Script => {
-            let Some(path) = explicit_path.as_deref() else {
+            let Some(mut path) = explicit_path.as_deref() else {
                 anyhow::bail!("Script initialization requires a file path")
             };
+
+            // For scripts, make sure we use the path with .py extension
+            let path_with_extension = if !path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("py"))
+            {
+                let mut path_with_extension = path.to_path_buf();
+                path_with_extension.set_extension("py");
+                path_with_extension
+            } else {
+                path.to_path_buf()
+            };
+            path = path_with_extension.as_path();
 
             init_script(
                 path,
@@ -212,6 +225,7 @@ async fn init_script(
     if package {
         warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
     }
+
     let client_builder = BaseClientBuilder::new()
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)

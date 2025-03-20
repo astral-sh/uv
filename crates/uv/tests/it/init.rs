@@ -743,6 +743,57 @@ fn init_script_create_directory() -> Result<()> {
     Ok(())
 }
 
+// Test that we append .py extension to script files when not provided
+#[test]
+fn init_script_auto_py_extension() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    // Path without .py extension
+    let script_path = "script_without_extension";
+    let expected_path = child.join("script_without_extension.py");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--script").arg(script_path), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `script_without_extension.py`
+    "###);
+
+    assert!(
+        expected_path.exists(),
+        "Script file with .py extension was not created"
+    );
+
+    let script = fs_err::read_to_string(&expected_path)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script, @r###"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+
+
+        def main() -> None:
+            print("Hello from script_without_extension.py!")
+
+
+        if __name__ == "__main__":
+            main()
+        "###
+        );
+    });
+
+    Ok(())
+}
+
 // Init script should fail if file is already a PEP 723 script
 #[test]
 fn init_script_file_conflicts() -> Result<()> {
