@@ -3,6 +3,29 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.6.9
+
+### Enhancements
+
+- Use `keyring --mode creds` when `authenticate = "always"` ([#12316](https://github.com/astral-sh/uv/pull/12316))
+- Fail with specific error message when no password is present and `authenticate = "always"` ([#12313](https://github.com/astral-sh/uv/pull/12313))
+
+### Bug fixes
+
+- Add boolish value parser for `UV_MANAGED_PYTHON` flags ([#12345](https://github.com/astral-sh/uv/pull/12345))
+- Make deserialization non-fatal when assessing source tree revisions ([#12319](https://github.com/astral-sh/uv/pull/12319))
+- Use resolver-returned wheel over alternate cached wheel ([#12301](https://github.com/astral-sh/uv/pull/12301))
+
+### Documentation
+
+- Add experimental `--torch-backend` to the PyTorch guide ([#12317](https://github.com/astral-sh/uv/pull/12317))
+- Fix `#keyring-provider` references in alternative index docs ([#12315](https://github.com/astral-sh/uv/pull/12315))
+- Fix `--directory` path in examples ([#12165](https://github.com/astral-sh/uv/pull/12165))
+
+### Preview changes
+
+- Automatically infer the PyTorch index via `--torch-backend=auto` ([#12070](https://github.com/astral-sh/uv/pull/12070))
+
 ## 0.6.8
 
 ### Enhancements
