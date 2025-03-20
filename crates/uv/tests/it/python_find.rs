@@ -736,6 +736,8 @@ fn python_find_script() {
 
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/[HASHEDNAME]
+    Resolved in [TIME]
+    Audited in [TIME]
     "###);
 
     if cfg!(windows) {
@@ -859,6 +861,8 @@ fn python_find_script_no_such_version() {
 
     ----- stderr -----
     Creating script environment at: [CACHE_DIR]/environments-v2/[HASHEDNAME]
+    Resolved in [TIME]
+    Audited in [TIME]
     "###);
 
     script
