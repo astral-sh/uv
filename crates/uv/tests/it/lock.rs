@@ -4313,14 +4313,14 @@ fn lock_requires_python() -> Result<()> {
 
     // Install from the lockfile.
     // Note we need to disable Python fetches or we'll just download 3.12
-    uv_snapshot!(context38.filters(), context38.sync().arg("--frozen").arg("--no-python-downloads"), @r###"
+    uv_snapshot!(context38.filters(), context38.sync().arg("--frozen").arg("--no-python-downloads"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: No interpreter found for Python >=3.12 in [PYTHON SOURCES]
-    "###);
+    error: No interpreter found for Python >=3.12 (from `requires-python`) in [PYTHON SOURCES]
+    ");
 
     Ok(())
 }

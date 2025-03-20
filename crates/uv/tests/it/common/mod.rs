@@ -1289,6 +1289,7 @@ pub fn python_installations_for_versions(
         .map(|python_version| {
             if let Ok(python) = PythonInstallation::find(
                 &PythonRequest::parse(python_version),
+                None,
                 EnvironmentPreference::OnlySystem,
                 PythonPreference::Managed,
                 &cache,

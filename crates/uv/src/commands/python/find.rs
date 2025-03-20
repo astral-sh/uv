@@ -61,6 +61,7 @@ pub(crate) async fn find(
 
     let python = PythonInstallation::find(
         &python_request.unwrap_or_default(),
+        Some(&source),
         environment_preference,
         python_preference,
         cache,

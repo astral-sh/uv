@@ -14,6 +14,7 @@ use uv_fs::{LockedFile, Simplified};
 use crate::discovery::find_python_installation;
 use crate::installation::PythonInstallation;
 use crate::virtualenv::{virtualenv_python_executable, PyVenvConfiguration};
+use crate::PythonRequestSource;
 use crate::{
     EnvironmentPreference, Error, Interpreter, Prefix, PythonNotFound, PythonPreference,
     PythonRequest, Target,
@@ -144,11 +145,13 @@ impl PythonEnvironment {
     /// instead.
     pub fn find(
         request: &PythonRequest,
+        request_source: Option<&PythonRequestSource>,
         preference: EnvironmentPreference,
         cache: &Cache,
     ) -> Result<Self, Error> {
         let installation = match find_python_installation(
             request,
+            request_source,
             preference,
             // Ignore managed installations when looking for environments
             PythonPreference::OnlySystem,
