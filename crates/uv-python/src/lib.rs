@@ -10,7 +10,7 @@ pub use crate::discovery::{
     find_python_installations,
 };
 pub use crate::environment::{InvalidEnvironmentKind, PythonEnvironment};
-pub use crate::implementation::ImplementationName;
+pub use crate::implementation::{ImplementationName, LenientImplementationName};
 pub use crate::installation::{PythonInstallation, PythonInstallationKey};
 pub use crate::interpreter::{BrokenSymlink, Error as InterpreterError, Interpreter};
 pub use crate::pointer_size::PointerSize;

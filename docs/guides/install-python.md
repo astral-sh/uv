@@ -120,6 +120,26 @@ To force uv to use the system Python, provide the `--no-managed-python` flag. Se
 [Python version preference](../concepts/python-versions.md#requiring-or-disabling-managed-python-versions)
 documentation for more details.
 
+## Upgrading Python patch versions
+
+Managed Python minor versions can be upgraded to the latest patch. This is not currently supported
+for PyPy and GraalPy implementations.
+
+To upgrade a Python minor version to the latest patch:
+
+```console
+$ uv python upgrade 3.12
+```
+
+To upgrade all installed Python minor versions to their latest patch versions:
+
+```console
+$ uv python upgrade
+```
+
+All virtual environments created by uv on a minor version will transparently upgrade when that minor
+version is upgraded.
+
 ## Next steps
 
 To learn more about `uv python`, see the [Python version concept](../concepts/python-versions.md)

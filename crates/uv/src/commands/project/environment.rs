@@ -74,7 +74,9 @@ impl CachedEnvironment {
 
         // Hash the interpreter based on its path.
         // TODO(charlie): Come up with a robust hash for the interpreter.
-        let interpreter_hash = cache_digest(&interpreter.sys_executable());
+        let interpreter_hash = cache_digest(&uv_fs::canonicalize_executable(
+            interpreter.sys_executable(),
+        )?);
 
         // Search in the content-addressed cache.
         let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
@@ -96,6 +98,7 @@ impl CachedEnvironment {
             false,
             false,
             true,
+            false,
             false,
         )?;
 

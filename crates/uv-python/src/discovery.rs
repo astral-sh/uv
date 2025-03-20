@@ -153,7 +153,7 @@ pub enum PythonVariant {
 }
 
 /// A Python discovery version request.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum VersionRequest {
     /// Allow an appropriate default Python version.
     #[default]
@@ -1593,6 +1593,24 @@ impl PythonRequest {
         // The @ was not present, so if the version fails to parse just return Ok(None). For
         // example, python3stuff.
         Ok(rest.parse().ok())
+    }
+
+    /// Check if this request includes a specific patch version.
+    pub fn includes_patch(&self) -> bool {
+        match self {
+            PythonRequest::Default => false,
+            PythonRequest::Any => false,
+            PythonRequest::Version(version_request) => version_request.patch().is_some(),
+            PythonRequest::Directory(..) => false,
+            PythonRequest::File(..) => false,
+            PythonRequest::ExecutableName(..) => false,
+            PythonRequest::Implementation(..) => false,
+            PythonRequest::ImplementationVersion(_, version) => version.patch().is_some(),
+            PythonRequest::Key(request) => request
+                .version
+                .as_ref()
+                .is_some_and(|request| request.patch().is_some()),
+        }
     }
 
     /// Check if a given interpreter satisfies the interpreter request.

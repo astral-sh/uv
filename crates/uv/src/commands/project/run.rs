@@ -25,10 +25,11 @@ use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
+use uv_python::managed::DirectorySymlink;
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions,
+    VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
@@ -446,6 +447,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     false,
                     false,
                     false,
+                    false,
                 )?;
 
                 Some(environment.into_interpreter())
@@ -454,6 +456,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     } else {
         None
     };
+
+    // When discovering the Python interpreter, did we request a specific
+    // patch version?
+    let mut is_patch_request = false;
 
     // Discover and sync the base environment.
     let workspace_cache = WorkspaceCache::default();
@@ -607,6 +613,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 )
                 .await?;
 
+                if let Some(PythonRequest::Version(version)) = &python_request {
+                    is_patch_request = matches!(version, &VersionRequest::MajorMinorPatch(..));
+                }
+
                 let interpreter = PythonInstallation::find_or_download(
                     python_request.as_ref(),
                     EnvironmentPreference::Any,
@@ -637,6 +647,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     temp_dir.path(),
                     interpreter,
                     uv_virtualenv::Prompt::None,
+                    false,
                     false,
                     false,
                     false,
@@ -840,6 +851,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .await?
                     .and_then(PythonVersionFile::into_version)
                 };
+                if let Some(PythonRequest::Version(version)) = &python_request {
+                    is_patch_request = matches!(version, &VersionRequest::MajorMinorPatch(..));
+                }
 
                 let python = PythonInstallation::find_or_download(
                     python_request.as_ref(),
@@ -868,6 +882,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     temp_dir.path(),
                     interpreter,
                     uv_virtualenv::Prompt::None,
+                    false,
                     false,
                     false,
                     false,
@@ -1094,7 +1109,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     };
 
     debug!("Running `{command}`");
-    let mut process = command.as_command(interpreter);
+    let mut process = command.as_command(interpreter, is_patch_request);
 
     // Construct the `PATH` environment variable.
     let new_path = std::env::join_paths(
@@ -1249,10 +1264,22 @@ impl RunCommand {
     }
 
     /// Convert a [`RunCommand`] into a [`Command`].
-    fn as_command(&self, interpreter: &Interpreter) -> Command {
+    fn as_command(&self, interpreter: &Interpreter, is_patch_request: bool) -> Command {
         match self {
             Self::Python(args) => {
-                let mut process = Command::new(interpreter.sys_executable());
+                let mut process = if is_patch_request || !interpreter.is_standalone() {
+                    Command::new(interpreter.sys_executable())
+                } else {
+                    // If this is a standalone interpreter, there is no patch request, and a
+                    // minor version symlink directory (or junction on Windows) exists,
+                    // run Python using an executable path containing that directory. This ensures that
+                    // virtual environments created with `uv run python -m venv` will be upgradeable.
+                    let executable = DirectorySymlink::try_from_interpreter(interpreter)
+                        .filter(DirectorySymlink::symlink_exists)
+                        .map(|directory_symlink| directory_symlink.symlink_executable.clone())
+                        .unwrap_or_else(|| PathBuf::from(interpreter.sys_executable()));
+                    Command::new(executable)
+                };
                 process.args(args);
                 process
             }
