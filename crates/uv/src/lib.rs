@@ -1312,6 +1312,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.no_project,
                 cli.top_level.no_config,
                 args.system,
+                args.r#virtual,
                 globals.python_preference,
                 &cache,
             )

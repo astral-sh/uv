@@ -369,6 +369,17 @@ fn python_find_venv() {
     ----- stderr -----
     "###);
 
+    // Using `--virtual` should be a no-op
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.python_find().arg("--virtual"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/python
+
+    ----- stderr -----
+    "###);
+
     // Even if the `VIRTUAL_ENV` is not set (the test context includes this by default)
     #[cfg(not(windows))]
     uv_snapshot!(context.filters(), context.python_find().env_remove(EnvVars::VIRTUAL_ENV), @r###"
@@ -380,10 +391,21 @@ fn python_find_venv() {
     ----- stderr -----
     "###);
 
+    // Using `--virtual` should be a no-op
+    #[cfg(not(windows))]
+    uv_snapshot!(context.filters(), context.python_find().arg("--virtual").env_remove(EnvVars::VIRTUAL_ENV), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/python
+
+    ----- stderr -----
+    "###);
+
     let child_dir = context.temp_dir.child("child");
     child_dir.create_dir_all().unwrap();
 
-    // Unless the system flag is passed
+    // But we should skip the virtual environment if the system flag is passed
     uv_snapshot!(context.filters(), context.python_find().arg("--system"), @r###"
     success: true
     exit_code: 0
@@ -403,7 +425,22 @@ fn python_find_venv() {
     ----- stderr -----
     "###);
 
-    // Unless, `--no-system` is included
+    // Unless `--virtual` is included
+    // TODO(zanieb): Report this as a bug upstream — this should be allowed.
+    uv_snapshot!(context.filters(), context.python_find().arg("--virtual").env(EnvVars::UV_SYSTEM_PYTHON, "1"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--virtual' cannot be used with '--system'
+
+    Usage: uv python find --cache-dir [CACHE_DIR] --virtual [REQUEST]
+
+    For more information, try '--help'.
+    "###);
+
+    // Or, unless, `--no-system` is included
     // TODO(zanieb): Report this as a bug upstream — this should be allowed.
     uv_snapshot!(context.filters(), context.python_find().arg("--no-system").env(EnvVars::UV_SYSTEM_PYTHON, "1"), @r###"
     success: false
@@ -532,6 +569,16 @@ fn python_find_venv() {
         ----- stderr -----
         "###);
     }
+
+    // If `--virtual` is provided, we should fail unless we can find a virtual environment
+    uv_snapshot!(context.filters(), context.python_find().arg("--virtual"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found in virtual environments
+    "###);
 }
 
 #[cfg(unix)]
