@@ -257,7 +257,7 @@ fn prune_unzipped() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of iniconfig need to be downloaded from a registry and you require iniconfig, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because iniconfig<=2.0.0 needs to be downloaded from a registry and you require iniconfig, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for `iniconfig` in the requested range (e.g., 0.2.dev0), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
@@ -348,7 +348,7 @@ fn prune_stale_revision() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v8/[ENTRY]
+    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
     "###);
@@ -375,6 +375,7 @@ fn prune_stale_revision() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);

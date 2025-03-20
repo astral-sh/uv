@@ -31,19 +31,19 @@ create the virtual environment with it.
 
 The following Python version request formats are supported:
 
-- `<version>` e.g. `3`, `3.12`, `3.12.3`
-- `<version-specifier>` e.g. `>=3.12,<3.13`
-- `<implementation>` e.g. `cpython` or `cp`
-- `<implementation>@<version>` e.g. `cpython@3.12`
-- `<implementation><version>` e.g. `cpython3.12` or `cp312`
-- `<implementation><version-specifier>` e.g. `cpython>=3.12,<3.13`
-- `<implementation>-<version>-<os>-<arch>-<libc>` e.g. `cpython-3.12.3-macos-aarch64-none`
+- `<version>` (e.g., `3`, `3.12`, `3.12.3`)
+- `<version-specifier>` (e.g., `>=3.12,<3.13`)
+- `<implementation>` (e.g., `cpython` or `cp`)
+- `<implementation>@<version>` (e.g., `cpython@3.12`)
+- `<implementation><version>` (e.g., `cpython3.12` or `cp312`)
+- `<implementation><version-specifier>` (e.g., `cpython>=3.12,<3.13`)
+- `<implementation>-<version>-<os>-<arch>-<libc>` (e.g., `cpython-3.12.3-macos-aarch64-none`)
 
 Additionally, a specific system Python interpreter can be requested with:
 
-- `<executable-path>` e.g. `/opt/homebrew/bin/python3`
-- `<executable-name>` e.g. `mypython3`
-- `<install-dir>` e.g. `/some/environment/`
+- `<executable-path>` (e.g., `/opt/homebrew/bin/python3`)
+- `<executable-name>` (e.g., `mypython3`)
+- `<install-dir>` (e.g., `/some/environment/`)
 
 By default, uv will automatically download Python versions if they cannot be found on the system.
 This behavior can be
@@ -52,16 +52,20 @@ This behavior can be
 ### Python version files
 
 The `.python-version` file can be used to create a default Python version request. uv searches for a
-`.python-version` file in the working directory and each of its parents. Any of the request formats
-described above can be used, though use of a version number is recommended for interoperability with
-other tools.
+`.python-version` file in the working directory and each of its parents. If none is found, uv will
+check the user-level configuration directory. Any of the request formats described above can be
+used, though use of a version number is recommended for interoperability with other tools.
 
 A `.python-version` file can be created in the current directory with the
 [`uv python pin`](../reference/cli.md/#uv-python-pin) command.
 
+A global `.python-version` file can be created in the user configuration directory with the
+[`uv python pin --global`](../reference/cli.md/#uv-python-pin) command.
+
 Discovery of `.python-version` files can be disabled with `--no-config`.
 
-uv will not search for `.python-version` files beyond project or workspace boundaries.
+uv will not search for `.python-version` files beyond project or workspace boundaries (with the
+exception of the user configuration directory).
 
 ## Installing a Python version
 
@@ -206,7 +210,7 @@ This interface also supports many [request formats](#requesting-a-version), e.g.
 executable that has a version of 3.11 or newer:
 
 ```console
-$ uv python find >=3.11
+$ uv python find '>=3.11'
 ```
 
 By default, `uv python find` will include Python versions from virtual environments. If a `.venv`
@@ -271,24 +275,43 @@ during `uv python install`.
     [persistent configuration file](../configuration/files.md) to change the default behavior, or
     the `--no-python-downloads` flag can be passed to any uv command.
 
-## Adjusting Python version preferences
+## Requiring or disabling managed Python versions
 
 By default, uv will attempt to use Python versions found on the system and only download managed
-interpreters when necessary.
+Python versions when necessary. To ignore system Python versions, and only use managed Python
+versions, use the `--managed-python` flag:
 
-The [`python-preference`](../reference/settings.md#python-preference) option can be used to adjust
-this behavior. By default, it is set to `managed` which prefers managed Python installations over
-system Python installations. However, system Python installations are still preferred over
+```console
+$ uv python list --managed-python
+```
+
+Similarly, to ignore managed Python versions and only use system Python versions, use the
+`--no-managed-python` flag:
+
+```console
+$ uv python list --no-managed-python
+```
+
+To change uv's default behavior in a configuration file, use the
+[`python-preference` setting](#adjusting-python-version-preferences).
+
+## Adjusting Python version preferences
+
+The [`python-preference`](../reference/settings.md#python-preference) setting determines whether to
+prefer using Python installations that are already present on the system, or those that are
+downloaded and installed by uv.
+
+By default, the `python-preference` is set to `managed` which prefers managed Python installations
+over system Python installations. However, system Python installations are still preferred over
 downloading a managed Python version.
 
 The following alternative options are available:
 
-- `only-managed`: Only use managed Python installations; never use system Python installations
-- `system`: Prefer system Python installations over managed Python installations
-- `only-system`: Only use system Python installations; never use managed Python installations
-
-These options allow disabling uv's managed Python versions entirely or always using them and
-ignoring any existing system installations.
+- `only-managed`: Only use managed Python installations; never use system Python installations.
+  Equivalent to `--managed-python`.
+- `system`: Prefer system Python installations over managed Python installations.
+- `only-system`: Only use system Python installations; never use managed Python installations.
+  Equivalent to `--no-managed-python`.
 
 !!! note
 

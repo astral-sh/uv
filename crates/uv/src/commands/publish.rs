@@ -295,7 +295,7 @@ async fn gather_credentials(
             if let Some(username) = &username {
                 debug!("Fetching password from keyring");
                 if let Some(keyring_password) = keyring_provider
-                    .fetch(&publish_url, username)
+                    .fetch(&publish_url, Some(username))
                     .await
                     .as_ref()
                     .and_then(|credentials| credentials.password())

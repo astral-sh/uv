@@ -683,6 +683,13 @@ By default, uv includes the `dev` dependency group in the environment (e.g., dur
 default-groups = ["dev", "foo"]
 ```
 
+To enable all dependencies groups by default, use `"all"` instead of listing group names:
+
+```toml title="pyproject.toml"
+[tool.uv]
+default-groups = "all"
+```
+
 !!! tip
 
     To disable this behaviour during `uv run` or `uv sync`, use `--no-default-groups`.
@@ -792,7 +799,7 @@ interpreted as "a version of `foo` that's at least 1.2.3, but less than 2, and n
 
 Specifiers are padded with trailing zeros if required, so `foo ==2` matches foo 2.0.0, too.
 
-A star can be used for the last digit with equals, e.g. `foo ==2.1.*` will accept any release from
+A star can be used for the last digit with equals, e.g., `foo ==2.1.*` will accept any release from
 the 2.1 series. Similarly, `~=` matches where the last digit is equal or higher, e.g., `foo ~=1.2`
 is equal to `foo >=1.2,<2`, and `foo ~=1.2.3` is equal to `foo >=1.2.3,<1.3`.
 

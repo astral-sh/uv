@@ -218,7 +218,7 @@ required-environments = [
 
 ## Dependency preferences
 
-If resolution output file exists, i.e. a uv lockfile (`uv.lock`) or a requirements output file
+If resolution output file exists, i.e., a uv lockfile (`uv.lock`) or a requirements output file
 (`requirements.txt`), uv will _prefer_ the dependency versions listed there. Similarly, if
 installing a package into a virtual environment, uv will prefer the already installed version if
 present. This means that locked or installed versions will not change unless an incompatible version

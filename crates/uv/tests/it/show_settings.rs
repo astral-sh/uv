@@ -148,29 +148,13 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -323,29 +307,13 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -499,29 +467,13 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -707,29 +659,13 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -853,29 +789,13 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1039,29 +959,13 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1269,29 +1173,13 @@ fn resolve_index_url() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1508,29 +1396,13 @@ fn resolve_index_url() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1708,29 +1580,13 @@ fn resolve_find_links() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -1876,29 +1732,13 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2098,29 +1938,13 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2303,29 +2127,13 @@ fn resolve_top_level() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2387,7 +2195,6 @@ fn resolve_top_level() -> anyhow::Result<()> {
     ignore = "Configuration tests are not yet supported on Windows"
 )]
 fn resolve_user_configuration() -> anyhow::Result<()> {
-    // Create a temporary directory to store the user configuration.
     let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
     let uv = xdg.child("uv");
     let config = uv.child("uv.toml");
@@ -2471,29 +2278,13 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2622,29 +2413,13 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2773,29 +2548,13 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -2926,29 +2685,13 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -3114,34 +2857,36 @@ fn resolve_tool() -> anyhow::Result<()> {
             no_binary_package: None,
         },
         settings: ResolverInstallerSettings {
-            index_locations: IndexLocations {
-                indexes: [],
-                flat_index: [],
-                no_index: false,
+            resolver: ResolverSettings {
+                build_options: BuildOptions {
+                    no_binary: None,
+                    no_build: None,
+                },
+                config_setting: ConfigSettings(
+                    {},
+                ),
+                dependency_metadata: DependencyMetadata(
+                    {},
+                ),
+                exclude_newer: None,
+                fork_strategy: RequiresPython,
+                index_locations: IndexLocations {
+                    indexes: [],
+                    flat_index: [],
+                    no_index: false,
+                },
+                index_strategy: FirstIndex,
+                keyring_provider: Disabled,
+                link_mode: Clone,
+                no_build_isolation: false,
+                no_build_isolation_package: [],
+                prerelease: IfNecessaryOrExplicit,
+                resolution: LowestDirect,
+                sources: Enabled,
+                upgrade: None,
             },
-            index_strategy: FirstIndex,
-            keyring_provider: Disabled,
-            resolution: LowestDirect,
-            prerelease: IfNecessaryOrExplicit,
-            fork_strategy: RequiresPython,
-            dependency_metadata: DependencyMetadata(
-                {},
-            ),
-            config_setting: ConfigSettings(
-                {},
-            ),
-            no_build_isolation: false,
-            no_build_isolation_package: [],
-            exclude_newer: None,
-            link_mode: Clone,
             compile_bytecode: false,
-            sources: Enabled,
-            upgrade: None,
             reinstall: None,
-            build_options: BuildOptions {
-                no_binary: None,
-                no_build: None,
-            },
         },
         force: false,
         editable: false,
@@ -3259,29 +3004,13 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -3469,29 +3198,13 @@ fn resolve_both() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -3616,6 +3329,7 @@ fn invalid_conflicts() -> anyhow::Result<()> {
 #[test]
 fn valid_conflicts() -> anyhow::Result<()> {
     let context = TestContext::new("3.12");
+    let xdg = assert_fs::TempDir::new().expect("Failed to create temp dir");
     let pyproject = context.temp_dir.child("pyproject.toml");
 
     // Write in `pyproject.toml` schema.
@@ -3630,7 +3344,8 @@ fn valid_conflicts() -> anyhow::Result<()> {
             [{extra = "x1"}, {extra = "x2"}],
         ]
     "#})?;
-    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path()), @r###"
+    uv_snapshot!(context.filters(), add_shared_args(context.lock(), context.temp_dir.path())
+        .env("XDG_CONFIG_HOME", xdg.path()), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -3767,29 +3482,13 @@ fn resolve_config_file() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -4012,29 +3711,13 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -4166,29 +3849,13 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -4339,29 +4006,13 @@ fn allow_insecure_host() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -4567,29 +4218,13 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -4774,29 +4409,13 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -4987,29 +4606,13 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -5195,29 +4798,13 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -5410,29 +4997,13 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -5618,29 +5189,13 @@ fn index_priority() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -5777,29 +5332,13 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -5922,29 +5461,13 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -6065,29 +5588,13 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -6210,29 +5717,13 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -6353,29 +5844,13 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {
@@ -6497,29 +5972,13 @@ fn verify_hashes() -> anyhow::Result<()> {
             },
             system: false,
             extras: None,
-            groups: DependencyGroups(
-                DependencyGroupsInner {
-                    include: Some(
-                        [],
-                    ),
-                    exclude: [],
-                    only_groups: false,
-                    history: DependencyGroupsHistory {
-                        dev_mode: None,
-                        group: [],
-                        only_group: [],
-                        no_group: [],
-                        all_groups: false,
-                        no_default_groups: false,
-                        defaults: [],
-                    },
-                },
-            ),
+            groups: [],
             break_system_packages: false,
             target: None,
             prefix: None,
             index_strategy: FirstIndex,
             keyring_provider: Disabled,
+            torch_backend: None,
             no_build_isolation: false,
             no_build_isolation_package: [],
             build_options: BuildOptions {

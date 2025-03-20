@@ -1,4 +1,5 @@
 use std::collections::hash_map::Entry;
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::io;
 use std::path::Path;
@@ -21,12 +22,14 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_types::{Index, IndexName, IndexUrls, UnresolvedRequirement, VersionId};
+use uv_distribution_types::{
+    Index, IndexName, IndexUrls, NameRequirementSpecification, UnresolvedRequirement, VersionId,
+};
 use uv_fs::Simplified;
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
-use uv_normalize::{PackageName, DEV_DEPENDENCIES};
-use uv_pep508::{ExtraName, Requirement, UnnamedRequirement, VersionOrUrl};
+use uv_normalize::{DefaultGroups, PackageName, DEV_DEPENDENCIES};
+use uv_pep508::{ExtraName, MarkerTree, Requirement, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
@@ -53,7 +56,7 @@ use crate::commands::project::{
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, project, ExitStatus, ScriptPath};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings, ResolverInstallerSettingsRef};
+use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -64,6 +67,8 @@ pub(crate) async fn add(
     active: Option<bool>,
     no_sync: bool,
     requirements: Vec<RequirementsSource>,
+    constraints: Vec<RequirementsSource>,
+    marker: Option<MarkerTree>,
     editable: Option<bool>,
     dependency_type: DependencyType,
     raw_sources: bool,
@@ -253,12 +258,22 @@ pub(crate) async fn add(
     let client_builder = BaseClientBuilder::new()
         .connectivity(network_settings.connectivity)
         .native_tls(network_settings.native_tls)
-        .keyring(settings.keyring_provider)
+        .keyring(settings.resolver.keyring_provider)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Read the requirements.
-    let RequirementsSpecification { requirements, .. } =
-        RequirementsSpecification::from_simple_sources(&requirements, &client_builder).await?;
+    let RequirementsSpecification {
+        requirements,
+        constraints,
+        ..
+    } = RequirementsSpecification::from_sources(
+        &requirements,
+        &constraints,
+        &[],
+        BTreeMap::default(),
+        &client_builder,
+    )
+    .await?;
 
     // Initialize any shared state.
     let state = PlatformState::default();
@@ -274,6 +289,7 @@ pub(crate) async fn add(
                     rev.as_deref(),
                     tag.as_deref(),
                     branch.as_deref(),
+                    marker,
                 )
             })
             .partition_map(|requirement| match requirement {
@@ -293,7 +309,7 @@ pub(crate) async fn add(
             let sources = SourceStrategy::Enabled;
 
             // Add all authenticated sources to the cache.
-            for index in settings.index_locations.allowed_indexes() {
+            for index in settings.resolver.index_locations.allowed_indexes() {
                 if let Some(credentials) = index.credentials() {
                     let credentials = Arc::new(credentials);
                     uv_auth::store_credentials(index.raw_url(), credentials.clone());
@@ -305,31 +321,40 @@ pub(crate) async fn add(
 
             // Initialize the registry client.
             let client = RegistryClientBuilder::try_from(client_builder)?
-                .index_urls(settings.index_locations.index_urls())
-                .index_strategy(settings.index_strategy)
+                .index_urls(settings.resolver.index_locations.index_urls())
+                .index_strategy(settings.resolver.index_strategy)
                 .markers(target.interpreter().markers())
                 .platform(target.interpreter().platform())
                 .build();
 
             // Determine whether to enable build isolation.
             let environment;
-            let build_isolation = if settings.no_build_isolation {
+            let build_isolation = if settings.resolver.no_build_isolation {
                 environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
                 BuildIsolation::Shared(&environment)
-            } else if settings.no_build_isolation_package.is_empty() {
+            } else if settings.resolver.no_build_isolation_package.is_empty() {
                 BuildIsolation::Isolated
             } else {
                 environment = PythonEnvironment::from_interpreter(target.interpreter().clone());
-                BuildIsolation::SharedPackage(&environment, &settings.no_build_isolation_package)
+                BuildIsolation::SharedPackage(
+                    &environment,
+                    &settings.resolver.no_build_isolation_package,
+                )
             };
 
             // Resolve the flat indexes from `--find-links`.
             let flat_index = {
                 let client = FlatIndexClient::new(&client, cache);
                 let entries = client
-                    .fetch(settings.index_locations.flat_indexes().map(Index::url))
+                    .fetch(
+                        settings
+                            .resolver
+                            .index_locations
+                            .flat_indexes()
+                            .map(Index::url),
+                    )
                     .await?;
-                FlatIndex::from_entries(entries, None, &hasher, &settings.build_options)
+                FlatIndex::from_entries(entries, None, &hasher, &settings.resolver.build_options)
             };
 
             // Create a build dispatch.
@@ -338,17 +363,17 @@ pub(crate) async fn add(
                 cache,
                 build_constraints,
                 target.interpreter(),
-                &settings.index_locations,
+                &settings.resolver.index_locations,
                 &flat_index,
-                &settings.dependency_metadata,
+                &settings.resolver.dependency_metadata,
                 state.clone().into_inner(),
-                settings.index_strategy,
-                &settings.config_setting,
+                settings.resolver.index_strategy,
+                &settings.resolver.config_setting,
                 build_isolation,
-                settings.link_mode,
-                &settings.build_options,
+                settings.resolver.link_mode,
+                &settings.resolver.build_options,
                 &build_hasher,
-                settings.exclude_newer,
+                settings.resolver.exclude_newer,
                 sources,
                 // No workspace caching since `uv add` changes the workspace definition.
                 WorkspaceCache::default(),
@@ -635,7 +660,8 @@ pub(crate) async fn add(
         locked,
         &dependency_type,
         raw_sources,
-        settings.as_ref(),
+        constraints,
+        &settings,
         &network_settings,
         installer_metadata,
         concurrency,
@@ -671,7 +697,8 @@ async fn lock_and_sync(
     locked: bool,
     dependency_type: &DependencyType,
     raw_sources: bool,
-    settings: ResolverInstallerSettingsRef<'_>,
+    constraints: Vec<NameRequirementSpecification>,
+    settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
     installer_metadata: bool,
     concurrency: Concurrency,
@@ -679,14 +706,13 @@ async fn lock_and_sync(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<(), ProjectError> {
-    let mut lock = project::lock::do_safe_lock(
+    let mut lock = project::lock::LockOperation::new(
         if locked {
             LockMode::Locked(target.interpreter())
         } else {
             LockMode::Write(target.interpreter())
         },
-        (&target).into(),
-        settings.into(),
+        &settings.resolver,
         network_settings,
         &lock_state,
         Box::new(DefaultResolveLogger),
@@ -695,6 +721,8 @@ async fn lock_and_sync(
         printer,
         preview,
     )
+    .with_constraints(constraints)
+    .execute((&target).into())
     .await?
     .into_lock();
 
@@ -797,14 +825,13 @@ async fn lock_and_sync(
 
             // If the file was modified, we have to lock again, though the only expected change is
             // the addition of the minimum version specifiers.
-            lock = project::lock::do_safe_lock(
+            lock = project::lock::LockOperation::new(
                 if locked {
                     LockMode::Locked(target.interpreter())
                 } else {
                     LockMode::Write(target.interpreter())
                 },
-                (&target).into(),
-                settings.into(),
+                &settings.resolver,
                 network_settings,
                 &lock_state,
                 Box::new(SummaryResolveLogger),
@@ -813,6 +840,7 @@ async fn lock_and_sync(
                 printer,
                 preview,
             )
+            .execute((&target).into())
             .await?
             .into_lock();
         }
@@ -869,7 +897,7 @@ async fn lock_and_sync(
         target,
         venv,
         &extras,
-        &dev.with_defaults(Vec::new()),
+        &dev.with_defaults(DefaultGroups::default()),
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,
@@ -896,10 +924,17 @@ fn augment_requirement(
     rev: Option<&str>,
     tag: Option<&str>,
     branch: Option<&str>,
+    marker: Option<MarkerTree>,
 ) -> UnresolvedRequirement {
     match requirement {
-        UnresolvedRequirement::Named(requirement) => {
+        UnresolvedRequirement::Named(mut requirement) => {
             UnresolvedRequirement::Named(uv_pypi_types::Requirement {
+                marker: marker
+                    .map(|marker| {
+                        requirement.marker.and(marker);
+                        requirement.marker
+                    })
+                    .unwrap_or(requirement.marker),
                 source: match requirement.source {
                     RequirementSource::Git {
                         git,
@@ -926,8 +961,14 @@ fn augment_requirement(
                 ..requirement
             })
         }
-        UnresolvedRequirement::Unnamed(requirement) => {
+        UnresolvedRequirement::Unnamed(mut requirement) => {
             UnresolvedRequirement::Unnamed(UnnamedRequirement {
+                marker: marker
+                    .map(|marker| {
+                        requirement.marker.and(marker);
+                        requirement.marker
+                    })
+                    .unwrap_or(requirement.marker),
                 url: match requirement.url.parsed_url {
                     ParsedUrl::Git(mut git) => {
                         let reference = if let Some(rev) = rev {

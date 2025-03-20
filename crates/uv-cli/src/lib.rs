@@ -15,12 +15,13 @@ use uv_configuration::{
     ProjectBuildBackend, TargetTriple, TrustedHost, TrustedPublishing, VersionControlSystem,
 };
 use uv_distribution_types::{Index, IndexUrl, Origin, PipExtraIndex, PipFindLinks, PipIndex};
-use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::Requirement;
+use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
+use uv_pep508::{MarkerTree, Requirement};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
+use uv_torch::TorchMode;
 
 pub mod comma;
 pub mod compat;
@@ -134,20 +135,43 @@ pub struct TopLevelArgs {
 #[command(next_help_heading = "Global options", next_display_order = 1000)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct GlobalArgs {
-    /// Whether to prefer uv-managed or system Python installations.
-    ///
-    /// By default, uv prefers using Python versions it manages. However, it
-    /// will use system Python installations if a uv-managed Python is not
-    /// installed. This option allows prioritizing or ignoring system Python
-    /// installations.
     #[arg(
         global = true,
         long,
         help_heading = "Python options",
         display_order = 700,
-        env = EnvVars::UV_PYTHON_PREFERENCE
+        env = EnvVars::UV_PYTHON_PREFERENCE,
+        hide = true
     )]
     pub python_preference: Option<PythonPreference>,
+
+    /// Require use of uv-managed Python versions.
+    ///
+    /// By default, uv prefers using Python versions it manages. However, it
+    /// will use system Python versions if a uv-managed Python is not
+    /// installed. This option disables use of system Python versions.
+    #[arg(
+        global = true,
+        long,
+        help_heading = "Python options",
+        env = EnvVars::UV_MANAGED_PYTHON,
+        overrides_with = "no_managed_python",
+        conflicts_with = "python_preference"
+    )]
+    pub managed_python: bool,
+
+    /// Disable use of uv-managed Python versions.
+    ///
+    /// Instead, uv will search for a suitable Python version on the system.
+    #[arg(
+        global = true,
+        long,
+        help_heading = "Python options",
+        env = EnvVars::UV_NO_MANAGED_PYTHON,
+        overrides_with = "managed_python",
+        conflicts_with = "python_preference"
+    )]
+    pub no_managed_python: bool,
 
     #[allow(clippy::doc_markdown)]
     /// Allow automatically downloading Python when required. [env: "UV_PYTHON_DOWNLOADS=auto"]
@@ -949,6 +973,7 @@ fn parse_maybe_string(input: &str) -> Result<Maybe<String>, String> {
 
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
+#[command(group = clap::ArgGroup::new("sources").required(true).multiple(true))]
 pub struct PipCompileArgs {
     /// Include all packages listed in the given `requirements.in` files.
     ///
@@ -959,7 +984,7 @@ pub struct PipCompileArgs {
     ///
     /// The order of the requirements files and the requirements in them is used to determine
     /// priority during resolution.
-    #[arg(required(true), value_parser = parse_file_path)]
+    #[arg(group = "sources", value_parser = parse_file_path)]
     pub src_file: Vec<PathBuf>,
 
     /// Constrain versions using the given requirements files.
@@ -1021,6 +1046,14 @@ pub struct PipCompileArgs {
 
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
+
+    /// Install the specified dependency group from a `pyproject.toml`.
+    ///
+    /// If no path is provided, the `pyproject.toml` in the working directory is used.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, group = "sources")]
+    pub group: Vec<PipGroupName>,
 
     /// Write the compiled requirements to the given `requirements.txt` file.
     ///
@@ -1257,6 +1290,21 @@ pub struct PipCompileArgs {
 
     #[arg(long, overrides_with("emit_index_annotation"), hide = true)]
     pub no_emit_index_annotation: bool,
+
+    /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`).
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
+    pub torch_backend: Option<TorchMode>,
 
     #[command(flatten)]
     pub compat_args: compat::PipCompileCompatArgs,
@@ -1499,6 +1547,21 @@ pub struct PipSyncArgs {
     #[arg(long)]
     pub dry_run: bool,
 
+    /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`).
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
+    pub torch_backend: Option<TorchMode>,
+
     #[command(flatten)]
     pub compat_args: compat::PipSyncCompatArgs,
 }
@@ -1585,6 +1648,14 @@ pub struct PipInstallArgs {
 
     #[arg(long, overrides_with("no_deps"), hide = true)]
     pub deps: bool,
+
+    /// Install the specified dependency group from a `pyproject.toml`.
+    ///
+    /// If no path is provided, the `pyproject.toml` in the working directory is used.
+    ///
+    /// May be provided multiple times.
+    #[arg(long, group = "sources")]
+    pub group: Vec<PipGroupName>,
 
     /// Require a matching hash for each requirement.
     ///
@@ -1790,6 +1861,21 @@ pub struct PipInstallArgs {
     /// print the resulting plan.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`)
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
+    pub torch_backend: Option<TorchMode>,
 
     #[command(flatten)]
     pub compat_args: compat::PipInstallCompatArgs,
@@ -3272,6 +3358,20 @@ pub struct AddArgs {
     #[arg(long, short, alias = "requirement", group = "sources", value_parser = parse_file_path)]
     pub requirements: Vec<PathBuf>,
 
+    /// Constrain versions using the given requirements files.
+    ///
+    /// Constraints files are `requirements.txt`-like files that only control the _version_ of a
+    /// requirement that's installed. The constraints will _not_ be added to the project's
+    /// `pyproject.toml` file, but _will_ be respected during dependency resolution.
+    ///
+    /// This is equivalent to pip's `--constraint` option.
+    #[arg(long, short, alias = "constraint", env = EnvVars::UV_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub constraints: Vec<Maybe<PathBuf>>,
+
+    /// Apply this marker to all added packages.
+    #[arg(long, short, value_parser = MarkerTree::from_str)]
+    pub marker: Option<MarkerTree>,
+
     /// Add the requirements to the development dependency group.
     ///
     /// This option is an alias for `--group dev`.
@@ -4388,8 +4488,9 @@ pub enum PythonCommand {
     /// By default, installed Python versions and the downloads for latest available patch version
     /// of each supported Python major version are shown.
     ///
-    /// The displayed versions are filtered by the `--python-preference` option, i.e., if using
-    /// `only-system`, no managed Python versions will be shown.
+    /// Use `--managed-python` to view only managed Python versions.
+    ///
+    /// Use `--no-managed-python` to omit managed Python versions.
     ///
     /// Use `--all-versions` to view all available patch versions.
     ///
@@ -4682,6 +4783,19 @@ pub struct PythonPinArgs {
     /// `requires-python` constraint.
     #[arg(long, alias = "no-workspace")]
     pub no_project: bool,
+
+    /// Update the global Python version pin.
+    ///
+    /// Writes the pinned Python version to a `.python-version` file in the uv user configuration
+    /// directory: `XDG_CONFIG_HOME/uv` on Linux/macOS and `%APPDATA%/uv` on Windows.
+    ///
+    /// When a local Python version pin is not found in the working directory or an ancestor
+    /// directory, this version will be used instead.
+    ///
+    /// Unlike local version pins, this version is used as the default for commands that mutate
+    /// global state, like `uv tool install`.
+    #[arg(long)]
+    pub global: bool,
 }
 
 #[derive(Args)]

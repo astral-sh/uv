@@ -11,7 +11,7 @@ use uv_configuration::{
     Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
     PreviewMode,
 };
-use uv_normalize::PackageName;
+use uv_normalize::{DefaultGroups, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_resolver::RequirementsTxtExport;
 use uv_scripts::{Pep723ItemRef, Pep723Script};
@@ -19,7 +19,7 @@ use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace,
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::lock::{do_safe_lock, LockMode};
+use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, detect_conflicts, ProjectError, ProjectInterpreter,
@@ -110,7 +110,7 @@ pub(crate) async fn export(
     // Determine the default groups to include.
     let defaults = match &target {
         ExportTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
-        ExportTarget::Script(_) => vec![],
+        ExportTarget::Script(_) => DefaultGroups::default(),
     };
     let dev = dev.with_defaults(defaults);
 
@@ -169,10 +169,9 @@ pub(crate) async fn export(
     let state = UniversalState::default();
 
     // Lock the project.
-    let lock = match do_safe_lock(
+    let lock = match LockOperation::new(
         mode,
-        (&target).into(),
-        settings.as_ref(),
+        &settings,
         &network_settings,
         &state,
         Box::new(DefaultResolveLogger),
@@ -181,6 +180,7 @@ pub(crate) async fn export(
         printer,
         preview,
     )
+    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),

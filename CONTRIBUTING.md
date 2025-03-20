@@ -177,7 +177,7 @@ Changelog entries and version bumps are automated. First, run:
 
 Then, editorialize the `CHANGELOG.md` file to ensure entries are consistently styled.
 
-Then, open a pull request e.g. `Bump version to ...`.
+Then, open a pull request, e.g., `Bump version to ...`.
 
 Binary builds will automatically be tested for the release.
 

@@ -64,6 +64,27 @@ print([(k, v["title"]) for k, v in data.items()][:10])
 The invocation `uv run example.py` would run _isolated_ from the project with only the given
 dependencies listed.
 
+## Legacy Windows Scripts
+
+Support is provided for
+[legacy setuptools scripts](https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/#scripts).
+These types of scripts are additional files installed by setuptools in `.venv\Scripts`.
+
+Currently only legacy scripts with the `.ps1`, `.cmd`, and `.bat` extensions are supported.
+
+For example, below is an example running a Command Prompt script.
+
+```console
+$ uv run --with nuitka==2.6.7 -- nuitka.cmd --version
+```
+
+In addition, you don't need to specify the extension. `uv` will automatically look for files ending
+in `.ps1`, `.cmd`, and `.bat` in that order of execution on your behalf.
+
+```console
+$ uv run --with nuitka==2.6.7 -- nuitka --version
+```
+
 ## Signal handling
 
 uv does not cede control of the process to the spawned command in order to provide better error

@@ -17,7 +17,7 @@ use crate::commands::project::{find_requires_python, ProjectError};
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings, ResolverSettingsRef};
+use crate::settings::{NetworkSettings, ResolverSettings};
 use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -107,7 +107,7 @@ pub(crate) async fn build_frontend(
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
-    settings: ResolverSettings,
+    settings: &ResolverSettings,
     network_settings: &NetworkSettings,
     no_config: bool,
     python_preference: PythonPreference,
@@ -132,7 +132,7 @@ pub(crate) async fn build_frontend(
         hash_checking,
         python.as_deref(),
         install_mirrors,
-        settings.as_ref(),
+        settings,
         network_settings,
         no_config,
         python_preference,
@@ -175,7 +175,7 @@ async fn build_impl(
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
-    settings: ResolverSettingsRef<'_>,
+    settings: &ResolverSettings,
     network_settings: &NetworkSettings,
     no_config: bool,
     python_preference: PythonPreference,
@@ -195,7 +195,7 @@ async fn build_impl(
     }
 
     // Extract the resolver settings.
-    let ResolverSettingsRef {
+    let ResolverSettings {
         index_locations,
         index_strategy,
         keyring_provider,
@@ -338,20 +338,20 @@ async fn build_impl(
             build_logs,
             force_pep517,
             build_constraints,
-            no_build_isolation,
+            *no_build_isolation,
             no_build_isolation_package,
             network_settings,
-            index_strategy,
-            keyring_provider,
-            exclude_newer,
-            sources,
+            *index_strategy,
+            *keyring_provider,
+            *exclude_newer,
+            *sources,
             concurrency,
             build_options,
             sdist,
             wheel,
             list,
             dependency_metadata,
-            link_mode,
+            *link_mode,
             config_setting,
             preview,
         );

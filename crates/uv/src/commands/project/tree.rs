@@ -10,6 +10,7 @@ use uv_cache_info::Timestamp;
 use uv_client::RegistryClientBuilder;
 use uv_configuration::{Concurrency, DependencyGroups, PreviewMode, TargetTriple};
 use uv_distribution_types::IndexCapabilities;
+use uv_normalize::DefaultGroups;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::{PackageMap, TreeDisplay};
@@ -20,7 +21,7 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
-use crate::commands::project::lock::{do_safe_lock, LockMode};
+use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
@@ -74,7 +75,7 @@ pub(crate) async fn tree(
     // Determine the default groups to include.
     let defaults = match target {
         LockTarget::Workspace(workspace) => default_dependency_groups(workspace.pyproject_toml())?,
-        LockTarget::Script(_) => vec![],
+        LockTarget::Script(_) => DefaultGroups::default(),
     };
 
     let native_tls = network_settings.native_tls;
@@ -132,10 +133,9 @@ pub(crate) async fn tree(
     let state = UniversalState::default();
 
     // Update the lockfile, if necessary.
-    let lock = match do_safe_lock(
+    let lock = match LockOperation::new(
         mode,
-        target,
-        settings.as_ref(),
+        &settings,
         network_settings,
         &state,
         Box::new(DefaultResolveLogger),
@@ -144,6 +144,7 @@ pub(crate) async fn tree(
         printer,
         preview,
     )
+    .execute(target)
     .await
     {
         Ok(result) => result.into_lock(),

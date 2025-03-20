@@ -112,9 +112,11 @@ constraint-dependencies = ["grpcio<1.65"]
 
 The list of `dependency-groups` to install by default.
 
+Can also be the literal "all" to default enable all groups.
+
 **Default value**: `["dev"]`
 
-**Type**: `list[str]`
+**Type**: `str | list[str]`
 
 **Example usage**:
 
@@ -477,10 +479,11 @@ The keys to consider when caching builds for the project.
 
 Cache keys enable you to specify the files or directories that should trigger a rebuild when
 modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`,
-or `setup.cfg` files in the project directory are modified, i.e.:
+or `setup.cfg` files in the project directory are modified, or if a `src` directory is
+added or removed, i.e.:
 
 ```toml
-cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]
+cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }, { dir = "src" }]
 ```
 
 As an example: if a project uses dynamic metadata to read its dependencies from a
@@ -2308,6 +2311,32 @@ Include distribution hashes in the output file.
 
 ---
 
+#### [`group`](#pip_group) {: #pip_group }
+<span id="group"></span>
+
+Include the following dependency groups.
+
+**Default value**: `None`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    group = ["dev", "docs"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    group = ["dev", "docs"]
+    ```
+
+---
+
 #### [`index-strategy`](#pip_index-strategy) {: #pip_index-strategy }
 <span id="index-strategy"></span>
 
@@ -3242,6 +3271,43 @@ environment. The packages will be installed at the top-level of the directory.
     ```toml
     [pip]
     target = "./target"
+    ```
+
+---
+
+#### [`torch-backend`](#pip_torch-backend) {: #pip_torch-backend }
+<span id="torch-backend"></span>
+
+The backend to use when fetching packages in the PyTorch ecosystem.
+
+When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+and will instead use the defined backend.
+
+For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+uv will use the PyTorch index for CUDA 12.6.
+
+The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+installed CUDA drivers.
+
+This option is in preview and may change in any future release.
+
+**Default value**: `null`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    torch-backend = "auto"
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    torch-backend = "auto"
     ```
 
 ---

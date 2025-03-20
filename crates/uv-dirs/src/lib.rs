@@ -103,6 +103,13 @@ pub fn user_config_dir() -> Option<PathBuf> {
         .ok()
 }
 
+pub fn user_uv_config_dir() -> Option<PathBuf> {
+    user_config_dir().map(|mut path| {
+        path.push("uv");
+        path
+    })
+}
+
 #[cfg(not(windows))]
 fn locate_system_config_xdg(value: Option<&str>) -> Option<PathBuf> {
     // On Linux and macOS, read the `XDG_CONFIG_DIRS` environment variable.

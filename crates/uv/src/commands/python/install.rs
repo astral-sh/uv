@@ -17,7 +17,7 @@ use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDo
 use uv_python::managed::{
     python_executable_dir, ManagedPythonInstallation, ManagedPythonInstallations,
 };
-use uv_python::platform::Libc;
+use uv_python::platform::{Arch, Libc};
 use uv_python::{
     PythonDownloads, PythonInstallationKey, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionFilePreference,
@@ -58,10 +58,11 @@ impl InstallRequest {
         let download = match ManagedPythonDownload::from_request(&download_request) {
             Ok(download) => download,
             Err(downloads::Error::NoDownloadFound(request))
-                if request.libc().is_some_and(Libc::is_musl) =>
+                if request.libc().is_some_and(Libc::is_musl)
+                    && request.arch().is_some_and(Arch::is_arm) =>
             {
                 return Err(anyhow::anyhow!(
-                    "uv does not yet provide musl Python distributions. See https://github.com/astral-sh/uv/issues/6890 to track support."
+                    "uv does not yet provide musl Python distributions on aarch64."
                 ));
             }
             Err(err) => return Err(err.into()),
@@ -204,15 +205,17 @@ pub(crate) async fn install(
             Vec::with_capacity(existing_installations.len() + requests.len());
 
         for request in &requests {
-            if existing_installations.is_empty() {
+            let mut matching_installations = existing_installations
+                .iter()
+                .filter(|installation| request.matches_installation(installation))
+                .peekable();
+
+            if matching_installations.peek().is_none() {
                 debug!("No installation found for request `{}`", request.cyan());
                 unsatisfied.push(Cow::Borrowed(request));
             }
 
-            for installation in existing_installations
-                .iter()
-                .filter(|installation| request.matches_installation(installation))
-            {
+            for installation in matching_installations {
                 changelog.existing.insert(installation.key().clone());
                 if matches!(&request.request, &PythonRequest::Any) {
                     // Construct a install request matching the existing installation
@@ -299,6 +302,7 @@ pub(crate) async fn install(
         .build();
     let reporter = PythonDownloadReporter::new(printer, downloads.len() as u64);
     let mut tasks = FuturesUnordered::new();
+
     for download in &downloads {
         tasks.push(async {
             (

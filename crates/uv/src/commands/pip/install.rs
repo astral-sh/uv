@@ -1,5 +1,6 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use itertools::Itertools;
@@ -9,9 +10,8 @@ use tracing::{debug, enabled, Level};
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, DryRun,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy,
-    Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification,
+    HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -22,6 +22,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
+use uv_normalize::GroupName;
 use uv_pep508::PackageName;
 use uv_pypi_types::{Conflicts, Requirement};
 use uv_python::{
@@ -33,7 +34,9 @@ use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
     ResolutionMode, ResolverEnvironment,
 };
+use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
+use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
@@ -55,13 +58,14 @@ pub(crate) async fn pip_install(
     overrides_from_workspace: Vec<Requirement>,
     build_constraints_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
-    groups: &DependencyGroups,
+    groups: BTreeMap<PathBuf, Vec<GroupName>>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
+    torch_backend: Option<TorchMode>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     network_settings: &NetworkSettings,
@@ -107,6 +111,7 @@ pub(crate) async fn pip_install(
         constraints,
         overrides,
         source_trees,
+        groups,
         index_url,
         extra_index_urls,
         no_index,
@@ -330,11 +335,28 @@ pub(crate) async fn pip_install(
         }
     }
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend.map(|mode| {
+        if preview.is_disabled() {
+            warn_user!("The `--torch-backend` setting is experimental and may change without warning. Pass `--preview` to disable this warning.");
+        }
+
+        TorchStrategy::from_mode(
+            mode,
+            python_platform
+                .map(TargetTriple::platform)
+                .as_ref()
+                .unwrap_or(interpreter.platform())
+                .os(),
+        )
+    }).transpose()?;
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
+        .torch_backend(torch_backend)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -424,7 +446,7 @@ pub(crate) async fn pip_install(
         project,
         BTreeSet::default(),
         extras,
-        groups,
+        &groups,
         preferences,
         site_packages.clone(),
         &hasher,

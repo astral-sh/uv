@@ -2,7 +2,7 @@
 name = "albatross"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["tqdm>=4,<5"]
+dependencies = ["iniconfig>=2,<3"]
 
 [build-system]
 requires = ["hatchling"]

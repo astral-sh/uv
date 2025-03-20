@@ -13,12 +13,13 @@ use uv_distribution_types::{
 };
 use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, OptionsMetadata};
-use uv_normalize::{ExtraName, PackageName};
+use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
+use uv_torch::TorchMode;
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -59,10 +60,11 @@ pub struct Options {
     ///
     /// Cache keys enable you to specify the files or directories that should trigger a rebuild when
     /// modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`,
-    /// or `setup.cfg` files in the project directory are modified, i.e.:
+    /// or `setup.cfg` files in the project directory are modified, or if a `src` directory is
+    /// added or removed, i.e.:
     ///
     /// ```toml
-    /// cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]
+    /// cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }, { dir = "src" }]
     /// ```
     ///
     /// As an example: if a project uses dynamic metadata to read its dependencies from a
@@ -1127,6 +1129,15 @@ pub struct PipOptions {
         "#
     )]
     pub no_deps: Option<bool>,
+    /// Include the following dependency groups.
+    #[option(
+        default = "None",
+        value_type = "list[str]",
+        example = r#"
+            group = ["dev", "docs"]
+        "#
+    )]
+    pub group: Option<Vec<PipGroupName>>,
     /// Allow `uv pip sync` with empty requirements, which will clear the environment of all
     /// packages.
     #[option(
@@ -1533,6 +1544,26 @@ pub struct PipOptions {
         "#
     )]
     pub reinstall_package: Option<Vec<PackageName>>,
+    /// The backend to use when fetching packages in the PyTorch ecosystem.
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[option(
+        default = "null",
+        value_type = "str",
+        example = r#"
+            torch-backend = "auto"
+        "#
+    )]
+    pub torch_backend: Option<TorchMode>,
 }
 
 impl PipOptions {

@@ -874,7 +874,7 @@ impl InterpreterInfo {
 
         // Read from the cache.
         if cache
-            .freshness(&cache_entry, None)
+            .freshness(&cache_entry, None, None)
             .is_ok_and(Freshness::is_fresh)
         {
             if let Ok(data) = fs::read(cache_entry.path()) {

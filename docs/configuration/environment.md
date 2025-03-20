@@ -179,6 +179,10 @@ Add additional context and structure to log messages.
 
 If logging is not enabled, e.g., with `RUST_LOG` or `-v`, this has no effect.
 
+### `UV_MANAGED_PYTHON`
+
+Require use of uv-managed Python versions.
+
 ### `UV_NATIVE_TLS`
 
 Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
@@ -228,6 +232,10 @@ Ignore `.env` files when executing `uv run` commands.
 ### `UV_NO_INSTALLER_METADATA`
 
 Skip writing `uv` installer metadata files (e.g., `INSTALLER`, `REQUESTED`, and `direct_url.json`) to site-packages `.dist-info` directories.
+
+### `UV_NO_MANAGED_PYTHON`
+
+Disable use of uv-managed Python versions.
 
 ### `UV_NO_PROGRESS`
 
@@ -343,8 +351,7 @@ Distributions can be read from a local directory by using the `file://` URL sche
 
 ### `UV_PYTHON_PREFERENCE`
 
-Equivalent to the `--python-preference` command-line argument. Whether uv
-should prefer system or managed Python versions.
+Whether uv should prefer system or managed Python versions.
 
 ### `UV_REQUEST_TIMEOUT`
 
@@ -377,6 +384,10 @@ Specifies the "bin" directory for installing tool executables.
 
 Specifies the directory where uv stores managed tools.
 
+### `UV_TORCH_BACKEND`
+
+Equivalent to the `--torch-backend` command-line argument (e.g., `cpu`, `cu126`, or `auto`).
+
 ### `UV_UNMANAGED_INSTALL`
 
 Used ephemeral environments like CI to install uv to a specific path while preventing
@@ -407,6 +418,10 @@ Used for trusted publishing via `uv publish`. Contains the oidc token url.
 
 General proxy for all network requests.
 
+### `APPDATA`
+
+Path to user-level configuration directory on Windows systems.
+
 ### `BASH_VERSION`
 
 Used to detect Bash shell usage.
@@ -419,7 +434,7 @@ Use to control color via `anstyle`.
 
 Overrides terminal width used for wrapping. This variable is not read by uv directly.
 
-This is a quasi-standard variable, described e.g. in `ncurses(3x)`.
+This is a quasi-standard variable, described, e.g., in `ncurses(3x)`.
 
 ### `CONDA_DEFAULT_ENV`
 
@@ -566,6 +581,10 @@ Path to system-level configuration directory on Windows systems.
 ### `TRACING_DURATIONS_FILE`
 
 Use to create the tracing durations file via the `tracing-durations-export` feature.
+
+### `USERPROFILE`
+
+Path to root directory of user's profile on Windows systems.
 
 ### `UV`
 

@@ -196,6 +196,7 @@ impl Middleware for AuthMiddleware {
                         extensions,
                         next,
                         &url,
+                        auth_policy,
                     )
                     .await;
             }
@@ -212,7 +213,9 @@ impl Middleware for AuthMiddleware {
                 // If it's fully authenticated, finish the request
                 if credentials.password().is_some() {
                     trace!("Request for {url} is fully authenticated");
-                    return self.complete_request(None, request, extensions, next).await;
+                    return self
+                        .complete_request(None, request, extensions, next, auth_policy)
+                        .await;
                 }
 
                 // If we just found a username, we'll make the request then look for password elsewhere
@@ -286,7 +289,7 @@ impl Middleware for AuthMiddleware {
                 trace!("Retrying request for {url} with credentials from cache {credentials:?}");
                 retry_request = credentials.authenticate(retry_request);
                 return self
-                    .complete_request(None, retry_request, extensions, next)
+                    .complete_request(None, retry_request, extensions, next, auth_policy)
                     .await;
             }
         }
@@ -294,13 +297,19 @@ impl Middleware for AuthMiddleware {
         // Then, fetch from external services.
         // Here, we use the username from the cache if present.
         if let Some(credentials) = self
-            .fetch_credentials(credentials.as_deref(), retry_request.url())
+            .fetch_credentials(credentials.as_deref(), retry_request.url(), auth_policy)
             .await
         {
             retry_request = credentials.authenticate(retry_request);
             trace!("Retrying request for {url} with {credentials:?}");
             return self
-                .complete_request(Some(credentials), retry_request, extensions, next)
+                .complete_request(
+                    Some(credentials),
+                    retry_request,
+                    extensions,
+                    next,
+                    auth_policy,
+                )
                 .await;
         }
 
@@ -309,7 +318,7 @@ impl Middleware for AuthMiddleware {
                 trace!("Retrying request for {url} with username from cache {credentials:?}");
                 retry_request = credentials.authenticate(retry_request);
                 return self
-                    .complete_request(None, retry_request, extensions, next)
+                    .complete_request(None, retry_request, extensions, next, auth_policy)
                     .await;
             }
         }
@@ -334,13 +343,16 @@ impl AuthMiddleware {
         request: Request,
         extensions: &mut Extensions,
         next: Next<'_>,
+        auth_policy: AuthPolicy,
     ) -> reqwest_middleware::Result<Response> {
         let Some(credentials) = credentials else {
             // Nothing to insert into the cache if we don't have credentials
             return next.run(request, extensions).await;
         };
-
         let url = request.url().clone();
+        if matches!(auth_policy, AuthPolicy::Always) && credentials.password().is_none() {
+            return Err(Error::Middleware(format_err!("Missing password for {url}")));
+        }
         let result = next.run(request, extensions).await;
 
         // Update the cache with new credentials on a successful request
@@ -363,6 +375,7 @@ impl AuthMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
         url: &str,
+        auth_policy: AuthPolicy,
     ) -> reqwest_middleware::Result<Response> {
         let credentials = Arc::new(credentials);
 
@@ -370,7 +383,7 @@ impl AuthMiddleware {
         if credentials.password().is_some() {
             trace!("Request for {url} is already fully authenticated");
             return self
-                .complete_request(Some(credentials), request, extensions, next)
+                .complete_request(Some(credentials), request, extensions, next, auth_policy)
                 .await;
         }
 
@@ -391,7 +404,7 @@ impl AuthMiddleware {
             // Do not insert already-cached credentials
             None
         } else if let Some(credentials) = self
-            .fetch_credentials(Some(&credentials), request.url())
+            .fetch_credentials(Some(&credentials), request.url(), auth_policy)
             .await
         {
             request = credentials.authenticate(request);
@@ -402,7 +415,7 @@ impl AuthMiddleware {
         };
 
         return self
-            .complete_request(credentials, request, extensions, next)
+            .complete_request(credentials, request, extensions, next, auth_policy)
             .await;
     }
 
@@ -413,6 +426,7 @@ impl AuthMiddleware {
         &self,
         credentials: Option<&Credentials>,
         url: &Url,
+        auth_policy: AuthPolicy,
     ) -> Option<Arc<Credentials>> {
         // Fetches can be expensive, so we will only run them _once_ per realm and username combination
         // All other requests for the same realm will wait until the first one completes
@@ -454,17 +468,25 @@ impl AuthMiddleware {
         }) {
             debug!("Found credentials in netrc file for {url}");
             Some(credentials)
-        // N.B. The keyring provider performs lookups for the exact URL then
-        //      falls back to the host, but we cache the result per realm so if a keyring
-        //      implementation returns different credentials for different URLs in the
-        //      same realm we will use the wrong credentials.
+
+        // N.B. The keyring provider performs lookups for the exact URL then falls back to the host,
+        //      but we cache the result per realm so if a keyring implementation returns different
+        //      credentials for different URLs in the same realm we will use the wrong credentials.
         } else if let Some(credentials) = match self.keyring {
             Some(ref keyring) => {
+                // The subprocess keyring provider is _slow_ so we do not perform fetches for all
+                // URLs; instead, we fetch if there's a username or if the user has requested to
+                // always authenticate.
                 if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
                     debug!("Checking keyring for credentials for {username}@{url}");
-                    keyring.fetch(url, username).await
+                    keyring.fetch(url, Some(username)).await
+                } else if matches!(auth_policy, AuthPolicy::Always) {
+                    debug!(
+                        "Checking keyring for credentials for {url} without username due to `authenticate = always`"
+                    );
+                    keyring.fetch(url, None).await
                 } else {
-                    debug!("Skipping keyring lookup for {url} with no username");
+                    debug!("Skipping keyring fetch for {url} without username; use `authenticate = always` to force");
                     None
                 }
             }
@@ -917,14 +939,12 @@ mod tests {
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
                     .with_keyring(Some(KeyringProvider::dummy([(
-                        (
-                            format!(
-                                "{}:{}",
-                                base_url.host_str().unwrap(),
-                                base_url.port().unwrap()
-                            ),
-                            username,
+                        format!(
+                            "{}:{}",
+                            base_url.host_str().unwrap(),
+                            base_url.port().unwrap()
                         ),
+                        username,
                         password,
                     )]))),
             )
@@ -972,6 +992,64 @@ mod tests {
         Ok(())
     }
 
+    #[test(tokio::test)]
+    async fn test_keyring_always_authenticate() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+        let server = start_test_server(username, password).await;
+        let base_url = Url::parse(&server.uri())?;
+
+        let auth_policies = auth_policies_for(&base_url, AuthPolicy::Always);
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_keyring(Some(KeyringProvider::dummy([(
+                        format!(
+                            "{}:{}",
+                            base_url.host_str().unwrap(),
+                            base_url.port().unwrap()
+                        ),
+                        username,
+                        password,
+                    )])))
+                    .with_url_auth_policies(auth_policies),
+            )
+            .build();
+
+        assert_eq!(
+            client.get(server.uri()).send().await?.status(),
+            200,
+            "Credentials (including a username) should be pulled from the keyring"
+        );
+
+        let mut url = base_url.clone();
+        url.set_username(username).unwrap();
+        assert_eq!(
+            client.get(url).send().await?.status(),
+            200,
+            "The password for the username should be pulled from the keyring"
+        );
+
+        let mut url = base_url.clone();
+        url.set_username(username).unwrap();
+        url.set_password(Some("invalid")).unwrap();
+        assert_eq!(
+            client.get(url).send().await?.status(),
+            401,
+            "Password in the URL should take precedence and fail"
+        );
+
+        let mut url = base_url.clone();
+        url.set_username("other_user").unwrap();
+        assert!(
+            matches!(client.get(url).send().await, Err(reqwest_middleware::Error::Middleware(_))),
+            "If the username does not match, a password should not be fetched, and the middleware should fail eagerly since `authenticate = always` is not satisfied"
+        );
+
+        Ok(())
+    }
+
     /// We include ports in keyring requests, e.g., `localhost:8000` should be distinct from `localhost`,
     /// unless the server is running on a default port, e.g., `localhost:80` is equivalent to `localhost`.
     /// We don't unit test the latter case because it's possible to collide with a server a developer is
@@ -989,7 +1067,8 @@ mod tests {
                     .with_cache(CredentialsCache::new())
                     .with_keyring(Some(KeyringProvider::dummy([(
                         // Omit the port from the keyring entry
-                        (base_url.host_str().unwrap(), username),
+                        base_url.host_str().unwrap(),
+                        username,
                         password,
                     )]))),
             )
@@ -1024,14 +1103,12 @@ mod tests {
         let client = test_client_builder()
             .with(AuthMiddleware::new().with_cache(cache).with_keyring(Some(
                 KeyringProvider::dummy([(
-                    (
-                        format!(
-                            "{}:{}",
-                            base_url.host_str().unwrap(),
-                            base_url.port().unwrap()
-                        ),
-                        username,
+                    format!(
+                        "{}:{}",
+                        base_url.host_str().unwrap(),
+                        base_url.port().unwrap()
                     ),
+                    username,
                     password,
                 )]),
             )))
@@ -1139,25 +1216,21 @@ mod tests {
                     .with_cache(CredentialsCache::new())
                     .with_keyring(Some(KeyringProvider::dummy([
                         (
-                            (
-                                format!(
-                                    "{}:{}",
-                                    base_url_1.host_str().unwrap(),
-                                    base_url_1.port().unwrap()
-                                ),
-                                username_1,
+                            format!(
+                                "{}:{}",
+                                base_url_1.host_str().unwrap(),
+                                base_url_1.port().unwrap()
                             ),
+                            username_1,
                             password_1,
                         ),
                         (
-                            (
-                                format!(
-                                    "{}:{}",
-                                    base_url_2.host_str().unwrap(),
-                                    base_url_2.port().unwrap()
-                                ),
-                                username_2,
+                            format!(
+                                "{}:{}",
+                                base_url_2.host_str().unwrap(),
+                                base_url_2.port().unwrap()
                             ),
+                            username_2,
                             password_2,
                         ),
                     ]))),
@@ -1393,25 +1466,21 @@ mod tests {
                     .with_cache(CredentialsCache::new())
                     .with_keyring(Some(KeyringProvider::dummy([
                         (
-                            (
-                                format!(
-                                    "{}:{}",
-                                    base_url_1.host_str().unwrap(),
-                                    base_url_1.port().unwrap()
-                                ),
-                                username_1,
+                            format!(
+                                "{}:{}",
+                                base_url_1.host_str().unwrap(),
+                                base_url_1.port().unwrap()
                             ),
+                            username_1,
                             password_1,
                         ),
                         (
-                            (
-                                format!(
-                                    "{}:{}",
-                                    base_url_2.host_str().unwrap(),
-                                    base_url_2.port().unwrap()
-                                ),
-                                username_2,
+                            format!(
+                                "{}:{}",
+                                base_url_2.host_str().unwrap(),
+                                base_url_2.port().unwrap()
                             ),
+                            username_2,
                             password_2,
                         ),
                     ]))),
@@ -1527,8 +1596,8 @@ mod tests {
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
                     .with_keyring(Some(KeyringProvider::dummy([
-                        ((base_url_1.clone(), username), password_1),
-                        ((base_url_2.clone(), username), password_2),
+                        (base_url_1.clone(), username, password_1),
+                        (base_url_2.clone(), username, password_2),
                     ]))),
             )
             .build();

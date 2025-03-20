@@ -276,10 +276,9 @@ pub(crate) async fn remove(
     let state = UniversalState::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = match project::lock::do_safe_lock(
+    let lock = match project::lock::LockOperation::new(
         mode,
-        (&target).into(),
-        settings.as_ref().into(),
+        &settings.resolver,
         &network_settings,
         &state,
         Box::new(DefaultResolveLogger),
@@ -288,6 +287,7 @@ pub(crate) async fn remove(
         printer,
         preview,
     )
+    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),
@@ -340,7 +340,7 @@ pub(crate) async fn remove(
         EditableMode::Editable,
         install_options,
         Modifications::Exact,
-        settings.as_ref().into(),
+        (&settings).into(),
         &network_settings,
         &state,
         Box::new(DefaultInstallLogger),

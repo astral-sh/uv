@@ -223,11 +223,22 @@ impl Cache {
     }
 
     /// Returns `true` if a cache entry must be revalidated given the [`Refresh`] policy.
-    pub fn must_revalidate(&self, package: &PackageName) -> bool {
+    pub fn must_revalidate_package(&self, package: &PackageName) -> bool {
         match &self.refresh {
             Refresh::None(_) => false,
             Refresh::All(_) => true,
-            Refresh::Packages(packages, _) => packages.contains(package),
+            Refresh::Packages(packages, _, _) => packages.contains(package),
+        }
+    }
+
+    /// Returns `true` if a cache entry must be revalidated given the [`Refresh`] policy.
+    pub fn must_revalidate_path(&self, path: &Path) -> bool {
+        match &self.refresh {
+            Refresh::None(_) => false,
+            Refresh::All(_) => true,
+            Refresh::Packages(_, paths, _) => paths
+                .iter()
+                .any(|target| same_file::is_same_file(path, target).unwrap_or(false)),
         }
     }
 
@@ -239,13 +250,20 @@ impl Cache {
         &self,
         entry: &CacheEntry,
         package: Option<&PackageName>,
+        path: Option<&Path>,
     ) -> io::Result<Freshness> {
         // Grab the cutoff timestamp, if it's relevant.
         let timestamp = match &self.refresh {
             Refresh::None(_) => return Ok(Freshness::Fresh),
             Refresh::All(timestamp) => timestamp,
-            Refresh::Packages(packages, timestamp) => {
-                if package.is_none_or(|package| packages.contains(package)) {
+            Refresh::Packages(packages, paths, timestamp) => {
+                if package.is_none_or(|package| packages.contains(package))
+                    || path.is_some_and(|path| {
+                        paths
+                            .iter()
+                            .any(|target| same_file::is_same_file(path, target).unwrap_or(false))
+                    })
+                {
                     timestamp
                 } else {
                     return Ok(Freshness::Fresh);
@@ -982,7 +1000,7 @@ impl CacheBucket {
         match self {
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_prune.rs`.
-            Self::SourceDistributions => "sdists-v8",
+            Self::SourceDistributions => "sdists-v9",
             Self::FlatIndex => "flat-index-v2",
             Self::Git => "git-v0",
             Self::Interpreter => "interpreter-v4",
@@ -1167,7 +1185,7 @@ pub enum Refresh {
     /// Don't refresh any entries.
     None(Timestamp),
     /// Refresh entries linked to the given packages, if created before the given timestamp.
-    Packages(Vec<PackageName>, Timestamp),
+    Packages(Vec<PackageName>, Vec<PathBuf>, Timestamp),
     /// Refresh all entries created before the given timestamp.
     All(Timestamp),
 }
@@ -1183,7 +1201,7 @@ impl Refresh {
                 if refresh_package.is_empty() {
                     Self::None(timestamp)
                 } else {
-                    Self::Packages(refresh_package, timestamp)
+                    Self::Packages(refresh_package, vec![], timestamp)
                 }
             }
         }
@@ -1193,7 +1211,7 @@ impl Refresh {
     pub fn timestamp(&self) -> Timestamp {
         match self {
             Self::None(timestamp) => *timestamp,
-            Self::Packages(_, timestamp) => *timestamp,
+            Self::Packages(.., timestamp) => *timestamp,
             Self::All(timestamp) => *timestamp,
         }
     }
@@ -1220,24 +1238,27 @@ impl Refresh {
             // Take the `max` of the two timestamps.
             (Self::None(t1), Refresh::None(t2)) => Refresh::None(max(t1, t2)),
             (Self::None(t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
-            (Self::None(t1), Refresh::Packages(packages, t2)) => {
-                Refresh::Packages(packages, max(t1, t2))
+            (Self::None(t1), Refresh::Packages(packages, paths, t2)) => {
+                Refresh::Packages(packages, paths, max(t1, t2))
             }
 
             // If the policy is `All`, refresh all packages.
             (Self::All(t1), Refresh::None(t2)) => Refresh::All(max(t1, t2)),
             (Self::All(t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
-            (Self::All(t1), Refresh::Packages(_packages, t2)) => Refresh::All(max(t1, t2)),
+            (Self::All(t1), Refresh::Packages(.., t2)) => Refresh::All(max(t1, t2)),
 
             // If the policy is `Packages`, take the "max" of the two policies.
-            (Self::Packages(packages, t1), Refresh::None(t2)) => {
-                Refresh::Packages(packages, max(t1, t2))
+            (Self::Packages(packages, paths, t1), Refresh::None(t2)) => {
+                Refresh::Packages(packages, paths, max(t1, t2))
             }
-            (Self::Packages(_packages, t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
-            (Self::Packages(packages1, t1), Refresh::Packages(packages2, t2)) => Refresh::Packages(
-                packages1.into_iter().chain(packages2).collect(),
-                max(t1, t2),
-            ),
+            (Self::Packages(.., t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
+            (Self::Packages(packages1, paths1, t1), Refresh::Packages(packages2, paths2, t2)) => {
+                Refresh::Packages(
+                    packages1.into_iter().chain(packages2).collect(),
+                    paths1.into_iter().chain(paths2).collect(),
+                    max(t1, t2),
+                )
+            }
         }
     }
 }

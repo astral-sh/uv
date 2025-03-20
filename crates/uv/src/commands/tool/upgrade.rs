@@ -293,7 +293,7 @@ async fn upgrade_tool(
         let resolution = resolve_environment(
             spec.into(),
             interpreter,
-            settings.as_ref().into(),
+            &settings.resolver,
             network_settings,
             &state,
             Box::new(SummaryResolveLogger),
@@ -310,7 +310,7 @@ async fn upgrade_tool(
             environment,
             &resolution.into(),
             Modifications::Exact,
-            settings.as_ref().into(),
+            (&settings).into(),
             network_settings,
             &state,
             Box::new(DefaultInstallLogger),

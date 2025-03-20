@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 pub use dist_info_name::DistInfoName;
 pub use extra_name::ExtraName;
-pub use group_name::{GroupName, DEV_DEPENDENCIES};
+pub use group_name::{DefaultGroups, GroupName, PipGroupName, DEV_DEPENDENCIES};
 pub use package_name::PackageName;
 
 use uv_small_str::SmallString;
@@ -120,6 +120,55 @@ impl Display for InvalidNameError {
 }
 
 impl Error for InvalidNameError {}
+
+/// Path didn't end with `pyproject.toml`
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InvalidPipGroupPathError(String);
+
+impl InvalidPipGroupPathError {
+    /// Returns the invalid path.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Display for InvalidPipGroupPathError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: {}",
+            self.0,
+        )
+    }
+}
+impl Error for InvalidPipGroupPathError {}
+
+/// Possible errors from reading a [`PipGroupName`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum InvalidPipGroupError {
+    Name(InvalidNameError),
+    Path(InvalidPipGroupPathError),
+}
+
+impl Display for InvalidPipGroupError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InvalidPipGroupError::Name(e) => e.fmt(f),
+            InvalidPipGroupError::Path(e) => e.fmt(f),
+        }
+    }
+}
+impl Error for InvalidPipGroupError {}
+impl From<InvalidNameError> for InvalidPipGroupError {
+    fn from(value: InvalidNameError) -> Self {
+        Self::Name(value)
+    }
+}
+impl From<InvalidPipGroupPathError> for InvalidPipGroupError {
+    fn from(value: InvalidPipGroupPathError) -> Self {
+        Self::Path(value)
+    }
+}
 
 #[cfg(test)]
 mod tests {

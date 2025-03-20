@@ -10607,7 +10607,7 @@ fn lock_mixed_extras() -> Result<()> {
         [tool.uv.workspace]
         members = ["packages/*"]
     "#})?;
-    workspace1.child("src/__init__.py").touch()?;
+    workspace1.child("src/workspace1/__init__.py").touch()?;
 
     let leaf1 = workspace1.child("packages").child("leaf1");
     leaf1.child("pyproject.toml").write_str(indoc! {r#"
@@ -10621,10 +10621,10 @@ fn lock_mixed_extras() -> Result<()> {
         async = ["iniconfig>=2"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
     "#})?;
-    leaf1.child("src/__init__.py").touch()?;
+    leaf1.child("src/leaf1/__init__.py").touch()?;
 
     // Create a second workspace (`workspace2`) with an extra of the same name.
     let workspace2 = context.temp_dir.child("workspace2");
@@ -10636,8 +10636,8 @@ fn lock_mixed_extras() -> Result<()> {
         dependencies = ["leaf2"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
 
         [tool.uv.sources]
         leaf2 = { workspace = true }
@@ -10645,7 +10645,7 @@ fn lock_mixed_extras() -> Result<()> {
         [tool.uv.workspace]
         members = ["packages/*"]
     "#})?;
-    workspace2.child("src/__init__.py").touch()?;
+    workspace2.child("src/workspace2/__init__.py").touch()?;
 
     let leaf2 = workspace2.child("packages").child("leaf2");
     leaf2.child("pyproject.toml").write_str(indoc! {r#"
@@ -10659,10 +10659,10 @@ fn lock_mixed_extras() -> Result<()> {
         async = ["packaging>=24"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
     "#})?;
-    leaf2.child("src/__init__.py").touch()?;
+    leaf2.child("src/leaf2/__init__.py").touch()?;
 
     // Lock the first workspace.
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace1), @r###"
@@ -10842,7 +10842,7 @@ fn lock_transitive_extra() -> Result<()> {
         [tool.uv.workspace]
         members = ["packages/*"]
     "#})?;
-    workspace.child("src/__init__.py").touch()?;
+    workspace.child("src/workspace/__init__.py").touch()?;
 
     let leaf = workspace.child("packages").child("leaf");
     leaf.child("pyproject.toml").write_str(indoc! {r#"
@@ -10856,10 +10856,10 @@ fn lock_transitive_extra() -> Result<()> {
         async = ["iniconfig>=2"]
 
         [build-system]
-        requires = ["setuptools>=42"]
-        build-backend = "setuptools.build_meta"
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
     "#})?;
-    leaf.child("src/__init__.py").touch()?;
+    leaf.child("src/leaf/__init__.py").touch()?;
 
     // Lock the workspace.
     uv_snapshot!(context.filters(), context.lock().current_dir(&workspace), @r###"
@@ -15223,9 +15223,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG Searching for a compatible version of project @ file://[TEMP_DIR]/ (<0.1.0 | >0.1.0)
     DEBUG No compatible version found for: project
       × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the provided package locations and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
-
-          hint: Packages were unavailable because index lookups were disabled and no additional package locations were provided (try: `--find-links <uri>`)
+      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
     "#);
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
@@ -18310,6 +18308,167 @@ fn lock_keyring_credentials() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// Fetch credentials (including a username) for a named index via the keyring using `authenticate =
+/// always`
+#[test]
+fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()> {
+    let keyring_context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    keyring_context
+        .pip_install()
+        .arg(
+            keyring_context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        // We need a newer version of keyring that supports `--mode`, so unset `EXCLUDE_NEWER` and
+        // pin the dependencies
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        // (from `echo "keyring==v25.6.0" | uv pip compile - --no-annotate --no-header -q`)
+        .arg("jaraco-classes==3.4.0")
+        .arg("jaraco-context==6.0.1")
+        .arg("jaraco-functools==4.1.0")
+        .arg("keyring==25.6.0")
+        .arg("more-itertools==10.6.0")
+        .assert()
+        .success();
+
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv]
+        keyring-provider = "subprocess"
+
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        default = true
+        authenticate = "always"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Request for https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/
+    Request for pypi-proxy.fly.dev
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
+
+    // The lockfile shout omit the credentials.
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "foo"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig" }]
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://pypi-proxy.fly.dev/basic-auth/simple" }
+        sdist = { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+/// Fetch credentials (including a username) for a named index via the keyring using `authenticate =
+/// always` — but the keyring version installed does not support `--mode creds`
+#[test]
+fn lock_keyring_credentials_always_authenticate_unsupported_mode() -> Result<()> {
+    let keyring_context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    keyring_context
+        .pip_install()
+        .arg(
+            keyring_context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv]
+        keyring-provider = "subprocess"
+
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        default = true
+        authenticate = "always"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Attempted to fetch credentials using the `keyring` command, but it does not support `--mode creds`; upgrade to `keyring>=v25.2.1` for support or provide a username
+    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/`
+      Caused by: Missing credentials for https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/
+    ");
 
     Ok(())
 }
@@ -24883,9 +25042,9 @@ fn lock_pytorch_cpu() -> Result<()> {
     Ok(())
 }
 
-/// Ensure that the `PyTorch` index-specific forks don't use the PyPI preference. If we solve a PyPI
+/// Ensure that the PyTorch index-specific forks don't use the PyPI preference. If we solve a PyPI
 /// fork first, and reuse the preferences, we'll end up selecting `2.2.2` (rather than `2.2.2+cpu`)
-/// in the `PyTorch` forks.
+/// in the PyTorch forks.
 ///
 /// Regression test for: <https://github.com/astral-sh/uv/issues/10772>
 #[test]
@@ -25808,7 +25967,7 @@ fn lock_pytorch_local_preference() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
         revision = 1
         requires-python = ">=3.12.[X]"
@@ -26082,6 +26241,8 @@ fn lock_pytorch_local_preference() -> Result<()> {
             { name = "torch", version = "2.6.0+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "sys_platform != 'darwin'" },
         ]
         wheels = [
+            { url = "https://files.pythonhosted.org/packages/52/5b/76ca113a853b19c7b1da761f8a72cb6429b3bd0bf932537d8df4657f47c3/torchvision-0.21.0-1-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:ffa2a16499508fe6798323e455f312c7c55f2a88901c9a7c0fb1efa86cf7e327", size = 2329878 },
+            { url = "https://files.pythonhosted.org/packages/4e/fe/5e193353706dab96fe73ae100d5a633ff635ce310e0d92f3bc2958d075b1/torchvision-0.21.0-1-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:7e9e9afa150e40cd2a8f0701c43cb82a8d724f512896455c0918b987f94b84a4", size = 2280711 },
             { url = "https://files.pythonhosted.org/packages/6e/1b/28f527b22d5e8800184d0bc847f801ae92c7573a8c15979d92b7091c0751/torchvision-0.21.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:97a5814a93c793aaf0179cfc7f916024f4b63218929aee977b645633d074a49f", size = 1784140 },
             { url = "https://files.pythonhosted.org/packages/36/63/0722e153fd27d64d5b0af45b5c8cb0e80b35a68cf0130303bc9a8bb095c7/torchvision-0.21.0-cp312-cp312-manylinux1_x86_64.whl", hash = "sha256:b578bcad8a4083b40d34f689b19ca9f7c63e511758d806510ea03c29ac568f7b", size = 7238673 },
             { url = "https://files.pythonhosted.org/packages/bb/ea/03541ed901cdc30b934f897060d09bbf7a98466a08ad1680320f9ce0cbe0/torchvision-0.21.0-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:5083a5b1fec2351bf5ea9900a741d54086db75baec4b1d21e39451e00977f1b1", size = 14701186 },
@@ -26100,7 +26261,7 @@ fn lock_pytorch_local_preference() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/26/9f/ad63fc0248c5379346306f8668cda6e2e2e9c95e01216d2b8ffd9ff037d0/typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d", size = 37438 },
         ]
-        "###
+        "#
         );
     });
 
@@ -26369,6 +26530,87 @@ fn lock_empty_extra() -> Result<()> {
         "###
         );
     });
+
+    Ok(())
+}
+
+/// The fork markers in the lockfile don't cover the supported environments (here: universal). We
+/// need to discard the lockfile.
+#[test]
+fn lock_invalid_fork_markers() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "attrs"
+        requires-python = ">=3.8"
+        version = "1.0.0"
+
+        [dependency-groups]
+        dev = ["idna"]
+        "#,
+    )?;
+
+    context.temp_dir.child("uv.lock").write_str(
+        r#"
+        version = 1
+        requires-python = ">=3.8"
+        resolution-markers = [
+            "python_full_version >= '3.10' and platform_python_implementation == 'CPython'",
+            "python_full_version == '3.9.*'",
+            "python_full_version < '3.9'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "attrs"
+        version = "1.0.0"
+        source = { editable = "." }
+
+        [package.dev-dependencies]
+        dev = [
+            { name = "idna", marker = "python_full_version < '3.10' or platform_python_implementation == 'CPython'" },
+        ]
+
+        [package.metadata]
+
+        [package.metadata.requires-dev]
+        dev = [{ name = "idna" }]
+
+        [[package]]
+        name = "idna"
+        version = "3.10"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/f1/70/7703c29685631f5a7590aa73f1f1d3fa9a380e654b86af429e0934a32f7d/idna-3.10.tar.gz", hash = "sha256:12f65c9b470abda6dc35cf8e63cc574b1c52b11df2c86030af0ac09b01b13ea9", size = 190490 }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/76/c6/c88e154df9c4e1a2a66ccf0005a88dfb2650c1dffb6f5ce603dfbd452ce3/idna-3.10-py3-none-any.whl", hash = "sha256:946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3", size = 70442 },
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Ignoring existing lockfile due to fork markers not covering the supported environments: `(python_full_version >= '3.8' and python_full_version < '3.10') or (python_full_version >= '3.8' and platform_python_implementation == 'CPython')` vs `python_full_version >= '3.8'`
+    Resolved 2 packages in [TIME]
+    Updated idna v3.10 -> v3.6
+    "###);
+
+    // Check that the lockfile got updated and we don't show the warning anymore.
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    "###);
 
     Ok(())
 }

@@ -281,7 +281,7 @@ impl InstalledDist {
     }
 
     /// Return the [`Path`] at which the distribution is stored on-disk.
-    pub fn path(&self) -> &Path {
+    pub fn install_path(&self) -> &Path {
         match self {
             Self::Registry(dist) => &dist.path,
             Self::Url(dist) => &dist.path,
@@ -332,7 +332,7 @@ impl InstalledDist {
     pub fn metadata(&self) -> Result<uv_pypi_types::ResolutionMetadata, InstalledDistError> {
         match self {
             Self::Registry(_) | Self::Url(_) => {
-                let path = self.path().join("METADATA");
+                let path = self.install_path().join("METADATA");
                 let contents = fs::read(&path)?;
                 // TODO(zanieb): Update this to use thiserror so we can unpack parse errors downstream
                 uv_pypi_types::ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
@@ -362,7 +362,7 @@ impl InstalledDist {
 
     /// Return the `INSTALLER` of the distribution.
     pub fn installer(&self) -> Result<Option<String>, InstalledDistError> {
-        let path = self.path().join("INSTALLER");
+        let path = self.install_path().join("INSTALLER");
         match fs::read_to_string(path) {
             Ok(installer) => Ok(Some(installer)),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),

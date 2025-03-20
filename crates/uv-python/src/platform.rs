@@ -126,6 +126,10 @@ impl Arch {
     pub fn family(&self) -> target_lexicon::Architecture {
         self.family
     }
+
+    pub fn is_arm(&self) -> bool {
+        matches!(self.family, target_lexicon::Architecture::Arm(_))
+    }
 }
 
 impl Display for Libc {

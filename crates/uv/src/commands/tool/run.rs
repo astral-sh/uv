@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::path::Path;
@@ -34,6 +35,7 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
+use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
@@ -165,6 +167,7 @@ pub(crate) async fn run(
         && invocation_source == ToolRunCommand::Uvx
         && target == "run"
         && settings
+            .resolver
             .index_locations
             .indexes()
             .all(|index| matches!(index.url, IndexUrl::Pypi(..)))
@@ -260,7 +263,12 @@ pub(crate) async fn run(
     let executable = from.executable();
 
     // Construct the command
-    let mut process = Command::new(executable);
+    let mut process = if cfg!(windows) {
+        WindowsRunnable::from_script_path(environment.scripts(), executable.as_ref()).into()
+    } else {
+        Command::new(executable)
+    };
+
     process.args(args);
 
     // Construct the `PATH` environment variable.
@@ -743,9 +751,14 @@ async fn get_or_create_environment(
     };
 
     // Read the `--with` requirements.
-    let spec =
-        RequirementsSpecification::from_sources(with, constraints, overrides, &client_builder)
-            .await?;
+    let spec = RequirementsSpecification::from_sources(
+        with,
+        constraints,
+        overrides,
+        BTreeMap::default(),
+        &client_builder,
+    )
+    .await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {

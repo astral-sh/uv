@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
@@ -26,7 +27,10 @@ use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLeve
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
 use uv_fs::{Simplified, CWD};
+use uv_pep508::VersionOrUrl;
+use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_requirements::RequirementsSource;
+use uv_requirements_txt::RequirementsTxtRequirement;
 use uv_scripts::{Pep723Error, Pep723Item, Pep723ItemRef, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_static::EnvVars;
@@ -417,6 +421,20 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
 
+            let mut groups = BTreeMap::new();
+            for group in args.settings.groups {
+                // If there's no path provided, expect a pyproject.toml in the project-dir
+                // (Which is typically the current working directory, matching pip's behaviour)
+                let pyproject_path = group
+                    .path
+                    .clone()
+                    .unwrap_or_else(|| project_dir.join("pyproject.toml"));
+                groups
+                    .entry(pyproject_path)
+                    .or_insert_with(Vec::new)
+                    .push(group.name.clone());
+            }
+
             commands::pip_compile(
                 &requirements,
                 &constraints,
@@ -427,7 +445,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.build_constraints_from_workspace,
                 args.environments,
                 args.settings.extras,
-                args.settings.groups,
+                groups,
                 args.settings.output_file.as_deref(),
                 args.settings.resolution,
                 args.settings.prerelease,
@@ -448,6 +466,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.emit_index_annotation,
                 args.settings.index_locations,
                 args.settings.index_strategy,
+                args.settings.torch_backend,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
                 &globals.network_settings,
@@ -515,6 +534,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.hash_checking,
                 args.settings.index_locations,
                 args.settings.index_strategy,
+                args.settings.torch_backend,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
                 &globals.network_settings,
@@ -549,23 +569,18 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = PipInstallSettings::resolve(args, filesystem);
+            let mut args = PipInstallSettings::resolve(args, filesystem);
             show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
-                args.refresh
-                    .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
-            );
 
             let mut requirements = Vec::with_capacity(
                 args.package.len() + args.editables.len() + args.requirements.len(),
             );
             for package in args.package {
-                requirements.push(RequirementsSource::from_package(package)?);
+                requirements.push(RequirementsSource::from_package_argument(&package)?);
             }
-            requirements.extend(args.editables.into_iter().map(RequirementsSource::Editable));
+            for package in args.editables {
+                requirements.push(RequirementsSource::from_editable(&package)?);
+            }
             requirements.extend(
                 args.requirements
                     .into_iter()
@@ -587,6 +602,69 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
 
+            let mut groups = BTreeMap::new();
+            for group in args.settings.groups {
+                // If there's no path provided, expect a pyproject.toml in the project-dir
+                // (Which is typically the current working directory, matching pip's behaviour)
+                let pyproject_path = group
+                    .path
+                    .clone()
+                    .unwrap_or_else(|| project_dir.join("pyproject.toml"));
+                groups
+                    .entry(pyproject_path)
+                    .or_insert_with(Vec::new)
+                    .push(group.name.clone());
+            }
+
+            // Special-case: any source trees specified on the command-line are automatically
+            // reinstalled. This matches user expectations: `uv pip install .` should always
+            // re-build and re-install the package in the current working directory.
+            for requirement in &requirements {
+                let requirement = match requirement {
+                    RequirementsSource::Package(requirement) => requirement,
+                    RequirementsSource::Editable(requirement) => requirement,
+                    _ => continue,
+                };
+                match requirement {
+                    RequirementsTxtRequirement::Named(requirement) => {
+                        if let Some(VersionOrUrl::Url(url)) = requirement.version_or_url.as_ref() {
+                            if let ParsedUrl::Directory(ParsedDirectoryUrl {
+                                install_path, ..
+                            }) = &url.parsed_url
+                            {
+                                debug!(
+                                    "Marking explicit source tree for reinstall: `{}`",
+                                    install_path.display()
+                                );
+                                args.settings.reinstall = args
+                                    .settings
+                                    .reinstall
+                                    .with_package(requirement.name.clone());
+                            }
+                        }
+                    }
+                    RequirementsTxtRequirement::Unnamed(requirement) => {
+                        if let ParsedUrl::Directory(ParsedDirectoryUrl { install_path, .. }) =
+                            &requirement.url.parsed_url
+                        {
+                            debug!(
+                                "Marking explicit source tree for reinstall: `{}`",
+                                install_path.display()
+                            );
+                            args.settings.reinstall =
+                                args.settings.reinstall.with_path(install_path.clone());
+                        }
+                    }
+                }
+            }
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
+
             commands::pip_install(
                 &requirements,
                 &constraints,
@@ -596,13 +674,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.overrides_from_workspace,
                 args.build_constraints_from_workspace,
                 &args.settings.extras,
-                &args.settings.groups,
+                groups,
                 args.settings.resolution,
                 args.settings.prerelease,
                 args.settings.dependency_mode,
                 args.settings.upgrade,
                 args.settings.index_locations,
                 args.settings.index_strategy,
+                args.settings.torch_backend,
                 args.settings.dependency_metadata,
                 args.settings.keyring_provider,
                 &globals.network_settings,
@@ -647,7 +726,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             let mut sources = Vec::with_capacity(args.package.len() + args.requirements.len());
             for package in args.package {
-                sources.push(RequirementsSource::from_package(package)?);
+                sources.push(RequirementsSource::from_package_argument(&package)?);
             }
             sources.extend(
                 args.requirements
@@ -842,7 +921,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.hash_checking,
                 args.python,
                 args.install_mirrors,
-                args.settings,
+                &args.settings,
                 &globals.network_settings,
                 cli.top_level.no_config,
                 globals.python_preference,
@@ -992,7 +1071,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
             let requirements = {
@@ -1000,13 +1079,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     args.with.len() + args.with_editable.len() + args.with_requirements.len(),
                 );
                 for package in args.with {
-                    requirements.push(RequirementsSource::from_with_package(package)?);
+                    requirements.push(RequirementsSource::from_with_package_argument(&package)?);
                 }
-                requirements.extend(
-                    args.with_editable
-                        .into_iter()
-                        .map(RequirementsSource::Editable),
-                );
+                for package in args.with_editable {
+                    requirements.push(RequirementsSource::from_editable(&package)?);
+                }
                 requirements.extend(
                     args.with_requirements
                         .into_iter()
@@ -1060,20 +1137,18 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let cache = cache.init()?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
             let mut requirements = Vec::with_capacity(
                 args.with.len() + args.with_editable.len() + args.with_requirements.len(),
             );
             for package in args.with {
-                requirements.push(RequirementsSource::from_with_package(package)?);
+                requirements.push(RequirementsSource::from_with_package_argument(&package)?);
             }
-            requirements.extend(
-                args.with_editable
-                    .into_iter()
-                    .map(RequirementsSource::Editable),
-            );
+            for package in args.with_editable {
+                requirements.push(RequirementsSource::from_editable(&package)?);
+            }
             requirements.extend(
                 args.with_requirements
                     .into_iter()
@@ -1296,6 +1371,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.resolved,
                 globals.python_preference,
                 args.no_project,
+                args.global,
                 &cache,
                 printer,
             )
@@ -1495,20 +1571,18 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
             let mut requirements = Vec::with_capacity(
                 args.with.len() + args.with_editable.len() + args.with_requirements.len(),
             );
             for package in args.with {
-                requirements.push(RequirementsSource::from_with_package(package)?);
+                requirements.push(RequirementsSource::from_with_package_argument(&package)?);
             }
-            requirements.extend(
-                args.with_editable
-                    .into_iter()
-                    .map(RequirementsSource::Editable),
-            );
+            for package in args.with_editable {
+                requirements.push(RequirementsSource::from_editable(&package)?);
+            }
             requirements.extend(
                 args.with_requirements
                     .into_iter()
@@ -1560,7 +1634,7 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
             // Unwrap the script.
@@ -1652,7 +1726,7 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
             // If the script already exists, use it; otherwise, propagate the file path and we'll
@@ -1670,13 +1744,20 @@ async fn run_project(
 
             let requirements = args
                 .packages
-                .into_iter()
-                .map(RequirementsSource::Package)
+                .iter()
+                .map(String::as_str)
+                .map(RequirementsSource::from_package_argument)
                 .chain(
                     args.requirements
                         .into_iter()
-                        .map(RequirementsSource::from_requirements_file),
+                        .map(RequirementsSource::from_requirements_file)
+                        .map(Ok),
                 )
+                .collect::<Result<Vec<_>>>()?;
+            let constraints = args
+                .constraints
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
                 .collect::<Vec<_>>();
 
             Box::pin(commands::add(
@@ -1686,6 +1767,8 @@ async fn run_project(
                 args.active,
                 args.no_sync,
                 requirements,
+                constraints,
+                args.marker,
                 args.editable,
                 args.dependency_type,
                 args.raw_sources,
@@ -1720,7 +1803,7 @@ async fn run_project(
             let cache = cache.init()?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.upgrade.clone())),
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
             // Unwrap the script.

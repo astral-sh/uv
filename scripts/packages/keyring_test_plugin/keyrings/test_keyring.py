@@ -2,7 +2,7 @@ import json
 import os
 import sys
 
-from keyring import backend
+from keyring import backend, credentials
 
 
 class KeyringTest(backend.KeyringBackend):
@@ -10,8 +10,8 @@ class KeyringTest(backend.KeyringBackend):
 
     def get_password(self, service, username):
         print(f"Request for {username}@{service}", file=sys.stderr)
-        credentials = json.loads(os.environ.get("KEYRING_TEST_CREDENTIALS", "{}"))
-        return credentials.get(service, {}).get(username)
+        entries = json.loads(os.environ.get("KEYRING_TEST_CREDENTIALS", "{}"))
+        return entries.get(service, {}).get(username)
 
     def set_password(self, service, username, password):
         raise NotImplementedError()
@@ -20,4 +20,15 @@ class KeyringTest(backend.KeyringBackend):
         raise NotImplementedError()
 
     def get_credential(self, service, username):
-        raise NotImplementedError()
+        print(f"Request for {service}", file=sys.stderr)
+        entries = json.loads(os.environ.get("KEYRING_TEST_CREDENTIALS", "{}"))
+        service_entries = entries.get(service, {})
+        if not service_entries:
+            return None
+        if username:
+            password = service_entries.get(username)
+            if not password:
+                return None
+            return credentials.SimpleCredential(username, password)
+        else:
+            return credentials.SimpleCredential(*list(service_entries.items())[0])

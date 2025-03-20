@@ -20,7 +20,7 @@ use uv_distribution_types::{
 };
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
-use uv_normalize::PackageName;
+use uv_normalize::{DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -36,7 +36,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, 
 use crate::commands::pip::operations;
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::install_target::InstallTarget;
-use crate::commands::project::lock::{do_safe_lock, LockMode, LockResult};
+use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, detect_conflicts, script_specification, update_environment,
@@ -117,7 +117,7 @@ pub(crate) async fn sync(
     // Determine the default groups to include.
     let defaults = match &target {
         SyncTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
-        SyncTarget::Script(..) => Vec::new(),
+        SyncTarget::Script(..) => DefaultGroups::default(),
     };
 
     // Discover or create the virtual environment.
@@ -274,9 +274,8 @@ pub(crate) async fn sync(
                 ));
             }
 
-            let spec =
-                script_specification(Pep723ItemRef::Script(script), settings.as_ref().into())?
-                    .unwrap_or_default();
+            let spec = script_specification(Pep723ItemRef::Script(script), &settings.resolver)?
+                .unwrap_or_default();
             match update_environment(
                 Deref::deref(&environment).clone(),
                 spec,
@@ -328,10 +327,9 @@ pub(crate) async fn sync(
         SyncTarget::Script(script) => LockTarget::from(script),
     };
 
-    let lock = match do_safe_lock(
+    let lock = match LockOperation::new(
         mode,
-        lock_target,
-        settings.as_ref().into(),
+        &settings.resolver,
         &network_settings,
         &state,
         Box::new(DefaultResolveLogger),
@@ -340,6 +338,7 @@ pub(crate) async fn sync(
         printer,
         preview,
     )
+    .execute(lock_target)
     .await
     {
         Ok(result) => {
@@ -454,7 +453,7 @@ pub(crate) async fn sync(
         editable,
         install_options,
         modifications,
-        settings.as_ref().into(),
+        (&settings).into(),
         &network_settings,
         &state,
         Box::new(DefaultInstallLogger),

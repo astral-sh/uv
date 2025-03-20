@@ -32,6 +32,14 @@ impl BuildableSource<'_> {
         }
     }
 
+    /// Return the source tree of the source, if available.
+    pub fn source_tree(&self) -> Option<&Path> {
+        match self {
+            Self::Dist(dist) => dist.source_tree(),
+            Self::Url(url) => url.source_tree(),
+        }
+    }
+
     /// Return the [`Version`] of the source, if available.
     pub fn version(&self) -> Option<&Version> {
         match self {
@@ -101,6 +109,14 @@ impl SourceUrl<'_> {
             Self::Git(dist) => dist.url,
             Self::Path(dist) => dist.url,
             Self::Directory(dist) => dist.url,
+        }
+    }
+
+    /// Return the source tree of the source, if available.
+    pub fn source_tree(&self) -> Option<&Path> {
+        match self {
+            Self::Directory(dist) => Some(&dist.install_path),
+            _ => None,
         }
     }
 

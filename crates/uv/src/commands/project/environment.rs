@@ -47,7 +47,7 @@ impl CachedEnvironment {
             resolve_environment(
                 spec,
                 &interpreter,
-                settings.as_ref().into(),
+                &settings.resolver,
                 network_settings,
                 state,
                 resolve,
@@ -99,7 +99,7 @@ impl CachedEnvironment {
             venv,
             &resolution,
             Modifications::Exact,
-            settings.as_ref().into(),
+            settings.into(),
             network_settings,
             state,
             install,

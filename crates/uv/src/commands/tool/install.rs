@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
 
@@ -34,7 +35,7 @@ use crate::commands::tool::{Target, ToolRequest};
 use crate::commands::ExitStatus;
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverInstallerSettings};
+use crate::settings::{NetworkSettings, ResolverInstallerSettings, ResolverSettings};
 
 /// Install a tool.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -108,9 +109,9 @@ pub(crate) async fn install(
         // Ex) `ruff`
         Target::Unspecified(from) => {
             let source = if editable {
-                RequirementsSource::Editable((*from).to_string())
+                RequirementsSource::from_editable(from)?
             } else {
-                RequirementsSource::Package((*from).to_string())
+                RequirementsSource::from_package(from)?
             };
             let requirement = RequirementsSpecification::from_source(&source, &client_builder)
                 .await?
@@ -208,9 +209,13 @@ pub(crate) async fn install(
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
     let settings = if request.is_latest() {
         ResolverInstallerSettings {
-            upgrade: settings
-                .upgrade
-                .combine(Upgrade::package(from.name.clone())),
+            resolver: ResolverSettings {
+                upgrade: settings
+                    .resolver
+                    .upgrade
+                    .combine(Upgrade::package(from.name.clone())),
+                ..settings.resolver
+            },
             ..settings
         }
     } else {
@@ -230,9 +235,14 @@ pub(crate) async fn install(
     };
 
     // Read the `--with` requirements.
-    let spec =
-        RequirementsSpecification::from_sources(with, constraints, overrides, &client_builder)
-            .await?;
+    let spec = RequirementsSpecification::from_sources(
+        with,
+        constraints,
+        overrides,
+        BTreeMap::default(),
+        &client_builder,
+    )
+    .await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -340,7 +350,9 @@ pub(crate) async fn install(
         .as_ref()
         .filter(|_| {
             // And the user didn't request a reinstall or upgrade...
-            !request.is_latest() && settings.reinstall.is_none() && settings.upgrade.is_none()
+            !request.is_latest()
+                && settings.reinstall.is_none()
+                && settings.resolver.upgrade.is_none()
         })
         .is_some()
     {
@@ -435,7 +447,7 @@ pub(crate) async fn install(
         let resolution = resolve_environment(
             spec.clone(),
             &interpreter,
-            settings.as_ref().into(),
+            &settings.resolver,
             &network_settings,
             &state,
             Box::new(DefaultResolveLogger),
@@ -487,7 +499,7 @@ pub(crate) async fn install(
                     match resolve_environment(
                         spec,
                         &interpreter,
-                        settings.as_ref().into(),
+                        &settings.resolver,
                         &network_settings,
                         &state,
                         Box::new(DefaultResolveLogger),
@@ -526,7 +538,7 @@ pub(crate) async fn install(
             environment,
             &resolution.into(),
             Modifications::Exact,
-            settings.as_ref().into(),
+            (&settings).into(),
             &network_settings,
             &state,
             Box::new(DefaultInstallLogger),

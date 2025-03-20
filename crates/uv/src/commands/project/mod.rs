@@ -13,8 +13,8 @@ use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun,
-    ExtrasSpecification, PreviewMode, Reinstall, SourceStrategy, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    PreviewMode, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredRequirement};
@@ -24,7 +24,7 @@ use uv_distribution_types::{
 use uv_fs::{LockedFile, Simplified, CWD};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts, Requirement};
@@ -54,7 +54,7 @@ use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{capitalize, conjunction, pip};
 use crate::printer::Printer;
 use crate::settings::{
-    InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings, ResolverSettingsRef,
+    InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings, ResolverSettings,
 };
 
 pub(crate) mod add;
@@ -1504,23 +1504,26 @@ pub(crate) async fn resolve_names(
 
     // Extract the project settings.
     let ResolverInstallerSettings {
-        index_locations,
-        index_strategy,
-        keyring_provider,
-        resolution: _,
-        prerelease: _,
-        fork_strategy: _,
-        dependency_metadata,
-        config_setting,
-        no_build_isolation,
-        no_build_isolation_package,
-        exclude_newer,
-        link_mode,
+        resolver:
+            ResolverSettings {
+                build_options,
+                config_setting,
+                dependency_metadata,
+                exclude_newer,
+                fork_strategy: _,
+                index_locations,
+                index_strategy,
+                keyring_provider,
+                link_mode,
+                no_build_isolation,
+                no_build_isolation_package,
+                prerelease: _,
+                resolution: _,
+                sources,
+                upgrade: _,
+            },
         compile_bytecode: _,
-        sources,
-        upgrade: _,
         reinstall: _,
-        build_options,
     } = settings;
 
     // Add all authenticated sources to the cache.
@@ -1632,7 +1635,7 @@ impl<'lock> EnvironmentSpecification<'lock> {
 pub(crate) async fn resolve_environment(
     spec: EnvironmentSpecification<'_>,
     interpreter: &Interpreter,
-    settings: ResolverSettingsRef<'_>,
+    settings: &ResolverSettings,
     network_settings: &NetworkSettings,
     state: &PlatformState,
     logger: Box<dyn ResolveLogger>,
@@ -1643,7 +1646,7 @@ pub(crate) async fn resolve_environment(
 ) -> Result<ResolverOutput, ProjectError> {
     warn_on_requirements_txt_setting(&spec.requirements, settings);
 
-    let ResolverSettingsRef {
+    let ResolverSettings {
         index_locations,
         index_strategy,
         keyring_provider,
@@ -1694,15 +1697,15 @@ pub(crate) async fn resolve_environment(
         .allow_insecure_host(network_settings.allow_insecure_host.clone())
         .url_auth_policies(UrlAuthPolicies::from(index_locations))
         .index_urls(index_locations.index_urls())
-        .index_strategy(index_strategy)
-        .keyring(keyring_provider)
+        .index_strategy(*index_strategy)
+        .keyring(*keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
 
     // Determine whether to enable build isolation.
     let environment;
-    let build_isolation = if no_build_isolation {
+    let build_isolation = if *no_build_isolation {
         environment = PythonEnvironment::from_interpreter(interpreter.clone());
         BuildIsolation::Shared(&environment)
     } else if no_build_isolation_package.is_empty() {
@@ -1713,18 +1716,18 @@ pub(crate) async fn resolve_environment(
     };
 
     let options = OptionsBuilder::new()
-        .resolution_mode(resolution)
-        .prerelease_mode(prerelease)
-        .fork_strategy(fork_strategy)
-        .exclude_newer(exclude_newer)
-        .index_strategy(index_strategy)
+        .resolution_mode(*resolution)
+        .prerelease_mode(*prerelease)
+        .fork_strategy(*fork_strategy)
+        .exclude_newer(*exclude_newer)
+        .index_strategy(*index_strategy)
         .build_options(build_options.clone())
         .build();
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let extras = ExtrasSpecification::default();
-    let groups = DependencyGroups::default();
+    let groups = BTreeMap::new();
     let hasher = HashStrategy::default();
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
@@ -1768,14 +1771,14 @@ pub(crate) async fn resolve_environment(
         &flat_index,
         dependency_metadata,
         state.clone().into_inner(),
-        index_strategy,
+        *index_strategy,
         config_setting,
         build_isolation,
-        link_mode,
+        *link_mode,
         build_options,
         &build_hasher,
-        exclude_newer,
-        sources,
+        *exclude_newer,
+        *sources,
         workspace_cache,
         concurrency,
         preview,
@@ -1988,26 +1991,29 @@ pub(crate) async fn update_environment(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<EnvironmentUpdate, ProjectError> {
-    warn_on_requirements_txt_setting(&spec, settings.as_ref().into());
+    warn_on_requirements_txt_setting(&spec, &settings.resolver);
 
     let ResolverInstallerSettings {
-        index_locations,
-        index_strategy,
-        keyring_provider,
-        resolution,
-        prerelease,
-        fork_strategy,
-        dependency_metadata,
-        config_setting,
-        no_build_isolation,
-        no_build_isolation_package,
-        exclude_newer,
-        link_mode,
+        resolver:
+            ResolverSettings {
+                build_options,
+                config_setting,
+                dependency_metadata,
+                exclude_newer,
+                fork_strategy,
+                index_locations,
+                index_strategy,
+                keyring_provider,
+                link_mode,
+                no_build_isolation,
+                no_build_isolation_package,
+                prerelease,
+                resolution,
+                sources,
+                upgrade,
+            },
         compile_bytecode,
-        sources,
-        upgrade,
         reinstall,
-        build_options,
     } = settings;
 
     // Respect all requirements from the provided sources.
@@ -2026,7 +2032,11 @@ pub(crate) async fn update_environment(
 
     // Check if the current environment satisfies the requirements
     let site_packages = SitePackages::from_environment(&venv)?;
-    if source_trees.is_empty() && reinstall.is_none() && upgrade.is_none() {
+    if reinstall.is_none()
+        && upgrade.is_none()
+        && source_trees.is_empty()
+        && matches!(modifications, Modifications::Sufficient)
+    {
         match site_packages.satisfies_spec(&requirements, &constraints, &overrides, &marker_env)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
@@ -2102,7 +2112,7 @@ pub(crate) async fn update_environment(
     let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
-    let groups = DependencyGroups::default();
+    let groups = BTreeMap::new();
     let hasher = HashStrategy::default();
     let preferences = Vec::default();
 
@@ -2266,24 +2276,26 @@ pub(crate) async fn init_script_python_requirement(
 #[allow(clippy::result_large_err)]
 pub(crate) fn default_dependency_groups(
     pyproject_toml: &PyProjectToml,
-) -> Result<Vec<GroupName>, ProjectError> {
+) -> Result<DefaultGroups, ProjectError> {
     if let Some(defaults) = pyproject_toml
         .tool
         .as_ref()
         .and_then(|tool| tool.uv.as_ref().and_then(|uv| uv.default_groups.as_ref()))
     {
-        for group in defaults {
-            if !pyproject_toml
-                .dependency_groups
-                .as_ref()
-                .is_some_and(|groups| groups.contains_key(group))
-            {
-                return Err(ProjectError::MissingDefaultGroup(group.clone()));
+        if let DefaultGroups::List(defaults) = defaults {
+            for group in defaults {
+                if !pyproject_toml
+                    .dependency_groups
+                    .as_ref()
+                    .is_some_and(|groups| groups.contains_key(group))
+                {
+                    return Err(ProjectError::MissingDefaultGroup(group.clone()));
+                }
             }
         }
         Ok(defaults.clone())
     } else {
-        Ok(vec![DEV_DEPENDENCIES.clone()])
+        Ok(DefaultGroups::List(vec![DEV_DEPENDENCIES.clone()]))
     }
 }
 
@@ -2333,7 +2345,7 @@ pub(crate) fn detect_conflicts(
 #[allow(clippy::result_large_err)]
 pub(crate) fn script_specification(
     script: Pep723ItemRef<'_>,
-    settings: ResolverSettingsRef,
+    settings: &ResolverSettings,
 ) -> Result<Option<RequirementsSpecification>, ProjectError> {
     let Some(dependencies) = script.metadata().dependencies.as_ref() else {
         return Ok(None);
@@ -2383,7 +2395,7 @@ pub(crate) fn script_specification(
                 script_dir.as_ref(),
                 script_sources,
                 script_indexes,
-                settings.index_locations,
+                &settings.index_locations,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2403,7 +2415,7 @@ pub(crate) fn script_specification(
                 script_dir.as_ref(),
                 script_sources,
                 script_indexes,
-                settings.index_locations,
+                &settings.index_locations,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2423,7 +2435,7 @@ pub(crate) fn script_specification(
                 script_dir.as_ref(),
                 script_sources,
                 script_indexes,
-                settings.index_locations,
+                &settings.index_locations,
             )
             .map_ok(LoweredRequirement::into_inner)
         })
@@ -2437,10 +2449,7 @@ pub(crate) fn script_specification(
 }
 
 /// Warn if the user provides (e.g.) an `--index-url` in a requirements file.
-fn warn_on_requirements_txt_setting(
-    spec: &RequirementsSpecification,
-    settings: ResolverSettingsRef<'_>,
-) {
+fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: &ResolverSettings) {
     let RequirementsSpecification {
         index_url,
         extra_index_urls,

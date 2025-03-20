@@ -140,9 +140,14 @@ impl EnvVars {
     /// exclude distributions published after the specified date.
     pub const UV_EXCLUDE_NEWER: &'static str = "UV_EXCLUDE_NEWER";
 
-    /// Equivalent to the `--python-preference` command-line argument. Whether uv
-    /// should prefer system or managed Python versions.
+    /// Whether uv should prefer system or managed Python versions.
     pub const UV_PYTHON_PREFERENCE: &'static str = "UV_PYTHON_PREFERENCE";
+
+    /// Require use of uv-managed Python versions.
+    pub const UV_MANAGED_PYTHON: &'static str = "UV_MANAGED_PYTHON";
+
+    /// Disable use of uv-managed Python versions.
+    pub const UV_NO_MANAGED_PYTHON: &'static str = "UV_NO_MANAGED_PYTHON";
 
     /// Equivalent to the
     /// [`python-downloads`](../reference/settings.md#python-downloads) setting and, when disabled, the
@@ -346,6 +351,12 @@ impl EnvVars {
 
     /// Path to system-level configuration directory on Windows systems.
     pub const SYSTEMDRIVE: &'static str = "SYSTEMDRIVE";
+
+    /// Path to user-level configuration directory on Windows systems.
+    pub const APPDATA: &'static str = "APPDATA";
+
+    /// Path to root directory of user's profile on Windows systems.
+    pub const USERPROFILE: &'static str = "USERPROFILE";
 
     /// Path to user-level configuration directory on Unix systems.
     pub const XDG_CONFIG_HOME: &'static str = "XDG_CONFIG_HOME";
@@ -665,6 +676,13 @@ impl EnvVars {
 
     /// Overrides terminal width used for wrapping. This variable is not read by uv directly.
     ///
-    /// This is a quasi-standard variable, described e.g. in `ncurses(3x)`.
+    /// This is a quasi-standard variable, described, e.g., in `ncurses(3x)`.
     pub const COLUMNS: &'static str = "COLUMNS";
+
+    /// The CUDA driver version to assume when inferring the PyTorch backend.
+    #[attr_hidden]
+    pub const UV_CUDA_DRIVER_VERSION: &'static str = "UV_CUDA_DRIVER_VERSION";
+
+    /// Equivalent to the `--torch-backend` command-line argument (e.g., `cpu`, `cu126`, or `auto`).
+    pub const UV_TORCH_BACKEND: &'static str = "UV_TORCH_BACKEND";
 }

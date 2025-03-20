@@ -1332,7 +1332,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// apply it in two cases:
     ///
     /// 1. Local versions, where the non-local version has greater platform coverage. The intent is
-    ///    such that, if we're resolving `PyTorch`, and we choose `torch==2.5.2+cpu`, we want to
+    ///    such that, if we're resolving PyTorch, and we choose `torch==2.5.2+cpu`, we want to
     ///    fork so that we can select `torch==2.5.2` on macOS (since the `+cpu` variant doesn't
     ///    include any macOS wheels).
     /// 2. Platforms that the user explicitly marks as "required" (opt-in). For example, the user
