@@ -19,15 +19,14 @@ use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution_types::{
-    IndexUrl, Name, NameRequirementSpecification, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    IndexUrl, Name, NameRequirementSpecification, Requirement, RequirementSource,
+    UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{Requirement, RequirementSource};
 use uv_python::VersionRequest;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,

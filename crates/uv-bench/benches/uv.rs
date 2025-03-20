@@ -4,7 +4,7 @@ use uv_bench::criterion::black_box;
 use uv_bench::criterion::{criterion_group, criterion_main, measurement::WallTime, Criterion};
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
-use uv_pypi_types::Requirement;
+use uv_distribution_types::Requirement;
 use uv_python::PythonEnvironment;
 use uv_resolver::Manifest;
 

@@ -7,8 +7,7 @@ use tracing::trace;
 
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
-use uv_distribution_types::{Dist, DistributionMetadata};
-use uv_pypi_types::{Requirement, RequirementSource};
+use uv_distribution_types::{Dist, DistributionMetadata, Requirement, RequirementSource};
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 

@@ -5,7 +5,7 @@ use std::slice;
 use rustc_hash::FxHashSet;
 
 use uv_configuration::SourceStrategy;
-use uv_distribution_types::IndexLocations;
+use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep508::MarkerTree;
 use uv_workspace::dependency_groups::FlatDependencyGroups;
@@ -18,9 +18,9 @@ use crate::Metadata;
 #[derive(Debug, Clone)]
 pub struct RequiresDist {
     pub name: PackageName,
-    pub requires_dist: Vec<uv_pypi_types::Requirement>,
+    pub requires_dist: Vec<Requirement>,
     pub provides_extras: Vec<ExtraName>,
-    pub dependency_groups: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
+    pub dependency_groups: BTreeMap<GroupName, Vec<Requirement>>,
     pub dynamic: bool,
 }
 
@@ -33,7 +33,7 @@ impl RequiresDist {
             requires_dist: metadata
                 .requires_dist
                 .into_iter()
-                .map(uv_pypi_types::Requirement::from)
+                .map(Requirement::from)
                 .collect(),
             provides_extras: metadata.provides_extras,
             dependency_groups: BTreeMap::default(),
@@ -186,15 +186,11 @@ impl RequiresDist {
                             )
                         })
                         .collect::<Result<Vec<_>, _>>(),
-                    SourceStrategy::Disabled => Ok(requirements
-                        .into_iter()
-                        .map(uv_pypi_types::Requirement::from)
-                        .collect()),
+                    SourceStrategy::Disabled => {
+                        Ok(requirements.into_iter().map(Requirement::from).collect())
+                    }
                 }?;
-                Ok::<(GroupName, Vec<uv_pypi_types::Requirement>), MetadataError>((
-                    name,
-                    requirements,
-                ))
+                Ok::<(GroupName, Vec<Requirement>), MetadataError>((name, requirements))
             })
             .collect::<Result<BTreeMap<_, _>, _>>()?;
 
@@ -227,10 +223,7 @@ impl RequiresDist {
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?,
-            SourceStrategy::Disabled => requires_dist
-                .into_iter()
-                .map(uv_pypi_types::Requirement::from)
-                .collect(),
+            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
         };
 
         Ok(Self {
@@ -360,14 +353,11 @@ impl From<Metadata> for RequiresDist {
 /// The [`FlatRequiresDist`] struct is used to flatten out the recursive dependencies, i.e., convert
 /// from the former to the latter.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FlatRequiresDist(Vec<uv_pypi_types::Requirement>);
+pub struct FlatRequiresDist(Vec<Requirement>);
 
 impl FlatRequiresDist {
     /// Flatten a set of requirements, resolving any self-references.
-    pub fn from_requirements(
-        requirements: Vec<uv_pypi_types::Requirement>,
-        name: &PackageName,
-    ) -> Self {
+    pub fn from_requirements(requirements: Vec<Requirement>, name: &PackageName) -> Self {
         // If there are no self-references, we can return early.
         if requirements.iter().all(|req| req.name != *name) {
             return Self(requirements);
@@ -400,7 +390,7 @@ impl FlatRequiresDist {
                 let requirement = {
                     let mut marker = marker;
                     marker.and(requirement.marker);
-                    uv_pypi_types::Requirement {
+                    Requirement {
                         name: requirement.name.clone(),
                         extras: requirement.extras.clone(),
                         groups: requirement.groups.clone(),
@@ -434,7 +424,7 @@ impl FlatRequiresDist {
         for req in &requirements {
             if req.name == *name {
                 if !req.source.is_empty() {
-                    flattened.push(uv_pypi_types::Requirement {
+                    flattened.push(Requirement {
                         name: req.name.clone(),
                         extras: vec![],
                         groups: req.groups.clone(),
@@ -450,14 +440,14 @@ impl FlatRequiresDist {
     }
 
     /// Consume the [`FlatRequiresDist`] and return the inner vector.
-    pub fn into_inner(self) -> Vec<uv_pypi_types::Requirement> {
+    pub fn into_inner(self) -> Vec<Requirement> {
         self.0
     }
 }
 
 impl IntoIterator for FlatRequiresDist {
-    type Item = uv_pypi_types::Requirement;
-    type IntoIter = std::vec::IntoIter<uv_pypi_types::Requirement>;
+    type Item = Requirement;
+    type IntoIter = std::vec::IntoIter<Requirement>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()

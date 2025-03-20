@@ -23,14 +23,15 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
-    Index, IndexName, IndexUrls, NameRequirementSpecification, UnresolvedRequirement, VersionId,
+    redact_credentials, Index, IndexName, IndexUrls, NameRequirementSpecification, Requirement,
+    RequirementSource, UnresolvedRequirement, VersionId,
 };
 use uv_fs::Simplified;
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
 use uv_normalize::{DefaultGroups, PackageName, DEV_DEPENDENCIES};
-use uv_pep508::{ExtraName, MarkerTree, Requirement, UnnamedRequirement, VersionOrUrl};
-use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
+use uv_pep508::{ExtraName, MarkerTree, UnnamedRequirement, VersionOrUrl};
+use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
@@ -928,7 +929,7 @@ fn augment_requirement(
 ) -> UnresolvedRequirement {
     match requirement {
         UnresolvedRequirement::Named(mut requirement) => {
-            UnresolvedRequirement::Named(uv_pypi_types::Requirement {
+            UnresolvedRequirement::Named(Requirement {
                 marker: marker
                     .map(|marker| {
                         requirement.marker.and(marker);
@@ -996,7 +997,7 @@ fn augment_requirement(
 
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.
 fn resolve_requirement(
-    requirement: uv_pypi_types::Requirement,
+    requirement: Requirement,
     workspace: bool,
     editable: Option<bool>,
     index: Option<IndexName>,
@@ -1004,7 +1005,7 @@ fn resolve_requirement(
     tag: Option<String>,
     branch: Option<String>,
     root: &Path,
-) -> Result<(Requirement, Option<Source>), anyhow::Error> {
+) -> Result<(uv_pep508::Requirement, Option<Source>), anyhow::Error> {
     let result = Source::from_requirement(
         &requirement.name,
         requirement.source.clone(),
@@ -1197,7 +1198,7 @@ impl AddTargetSnapshot {
 #[derive(Debug, Clone)]
 struct DependencyEdit {
     dependency_type: DependencyType,
-    requirement: Requirement,
+    requirement: uv_pep508::Requirement,
     source: Option<Source>,
     edit: ArrayEdit,
 }

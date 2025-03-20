@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use uv_configuration::SourceStrategy;
-use uv_distribution_types::IndexLocations;
+use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::PackageName;
 use uv_workspace::pyproject::ToolUvSources;
 use uv_workspace::{
@@ -15,7 +15,7 @@ use crate::metadata::{LoweredRequirement, MetadataError};
 #[derive(Debug, Clone)]
 pub struct BuildRequires {
     pub name: Option<PackageName>,
-    pub requires_dist: Vec<uv_pypi_types::Requirement>,
+    pub requires_dist: Vec<Requirement>,
 }
 
 impl BuildRequires {
@@ -27,7 +27,7 @@ impl BuildRequires {
             requires_dist: metadata
                 .requires_dist
                 .into_iter()
-                .map(uv_pypi_types::Requirement::from)
+                .map(Requirement::from)
                 .collect(),
         }
     }
@@ -124,10 +124,7 @@ impl BuildRequires {
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?,
-            SourceStrategy::Disabled => requires_dist
-                .into_iter()
-                .map(uv_pypi_types::Requirement::from)
-                .collect(),
+            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
         };
 
         Ok(Self {
@@ -199,10 +196,7 @@ impl BuildRequires {
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?,
-            SourceStrategy::Disabled => requires_dist
-                .into_iter()
-                .map(uv_pypi_types::Requirement::from)
-                .collect(),
+            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
         };
 
         Ok(Self {

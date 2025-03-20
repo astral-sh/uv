@@ -4,7 +4,7 @@ use futures::{stream::FuturesOrdered, TryStreamExt};
 
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::DistributionMetadata;
-use uv_pypi_types::Requirement;
+use uv_distribution_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 

@@ -5,10 +5,10 @@ use itertools::Either;
 
 use uv_configuration::SourceStrategy;
 use uv_distribution::LoweredRequirement;
-use uv_distribution_types::{Index, IndexLocations};
+use uv_distribution_types::{Index, IndexLocations, Requirement};
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
-use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments, VerbatimParsedUrl};
+use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_resolver::{Lock, LockVersion, RequiresPython, VERSION};
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::DependencyGroupError;

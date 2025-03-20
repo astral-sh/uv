@@ -9,13 +9,13 @@ use url::Url;
 
 use uv_configuration::{DependencyGroups, ExtrasSpecification};
 use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
+use uv_distribution_types::Requirement;
 use uv_distribution_types::{
     BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, SourceUrl, VersionId,
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::RequirementOrigin;
-use uv_pypi_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 

@@ -15,7 +15,7 @@ use uv_pep508::{
     marker, MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl,
 };
 
-use crate::{
+use uv_pypi_types::{
     ConflictItem, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl,
     ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
 };

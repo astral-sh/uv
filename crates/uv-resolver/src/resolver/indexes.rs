@@ -1,7 +1,7 @@
-use uv_distribution_types::IndexUrl;
+use uv_distribution_types::{IndexUrl, RequirementSource};
 use uv_normalize::PackageName;
 use uv_pep508::VerbatimUrl;
-use uv_pypi_types::{ConflictItem, RequirementSource};
+use uv_pypi_types::ConflictItem;
 
 use crate::resolver::ForkMap;
 use crate::{DependencyMode, Manifest, ResolverEnvironment};

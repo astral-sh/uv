@@ -4,7 +4,7 @@ use std::path::Path;
 use thiserror::Error;
 
 use uv_configuration::SourceStrategy;
-use uv_distribution_types::{GitSourceUrl, IndexLocations};
+use uv_distribution_types::{GitSourceUrl, IndexLocations, Requirement};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashDigests, ResolutionMetadata};
@@ -46,10 +46,10 @@ pub struct Metadata {
     pub name: PackageName,
     pub version: Version,
     // Optional fields
-    pub requires_dist: Vec<uv_pypi_types::Requirement>,
+    pub requires_dist: Vec<Requirement>,
     pub requires_python: Option<VersionSpecifiers>,
     pub provides_extras: Vec<ExtraName>,
-    pub dependency_groups: BTreeMap<GroupName, Vec<uv_pypi_types::Requirement>>,
+    pub dependency_groups: BTreeMap<GroupName, Vec<Requirement>>,
     pub dynamic: bool,
 }
 
@@ -63,7 +63,7 @@ impl Metadata {
             requires_dist: metadata
                 .requires_dist
                 .into_iter()
-                .map(uv_pypi_types::Requirement::from)
+                .map(Requirement::from)
                 .collect(),
             requires_python: metadata.requires_python,
             provides_extras: metadata.provides_extras,
