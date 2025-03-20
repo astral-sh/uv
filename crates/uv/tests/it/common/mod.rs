@@ -23,9 +23,10 @@ use regex::Regex;
 use tokio::io::AsyncWriteExt;
 use uv_cache::Cache;
 use uv_fs::Simplified;
-use uv_python::managed::ManagedPythonInstallations;
+use uv_python::managed::{DirectorySymlink, ManagedPythonInstallations};
 use uv_python::{
-    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersion,
+    EnvironmentPreference, ImplementationName, LenientImplementationName, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersion,
 };
 use uv_static::EnvVars;
 
@@ -554,6 +555,20 @@ impl TestContext {
                     .map(|pattern| (pattern.to_string(), format!("[PYTHON-{version}]"))),
             );
 
+            // Add filtering for the symlink path for the executable
+            if let Some(directory_symlink) = DirectorySymlink::try_from(
+                version.major(),
+                version.minor(),
+                executable.as_path(),
+                &LenientImplementationName::from(ImplementationName::CPython),
+            ) {
+                filters.extend(
+                    Self::path_patterns(directory_symlink.symlink_directory)
+                        .into_iter()
+                        .map(|pattern| (pattern.to_string(), format!("[PYTHON-{version}]"))),
+                );
+            }
+
             // And for the symlink we created in the test the Python path
             filters.extend(
                 Self::path_patterns(python_dir.join(version.to_string()))
@@ -953,6 +968,17 @@ impl TestContext {
         let mut command = self.new_command();
         self.add_shared_options(&mut command, true);
         command.arg("python").arg("uninstall");
+        command
+    }
+
+    /// Create a `uv python upgrade` command with options shared across scenarios.
+    pub fn python_upgrade(&self) -> Command {
+        let mut command = self.new_command();
+        self.add_shared_options(&mut command, true);
+        command
+            .arg("python")
+            .arg("upgrade")
+            .current_dir(&self.temp_dir);
         command
     }
 
