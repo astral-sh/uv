@@ -1004,27 +1004,29 @@ pub fn add_dependency(
 
             let decor = value.decor_mut();
 
-            // If we're adding to the end of the list, treat trailing comments as leading comments
-            // on the added dependency.
-            //
-            // For example, given:
-            // ```toml
-            // dependencies = [
-            //     "anyio", # trailing comment
-            // ]
-            // ```
-            //
-            // If we add `flask` to the end, we want to retain the comment on `anyio`:
-            // ```toml
-            // dependencies = [
-            //     "anyio", # trailing comment
-            //     "flask",
-            // ]
-            // ```
-            if index == deps.len() {
-                decor.set_prefix(deps.trailing().clone());
-                deps.set_trailing("");
-            }
+            // Ensure trailing comments remain on the correct line, post-insertion
+            match index {
+                0 => {
+                    // Trailing comment, if it exists, is already part of `deps.trailing`.
+                    // No changes required.
+                }
+                val if val == deps.len() => {
+                    // If we're adding to the end of the list,
+                    // treat trailing comments as leading comments on the added dependency.
+                    //
+                    // See [`test::retain_trailing_comment_position_on_sole_dep`].
+                    decor.set_prefix(deps.trailing().clone());
+                    deps.set_trailing("");
+                }
+                val => {
+                    // Retain position of trailing comments when a dependency is inserted right below it.
+                    //
+                    // See [`test::retain_trailing_comment_position_on_non_final_dep`].
+                    let targetted_decor = deps.get_mut(val).unwrap().decor_mut();
+                    decor.set_prefix(targetted_decor.prefix().unwrap().clone());
+                    targetted_decor.set_prefix(""); // Re-formatted later by `reformat_array_multiline`
+                }
+            };
 
             deps.insert_formatted(index, value);
 
