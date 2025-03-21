@@ -65,6 +65,7 @@ pub enum PublishError {
     CheckUrlIndex(#[source] uv_client::Error),
     #[error(
         "Local file and index file do not match for {filename}. \
+        If you know what you're doing to can still upload this file using the option `--force`. \
         Local: {hash_algorithm}={local}, Remote: {hash_algorithm}={remote}"
     )]
     HashMismatch {
