@@ -665,8 +665,14 @@ fn python_find_venv_invalid() {
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/11825>
+///
+/// This test will not succeed on macOS if using a Homebrew provided interpreter. The interpreter
+/// reports `sys.executable` as the canonicalized path instead of `[TEMP_DIR]/...`. For this reason,
+/// it's marked as requiring our `python-managed` feature — but it does not enforce that these are
+/// used in the test context.
 #[test]
 #[cfg(unix)]
+#[cfg(feature = "python-managed")]
 fn python_required_python_major_minor() {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
 
