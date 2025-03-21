@@ -976,6 +976,7 @@ impl PythonFindSettings {
             no_project,
             system,
             no_system,
+            script: _,
         } = args;
 
         Self {
