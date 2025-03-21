@@ -224,6 +224,27 @@ impl TestContext {
         self
     }
 
+    /// Add extra filtering for ` -> <PATH>` symlink display for Python versions in the test
+    /// context, e.g., for use in `uv python list`.
+    #[must_use]
+    pub fn with_filtered_python_symlinks(mut self) -> Self {
+        for (version, executable) in &self.python_versions {
+            if fs_err::symlink_metadata(executable).unwrap().is_symlink() {
+                self.filters.extend(
+                    Self::path_patterns(executable.read_link().unwrap())
+                        .into_iter()
+                        .map(|pattern| (format! {" -> {pattern}"}, String::new())),
+                );
+            }
+            // Drop links that are byproducts of the test context too
+            self.filters.push((
+                regex::escape(&format!(" -> [PYTHON-{version}]")),
+                String::new(),
+            ));
+        }
+        self
+    }
+
     /// Add extra standard filtering for a given path.
     #[must_use]
     pub fn with_filtered_path(mut self, path: &Path, name: &str) -> Self {
@@ -797,6 +818,18 @@ impl TestContext {
             .arg("python")
             .arg("find")
             .env(EnvVars::UV_PREVIEW, "1")
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
+            .current_dir(&self.temp_dir);
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    /// Create a `uv python list` command with options shared across scenarios.
+    pub fn python_list(&self) -> Command {
+        let mut command = self.new_command();
+        command
+            .arg("python")
+            .arg("list")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
             .current_dir(&self.temp_dir);
         self.add_shared_options(&mut command, false);
