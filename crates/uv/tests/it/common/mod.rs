@@ -256,11 +256,33 @@ impl TestContext {
     /// Adds a filter that ignores platform information in a Python installation key.
     pub fn with_filtered_python_keys(mut self) -> Self {
         // Filter platform keys
-        self.filters.push((
-            r"((?:cpython|pypy)-\d+\.\d+(?:\.(?:\[X\]|\d+))?[a-z]?(?:\+[a-z]+)?)-[a-z0-9]+-[a-z0-9_]+-[a-z]+"
-                .to_string(),
-            "$1-[PLATFORM]".to_string(),
-        ));
+        let platform_re = r"(?x)
+  (                         # We capture the group before the platform
+    (?:cpython|pypy)        # Python implementation
+    -
+    \d+\.\d+                # Major and minor version
+    (?:                     # The patch version is handled separately
+      \.
+      (?:
+        \[X\]               # A previously filtered patch version [X]
+        |                   # OR
+        \d+                 # An actual patch version
+      )
+    )?                      # (we allow the patch version to be missing entirely, e.g., in a request)
+    [a-z]?                  # Pre-release letter
+    (?:
+      \+[a-z]+              # An optional variant variant, such as `+free-threaded
+    )?
+  )
+  -
+  [a-z0-9]+                 # Operating system (e.g., 'macos')
+  -
+  [a-z0-9_]+                # Architecture (e.g., 'aarch64')
+  -
+  [a-z]+                    # Libc (e.g., 'none')
+";
+        self.filters
+            .push((platform_re.to_string(), "$1-[PLATFORM]".to_string()));
         self
     }
 
