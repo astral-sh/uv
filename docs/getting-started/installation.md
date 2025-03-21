@@ -21,13 +21,13 @@ uv provides a standalone installer to download and install uv:
     ```console
     $ wget -qO- https://astral.sh/uv/install.sh | sh
     ```
-    
+
     If you prefer httpie:
-    
+
     ```console
     $ https ://astral.sh/uv/install.sh -SF | sh
     ```
-    
+
     Request a specific version by including it in the URL:
 
     ```console
