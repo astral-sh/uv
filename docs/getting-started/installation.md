@@ -33,8 +33,6 @@ uv provides a standalone installer to download and install uv:
     $ curl -LsSf https://astral.sh/uv/0.6.9/install.sh | sh
     ```
 
-
-
 === "Windows"
 
     Use `irm` to download the script and execute it with `iex`:
