@@ -20,12 +20,12 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
-    Origin, UnresolvedRequirementSpecification, Verbatim,
+    Origin, Requirement, UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::{GroupName, PackageName};
-use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments};
+use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersion, VersionRequest,

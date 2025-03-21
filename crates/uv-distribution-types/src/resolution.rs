@@ -1,9 +1,9 @@
 use uv_distribution_filename::DistExtension;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{HashDigest, HashDigests, RequirementSource};
+use uv_pypi_types::{HashDigest, HashDigests};
 
-use crate::{BuiltDist, Diagnostic, Dist, Name, ResolvedDist, SourceDist};
+use crate::{BuiltDist, Diagnostic, Dist, Name, RequirementSource, ResolvedDist, SourceDist};
 
 /// A set of packages pinned at specific versions.
 ///

@@ -7,14 +7,14 @@ use thiserror::Error;
 use url::Url;
 
 use uv_distribution_filename::DistExtension;
-use uv_distribution_types::{Index, IndexLocations, IndexName, Origin};
+use uv_distribution_types::{
+    Index, IndexLocations, IndexName, Origin, Requirement, RequirementSource,
+};
 use uv_git_types::{GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{looks_like_git_repository, MarkerTree, VerbatimUrl, VersionOrUrl};
-use uv_pypi_types::{
-    ConflictItem, ParsedUrlError, Requirement, RequirementSource, VerbatimParsedUrl,
-};
+use uv_pypi_types::{ConflictItem, ParsedUrlError, VerbatimParsedUrl};
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 use uv_workspace::Workspace;
 

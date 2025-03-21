@@ -5,8 +5,9 @@ pub use crate::sources::*;
 pub use crate::specification::*;
 pub use crate::unnamed::*;
 
-use uv_distribution_types::{Dist, DistErrorKind, GitSourceDist, SourceDist};
-use uv_pypi_types::{Requirement, RequirementSource};
+use uv_distribution_types::{
+    Dist, DistErrorKind, GitSourceDist, Requirement, RequirementSource, SourceDist,
+};
 
 mod extras;
 mod lookahead;

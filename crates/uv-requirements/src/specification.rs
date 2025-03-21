@@ -36,6 +36,7 @@ use tracing::instrument;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{DependencyGroups, NoBinary, NoBuild};
+use uv_distribution_types::Requirement;
 use uv_distribution_types::{
     IndexUrl, NameRequirementSpecification, UnresolvedRequirement,
     UnresolvedRequirementSpecification,
@@ -43,7 +44,6 @@ use uv_distribution_types::{
 use uv_fs::{Simplified, CWD};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::{MarkerTree, UnnamedRequirement, UnnamedRequirementUrl};
-use uv_pypi_types::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
 use uv_warnings::warn_user;

@@ -16,15 +16,15 @@ use uv_configuration::{
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification, Origin, Resolution,
-    UnresolvedRequirementSpecification,
+    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification, Origin, Requirement,
+    Resolution, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::GroupName;
 use uv_pep508::PackageName;
-use uv_pypi_types::{Conflicts, Requirement};
+use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
     PythonRequest, PythonVersion, Target,

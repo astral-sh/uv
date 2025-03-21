@@ -1,5 +1,5 @@
+use uv_distribution_types::Requirement;
 use uv_normalize::ExtraName;
-use uv_pypi_types::Requirement;
 
 /// A set of requirements as requested by a parent requirement.
 ///

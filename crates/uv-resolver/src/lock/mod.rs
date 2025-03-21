@@ -25,10 +25,11 @@ use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
-    BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexUrl, Name,
-    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RemoteSource, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
+    redact_credentials, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
+    DirectorySourceDist, Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations,
+    IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, ResolvedDist, StaticMetadata,
+    ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -40,8 +41,7 @@ use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    redact_credentials, ConflictPackage, Conflicts, HashDigest, HashDigests, ParsedArchiveUrl,
-    ParsedGitUrl, Requirement, RequirementSource,
+    ConflictPackage, Conflicts, HashDigest, HashDigests, ParsedArchiveUrl, ParsedGitUrl,
 };
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};

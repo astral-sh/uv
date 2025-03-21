@@ -19,7 +19,7 @@ use serde::{de::IntoDeserializer, de::SeqAccess, Deserialize, Deserializer, Seri
 use thiserror::Error;
 use url::Url;
 
-use uv_distribution_types::{Index, IndexName};
+use uv_distribution_types::{Index, IndexName, RequirementSource};
 use uv_fs::{relative_to, PortablePathBuf};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
@@ -27,8 +27,7 @@ use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::{
-    Conflicts, DependencyGroups, RequirementSource, SchemaConflicts, SupportedEnvironments,
-    VerbatimParsedUrl,
+    Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
 };
 
 #[derive(Error, Debug)]

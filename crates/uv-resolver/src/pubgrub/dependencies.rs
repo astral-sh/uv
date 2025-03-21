@@ -4,11 +4,12 @@ use std::iter;
 use either::Either;
 use pubgrub::Ranges;
 
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{
     Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl,
-    Requirement, RequirementSource, VerbatimParsedUrl,
+    VerbatimParsedUrl,
 };
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};

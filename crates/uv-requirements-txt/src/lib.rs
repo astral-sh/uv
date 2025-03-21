@@ -48,10 +48,12 @@ use url::Url;
 use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
-use uv_distribution_types::{UnresolvedRequirement, UnresolvedRequirementSpecification};
+use uv_distribution_types::{
+    Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
+};
 use uv_fs::Simplified;
 use uv_pep508::{expand_env_vars, Pep508Error, RequirementOrigin, VerbatimUrl};
-use uv_pypi_types::{Requirement, VerbatimParsedUrl};
+use uv_pypi_types::VerbatimParsedUrl;
 
 use crate::requirement::EditableError;
 pub use crate::requirement::RequirementsTxtRequirement;

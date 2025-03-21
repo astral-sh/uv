@@ -1,10 +1,9 @@
-use uv_pypi_types::RequirementSource;
+use uv_distribution_types::RequirementSource;
+use uv_normalize::PackageName;
+use uv_pep440::Operator;
 
 use crate::resolver::ForkSet;
 use crate::{DependencyMode, Manifest, ResolverEnvironment};
-
-use uv_normalize::PackageName;
-use uv_pep440::Operator;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
