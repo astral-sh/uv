@@ -26,6 +26,7 @@ uv provides a standalone installer to download and install uv:
     
     ```console
     $ https ://astral.sh/uv/install.sh -SF | sh
+    ```
     
     Request a specific version by including it in the URL:
 
