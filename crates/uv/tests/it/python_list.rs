@@ -27,6 +27,79 @@ fn python_list() {
     ----- stderr -----
     ");
 
+    // Request Python 3.12
+    uv_snapshot!(context.filters(), context.python_list().arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM]    [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+
+    // Request Python 3.11
+    uv_snapshot!(context.filters(), context.python_list().arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    // Request CPython
+    uv_snapshot!(context.filters(), context.python_list().arg("cpython"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]
+    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    // Request CPython 3.12
+    uv_snapshot!(context.filters(), context.python_list().arg("cpython@3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM]    [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+
+    // Request CPython 3.12 via partial key syntax
+    uv_snapshot!(context.filters(), context.python_list().arg("cpython-3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM]    [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+
+    // Request CPython 3.12 for the current platform
+    let os = Os::from_env();
+    let arch = Arch::from_env();
+
+    uv_snapshot!(context.filters(), context.python_list().arg(format!("cpython-3.12-{os}-{arch}")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM]    [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+
+    // Request PyPy (which should be missing)
+    uv_snapshot!(context.filters(), context.python_list().arg("pypy"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
     // Swap the order of the Python versions
     context.python_versions.reverse();
 
@@ -42,16 +115,12 @@ fn python_list() {
 
     // Request Python 3.11
     uv_snapshot!(context.filters(), context.python_list().arg("3.11"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
 
     ----- stderr -----
-    error: unexpected argument '3.11' found
-
-    Usage: uv python list [OPTIONS]
-
-    For more information, try '--help'.
     ");
 }
 
@@ -132,5 +201,81 @@ fn python_list_venv() {
     cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
 
     ----- stderr -----
+    ");
+}
+
+#[cfg(unix)]
+#[test]
+fn python_list_unsupported_version() {
+    let context: TestContext = TestContext::new_with_versions(&["3.12"])
+        .with_filtered_python_symlinks()
+        .with_filtered_python_keys();
+
+    // Request a low version
+    uv_snapshot!(context.filters(), context.python_list().arg("3.6"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.7 is not supported but 3.6 was requested.
+    ");
+
+    // Request a low version with a patch
+    uv_snapshot!(context.filters(), context.python_list().arg("3.6.9"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.7 is not supported but 3.6.9 was requested.
+    ");
+
+    // Request a really low version
+    uv_snapshot!(context.filters(), context.python_list().arg("2.6"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.7 is not supported but 2.6 was requested.
+    ");
+
+    // Request a really low version with a patch
+    uv_snapshot!(context.filters(), context.python_list().arg("2.6.8"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.7 is not supported but 2.6.8 was requested.
+    ");
+
+    // Request a future version
+    uv_snapshot!(context.filters(), context.python_list().arg("4.2"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // Request a low version with a range
+    uv_snapshot!(context.filters(), context.python_list().arg("<3.0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // Request free-threaded Python on unsupported version
+    uv_snapshot!(context.filters(), context.python_list().arg("3.12t"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.13 does not support free-threading but 3.12t was requested.
     ");
 }
