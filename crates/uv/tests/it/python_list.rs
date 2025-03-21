@@ -1,3 +1,4 @@
+use uv_python::platform::{Arch, Os};
 use uv_static::EnvVars;
 
 use crate::common::{uv_snapshot, TestContext};
