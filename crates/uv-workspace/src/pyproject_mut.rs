@@ -1004,27 +1004,56 @@ pub fn add_dependency(
 
             let decor = value.decor_mut();
 
-            // If we're adding to the end of the list, treat trailing comments as leading comments
-            // on the added dependency.
-            //
-            // For example, given:
-            // ```toml
-            // dependencies = [
-            //     "anyio", # trailing comment
-            // ]
-            // ```
-            //
-            // If we add `flask` to the end, we want to retain the comment on `anyio`:
-            // ```toml
-            // dependencies = [
-            //     "anyio", # trailing comment
-            //     "flask",
-            // ]
-            // ```
-            if index == deps.len() {
-                decor.set_prefix(deps.trailing().clone());
-                deps.set_trailing("");
-            }
+            // Ensure comments remain on the correct line, post-insertion
+            match index {
+                val if val == deps.len() => {
+                    // If we're adding to the end of the list, treat trailing comments as leading comments
+                    // on the added dependency.
+                    //
+                    // For example, given:
+                    // ```toml
+                    // dependencies = [
+                    //     "anyio", # trailing comment
+                    // ]
+                    // ```
+                    //
+                    // If we add `flask` to the end, we want to retain the comment on `anyio`:
+                    // ```toml
+                    // dependencies = [
+                    //     "anyio", # trailing comment
+                    //     "flask",
+                    // ]
+                    // ```
+                    decor.set_prefix(deps.trailing().clone());
+                    deps.set_trailing("");
+                }
+                0 => {
+                    // If the dependency is prepended to a non-empty list, do nothing
+                }
+                val => {
+                    // Retain position of end-of-line comments when a dependency is inserted right below it.
+                    //
+                    // For example, given:
+                    // ```toml
+                    // dependencies = [
+                    //     "anyio", # end-of-line comment
+                    //     "flask",
+                    // ]
+                    // ```
+                    //
+                    // If we add `pydantic` (between `anyio` and `flask`), we want to retain the comment on `anyio`:
+                    // ```toml
+                    // dependencies = [
+                    //     "anyio", # end-of-line comment
+                    //     "pydantic",
+                    //     "flask",
+                    // ]
+                    // ```
+                    let targeted_decor = deps.get_mut(val).unwrap().decor_mut();
+                    decor.set_prefix(targeted_decor.prefix().unwrap().clone());
+                    targeted_decor.set_prefix(""); // Re-formatted later by `reformat_array_multiline`
+                }
+            };
 
             deps.insert_formatted(index, value);
 
