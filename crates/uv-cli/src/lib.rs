@@ -4740,16 +4740,6 @@ pub struct PythonFindArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
-
-    /// Find the environment for a Python script, rather than the current project.
-    #[arg(
-        long,
-        conflicts_with = "request",
-        conflicts_with = "no_project",
-        conflicts_with = "system",
-        conflicts_with = "no_system"
-    )]
-    pub script: Option<PathBuf>,
 }
 
 #[derive(Args)]

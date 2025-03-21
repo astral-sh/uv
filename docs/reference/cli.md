@@ -5018,8 +5018,6 @@ uv python find [OPTIONS] [REQUEST]
 
 </dd><dt id="uv-python-find--quiet"><a href="#uv-python-find--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
-</dd><dt id="uv-python-find--script"><a href="#uv-python-find--script"><code>--script</code></a> <i>script</i></dt><dd><p>Find the environment for a Python script, rather than the current project</p>
-
 </dd><dt id="uv-python-find--system"><a href="#uv-python-find--system"><code>--system</code></a></dt><dd><p>Only find system Python interpreters.</p>
 
 <p>By default, uv will report the first Python interpreter it would use, including those in an active virtual environment or a virtual environment in the current working directory or any parent directory.</p>
