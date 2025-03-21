@@ -257,7 +257,7 @@ impl TestContext {
     pub fn with_filtered_python_keys(mut self) -> Self {
         // Filter platform keys
         self.filters.push((
-            r"((?:cpython|pypy)-\d+\.\d+(?:\.(?:\[X\]|\d+))?[a-z]?(?:\+[a-z]+)?)-[a-z0-9]+-[a-z0-9_]+-[a-z]+"
+            r"((?:cpython|pypy)-\d+\.\d+(?:\.(?:\[X\]|\d+))?[a-z]?(?:[a-z][0-9])?(?:\+[a-z]+)?)-[a-z0-9]+-[a-z0-9_]+-[a-z]+"
                 .to_string(),
             "$1-[PLATFORM]".to_string(),
         ));
