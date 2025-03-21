@@ -1244,6 +1244,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let cache = cache.init()?;
 
             commands::python_list(
+                args.request,
                 args.kinds,
                 args.all_versions,
                 args.all_platforms,
