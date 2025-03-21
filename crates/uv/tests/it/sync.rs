@@ -380,7 +380,7 @@ fn check() -> Result<()> {
     Would download 1 package
     Would install 1 package
      + iniconfig==2.0.0
-    error: The environment is out of sync and requires updates. Run `uv sync` to install or update packages.
+    error: The environment is outdated; run `uv sync` to update the environment
     "###);
 
     // Sync the environment.

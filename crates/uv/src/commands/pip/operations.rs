@@ -790,7 +790,7 @@ fn report_dry_run(
     }
 
     if matches!(dry_run, DryRun::Check) {
-        return Err(Error::OutOfSyncEnv);
+        return Err(Error::OutdatedEnvironment);
     }
 
     Ok(())
@@ -866,5 +866,5 @@ pub(crate) enum Error {
     Anyhow(#[from] anyhow::Error),
 
     #[error("The environment is outdated; run `{}` to update the environment", "uv sync".cyan())]
-    OutOfSyncEnv,
+    OutdatedEnvironment,
 }
