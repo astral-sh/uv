@@ -1354,6 +1354,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     args.system,
                     globals.python_preference,
                     &cache,
+                    printer,
                 )
                 .await
             }

@@ -1,4 +1,3 @@
-use anstream::println;
 use anyhow::Result;
 use std::fmt::Write;
 use std::path::Path;
@@ -31,6 +30,7 @@ pub(crate) async fn find(
     system: bool,
     python_preference: PythonPreference,
     cache: &Cache,
+    printer: Printer,
 ) -> Result<ExitStatus> {
     let environment_preference = if system {
         EnvironmentPreference::OnlySystem
@@ -91,12 +91,17 @@ pub(crate) async fn find(
     };
 
     if show_version {
-        println!("{}", python.interpreter().python_version());
+        writeln!(
+            printer.stdout(),
+            "{}",
+            python.interpreter().python_version()
+        )?;
     } else {
-        println!(
+        writeln!(
+            printer.stdout(),
             "{}",
             std::path::absolute(python.interpreter().sys_executable())?.simplified_display()
-        );
+        )?;
     }
 
     Ok(ExitStatus::Success)
@@ -135,12 +140,13 @@ pub(crate) async fn find_script(
     };
 
     if show_version {
-        println!("{}", interpreter.python_version());
+        writeln!(printer.stdout(), "{}", interpreter.python_version())?;
     } else {
-        println!(
+        writeln!(
+            printer.stdout(),
             "{}",
             std::path::absolute(interpreter.sys_executable())?.simplified_display()
-        );
+        )?;
     }
 
     Ok(ExitStatus::Success)
