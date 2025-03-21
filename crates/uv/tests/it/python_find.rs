@@ -710,7 +710,10 @@ fn python_required_python_major_minor() {
 
 #[test]
 fn python_find_script() {
-    let context = TestContext::new("3.13");
+    let context = TestContext::new("3.13")
+        .with_filtered_exe_suffix()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
     let filters = context
         .filters()
         .into_iter()
@@ -729,7 +732,7 @@ fn python_find_script() {
     Initialized script at `foo.py`
     "###);
 
-    uv_snapshot!(filters, context.sync().arg("--script").arg("foo.py"), @r###"
+    uv_snapshot!(filters, context.sync().arg("--script").arg("foo.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -738,32 +741,24 @@ fn python_find_script() {
     Creating script environment at: [CACHE_DIR]/environments-v2/[HASHEDNAME]
     Resolved in [TIME]
     Audited in [TIME]
-    "###);
+    ");
 
-    if cfg!(windows) {
-        uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
-        [CACHE_DIR]/environments-v2/[HASHEDNAME]/Scripts/python.exe
+    uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/environments-v2/[HASHEDNAME]/[BIN]/python
 
-        ----- stderr -----
-        "###);
-    } else {
-        uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
-        [CACHE_DIR]/environments-v2/[HASHEDNAME]/bin/python3
-
-        ----- stderr -----
-        "###);
-    }
+    ----- stderr -----
+    ");
 }
 
 #[test]
 fn python_find_script_no_environment() {
-    let context = TestContext::new("3.13");
+    let context = TestContext::new("3.13")
+        .with_filtered_exe_suffix()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
 
     let script = context.temp_dir.child("foo.py");
 
@@ -775,30 +770,19 @@ fn python_find_script_no_environment() {
         "})
         .unwrap();
 
-    if cfg!(windows) {
-        uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
-        [VENV]/Scripts/python.exe
+    uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/python
 
-        ----- stderr -----
-        "###);
-    } else {
-        uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r###"
-        success: true
-        exit_code: 0
-        ----- stdout -----
-        [VENV]/bin/python3
-
-        ----- stderr -----
-        "###);
-    }
+    ----- stderr -----
+    ");
 }
 
 #[test]
 fn python_find_script_python_not_found() {
-    let context = TestContext::new_with_versions(&[]);
+    let context = TestContext::new_with_versions(&[]).with_filtered_python_sources();
 
     let script = context.temp_dir.child("foo.py");
 
@@ -810,30 +794,23 @@ fn python_find_script_python_not_found() {
         "})
         .unwrap();
 
-    if cfg!(windows) {
-        uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r"
-        success: false
-        exit_code: 1
-        ----- stdout -----
+    uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
 
-        ----- stderr -----
-        No interpreter found in virtual environments, managed installations, search path, or registry
-        ");
-    } else {
-        uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r"
-        success: false
-        exit_code: 1
-        ----- stdout -----
-
-        ----- stderr -----
-        No interpreter found in virtual environments, managed installations, or search path
-        ");
-    }
+    ----- stderr -----
+    No interpreter found in [PYTHON SOURCES]
+    ");
 }
 
 #[test]
 fn python_find_script_no_such_version() {
-    let context = TestContext::new("3.13");
+    let context = TestContext::new("3.13")
+        .with_filtered_exe_suffix()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names()
+        .with_filtered_python_sources();
     let filters = context
         .filters()
         .into_iter()
@@ -844,7 +821,6 @@ fn python_find_script_no_such_version() {
         .collect::<Vec<_>>();
 
     let script = context.temp_dir.child("foo.py");
-
     script
         .write_str(indoc! {r#"
             # /// script
@@ -854,7 +830,7 @@ fn python_find_script_no_such_version() {
         "#})
         .unwrap();
 
-    uv_snapshot!(filters, context.sync().arg("--script").arg("foo.py"), @r###"
+    uv_snapshot!(filters, context.sync().arg("--script").arg("foo.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -863,7 +839,7 @@ fn python_find_script_no_such_version() {
     Creating script environment at: [CACHE_DIR]/environments-v2/[HASHEDNAME]
     Resolved in [TIME]
     Audited in [TIME]
-    "###);
+    ");
 
     script
         .write_str(indoc! {r#"
@@ -874,23 +850,12 @@ fn python_find_script_no_such_version() {
         "#})
         .unwrap();
 
-    if cfg!(windows) {
-        uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r"
-        success: false
-        exit_code: 1
-        ----- stdout -----
+    uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
 
-        ----- stderr -----
-        No interpreter found for Python >=3.14 in virtual environments, managed installations, search path, or registry
-        ");
-    } else {
-        uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r"
-        success: false
-        exit_code: 1
-        ----- stdout -----
-
-        ----- stderr -----
-        No interpreter found for Python >=3.14 in virtual environments, managed installations, or search path
-        ");
-    }
+    ----- stderr -----
+    No interpreter found for Python >=3.14 in [PYTHON SOURCES]
+    ");
 }
