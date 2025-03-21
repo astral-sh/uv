@@ -1359,7 +1359,7 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 #[cfg(test)]
 mod test {
     use toml_edit::Array;
-    use uv_pep508::Requirement;
+    use uv_pep508::{MarkerTree, Requirement};
 
     use super::{add_dependency, split_specifiers};
 
@@ -1403,7 +1403,7 @@ mod test {
             name: "flask".parse().unwrap(),
             extras: vec![],
             version_or_url: None,
-            marker: Default::default(),
+            marker: MarkerTree::default(),
             origin: None,
         };
 
@@ -1451,7 +1451,7 @@ mod test {
             name: "flask".parse().unwrap(),
             extras: vec![],
             version_or_url: None,
-            marker: Default::default(),
+            marker: MarkerTree::default(),
             origin: None,
         };
 
