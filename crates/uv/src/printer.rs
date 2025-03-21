@@ -30,6 +30,7 @@ impl Printer {
     }
 
     /// Return the [`Stdout`] for this printer.
+    #[allow(dead_code, reason = "to be adopted incrementally")]
     pub(crate) fn stdout_important(self) -> Stdout {
         match self {
             Self::Silent => Stdout::Disabled,
