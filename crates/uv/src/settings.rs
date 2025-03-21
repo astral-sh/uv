@@ -963,6 +963,7 @@ impl PythonUninstallSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PythonFindSettings {
     pub(crate) request: Option<String>,
+    pub(crate) show_version: bool,
     pub(crate) no_project: bool,
     pub(crate) system: bool,
 }
@@ -973,6 +974,7 @@ impl PythonFindSettings {
     pub(crate) fn resolve(args: PythonFindArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let PythonFindArgs {
             request,
+            show_version,
             no_project,
             system,
             no_system,
@@ -981,6 +983,7 @@ impl PythonFindSettings {
 
         Self {
             request,
+            show_version,
             no_project,
             system: flag(system, no_system).unwrap_or_default(),
         }

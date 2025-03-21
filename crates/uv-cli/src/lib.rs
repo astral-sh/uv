@@ -4759,6 +4759,10 @@ pub struct PythonFindArgs {
         conflicts_with = "no_system"
     )]
     pub script: Option<PathBuf>,
+
+    /// Show the Python version that would be used instead of the path to the interpreter.
+    #[arg(long)]
+    pub show_version: bool,
 }
 
 #[derive(Args)]
