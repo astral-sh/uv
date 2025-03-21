@@ -1,5 +1,6 @@
 use itertools::{Either, Itertools};
 use regex::Regex;
+use rustc_hash::{FxBuildHasher, FxHashSet};
 use same_file::is_same_file;
 use std::env::consts::EXE_SUFFIX;
 use std::fmt::{self, Debug, Formatter};
@@ -496,6 +497,7 @@ fn python_executables_from_search_path<'a>(
     // check multiple names per directory while respecting the search path order and python names
     // precedence.
     let search_dirs: Vec<_> = env::split_paths(&search_path).collect();
+    let mut seen_dirs = FxHashSet::with_capacity_and_hasher(search_dirs.len(), FxBuildHasher);
     search_dirs
         .into_iter()
         .filter(|dir| dir.is_dir())
@@ -506,33 +508,50 @@ fn python_executables_from_search_path<'a>(
                 "Checking `PATH` directory for interpreters: {}",
                 dir.display()
             );
-            possible_names
-                .clone()
-                .into_iter()
-                .flat_map(move |name| {
-                    // Since we're just working with a single directory at a time, we collect to simplify ownership
-                    which::which_in_global(&*name, Some(&dir))
-                        .into_iter()
-                        .flatten()
-                        // We have to collect since `which` requires that the regex outlives its
-                        // parameters, and the dir is local while we return the iterator.
-                        .collect::<Vec<_>>()
+            same_file::Handle::from_path(&dir)
+                // Skip directories we've already seen, to avoid inspecting interpreters multiple
+                // times when directories are repeated or symlinked in the `PATH`
+                .map(|handle| seen_dirs.insert(handle))
+                .inspect(|fresh_dir| {
+                    if !fresh_dir {
+                        trace!("Skipping already seen directory: {}", dir.display());
+                    }
                 })
-                .chain(find_all_minor(implementation, version, &dir_clone))
-                .filter(|path| !is_windows_store_shim(path))
-                .inspect(|path| trace!("Found possible Python executable: {}", path.display()))
-                .chain(
-                    // TODO(zanieb): Consider moving `python.bat` into `possible_names` to avoid a chain
-                    cfg!(windows)
-                        .then(move || {
-                            which::which_in_global("python.bat", Some(&dir_clone))
+                // If we cannot determine if the directory is unique, we'll assume it is
+                .unwrap_or(true)
+                .then(|| {
+                    possible_names
+                        .clone()
+                        .into_iter()
+                        .flat_map(move |name| {
+                            // Since we're just working with a single directory at a time, we collect to simplify ownership
+                            which::which_in_global(&*name, Some(&dir))
                                 .into_iter()
                                 .flatten()
+                                // We have to collect since `which` requires that the regex outlives its
+                                // parameters, and the dir is local while we return the iterator.
                                 .collect::<Vec<_>>()
                         })
-                        .into_iter()
-                        .flatten(),
-                )
+                        .chain(find_all_minor(implementation, version, &dir_clone))
+                        .filter(|path| !is_windows_store_shim(path))
+                        .inspect(|path| {
+                            trace!("Found possible Python executable: {}", path.display());
+                        })
+                        .chain(
+                            // TODO(zanieb): Consider moving `python.bat` into `possible_names` to avoid a chain
+                            cfg!(windows)
+                                .then(move || {
+                                    which::which_in_global("python.bat", Some(&dir_clone))
+                                        .into_iter()
+                                        .flatten()
+                                        .collect::<Vec<_>>()
+                                })
+                                .into_iter()
+                                .flatten(),
+                        )
+                })
+                .into_iter()
+                .flatten()
         })
 }
 
