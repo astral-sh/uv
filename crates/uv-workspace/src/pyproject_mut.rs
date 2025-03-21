@@ -1022,9 +1022,9 @@ pub fn add_dependency(
                     // Retain position of trailing comments when a dependency is inserted right below it.
                     //
                     // See [`test::retain_trailing_comment_position_on_non_final_dep`].
-                    let targetted_decor = deps.get_mut(val).unwrap().decor_mut();
-                    decor.set_prefix(targetted_decor.prefix().unwrap().clone());
-                    targetted_decor.set_prefix(""); // Re-formatted later by `reformat_array_multiline`
+                    let targeted_decor = deps.get_mut(val).unwrap().decor_mut();
+                    decor.set_prefix(targeted_decor.prefix().unwrap().clone());
+                    targeted_decor.set_prefix(""); // Re-formatted later by `reformat_array_multiline`
                 }
             };
 
