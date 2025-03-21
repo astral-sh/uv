@@ -3,7 +3,9 @@ use std::sync::Arc;
 
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
-use uv_distribution_types::{Dist, IndexCapabilities, IndexUrl, InstalledDist, RequestedDist};
+use uv_distribution_types::{
+    Dist, IndexCapabilities, IndexMetadata, IndexMetadataRef, InstalledDist, RequestedDist,
+};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Tags;
@@ -78,7 +80,7 @@ pub trait ResolverProvider {
     fn get_package_versions<'io>(
         &'io self,
         package_name: &'io PackageName,
-        index: Option<&'io IndexUrl>,
+        index: Option<&'io IndexMetadata>,
     ) -> impl Future<Output = PackageVersionsResult> + 'io;
 
     /// Get the metadata for a distribution.
@@ -150,13 +152,18 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     async fn get_package_versions<'io>(
         &'io self,
         package_name: &'io PackageName,
-        index: Option<&'io IndexUrl>,
+        index: Option<&'io IndexMetadata>,
     ) -> PackageVersionsResult {
         let result = self
             .fetcher
             .client()
             .manual(|client, semaphore| {
-                client.simple(package_name, index, self.capabilities, semaphore)
+                client.simple(
+                    package_name,
+                    index.map(IndexMetadataRef::from),
+                    self.capabilities,
+                    semaphore,
+                )
             })
             .await;
 
@@ -171,7 +178,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                         VersionMap::from_metadata(
                             metadata,
                             package_name,
-                            index,
+                            index.url(),
                             self.tags.as_ref(),
                             &self.requires_python,
                             &self.allowed_yanks,

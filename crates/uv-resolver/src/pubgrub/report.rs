@@ -11,7 +11,7 @@ use rustc_hash::FxHashMap;
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
-    IndexLocations, IndexUrl,
+    IndexLocations, IndexMetadata, IndexUrl,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -727,7 +727,7 @@ impl PubGrubReportFormatter<'_> {
         env: &ResolverEnvironment,
         tags: Option<&Tags>,
     ) -> Option<PubGrubHint> {
-        let response = if let Some(url) = fork_indexes.get(name) {
+        let response = if let Some(url) = fork_indexes.get(name).map(IndexMetadata::url) {
             index.explicit().get(&(name.clone(), url.clone()))
         } else {
             index.implicit().get(name)

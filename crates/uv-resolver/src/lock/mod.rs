@@ -27,9 +27,9 @@ use uv_distribution_filename::{
 use uv_distribution_types::{
     redact_credentials, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
     DirectorySourceDist, Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations,
-    IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, ResolvedDist, StaticMetadata,
-    ToUrlError, UrlString,
+    IndexMetadata, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement, RequirementSource,
+    ResolvedDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -4563,12 +4563,17 @@ fn normalize_requirement(
         }
         RequirementSource::Registry {
             specifier,
-            mut index,
+            index,
             conflict,
         } => {
-            if let Some(index) = index.as_mut() {
-                redact_credentials(index);
-            }
+            // Round-trip the index to remove anything apart from the URL.
+            let index = index
+                .map(|index| index.url.into_url())
+                .map(|mut index| {
+                    redact_credentials(&mut index);
+                    index
+                })
+                .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index))));
             Ok(Requirement {
                 name: requirement.name,
                 extras: requirement.extras,

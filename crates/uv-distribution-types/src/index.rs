@@ -10,7 +10,9 @@ use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
 use crate::{IndexUrl, IndexUrlError};
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub struct Index {
@@ -200,6 +202,20 @@ impl Index {
     }
 }
 
+impl From<IndexUrl> for Index {
+    fn from(value: IndexUrl) -> Self {
+        Self {
+            name: None,
+            url: value,
+            explicit: false,
+            default: false,
+            origin: None,
+            publish_url: None,
+            authenticate: AuthPolicy::default(),
+        }
+    }
+}
+
 impl FromStr for Index {
     type Err = IndexSourceError;
 
@@ -232,6 +248,76 @@ impl FromStr for Index {
             publish_url: None,
             authenticate: AuthPolicy::default(),
         })
+    }
+}
+
+/// An [`IndexUrl`] along with the metadata necessary to query the index.
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct IndexMetadata {
+    pub url: IndexUrl,
+    // /// The type of the index.
+    // ///
+    // /// Indexes can either be PEP 503-compliant (i.e., a registry implementing the Simple API) or
+    // /// structured as a flat list of distributions (e.g., `--find-links`). In both cases, indexes
+    // /// can point to either local or remote resources.
+    // #[serde(default)]
+    // pub r#type: IndexKind,
+}
+
+impl IndexMetadata {
+    /// Return a reference to the [`IndexMetadata`].
+    pub fn as_ref(&self) -> IndexMetadataRef<'_> {
+        let Self { url } = self;
+        IndexMetadataRef { url }
+    }
+
+    /// Consume the [`IndexMetadata`] and return the [`IndexUrl`].
+    pub fn into_url(self) -> IndexUrl {
+        self.url
+    }
+}
+
+/// A reference to an [`IndexMetadata`].
+#[derive(Debug, Copy, Clone)]
+pub struct IndexMetadataRef<'a> {
+    pub url: &'a IndexUrl,
+}
+
+impl IndexMetadata {
+    /// Return the [`IndexUrl`] of the index.
+    pub fn url(&self) -> &IndexUrl {
+        &self.url
+    }
+}
+
+impl IndexMetadataRef<'_> {
+    /// Return the [`IndexUrl`] of the index.
+    pub fn url(&self) -> &IndexUrl {
+        self.url
+    }
+}
+
+impl<'a> From<&'a IndexMetadata> for IndexMetadataRef<'a> {
+    fn from(value: &'a IndexMetadata) -> Self {
+        Self { url: &value.url }
+    }
+}
+
+impl<'a> From<&'a IndexUrl> for IndexMetadataRef<'a> {
+    fn from(value: &'a IndexUrl) -> Self {
+        Self { url: value }
+    }
+}
+
+impl<'a> From<&'a Index> for IndexMetadataRef<'a> {
+    fn from(value: &'a Index) -> Self {
+        Self { url: &value.url }
+    }
+}
+
+impl From<IndexUrl> for IndexMetadata {
+    fn from(value: IndexUrl) -> Self {
+        Self { url: value }
     }
 }
 

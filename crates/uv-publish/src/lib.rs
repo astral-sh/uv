@@ -479,7 +479,7 @@ pub async fn check_url(
     let response = match registry_client
         .simple(
             filename.name(),
-            Some(index_url),
+            Some(index_url.into()),
             index_capabilities,
             download_concurrency,
         )
