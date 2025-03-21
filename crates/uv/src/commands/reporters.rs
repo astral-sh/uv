@@ -69,6 +69,26 @@ impl BarState {
 enum Direction {
     Upload,
     Download,
+    Extract,
+}
+
+impl Direction {
+    fn as_str(&self) -> &str {
+        match self {
+            Direction::Download => "Downloading",
+            Direction::Upload => "Uploading",
+            Direction::Extract => "Extracting",
+        }
+    }
+}
+
+impl From<uv_python::downloads::Direction> for Direction {
+    fn from(dir: uv_python::downloads::Direction) -> Self {
+        match dir {
+            uv_python::downloads::Direction::Download => Self::Download,
+            uv_python::downloads::Direction::Extract => Self::Extract,
+        }
+    }
 }
 
 impl ProgressReporter {
@@ -191,6 +211,7 @@ impl ProgressReporter {
                     match direction {
                         Direction::Download => "Downloading",
                         Direction::Upload => "Uploading",
+                        Direction::Extract => "Extracting",
                     }
                     .bold()
                     .cyan(),
@@ -205,12 +226,7 @@ impl ProgressReporter {
                 let _ = writeln!(
                     self.printer.stderr(),
                     "{} {}",
-                    match direction {
-                        Direction::Download => "Downloading",
-                        Direction::Upload => "Uploading",
-                    }
-                    .bold()
-                    .cyan(),
+                    direction.as_str().bold().cyan(),
                     name
                 );
             }
@@ -251,12 +267,7 @@ impl ProgressReporter {
             let _ = writeln!(
                 self.printer.stderr(),
                 " {} {}",
-                match direction {
-                    Direction::Download => "Downloaded",
-                    Direction::Upload => "Uploaded",
-                }
-                .bold()
-                .green(),
+                direction.as_str().bold().green(),
                 progress.message()
             );
         }
@@ -583,21 +594,22 @@ impl PythonDownloadReporter {
 }
 
 impl uv_python::downloads::Reporter for PythonDownloadReporter {
-    fn on_progress(&self, _name: &PythonInstallationKey, id: usize) {
-        self.reporter.on_download_complete(id);
+    fn on_request_start(
+        &self,
+        direction: uv_python::downloads::Direction,
+        name: &PythonInstallationKey,
+        size: Option<u64>,
+    ) -> usize {
+        self.reporter
+            .on_request_start(direction.into(), format!("{name} ({direction})"), size)
     }
 
-    fn on_download_start(&self, name: &PythonInstallationKey, size: Option<u64>) -> usize {
-        self.reporter.on_download_start(name.to_string(), size)
+    fn on_request_progress(&self, id: usize, inc: u64) {
+        self.reporter.on_request_progress(id, inc);
     }
 
-    fn on_download_progress(&self, id: usize, inc: u64) {
-        self.reporter.on_download_progress(id, inc);
-    }
-
-    fn on_download_complete(&self) {
-        self.reporter.root.set_message("");
-        self.reporter.root.finish_and_clear();
+    fn on_request_complete(&self, direction: uv_python::downloads::Direction, id: usize) {
+        self.reporter.on_request_complete(direction.into(), id);
     }
 }
 
