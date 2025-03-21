@@ -1004,7 +1004,7 @@ pub fn add_dependency(
 
             let decor = value.decor_mut();
 
-            // Ensure trailing comments remain on the correct line, post-insertion
+            // Ensure comments remain on the correct line, post-insertion
             match index {
                 val if val == deps.len() => {
                     // If we're adding to the end of the list, treat trailing comments as leading comments
@@ -1031,12 +1031,12 @@ pub fn add_dependency(
                     // If the dependency is prepended to a non-empty list, do nothing
                 }
                 val => {
-                    // Retain position of trailing comments when a dependency is inserted right below it.
+                    // Retain position of end-of-line comments when a dependency is inserted right below it.
                     //
                     // For example, given:
                     // ```toml
                     // dependencies = [
-                    //     "anyio", # trailing comment
+                    //     "anyio", # end-of-line comment
                     //     "flask",
                     // ]
                     // ```
@@ -1044,7 +1044,7 @@ pub fn add_dependency(
                     // If we add `pydantic` (between `anyio` and `flask`), we want to retain the comment on `anyio`:
                     // ```toml
                     // dependencies = [
-                    //     "anyio", # trailing comment
+                    //     "anyio", # end-of-line comment
                     //     "pydantic",
                     //     "flask",
                     // ]
