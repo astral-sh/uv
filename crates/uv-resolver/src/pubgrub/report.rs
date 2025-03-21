@@ -6,6 +6,7 @@ use indexmap::IndexSet;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use pubgrub::{DerivationTree, Derived, External, Map, Range, ReportFormatter, Term};
+use reqwest::StatusCode;
 use rustc_hash::FxHashMap;
 
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
@@ -845,6 +846,12 @@ impl PubGrubReportFormatter<'_> {
                     reason: reason.clone(),
                 });
             }
+            Some(UnavailablePackage::Network(status)) => {
+                hints.insert(PubGrubHint::InvalidPackageNetwork {
+                    package: name.clone(),
+                    status: *status,
+                });
+            }
             Some(UnavailablePackage::NotFound) => {}
             None => {}
         }
@@ -884,6 +891,13 @@ impl PubGrubReportFormatter<'_> {
                                 version: version.clone(),
                                 requires_python: requires_python.clone(),
                                 python_version: python_version.clone(),
+                            });
+                        }
+                        MetadataUnavailable::Network(status) => {
+                            hints.insert(PubGrubHint::InvalidVersionNetwork {
+                                package: name.clone(),
+                                version: version.clone(),
+                                status: *status,
                             });
                         }
                     }
@@ -1025,6 +1039,12 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         reason: String,
     },
+    /// The package metadata could not be fetched due to a network error.
+    InvalidPackageNetwork {
+        package: PackageName,
+        // excluded from `PartialEq` and `Hash`
+        status: StatusCode,
+    },
     /// Metadata for a package version could not be parsed.
     InvalidVersionMetadata {
         package: PackageName,
@@ -1060,6 +1080,14 @@ pub(crate) enum PubGrubHint {
         requires_python: VersionSpecifiers,
         // excluded from `PartialEq` and `Hash`
         python_version: Version,
+    },
+    /// The package metadata could not be fetched due to a network error.
+    InvalidVersionNetwork {
+        package: PackageName,
+        // excluded from `PartialEq` and `Hash`
+        version: Version,
+        // excluded from `PartialEq` and `Hash`
+        status: StatusCode,
     },
     /// The `Requires-Python` requirement was not satisfied.
     RequiresPython {
@@ -1164,6 +1192,9 @@ enum PubGrubHintCore {
     InvalidPackageStructure {
         package: PackageName,
     },
+    InvalidPackageNetwork {
+        package: PackageName,
+    },
     InvalidVersionMetadata {
         package: PackageName,
     },
@@ -1171,6 +1202,9 @@ enum PubGrubHintCore {
         package: PackageName,
     },
     InvalidVersionStructure {
+        package: PackageName,
+    },
+    InvalidVersionNetwork {
         package: PackageName,
     },
     IncompatibleBuildRequirement {
@@ -1233,6 +1267,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::InvalidPackageStructure { package, .. } => {
                 Self::InvalidPackageStructure { package }
             }
+            PubGrubHint::InvalidPackageNetwork { package, .. } => {
+                Self::InvalidPackageNetwork { package }
+            }
             PubGrubHint::InvalidVersionMetadata { package, .. } => {
                 Self::InvalidVersionMetadata { package }
             }
@@ -1241,6 +1278,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
             }
             PubGrubHint::InvalidVersionStructure { package, .. } => {
                 Self::InvalidVersionStructure { package }
+            }
+            PubGrubHint::InvalidVersionNetwork { package, .. } => {
+                Self::InvalidVersionNetwork { package }
             }
             PubGrubHint::IncompatibleBuildRequirement { package, .. } => {
                 Self::IncompatibleBuildRequirement { package }
@@ -1356,6 +1396,16 @@ impl std::fmt::Display for PubGrubHint {
                     textwrap::indent(reason, "  ")
                 )
             }
+            Self::InvalidPackageNetwork { package, status } => {
+                write!(
+                    f,
+                    "{}{} Metadata for `{}` could not be fetched; the server returned: `{}`",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    format!("{status}").red(),
+                )
+            }
             Self::InvalidVersionMetadata {
                 package,
                 version,
@@ -1384,6 +1434,21 @@ impl std::fmt::Display for PubGrubHint {
                     package.cyan(),
                     format!("v{version}").cyan(),
                     textwrap::indent(reason, "  ")
+                )
+            }
+            Self::InvalidVersionNetwork {
+                package,
+                version,
+                status,
+            } => {
+                write!(
+                    f,
+                    "{}{} Metadata for `{}` ({}) could not be fetched; the server returned: `{}`",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    package.cyan(),
+                    format!("v{version}").cyan(),
+                    format!("{status}").red(),
                 )
             }
             Self::InconsistentVersionMetadata {

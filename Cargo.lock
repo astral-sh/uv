@@ -5619,6 +5619,7 @@ dependencies = [
  "owo-colors",
  "petgraph",
  "pubgrub",
+ "reqwest",
  "rkyv",
  "rustc-hash",
  "same-file",
