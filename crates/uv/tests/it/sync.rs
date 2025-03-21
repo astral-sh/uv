@@ -7681,7 +7681,7 @@ fn sync_dry_run() -> Result<()> {
      + iniconfig==2.0.0
     "###);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--dry-run").arg("-vv"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
