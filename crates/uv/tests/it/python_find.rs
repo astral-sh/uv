@@ -9,28 +9,18 @@ use crate::common::{uv_snapshot, venv_bin_path, TestContext};
 
 #[test]
 fn python_find() {
-    let mut context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let mut context: TestContext =
+        TestContext::new_with_versions(&["3.11", "3.12"]).with_filtered_python_sources();
 
     // No interpreters on the path
-    if cfg!(windows) {
-        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-        error: No interpreter found in virtual environments, managed installations, search path, or registry
-        "###);
-    } else {
-        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
-
-        ----- stderr -----
-        error: No interpreter found in virtual environments, managed installations, or search path
-        "###);
-    }
+    ----- stderr -----
+    error: No interpreter found in [PYTHON SOURCES]
+    ");
 
     // We find the first interpreter on the path
     uv_snapshot!(context.filters(), context.python_find(), @r###"
@@ -108,25 +98,14 @@ fn python_find() {
     "###);
 
     // Request PyPy (which should be missing)
-    if cfg!(windows) {
-        uv_snapshot!(context.filters(), context.python_find().arg("pypy"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    uv_snapshot!(context.filters(), context.python_find().arg("pypy"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-        error: No interpreter found for PyPy in virtual environments, managed installations, search path, or registry
-        "###);
-    } else {
-        uv_snapshot!(context.filters(), context.python_find().arg("pypy"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
-
-        ----- stderr -----
-        error: No interpreter found for PyPy in virtual environments, managed installations, or search path
-        "###);
-    }
+    ----- stderr -----
+    error: No interpreter found for PyPy in [PYTHON SOURCES]
+    ");
 
     // Swap the order of the Python versions
     context.python_versions.reverse();
