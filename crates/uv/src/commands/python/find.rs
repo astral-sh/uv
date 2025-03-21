@@ -1,24 +1,17 @@
 use anstream::println;
 use anyhow::Result;
-use std::fmt::Write;
 use std::path::Path;
 
 use uv_cache::Cache;
 use uv_fs::Simplified;
-use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
-};
-use uv_scripts::Pep723ItemRef;
-use uv_settings::PythonInstallMirrors;
+use uv_python::{EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::commands::{
-    project::{validate_project_requires_python, ScriptInterpreter, WorkspacePython},
+    project::{validate_project_requires_python, WorkspacePython},
     ExitStatus,
 };
-use crate::printer::Printer;
-use crate::settings::NetworkSettings;
 
 /// Find a Python interpreter.
 pub(crate) async fn find(
@@ -94,49 +87,4 @@ pub(crate) async fn find(
     );
 
     Ok(ExitStatus::Success)
-}
-
-pub(crate) async fn find_script(
-    script: Pep723ItemRef<'_>,
-    network_settings: &NetworkSettings,
-    python_preference: PythonPreference,
-    python_downloads: PythonDownloads,
-    no_config: bool,
-    cache: &Cache,
-    printer: Printer,
-) -> Result<ExitStatus> {
-    match ScriptInterpreter::discover(
-        script,
-        None,
-        network_settings,
-        python_preference,
-        python_downloads,
-        &PythonInstallMirrors::default(),
-        no_config,
-        Some(false),
-        cache,
-        printer,
-    )
-    .await
-    {
-        Err(error) => {
-            writeln!(printer.stderr(), "{error}")?;
-
-            Ok(ExitStatus::Failure)
-        }
-
-        Ok(ScriptInterpreter::Interpreter(interpreter)) => {
-            let path = interpreter.sys_executable();
-            println!("{}", std::path::absolute(path)?.simplified_display());
-
-            Ok(ExitStatus::Success)
-        }
-
-        Ok(ScriptInterpreter::Environment(environment)) => {
-            let path = environment.interpreter().sys_executable();
-            println!("{}", std::path::absolute(path)?.simplified_display());
-
-            Ok(ExitStatus::Success)
-        }
-    }
 }
