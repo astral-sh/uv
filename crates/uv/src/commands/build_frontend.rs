@@ -624,7 +624,7 @@ async fn build_package(
                 BuildOutput::Quiet
             }
         }
-        Printer::Quiet => BuildOutput::Quiet,
+        Printer::Quiet | Printer::Silent => BuildOutput::Quiet,
     };
 
     let mut build_results = Vec::new();
