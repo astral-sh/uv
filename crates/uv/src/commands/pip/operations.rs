@@ -865,6 +865,6 @@ pub(crate) enum Error {
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 
-    #[error("The environment is out of sync and requires updates. Run `{}` to install or update packages.", "uv sync".cyan())]
+    #[error("The environment is outdated; run `{}` to update the environment", "uv sync".cyan())]
     OutOfSyncEnv,
 }

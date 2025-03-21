@@ -1515,7 +1515,7 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
 </dd><dt id="uv-sync--check"><a href="#uv-sync--check"><code>--check</code></a></dt><dd><p>Check if the Python environment is synchronized with the project.</p>
 
-<p>If the environment is not up to do, uv will exit with an error.</p>
+<p>If the environment is not up to date, uv will exit with an error.</p>
 
 </dd><dt id="uv-sync--color"><a href="#uv-sync--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
 
