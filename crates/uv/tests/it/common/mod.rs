@@ -269,7 +269,7 @@ impl TestContext {
         \d+                 # An actual patch version
       )
     )?                      # (we allow the patch version to be missing entirely, e.g., in a request)
-    [a-z]?                  # Pre-release letter
+    ([a-z]+[0-9]*)?         # Pre-release version component, e.g., `a6` or `rc2`
     (?:
       \+[a-z]+              # An optional variant variant, such as `+free-threaded
     )?
