@@ -144,6 +144,7 @@ because the nav is in a hamburger menu anyway
   .md-nav__item--section > .md-nav__link {
       font-weight: normal;
       font-size: 0.85rem;
+      padding-bottom: 0.15em;
   }
   /* Reducing spacing between nav items to fit more content 
   First, disable `nav__link` spacing then use `nav__item` to enforce margins this reduces inconsistencies in the spacing. */
@@ -156,7 +157,7 @@ because the nav is in a hamburger menu anyway
   /* Use larger spacing for the sections headings */
   .md-nav--primary .md-nav__item--section {
     margin-bottom: 0.75em;
-    margin-top: 1em;
+    margin-top: 1.25em;
   }
   /* Decrease the font size of items in a collapsible section */
   .md-nav__item--section> .md-nav > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list {
