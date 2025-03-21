@@ -290,10 +290,9 @@ impl TestContext {
         \d+                 # An actual patch version
       )
     )?                      # (we allow the patch version to be missing entirely, e.g., in a request)
-    [a-z]?                  # Pre-release letter
-    (?:
-      \+[a-z]+              # An optional variant variant, such as `+free-threaded
-    )?
+    (?:(?:a|b|rc)[0-9]+)?   # Pre-release version component, e.g., `a6` or `rc2`
+    (?:[td])?               # A short variant, such as `t` (for freethreaded) or `d` (for debug)
+    (?:\+[a-z]+)?           # A long variant, such as `+free-threaded`
   )
   -
   [a-z0-9]+                 # Operating system (e.g., 'macos')
