@@ -31,7 +31,7 @@ use uv_pep508::VersionOrUrl;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_requirements::RequirementsSource;
 use uv_requirements_txt::RequirementsTxtRequirement;
-use uv_scripts::{Pep723Error, Pep723Item, Pep723Metadata, Pep723Script};
+use uv_scripts::{Pep723Error, Pep723Item, Pep723ItemRef, Pep723Metadata, Pep723Script};
 use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
@@ -245,6 +245,32 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 Err(err) => return Err(err.into()),
             },
             _ => None,
+        }
+    } else if let Commands::Python(uv_cli::PythonNamespace {
+        command:
+            PythonCommand::Find(uv_cli::PythonFindArgs {
+                script: Some(script),
+                ..
+            }),
+    }) = &*cli.command
+    {
+        match Pep723Script::read(&script).await {
+            Ok(Some(script)) => Some(Pep723Item::Script(script)),
+            Ok(None) => {
+                bail!(
+                    "`{}` does not contain a PEP 723 metadata tag; run `{}` to initialize the script",
+                    script.user_display().cyan(),
+                    format!("uv init --script {}", script.user_display()).green()
+                )
+            }
+            Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                bail!(
+                    "Failed to read `{}` (not found); run `{}` to create a PEP 723 script",
+                    script.user_display().cyan(),
+                    format!("uv init --script {}", script.user_display()).green()
+                )
+            }
+            Err(err) => return Err(err.into()),
         }
     } else {
         None
@@ -1306,16 +1332,29 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             // Initialize the cache.
             let cache = cache.init()?;
 
-            commands::python_find(
-                &project_dir,
-                args.request,
-                args.no_project,
-                cli.top_level.no_config,
-                args.system,
-                globals.python_preference,
-                &cache,
-            )
-            .await
+            if let Some(Pep723Item::Script(script)) = script {
+                commands::python_find_script(
+                    Pep723ItemRef::Script(&script),
+                    &globals.network_settings,
+                    globals.python_preference,
+                    globals.python_downloads,
+                    cli.top_level.no_config,
+                    &cache,
+                    printer,
+                )
+                .await
+            } else {
+                commands::python_find(
+                    &project_dir,
+                    args.request,
+                    args.no_project,
+                    cli.top_level.no_config,
+                    args.system,
+                    globals.python_preference,
+                    &cache,
+                )
+                .await
+            }
         }
         Commands::Python(PythonNamespace {
             command: PythonCommand::Pin(args),
