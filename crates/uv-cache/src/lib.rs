@@ -1185,7 +1185,7 @@ pub enum Refresh {
     /// Don't refresh any entries.
     None(Timestamp),
     /// Refresh entries linked to the given packages, if created before the given timestamp.
-    Packages(Vec<PackageName>, Vec<PathBuf>, Timestamp),
+    Packages(Vec<PackageName>, Vec<Box<Path>>, Timestamp),
     /// Refresh all entries created before the given timestamp.
     All(Timestamp),
 }

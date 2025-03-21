@@ -1,5 +1,5 @@
 use either::Either;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use uv_pep508::PackageName;
 
 use rustc_hash::FxHashMap;
@@ -19,7 +19,7 @@ pub enum Reinstall {
     All,
 
     /// Reinstall only the specified packages.
-    Packages(Vec<PackageName>, Vec<PathBuf>),
+    Packages(Vec<PackageName>, Vec<Box<Path>>),
 }
 
 impl Reinstall {
@@ -88,9 +88,9 @@ impl Reinstall {
         }
     }
 
-    /// Add a [`PathBuf`] to the [`Reinstall`] policy.
+    /// Add a [`Box<Path>`] to the [`Reinstall`] policy.
     #[must_use]
-    pub fn with_path(self, path: PathBuf) -> Self {
+    pub fn with_path(self, path: Box<Path>) -> Self {
         match self {
             Self::None => Self::Packages(vec![], vec![path]),
             Self::All => Self::All,

@@ -1,12 +1,12 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use crate::Error;
+use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{CachedDist, Dist, Hashed};
 use uv_metadata::read_flat_wheel_metadata;
 use uv_pypi_types::{HashDigest, HashDigests, ResolutionMetadata};
 
-use uv_cache_info::CacheInfo;
+use crate::Error;
 
 /// A locally available wheel.
 #[derive(Debug, Clone)]
@@ -17,7 +17,7 @@ pub struct LocalWheel {
     pub(crate) filename: WheelFilename,
     /// The canonicalized path in the cache directory to which the wheel was downloaded.
     /// Typically, a directory within the archive bucket.
-    pub(crate) archive: PathBuf,
+    pub(crate) archive: Box<Path>,
     /// The cache index of the wheel.
     pub(crate) cache: CacheInfo,
     /// The computed hashes of the wheel.
@@ -43,7 +43,7 @@ impl LocalWheel {
     /// Read the [`ResolutionMetadata`] from a wheel.
     pub fn metadata(&self) -> Result<ResolutionMetadata, Error> {
         read_flat_wheel_metadata(&self.filename, &self.archive)
-            .map_err(|err| Error::WheelMetadata(self.archive.clone(), Box::new(err)))
+            .map_err(|err| Error::WheelMetadata(self.archive.to_path_buf(), Box::new(err)))
     }
 }
 

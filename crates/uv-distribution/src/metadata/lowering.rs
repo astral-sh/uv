@@ -171,7 +171,7 @@ impl LoweredRequirement {
                         } => {
                             let source = git_source(
                                 &git,
-                                subdirectory.map(PathBuf::from),
+                                subdirectory.map(Box::<Path>::from),
                                 rev,
                                 tag,
                                 branch,
@@ -185,7 +185,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source =
-                                url_source(&requirement, url, subdirectory.map(PathBuf::from))?;
+                                url_source(&requirement, url, subdirectory.map(Box::<Path>::from))?;
                             (source, marker)
                         }
                         Source::Path {
@@ -196,7 +196,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source = path_source(
-                                PathBuf::from(path),
+                                path,
                                 git_member,
                                 origin,
                                 project_dir,
@@ -296,20 +296,20 @@ impl LoweredRequirement {
                                     subdirectory: if subdirectory == PathBuf::new() {
                                         None
                                     } else {
-                                        Some(subdirectory)
+                                        Some(subdirectory.into_boxed_path())
                                     },
                                     url,
                                 }
                             } else if member.pyproject_toml().is_package() {
                                 RequirementSource::Directory {
-                                    install_path,
+                                    install_path: install_path.into_boxed_path(),
                                     url,
                                     editable: true,
                                     r#virtual: false,
                                 }
                             } else {
                                 RequirementSource::Directory {
-                                    install_path,
+                                    install_path: install_path.into_boxed_path(),
                                     url,
                                     editable: false,
                                     r#virtual: true,
@@ -402,7 +402,7 @@ impl LoweredRequirement {
                         } => {
                             let source = git_source(
                                 &git,
-                                subdirectory.map(PathBuf::from),
+                                subdirectory.map(Box::<Path>::from),
                                 rev,
                                 tag,
                                 branch,
@@ -416,7 +416,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source =
-                                url_source(&requirement, url, subdirectory.map(PathBuf::from))?;
+                                url_source(&requirement, url, subdirectory.map(Box::<Path>::from))?;
                             (source, marker)
                         }
                         Source::Path {
@@ -427,7 +427,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source = path_source(
-                                PathBuf::from(path),
+                                path,
                                 None,
                                 RequirementOrigin::Project,
                                 dir,
@@ -550,7 +550,7 @@ impl std::fmt::Display for SourceKind {
 /// Convert a Git source into a [`RequirementSource`].
 fn git_source(
     git: &Url,
-    subdirectory: Option<PathBuf>,
+    subdirectory: Option<Box<Path>>,
     rev: Option<String>,
     tag: Option<String>,
     branch: Option<String>,
@@ -571,7 +571,7 @@ fn git_source(
     if let Some(subdirectory) = subdirectory.as_ref() {
         let subdirectory = subdirectory
             .to_str()
-            .ok_or_else(|| LoweringError::NonUtf8Path(subdirectory.clone()))?;
+            .ok_or_else(|| LoweringError::NonUtf8Path(subdirectory.to_path_buf()))?;
         url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
     }
     let url = VerbatimUrl::from_url(url);
@@ -589,7 +589,7 @@ fn git_source(
 fn url_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
     url: Url,
-    subdirectory: Option<PathBuf>,
+    subdirectory: Option<Box<Path>>,
 ) -> Result<RequirementSource, LoweringError> {
     let mut verbatim_url = url.clone();
     if verbatim_url.fragment().is_some() {
@@ -598,7 +598,7 @@ fn url_source(
     if let Some(subdirectory) = subdirectory.as_ref() {
         let subdirectory = subdirectory
             .to_str()
-            .ok_or_else(|| LoweringError::NonUtf8Path(subdirectory.clone()))?;
+            .ok_or_else(|| LoweringError::NonUtf8Path(subdirectory.to_path_buf()))?;
         verbatim_url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
     }
 
@@ -687,7 +687,7 @@ fn path_source(
                 subdirectory: if subdirectory == PathBuf::new() {
                     None
                 } else {
-                    Some(subdirectory)
+                    Some(subdirectory.into_boxed_path())
                 },
                 url,
             });
@@ -695,7 +695,7 @@ fn path_source(
 
         if editable == Some(true) {
             Ok(RequirementSource::Directory {
-                install_path,
+                install_path: install_path.into_boxed_path(),
                 url,
                 editable: true,
                 r#virtual: false,
@@ -712,7 +712,7 @@ fn path_source(
             });
 
             Ok(RequirementSource::Directory {
-                install_path,
+                install_path: install_path.into_boxed_path(),
                 url,
                 editable: false,
                 // If a project is not a package, treat it as a virtual dependency.
@@ -733,7 +733,7 @@ fn path_source(
         Ok(RequirementSource::Path {
             ext: DistExtension::from_path(&install_path)
                 .map_err(|err| ParsedUrlError::MissingExtensionPath(path.to_path_buf(), err))?,
-            install_path,
+            install_path: install_path.into_boxed_path(),
             url,
         })
     }
