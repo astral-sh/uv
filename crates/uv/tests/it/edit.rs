@@ -8830,6 +8830,62 @@ fn add_preserves_end_of_line_comments() -> Result<()> {
 }
 
 #[test]
+fn add_preserves_end_of_line_comment_on_non_last_deps() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [ # comment
+            "anyio==3.7.0", # comment 1
+            "sniffio==1.3.1",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("requests==2.31.0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 8 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + anyio==3.7.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [ # comment
+            "anyio==3.7.0", # comment 1
+            "requests==2.31.0",
+            "sniffio==1.3.1",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
+#[test]
 fn add_direct_url_subdirectory() -> Result<()> {
     let context = TestContext::new("3.12");
 

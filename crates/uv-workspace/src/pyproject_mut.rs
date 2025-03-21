@@ -1006,22 +1006,49 @@ pub fn add_dependency(
 
             // Ensure trailing comments remain on the correct line, post-insertion
             match index {
-                0 => {
-                    // Trailing comment, if it exists, is already part of `deps.trailing`.
-                    // No changes required.
-                }
                 val if val == deps.len() => {
-                    // If we're adding to the end of the list,
-                    // treat trailing comments as leading comments on the added dependency.
+                    // If we're adding to the end of the list, treat trailing comments as leading comments
+                    // on the added dependency.
                     //
-                    // See [`test::retain_trailing_comment_position_on_sole_dep`].
+                    // For example, given:
+                    // ```toml
+                    // dependencies = [
+                    //     "anyio", # trailing comment
+                    // ]
+                    // ```
+                    //
+                    // If we add `flask` to the end, we want to retain the comment on `anyio`:
+                    // ```toml
+                    // dependencies = [
+                    //     "anyio", # trailing comment
+                    //     "flask",
+                    // ]
+                    // ```
                     decor.set_prefix(deps.trailing().clone());
                     deps.set_trailing("");
+                }
+                0 => {
+                    // If the dependency is prepended to a non-empty list, do nothing
                 }
                 val => {
                     // Retain position of trailing comments when a dependency is inserted right below it.
                     //
-                    // See [`test::retain_trailing_comment_position_on_non_final_dep`].
+                    // For example, given:
+                    // ```toml
+                    // dependencies = [
+                    //     "anyio", # trailing comment
+                    //     "flask",
+                    // ]
+                    // ```
+                    //
+                    // If we add `pydantic` (between `anyio` and `flask`), we want to retain the comment on `anyio`:
+                    // ```toml
+                    // dependencies = [
+                    //     "anyio", # trailing comment
+                    //     "pydantic",
+                    //     "flask",
+                    // ]
+                    // ```
                     let targeted_decor = deps.get_mut(val).unwrap().decor_mut();
                     decor.set_prefix(targeted_decor.prefix().unwrap().clone());
                     targeted_decor.set_prefix(""); // Re-formatted later by `reformat_array_multiline`
@@ -1358,10 +1385,7 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
-    use toml_edit::Array;
-    use uv_pep508::{MarkerTree, Requirement};
-
-    use super::{add_dependency, split_specifiers};
+    use super::split_specifiers;
 
     #[test]
     fn split() {
@@ -1373,98 +1397,5 @@ mod test {
         );
         assert_eq!(split_specifiers("flask[dotenv]"), ("flask[dotenv]", ""));
         assert_eq!(split_specifiers("flask @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"), ("flask", "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"));
-    }
-
-    /// If we're adding to the end of the list, treat trailing comments as leading comments
-    /// on the added dependency.
-    ///
-    /// For example, given:
-    /// ```toml
-    /// dependencies = [
-    ///     "anyio", # trailing comment
-    /// ]
-    /// ```
-    ///
-    /// If we add `flask` to the end, we want to retain the comment on `anyio`:
-    /// ```toml
-    /// dependencies = [
-    ///     "anyio", # trailing comment
-    ///     "flask",
-    /// ]
-    /// ```
-    #[test]
-    fn retain_trailing_comment_position_on_sole_dep() {
-        const TRAILING_COMMENT: &str = " # trailing comment\n    ";
-        let mut array = Array::new();
-        array.push("anyio");
-        array.set_trailing(TRAILING_COMMENT);
-
-        let req = Requirement {
-            name: "flask".parse().unwrap(),
-            extras: vec![],
-            version_or_url: None,
-            marker: MarkerTree::default(),
-            origin: None,
-        };
-
-        add_dependency(&req, &mut array, false).unwrap();
-
-        assert_eq!(array.len(), 2);
-        assert_eq!(
-            array.get(1).unwrap().decor().prefix().unwrap().as_str(),
-            Some(TRAILING_COMMENT)
-        );
-        assert_eq!(array.trailing().as_str(), Some("\n"));
-    }
-
-    /// Retain position of trailing comments when a dependency is inserted right below it.
-    ///
-    /// For example, given:
-    /// ```toml
-    /// dependencies = [
-    ///     "anyio", # trailing comment
-    ///     "flask",
-    /// ]
-    /// ```
-    ///
-    /// If we add `pydantic` (between `anyio` and `flask`), we want to retain the comment on `anyio`:
-    /// ```toml
-    /// dependencies = [
-    ///     "anyio", # trailing comment
-    ///     "pydantic",
-    ///     "flask",
-    /// ]
-    /// ```
-    #[test]
-    fn retain_trailing_comment_position_on_non_final_dep() {
-        const TRAILING_COMMENT: &str = " # trailing comment\n    ";
-        let mut array = Array::new();
-        array.push("anyio");
-        array.push("pydantic");
-        array
-            .get_mut(1)
-            .unwrap()
-            .decor_mut()
-            .set_prefix(TRAILING_COMMENT);
-
-        let req = Requirement {
-            name: "flask".parse().unwrap(),
-            extras: vec![],
-            version_or_url: None,
-            marker: MarkerTree::default(),
-            origin: None,
-        };
-
-        add_dependency(&req, &mut array, false).unwrap();
-
-        assert_eq!(array.len(), 3);
-        assert_eq!(
-            array.get(1).unwrap().decor().prefix().unwrap().as_str(),
-            Some(TRAILING_COMMENT)
-        );
-        assert_eq!(
-            array.get(2).unwrap().decor().prefix().unwrap().as_str(),
-            Some("\n    ")
-        );
     }
 }
