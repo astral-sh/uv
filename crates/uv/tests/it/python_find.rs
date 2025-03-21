@@ -859,3 +859,49 @@ fn python_find_script_no_such_version() {
     No interpreter found for Python >=3.14 in [PYTHON SOURCES]
     ");
 }
+
+#[test]
+fn python_find_show_version() {
+    let context: TestContext =
+        TestContext::new_with_versions(&["3.11", "3.12"]).with_filtered_python_sources();
+
+    // No interpreters found
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, "").arg("--show-version"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found in [PYTHON SOURCES]
+    ");
+
+    // Show the first version found
+    uv_snapshot!(context.filters(), context.python_find().arg("--show-version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11.[X]
+
+    ----- stderr -----
+    ");
+
+    // Request Python 3.12
+    uv_snapshot!(context.filters(), context.python_find().arg("--show-version").arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    // Request Python 3.11
+    uv_snapshot!(context.filters(), context.python_find().arg("--show-version").arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11.[X]
+
+    ----- stderr -----
+    ");
+}

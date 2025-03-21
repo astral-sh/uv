@@ -21,9 +21,11 @@ use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
 /// Find a Python interpreter.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn find(
     project_dir: &Path,
     request: Option<String>,
+    show_version: bool,
     no_project: bool,
     no_config: bool,
     system: bool,
@@ -88,16 +90,21 @@ pub(crate) async fn find(
         }
     };
 
-    println!(
-        "{}",
-        std::path::absolute(python.interpreter().sys_executable())?.simplified_display()
-    );
+    if show_version {
+        println!("{}", python.interpreter().python_version());
+    } else {
+        println!(
+            "{}",
+            std::path::absolute(python.interpreter().sys_executable())?.simplified_display()
+        );
+    }
 
     Ok(ExitStatus::Success)
 }
 
 pub(crate) async fn find_script(
     script: Pep723ItemRef<'_>,
+    show_version: bool,
     network_settings: &NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
@@ -105,7 +112,7 @@ pub(crate) async fn find_script(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    match ScriptInterpreter::discover(
+    let interpreter = match ScriptInterpreter::discover(
         script,
         None,
         network_settings,
@@ -121,22 +128,20 @@ pub(crate) async fn find_script(
     {
         Err(error) => {
             writeln!(printer.stderr(), "{error}")?;
-
-            Ok(ExitStatus::Failure)
+            return Ok(ExitStatus::Failure);
         }
+        Ok(ScriptInterpreter::Interpreter(interpreter)) => interpreter,
+        Ok(ScriptInterpreter::Environment(environment)) => environment.into_interpreter(),
+    };
 
-        Ok(ScriptInterpreter::Interpreter(interpreter)) => {
-            let path = interpreter.sys_executable();
-            println!("{}", std::path::absolute(path)?.simplified_display());
-
-            Ok(ExitStatus::Success)
-        }
-
-        Ok(ScriptInterpreter::Environment(environment)) => {
-            let path = environment.interpreter().sys_executable();
-            println!("{}", std::path::absolute(path)?.simplified_display());
-
-            Ok(ExitStatus::Success)
-        }
+    if show_version {
+        println!("{}", interpreter.python_version());
+    } else {
+        println!(
+            "{}",
+            std::path::absolute(interpreter.sys_executable())?.simplified_display()
+        );
     }
+
+    Ok(ExitStatus::Success)
 }
