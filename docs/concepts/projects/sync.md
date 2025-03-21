@@ -146,6 +146,31 @@ The `foo` group would not be installed.
 See the [development dependencies](./dependencies.md#development-dependencies) documentation for
 details on how to manage development dependencies.
 
+### Syncing workspaces
+
+In a workspace setup, using `uv sync` in the project root folder will only sync the project
+package. All workspace depencies will be removed and the workspace packages will not be included
+in the python path when running a python program using the `uv run` command.
+If you use `uv sync` in a workspace folder, it will only sync the current workspace and the parent
+project. It will remove all dependencies from the virtual environment that may have been installed 
+for other worspaces in the project and only the current workspace source code folder and the project
+root will be included in the python path when running a python program using the `uv run` command.
+
+To sync the entire workspace and have all workspace packages added to the python path when using
+the `uv run` command, use the `--all-packages` option when running `uv saync` in the project root:
+```console
+$ uv sync --all-packages
+```
+To sync only specific packages in the workspace use the `--packages <package name>` option for each
+package you wish to sync when running `uv sync` in the project root:
+```console
+$ uv sync --package beta --package delta
+```
+
+To prevent losing installed workspace depencies when syncing 1 or more specific workspace packages,
+use the `--inexact` option. This will also prevent removal of any workspace packages automatically
+added to the python path when running a python program using the `uv run` command.
+
 ## Upgrading locked package versions
 
 With an existing `uv.lock` file, uv will prefer the previously locked versions of packages when
