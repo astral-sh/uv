@@ -374,6 +374,7 @@ pub async fn upload(
     check_url_client: Option<&CheckUrlClient<'_>>,
     download_concurrency: &Semaphore,
     reporter: Arc<impl Reporter>,
+    force: bool,
 ) -> Result<bool, PublishError> {
     let form_metadata = form_metadata(file, filename)
         .await
@@ -433,7 +434,14 @@ pub async fn upload(
                     PublishSendError::Status(..) | PublishSendError::StatusNoBody(..)
                 ) {
                     if let Some(check_url_client) = &check_url_client {
-                        if check_url(check_url_client, file, filename, download_concurrency).await?
+                        if check_url(
+                            check_url_client,
+                            file,
+                            filename,
+                            download_concurrency,
+                            force,
+                        )
+                        .await?
                         {
                             // There was a raced upload of the same file, so even though our upload failed,
                             // the right file now exists in the registry.
@@ -457,6 +465,7 @@ pub async fn check_url(
     file: &Path,
     filename: &DistFilename,
     download_concurrency: &Semaphore,
+    force: bool,
 ) -> Result<bool, PublishError> {
     let CheckUrlClient {
         index_url,
@@ -547,12 +556,17 @@ pub async fn check_url(
             );
             Ok(true)
         } else {
-            Err(PublishError::HashMismatch {
-                filename: Box::new(filename.clone()),
-                hash_algorithm: remote_hash.algorithm,
-                local: local_hash.digest.to_string(),
-                remote: remote_hash.digest.to_string(),
-            })
+            if force {
+                warn!("Forcing upload despite hash mismatch.");
+                Ok(false)
+            } else {
+                Err(PublishError::HashMismatch {
+                    filename: Box::new(filename.clone()),
+                    hash_algorithm: remote_hash.algorithm,
+                    local: local_hash.digest.to_string(),
+                    remote: remote_hash.digest.to_string(),
+                })
+            }
         }
     } else {
         Err(PublishError::MissingHash(Box::new(filename.clone())))
