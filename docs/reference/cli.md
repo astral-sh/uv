@@ -434,6 +434,7 @@ uv run [OPTIONS] [COMMAND]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-run--python"><a href="#uv-run--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for the run environment.</p>
 
 <p>If the interpreter request is satisfied by a discovered environment, the environment will be used.</p>
@@ -694,6 +695,7 @@ uv init [OPTIONS] [PATH]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-init--python"><a href="#uv-init--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to determine the minimum supported Python version.</p>
 
 <p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
@@ -1053,6 +1055,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-add--python"><a href="#uv-add--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for resolving and syncing.</p>
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
@@ -1408,6 +1411,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-remove--python"><a href="#uv-remove--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for resolving and syncing.</p>
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
@@ -1826,6 +1830,7 @@ uv sync [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-sync--python"><a href="#uv-sync--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for the project environment.</p>
 
 <p>By default, the first interpreter that meets the project&#8217;s <code>requires-python</code> constraint is used.</p>
@@ -2145,6 +2150,7 @@ uv lock [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-lock--python"><a href="#uv-lock--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
 
 <p>A Python interpreter is required for building source distributions to determine package metadata when there are not wheels.</p>
@@ -2542,6 +2548,7 @@ uv export [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-export--prune"><a href="#uv-export--prune"><code>--prune</code></a> <i>prune</i></dt><dd><p>Prune the given package from the dependency tree.</p>
 
 <p>Pruned packages will be excluded from the exported requirements file, as will any dependencies that are no longer required after the pruned package is removed.</p>
@@ -2896,6 +2903,7 @@ uv tree [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-tree--prune"><a href="#uv-tree--prune"><code>--prune</code></a> <i>prune</i></dt><dd><p>Prune the given package from the display of the dependency tree</p>
 
 </dd><dt id="uv-tree--python"><a href="#uv-tree--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for locking and filtering.</p>
@@ -3349,6 +3357,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-tool-run--python"><a href="#uv-tool-run--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to build the run environment.</p>
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
@@ -3683,6 +3692,7 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-tool-install--python"><a href="#uv-tool-install--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use to build the tool environment.</p>
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
@@ -3997,6 +4007,7 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-tool-upgrade--python"><a href="#uv-tool-upgrade--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>Upgrade a tool, and specify it to use the given Python interpreter to build its environment. Use with <code>--all</code> to apply to all tools.</p>
 
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
@@ -4129,6 +4140,7 @@ uv tool list [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-tool-list--quiet"><a href="#uv-tool-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-tool-list--show-paths"><a href="#uv-tool-list--show-paths"><code>--show-paths</code></a></dt><dd><p>Whether to display the path to each tool environment and installed executable</p>
@@ -4252,6 +4264,7 @@ uv tool uninstall [OPTIONS] <NAME>...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-tool-uninstall--quiet"><a href="#uv-tool-uninstall--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-tool-uninstall--verbose"><a href="#uv-tool-uninstall--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
@@ -4369,6 +4382,7 @@ uv tool update-shell [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-tool-update-shell--quiet"><a href="#uv-tool-update-shell--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-tool-update-shell--verbose"><a href="#uv-tool-update-shell--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
@@ -4504,6 +4518,7 @@ uv tool dir [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-tool-dir--quiet"><a href="#uv-tool-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-tool-dir--verbose"><a href="#uv-tool-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
@@ -4719,6 +4734,7 @@ uv python list [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-python-list--quiet"><a href="#uv-python-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-python-list--show-urls"><a href="#uv-python-list--show-urls"><code>--show-urls</code></a></dt><dd><p>Show the URLs of available Python downloads.</p>
@@ -4882,6 +4898,7 @@ uv python install [OPTIONS] [TARGETS]...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-python-install--pypy-mirror"><a href="#uv-python-install--pypy-mirror"><code>--pypy-mirror</code></a> <i>pypy-mirror</i></dt><dd><p>Set the URL to use as the source for downloading PyPy installations.</p>
 
 <p>The provided URL will replace <code>https://downloads.python.org/pypy</code> in, e.g., <code>https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2</code>.</p>
@@ -5020,6 +5037,7 @@ uv python find [OPTIONS] [REQUEST]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-python-find--quiet"><a href="#uv-python-find--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-python-find--script"><a href="#uv-python-find--script"><code>--script</code></a> <i>script</i></dt><dd><p>Find the environment for a Python script, rather than the current project</p>
@@ -5170,6 +5188,7 @@ uv python pin [OPTIONS] [REQUEST]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-python-pin--quiet"><a href="#uv-python-pin--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-python-pin--resolved"><a href="#uv-python-pin--resolved"><code>--resolved</code></a></dt><dd><p>Write the resolved Python interpreter path instead of the request.</p>
@@ -5309,6 +5328,7 @@ uv python dir [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-python-dir--quiet"><a href="#uv-python-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-python-dir--verbose"><a href="#uv-python-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
@@ -5433,6 +5453,7 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-python-uninstall--quiet"><a href="#uv-python-uninstall--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-python-uninstall--verbose"><a href="#uv-python-uninstall--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
@@ -5813,6 +5834,7 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-pip-compile--python"><a href="#uv-pip-compile--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution.</p>
 
 <p>A Python interpreter is required for building source distributions to determine package metadata when there are not wheels.</p>
@@ -6279,6 +6301,7 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-pip-sync--python"><a href="#uv-pip-sync--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter into which packages should be installed.</p>
 
 <p>By default, syncing requires a virtual environment. A path to an alternative Python can be provided, but it is only recommended in continuous integration (CI) environments and should be used with caution, as it can modify the system Python installation.</p>
@@ -6803,6 +6826,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-pip-install--python"><a href="#uv-pip-install--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter into which packages should be installed.</p>
 
 <p>By default, installation requires a virtual environment. A path to an alternative Python can be provided, but it is only recommended in continuous integration (CI) environments and should be used with caution, as it can modify the system Python installation.</p>
@@ -7159,6 +7183,7 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-pip-uninstall--python"><a href="#uv-pip-uninstall--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter from which packages should be uninstalled.</p>
 
 <p>By default, uninstallation requires a virtual environment. A path to an alternative Python can be provided, but it is only recommended in continuous integration (CI) environments and should be used with caution, as it can modify the system Python installation.</p>
@@ -7292,6 +7317,7 @@ uv pip freeze [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-pip-freeze--python"><a href="#uv-pip-freeze--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be listed.</p>
 
 <p>By default, uv lists packages in a virtual environment but will show packages in a system Python environment if no virtual environment is found.</p>
@@ -7511,6 +7537,7 @@ uv pip list [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-pip-list--python"><a href="#uv-pip-list--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be listed.</p>
 
 <p>By default, uv lists packages in a virtual environment but will show packages in a system Python environment if no virtual environment is found.</p>
@@ -7646,6 +7673,7 @@ uv pip show [OPTIONS] [PACKAGE]...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-pip-show--python"><a href="#uv-pip-show--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to find the package in.</p>
 
 <p>By default, uv looks for packages in a virtual environment but will look for packages in a system Python environment if no virtual environment is found.</p>
@@ -7854,6 +7882,7 @@ uv pip tree [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-pip-tree--prune"><a href="#uv-pip-tree--prune"><code>--prune</code></a> <i>prune</i></dt><dd><p>Prune the given package from the display of the dependency tree</p>
 
 </dd><dt id="uv-pip-tree--python"><a href="#uv-pip-tree--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be listed.</p>
@@ -7985,6 +8014,7 @@ uv pip check [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-pip-check--python"><a href="#uv-pip-check--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter for which packages should be checked.</p>
 
 <p>By default, uv checks packages in a virtual environment but will check packages in a system Python environment if no virtual environment is found.</p>
@@ -8226,6 +8256,7 @@ uv venv [OPTIONS] [PATH]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-venv--prompt"><a href="#uv-venv--prompt"><code>--prompt</code></a> <i>prompt</i></dt><dd><p>Provide an alternative prompt prefix for the virtual environment.</p>
 
 <p>By default, the prompt is dependent on whether a path was provided to <code>uv venv</code>. If provided (e.g, <code>uv venv project</code>), the prompt is set to the directory name. If not provided (<code>uv venv</code>), the prompt is set to the current directory&#8217;s name.</p>
@@ -8568,6 +8599,7 @@ uv build [OPTIONS] [SRC]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-build--python"><a href="#uv-build--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for the build environment.</p>
 
 <p>By default, builds are executed in isolated virtual environments. The discovered interpreter will be used to create those environments, and will be symlinked or copied in depending on the platform.</p>
@@ -8770,6 +8802,7 @@ With these settings, the following two calls are equivalent:</code></pre>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-publish--publish-url"><a href="#uv-publish--publish-url"><code>--publish-url</code></a> <i>publish-url</i></dt><dd><p>The URL of the upload endpoint (not the index URL).</p>
 
 <p>Note that there are typically different URLs for index access (e.g., <code>https:://.../simple</code>) and index upload.</p>
@@ -8935,6 +8968,7 @@ uv cache clean [OPTIONS] [PACKAGE]...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-cache-clean--quiet"><a href="#uv-cache-clean--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-cache-clean--verbose"><a href="#uv-cache-clean--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
@@ -9052,6 +9086,7 @@ uv cache prune [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-cache-prune--quiet"><a href="#uv-cache-prune--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-cache-prune--verbose"><a href="#uv-cache-prune--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
@@ -9171,6 +9206,7 @@ uv cache dir [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-cache-dir--quiet"><a href="#uv-cache-dir--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-cache-dir--verbose"><a href="#uv-cache-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
@@ -9304,6 +9340,7 @@ uv self update [OPTIONS] [TARGET_VERSION]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-self-update--quiet"><a href="#uv-self-update--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-self-update--token"><a href="#uv-self-update--token"><code>--token</code></a> <i>token</i></dt><dd><p>A GitHub token for authentication. A token is not required but can be used to reduce the chance of encountering rate limits</p>
@@ -9418,6 +9455,7 @@ uv version [OPTIONS]
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-version--quiet"><a href="#uv-version--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-version--verbose"><a href="#uv-version--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
@@ -9481,6 +9519,7 @@ uv generate-shell-completion [OPTIONS] <SHELL>
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd></dl>
 
 ## uv help
@@ -9590,6 +9629,7 @@ uv help [OPTIONS] [COMMAND]...
 
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
 </dd><dt id="uv-help--quiet"><a href="#uv-help--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Do not print any output</p>
 
 </dd><dt id="uv-help--verbose"><a href="#uv-help--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
