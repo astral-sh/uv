@@ -1,3 +1,4 @@
+use uv_python::platform::{Arch, Os};
 use uv_static::EnvVars;
 
 use crate::common::{uv_snapshot, TestContext};
@@ -27,6 +28,79 @@ fn python_list() {
     ----- stderr -----
     ");
 
+    // Request Python 3.12
+    uv_snapshot!(context.filters(), context.python_list().arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM]    [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+
+    // Request Python 3.11
+    uv_snapshot!(context.filters(), context.python_list().arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    // Request CPython
+    uv_snapshot!(context.filters(), context.python_list().arg("cpython"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]
+    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    // Request CPython 3.12
+    uv_snapshot!(context.filters(), context.python_list().arg("cpython@3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM]    [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+
+    // Request CPython 3.12 via partial key syntax
+    uv_snapshot!(context.filters(), context.python_list().arg("cpython-3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM]    [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+
+    // Request CPython 3.12 for the current platform
+    let os = Os::from_env();
+    let arch = Arch::from_env();
+
+    uv_snapshot!(context.filters(), context.python_list().arg(format!("cpython-3.12-{os}-{arch}")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM]    [PYTHON-3.12]
+
+    ----- stderr -----
+    ");
+
+    // Request PyPy (which should be missing)
+    uv_snapshot!(context.filters(), context.python_list().arg("pypy"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
     // Swap the order of the Python versions
     context.python_versions.reverse();
 
@@ -42,16 +116,12 @@ fn python_list() {
 
     // Request Python 3.11
     uv_snapshot!(context.filters(), context.python_list().arg("3.11"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
 
     ----- stderr -----
-    error: unexpected argument '3.11' found
-
-    Usage: uv python list [OPTIONS]
-
-    For more information, try '--help'.
     ");
 }
 
@@ -130,6 +200,193 @@ fn python_list_venv() {
     ----- stdout -----
     cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]
     cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+}
+
+#[cfg(unix)]
+#[test]
+fn python_list_unsupported_version() {
+    let context: TestContext = TestContext::new_with_versions(&["3.12"])
+        .with_filtered_python_symlinks()
+        .with_filtered_python_keys();
+
+    // Request a low version
+    uv_snapshot!(context.filters(), context.python_list().arg("3.6"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.7 is not supported but 3.6 was requested.
+    ");
+
+    // Request a low version with a patch
+    uv_snapshot!(context.filters(), context.python_list().arg("3.6.9"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.7 is not supported but 3.6.9 was requested.
+    ");
+
+    // Request a really low version
+    uv_snapshot!(context.filters(), context.python_list().arg("2.6"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.7 is not supported but 2.6 was requested.
+    ");
+
+    // Request a really low version with a patch
+    uv_snapshot!(context.filters(), context.python_list().arg("2.6.8"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.7 is not supported but 2.6.8 was requested.
+    ");
+
+    // Request a future version
+    uv_snapshot!(context.filters(), context.python_list().arg("4.2"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // Request a low version with a range
+    uv_snapshot!(context.filters(), context.python_list().arg("<3.0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // Request free-threaded Python on unsupported version
+    uv_snapshot!(context.filters(), context.python_list().arg("3.12t"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Invalid version request: Python <3.13 does not support free-threading but 3.12t was requested.
+    ");
+}
+
+#[test]
+fn python_list_downloads() {
+    let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_keys();
+
+    // We do not test showing all interpreters — as it differs per platform
+    // Instead, we choose a Python version where our available distributions are stable
+
+    // Test the default display, which requires reverting the test context disabling Python downloads
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.16-[PLATFORM]    <download available>
+
+    ----- stderr -----
+    ");
+
+    // Show patch versions
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--all-versions").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.16-[PLATFORM]    <download available>
+    cpython-3.10.15-[PLATFORM]    <download available>
+    cpython-3.10.14-[PLATFORM]    <download available>
+    cpython-3.10.13-[PLATFORM]    <download available>
+    cpython-3.10.12-[PLATFORM]    <download available>
+    cpython-3.10.11-[PLATFORM]    <download available>
+    cpython-3.10.9-[PLATFORM]     <download available>
+    cpython-3.10.8-[PLATFORM]     <download available>
+    cpython-3.10.7-[PLATFORM]     <download available>
+    cpython-3.10.6-[PLATFORM]     <download available>
+    cpython-3.10.5-[PLATFORM]     <download available>
+    cpython-3.10.4-[PLATFORM]     <download available>
+    cpython-3.10.3-[PLATFORM]     <download available>
+    cpython-3.10.2-[PLATFORM]     <download available>
+    cpython-3.10.0-[PLATFORM]     <download available>
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+#[cfg(feature = "python-managed")]
+fn python_list_downloads_installed() {
+    use assert_cmd::assert::OutputAssertExt;
+
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_python_names()
+        .with_filtered_python_install_bin()
+        .with_managed_python_dirs();
+
+    // We do not test showing all interpreters — as it differs per platform
+    // Instead, we choose a Python version where our available distributions are stable
+
+    // First, the download is shown as available
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.16-[PLATFORM]    <download available>
+
+    ----- stderr -----
+    ");
+
+    // TODO(zanieb): It'd be nice to test `--show-urls` here too but we need special filtering for
+    // the URL
+
+    // But not if `--only-installed` is used
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-installed").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // Install a Python version
+    context.python_install().arg("3.10").assert().success();
+
+    // Then, it should be listed as installed instead of available
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.16-[PLATFORM]    managed/cpython-3.10.16-[PLATFORM]/[INSTALL-BIN]/python
+
+    ----- stderr -----
+    ");
+
+    // But, the display should be reverted if `--only-downloads` is used
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-downloads").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.16-[PLATFORM]    <download available>
+
+    ----- stderr -----
+    ");
+
+    // And should not be shown if `--no-managed-python` is used
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--no-managed-python").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
 
     ----- stderr -----
     ");

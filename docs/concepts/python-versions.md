@@ -173,6 +173,18 @@ To list installed and available Python versions:
 $ uv python list
 ```
 
+To filter the Python versions, provide a request, e.g., to show all Python 3.13 interpreters:
+
+```console
+$ uv python list 3.13
+```
+
+Or, to show all PyPy interpreters:
+
+```console
+$ uv python list pypy
+```
+
 By default, downloads for other platforms and old patch versions are hidden.
 
 To view all versions:
