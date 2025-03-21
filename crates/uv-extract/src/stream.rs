@@ -213,6 +213,7 @@ pub async fn untar_gz<R: tokio::io::AsyncRead + Unpin>(
     )
     .set_preserve_mtime(false)
     .set_preserve_permissions(false)
+    .set_allow_external_symlinks(false)
     .build();
     Ok(untar_in(archive, target.as_ref()).await?)
 }
@@ -232,6 +233,7 @@ pub async fn untar_bz2<R: tokio::io::AsyncRead + Unpin>(
     )
     .set_preserve_mtime(false)
     .set_preserve_permissions(false)
+    .set_allow_external_symlinks(false)
     .build();
     Ok(untar_in(archive, target.as_ref()).await?)
 }
@@ -251,6 +253,7 @@ pub async fn untar_zst<R: tokio::io::AsyncRead + Unpin>(
     )
     .set_preserve_mtime(false)
     .set_preserve_permissions(false)
+    .set_allow_external_symlinks(false)
     .build();
     Ok(untar_in(archive, target.as_ref()).await?)
 }
@@ -270,6 +273,7 @@ pub async fn untar_xz<R: tokio::io::AsyncRead + Unpin>(
     )
     .set_preserve_mtime(false)
     .set_preserve_permissions(false)
+    .set_allow_external_symlinks(false)
     .build();
     untar_in(archive, target.as_ref()).await?;
     Ok(())
@@ -288,6 +292,7 @@ pub async fn untar<R: tokio::io::AsyncRead + Unpin>(
         tokio_tar::ArchiveBuilder::new(&mut reader as &mut (dyn tokio::io::AsyncRead + Unpin))
             .set_preserve_mtime(false)
             .set_preserve_permissions(false)
+            .set_allow_external_symlinks(false)
             .build();
     untar_in(archive, target.as_ref()).await?;
     Ok(())
