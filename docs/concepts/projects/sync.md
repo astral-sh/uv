@@ -152,17 +152,20 @@ In a workspace setup, using `uv sync` in the project root folder will only sync 
 package. All workspace dependencies will be removed and the workspace packages will not be included
 in the python path when running a python program using the `uv run` command.
 If you use `uv sync` in a workspace folder, it will only sync the current workspace and the parent
-project. It will remove all dependencies from the virtual environment that may have been installed 
+project. It will remove all dependencies from the virtual environment that may have been installed
 for other worspaces in the project and only the current workspace source code folder and the project
 root will be included in the python path when running a python program using the `uv run` command.
 
 To sync the entire workspace and have all workspace packages added to the python path when using
-the `uv run` command, use the `--all-packages` option when running `uv saync` in the project root:
+the `uv run` command, use the `--all-packages` option when running `uv sync` in the project root:
+
 ```console
 $ uv sync --all-packages
 ```
+
 To sync only specific packages in the workspace use the `--packages <package name>` option for each
 package you wish to sync when running `uv sync` in the project root:
+
 ```console
 $ uv sync --package beta --package delta
 ```
