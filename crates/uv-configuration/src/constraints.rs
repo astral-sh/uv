@@ -28,7 +28,7 @@ impl Constraints {
                 .or_default()
                 .push(Requirement {
                     // We add and apply constraints independent of their extras.
-                    extras: vec![],
+                    extras: Box::new([]),
                     ..requirement
                 });
         }

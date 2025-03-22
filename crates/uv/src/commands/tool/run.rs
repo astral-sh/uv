@@ -746,7 +746,7 @@ async fn get_or_create_environment(
                 let requirement = Requirement {
                     name: name.clone(),
                     extras: extras.clone(),
-                    groups: vec![],
+                    groups: Box::new([]),
                     marker: MarkerTree::default(),
                     source: RequirementSource::Registry {
                         specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
@@ -769,7 +769,7 @@ async fn get_or_create_environment(
                 let requirement = Requirement {
                     name: name.clone(),
                     extras: extras.clone(),
-                    groups: vec![],
+                    groups: Box::new([]),
                     marker: MarkerTree::default(),
                     source: RequirementSource::Registry {
                         specifier: VersionSpecifiers::empty(),

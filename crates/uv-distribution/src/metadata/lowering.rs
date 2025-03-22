@@ -324,7 +324,7 @@ impl LoweredRequirement {
                     Ok(Self(Requirement {
                         name: requirement.name.clone(),
                         extras: requirement.extras.clone(),
-                        groups: vec![],
+                        groups: Box::new([]),
                         marker,
                         source,
                         origin: requirement.origin.clone(),
@@ -466,7 +466,7 @@ impl LoweredRequirement {
                     Ok(Self(Requirement {
                         name: requirement.name.clone(),
                         extras: requirement.extras.clone(),
-                        groups: vec![],
+                        groups: Box::new([]),
                         marker,
                         source,
                         origin: requirement.origin.clone(),
