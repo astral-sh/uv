@@ -43,8 +43,6 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
-    SerdeJson(#[from] serde_json::Error),
-    #[error(transparent)]
     ImplementationError(#[from] ImplementationError),
     #[error("Expected download URL (`{0}`) to end in a supported file extension: {1}")]
     MissingExtension(String, ExtensionError),
@@ -96,6 +94,8 @@ pub enum Error {
     LibcDetection(#[from] LibcDetectionError),
     #[error("Remote python downloads JSON is not yet supported, please use a local path (without `file://` prefix)")]
     RemoteJSONNotSupported(),
+    #[error("The json of the python downloads is invalid: {0}")]
+    InvalidPythonDownloadsJSON(String, #[source] serde_json::Error),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -515,9 +515,12 @@ impl ManagedPythonDownload {
                         Err(e) => { Err(Error::Io(e)) }?,
                     };
 
-                    serde_json::from_reader(file)?
+                    serde_json::from_reader(file)
+                        .map_err(|e| Error::InvalidPythonDownloadsJSON(json_source.clone(), e))?
                 } else {
-                    serde_json::from_str(BUILTIN_PYTHON_DOWNLOADS_JSON)?
+                    serde_json::from_str(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
+                        Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_string(), e)
+                    })?
                 };
 
             let result = parse_json_downloads(json_downloads);
