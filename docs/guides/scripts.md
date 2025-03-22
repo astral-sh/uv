@@ -217,6 +217,26 @@ print(Point)
 is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
 more details.
 
+## Using a shebang line
+
+With a shebang line, you can run scripts that are on your `PATH` or in the current folder without
+specifying `uv run` before the filename.
+
+For example, create a file called `greet` with the following contents
+
+```python title="greet"
+#!/usr/bin/env -S uv run --script
+
+print("Hello, world!")
+```
+
+Ensure that your script is executable, typically with `chmod +x greet`, and run the script
+
+```
+$ ./greet
+Hello, world!
+```
+
 ## Using alternative package indexes
 
 If you wish to use an alternative [package index](../configuration/indexes.md) to resolve
