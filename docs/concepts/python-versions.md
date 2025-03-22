@@ -165,8 +165,10 @@ project command invocations. The first Python version that is compatible with th
 be used, unless a version is otherwise requested, e.g., via a `.python-version` file or the
 `--python` flag.
 
+
 If for some reason you need to change the default python version for your project after it has been
-created use the [`uv python pin`](../reference/cli.md/#uv-python-pin) command specifying the desired version:
+created use the [`uv python pin`](../reference/cli.md/#uv-python-pin) command specifying the desired
+version:
 
 ```console
 $ uv python pin 3.12
