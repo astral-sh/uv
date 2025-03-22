@@ -56,16 +56,17 @@ pub enum Error {
     #[error("Failed to write RECORD file")]
     Csv(#[from] csv::Error),
     #[error(
-        "Expected a Python module for `{}` with an `__init__.py` at: `{}`",
-        module_name,
-        project_src.user_display()
+        "Expected a Python module directory at: `{}`",
+        _0.user_display()
     )]
-    MissingModule {
-        module_name: Identifier,
-        project_src: PathBuf,
-    },
+    MissingModule(PathBuf),
     #[error(
-        "Expected a single Python module for `{}` with an `__init__.py`, found multiple:\n* `{}`",
+        "Expected an `__init__.py` at: `{}`",
+        _0.user_display()
+    )]
+    MissingInitPy(PathBuf),
+    #[error(
+        "Expected an `__init__.py` at `{}`, found multiple:\n* `{}`",
         module_name,
         paths.iter().map(Simplified::user_display).join("`\n* `")
     )]

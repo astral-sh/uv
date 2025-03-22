@@ -458,14 +458,28 @@ fn build_module_name_normalization() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-wheel")
-        .arg(&wheel_dir), @r"
+        .arg(&wheel_dir), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module for `django_plugin` with an `__init__.py` at: `src`
-    ");
+    error: Expected a Python module directory at: `src/django_plugin`
+    "###);
+
+    fs_err::create_dir_all(context.temp_dir.join("src/Django_plugin"))?;
+    // Error case 2: A matching module, but no `__init__.py`.
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-wheel")
+        .arg(&wheel_dir), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Expected an `__init__.py` at: `src/Django_plugin/__init__.py`
+    "###);
 
     // Use `Django_plugin` instead of `django_plugin`
     context
@@ -507,7 +521,7 @@ fn build_module_name_normalization() -> Result<()> {
     ----- stderr -----
     ");
 
-    // Error case 2: Multiple modules a matching name.
+    // Error case 3: Multiple modules a matching name.
     // Requires a case-sensitive filesystem.
     #[cfg(target_os = "linux")]
     {

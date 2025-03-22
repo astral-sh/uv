@@ -254,17 +254,25 @@ fn find_module_root(src_root: &Path, module_name: Identifier) -> Result<PathBuf,
     let normalized = module_name.to_string();
     let modules = fs_err::read_dir(src_root)?
         .filter_ok(|entry| {
-            entry.file_name().to_string_lossy().to_lowercase() == normalized
-                && entry.path().join("__init__.py").is_file()
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|file_name| file_name.to_lowercase() == normalized)
         })
         .map_ok(|entry| entry.path())
         .collect::<Result<Vec<_>, _>>()?;
     match modules.as_slice() {
-        [] => Err(Error::MissingModule {
-            module_name,
-            project_src: src_root.to_path_buf(),
-        }),
-        [module_root] => Ok(module_root.clone()),
+        [] => {
+            // Show the normalized path in the error message, as representative example.
+            Err(Error::MissingModule(src_root.join(module_name.as_ref())))
+        }
+        [module_root] => {
+            if module_root.join("__init__.py").is_file() {
+                Ok(module_root.clone())
+            } else {
+                Err(Error::MissingInitPy(module_root.join("__init__.py")))
+            }
+        }
         multiple => {
             let mut paths = multiple.to_vec();
             paths.sort();
