@@ -5,6 +5,7 @@ use std::fmt::Formatter;
 use std::path::{Component, Path, PathBuf};
 
 use either::Either;
+use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::EdgeRef;
 use petgraph::visit::IntoNodeReferences;
@@ -312,6 +313,19 @@ impl<'lock> RequirementsTxtExport<'lock> {
             .map(|(index, package)| Requirement {
                 package,
                 marker: reachability.remove(&index).unwrap_or_default(),
+                parents: graph
+                    .edges_directed(index, Direction::Incoming)
+                    .filter_map(|edge| {
+                        let src = edge.source();
+                        if src == root {
+                            None
+                        } else if let Some(Node::Package(parent)) = graph.node_weight(src) {
+                            Some(*parent)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
             })
             .filter(|requirement| !requirement.marker.is_false())
             .collect::<Vec<_>>();
@@ -496,7 +510,12 @@ fn conflict_marker_reachability<'lock>(
 impl std::fmt::Display for RequirementsTxtExport<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Write out each package.
-        for Requirement { package, marker } in &self.nodes {
+        for Requirement {
+            package,
+            marker,
+            parents,
+        } in &self.nodes
+        {
             match &package.id.source {
                 Source::Registry(_) => {
                     let version = package
@@ -587,6 +606,9 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
             }
 
             writeln!(f)?;
+            for parent in parents {
+                writeln!(f, "{}", format!("    # via {}", parent.id.name).green())?;
+            }
         }
 
         Ok(())
@@ -638,6 +660,7 @@ impl Reachable<MarkerTree> for Edge<'_> {
 struct Requirement<'lock> {
     package: &'lock Package,
     marker: MarkerTree,
+    parents: Vec<&'lock Package>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
