@@ -145,7 +145,7 @@ mod resolver {
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
         let exclude_newer = Some(
-            jiff::civil::date(2024, 8, 8)
+            jiff::civil::date(2024, 9, 1)
                 .to_zoned(jiff::tz::TimeZone::UTC)
                 .unwrap()
                 .timestamp()
