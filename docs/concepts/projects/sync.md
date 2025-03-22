@@ -148,16 +148,16 @@ details on how to manage development dependencies.
 
 ### Syncing workspaces
 
-In a workspace setup, using `uv sync` in the project root folder will only sync the project
-package. All workspace dependencies will be removed and the workspace packages will not be included
-in the python path when running a python program using the `uv run` command.
-If you use `uv sync` in a workspace folder, it will only sync the current workspace and the parent
-project. It will remove all dependencies from the virtual environment that may have been installed
-for other worspaces in the project and only the current workspace source code folder and the project
-root will be included in the python path when running a python program using the `uv run` command.
+In a workspace setup, using `uv sync` in the project root folder will only sync the project package.
+All workspace dependencies will be removed and the workspace packages will not be included in the
+python path when running a python program using the `uv run` command. If you use `uv sync` in a
+workspace folder, it will only sync the current workspace and the parent project. It will remove all
+dependencies from the virtual environment that may have been installed for other worspaces in the
+project and only the current workspace source code folder and the project root will be included in
+the python path when running a python program using the `uv run` command.
 
-To sync the entire workspace and have all workspace packages added to the python path when using
-the `uv run` command, use the `--all-packages` option when running `uv sync` in the project root:
+To sync the entire workspace and have all workspace packages added to the python path when using the
+`uv run` command, use the `--all-packages` option when running `uv sync` in the project root:
 
 ```console
 $ uv sync --all-packages
@@ -170,9 +170,9 @@ package you wish to sync when running `uv sync` in the project root:
 $ uv sync --package beta --package delta
 ```
 
-To prevent losing installed workspace dependencies when syncing 1 or more specific workspace packages,
-use the `--inexact` option. This will also prevent removal of any workspace packages automatically
-added to the python path when running a python program using the `uv run` command.
+To prevent losing installed workspace dependencies when syncing 1 or more specific workspace
+packages, use the `--inexact` option. This will also prevent removal of any workspace packages
+automatically added to the python path when running a python program using the `uv run` command.
 
 ## Upgrading locked package versions
 
