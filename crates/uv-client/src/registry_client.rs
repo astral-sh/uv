@@ -1138,13 +1138,13 @@ mod tests {
             .map(|file| uv_pypi_types::base_url_join_relative(base.as_url().as_str(), &file.url))
             .collect::<Result<Vec<_>, JoinRelativeError>>()?;
         let urls = urls.iter().map(Url::as_str).collect::<Vec<_>>();
-        insta::assert_debug_snapshot!(urls, @r###"
-    [
-        "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.1/Flask-0.1.tar.gz#sha256=9da884457e910bf0847d396cb4b778ad9f3c3d17db1c5997cb861937bd284237",
-        "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.10.1/Flask-0.10.1.tar.gz#sha256=4c83829ff83d408b5e1d4995472265411d2c414112298f2eb4b359d9e4563373",
-        "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/3.0.1/flask-3.0.1.tar.gz#sha256=6489f51bb3666def6f314e15f19d50a1869a19ae0e8c9a3641ffe66c77d42403",
-    ]
-    "###);
+        insta::assert_debug_snapshot!(urls, @r#"
+        [
+            "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.1/Flask-0.1.tar.gz",
+            "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.10.1/Flask-0.10.1.tar.gz",
+            "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/3.0.1/flask-3.0.1.tar.gz",
+        ]
+        "#);
 
         Ok(())
     }
