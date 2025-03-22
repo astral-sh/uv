@@ -107,26 +107,13 @@ impl<'a> FlatIndexClient<'a> {
     }
 
     /// Read the directories and flat remote indexes from `--find-links`.
-    #[allow(clippy::result_large_err)]
-    pub async fn fetch(
+    pub async fn fetch_all(
         &self,
         indexes: impl Iterator<Item = &IndexUrl>,
     ) -> Result<FlatIndexEntries, FlatIndexError> {
         let mut fetches = futures::stream::iter(indexes)
             .map(|index| async move {
-                let entries = match index {
-                    IndexUrl::Path(url) => {
-                        let path = url
-                            .to_file_path()
-                            .map_err(|()| FlatIndexError::NonFileUrl(url.to_url()))?;
-                        Self::read_from_directory(&path, index)
-                            .map_err(|err| FlatIndexError::FindLinksDirectory(path.clone(), err))?
-                    }
-                    IndexUrl::Pypi(url) | IndexUrl::Url(url) => self
-                        .read_from_url(url, index)
-                        .await
-                        .map_err(|err| FlatIndexError::FindLinksUrl(url.to_url(), err))?,
-                };
+                let entries = self.fetch_index(index).await?;
                 if entries.is_empty() {
                     warn!("No packages found in `--find-links` entry: {}", index);
                 } else {
@@ -149,6 +136,23 @@ impl<'a> FlatIndexClient<'a> {
             .entries
             .sort_by(|a, b| a.filename.cmp(&b.filename).then(a.index.cmp(&b.index)));
         Ok(results)
+    }
+
+    /// Fetch a flat remote index from a `--find-links` URL.
+    pub async fn fetch_index(&self, index: &IndexUrl) -> Result<FlatIndexEntries, FlatIndexError> {
+        match index {
+            IndexUrl::Path(url) => {
+                let path = url
+                    .to_file_path()
+                    .map_err(|()| FlatIndexError::NonFileUrl(url.to_url()))?;
+                Self::read_from_directory(&path, index)
+                    .map_err(|err| FlatIndexError::FindLinksDirectory(path.clone(), err))
+            }
+            IndexUrl::Pypi(url) | IndexUrl::Url(url) => self
+                .read_from_url(url, index)
+                .await
+                .map_err(|err| FlatIndexError::FindLinksUrl(url.to_url(), err)),
+        }
     }
 
     /// Read a flat remote index from a `--find-links` URL.

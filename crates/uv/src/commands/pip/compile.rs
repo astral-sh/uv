@@ -375,7 +375,7 @@ pub(crate) async fn pip_compile(
     let flat_index = {
         let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
         let entries = client
-            .fetch(index_locations.flat_indexes().map(Index::url))
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
         FlatIndex::from_entries(entries, tags.as_deref(), &hasher, &build_options)
     };
