@@ -1,8 +1,8 @@
 # Managing dependencies
 
-## Dependency tables
+## Dependency fields
 
-Dependencies of the project are defined in several tables:
+Dependencies of the project are defined in several fields:
 
 - [`project.dependencies`](#project-dependencies): Published dependencies.
 - [`project.optional-dependencies`](#optional-dependencies): Published optional dependencies, or
@@ -12,7 +12,7 @@ Dependencies of the project are defined in several tables:
 
 !!! note
 
-    The `project.dependencies` and `project.optional-dependencies` tables can be used even if
+    The `project.dependencies` and `project.optional-dependencies` fields can be used even if
     project isn't going to be published. `dependency-groups` are a recently standardized feature
     and may not be supported by all tools yet.
 
@@ -27,7 +27,7 @@ To add a dependency:
 $ uv add httpx
 ```
 
-An entry will be added in the `project.dependencies` table:
+An entry will be added in the `project.dependencies` field:
 
 ```toml title="pyproject.toml" hl_lines="4"
 [project]
@@ -38,7 +38,7 @@ dependencies = ["httpx>=0.27.2"]
 
 The [`--dev`](#development-dependencies), [`--group`](#dependency-groups), or
 [`--optional`](#optional-dependencies) flags can be used to add a dependencies to an alternative
-table.
+field.
 
 The dependency will include a constraint, e.g., `>=0.27.2`, for the most recent, compatible version
 of the package. An alternative constraint can be provided:
@@ -48,7 +48,7 @@ $ uv add "httpx>=0.20"
 ```
 
 When adding a dependency from a source other than a package registry, uv will add an entry in the
-sources table. For example, when adding `httpx` from GitHub:
+sources field. For example, when adding `httpx` from GitHub:
 
 ```console
 $ uv add "httpx @ git+https://github.com/encode/httpx"
