@@ -171,6 +171,7 @@ created use the [`uv python pin`](../reference/cli.md/#uv-python-pin) command sp
 ```console
 $ uv python pin 3.12
 ```
+
 This will update the `.python-version` file for the project.
 
 ## Viewing available Python versions
