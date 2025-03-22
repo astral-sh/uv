@@ -167,7 +167,7 @@ package you wish to sync when running `uv sync` in the project root:
 $ uv sync --package beta --package delta
 ```
 
-To prevent losing installed workspace depencies when syncing 1 or more specific workspace packages,
+To prevent losing installed workspace dependencies when syncing 1 or more specific workspace packages,
 use the `--inexact` option. This will also prevent removal of any workspace packages automatically
 added to the python path when running a python program using the `uv run` command.
 
