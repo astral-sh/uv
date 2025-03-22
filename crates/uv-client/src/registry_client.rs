@@ -258,9 +258,25 @@ impl RegistryClient {
     fn index_urls_for(&self, package_name: &PackageName) -> impl Iterator<Item = &IndexUrl> {
         self.torch_backend
             .as_ref()
-            .and_then(|torch_backend| torch_backend.index_urls(package_name))
+            .and_then(|torch_backend| {
+                torch_backend
+                    .applies_to(package_name)
+                    .then(|| torch_backend.index_urls())
+            })
             .map(Either::Left)
             .unwrap_or_else(|| Either::Right(self.index_urls.indexes().map(Index::url)))
+    }
+
+    /// Return the appropriate [`IndexStrategy`] for the given [`PackageName`].
+    fn index_strategy_for(&self, package_name: &PackageName) -> IndexStrategy {
+        self.torch_backend
+            .as_ref()
+            .and_then(|torch_backend| {
+                torch_backend
+                    .applies_to(package_name)
+                    .then_some(IndexStrategy::UnsafeFirstMatch)
+            })
+            .unwrap_or(self.index_strategy)
     }
 
     /// Fetch a package from the `PyPI` simple API.
@@ -290,7 +306,7 @@ impl RegistryClient {
 
         let mut results = Vec::new();
 
-        match self.index_strategy {
+        match self.index_strategy_for(package_name) {
             // If we're searching for the first index that contains the package, fetch serially.
             IndexStrategy::FirstIndex => {
                 for index in indexes {
