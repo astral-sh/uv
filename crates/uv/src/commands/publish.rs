@@ -32,6 +32,7 @@ pub(crate) async fn publish(
     check_url: Option<IndexUrl>,
     cache: &Cache,
     printer: Printer,
+    force: bool,
 ) -> Result<ExitStatus> {
     if network_settings.connectivity.is_offline() {
         bail!("Unable to publish files in offline mode");
@@ -111,8 +112,14 @@ pub(crate) async fn publish(
 
     for (file, raw_filename, filename) in files {
         if let Some(check_url_client) = &check_url_client {
-            if uv_publish::check_url(check_url_client, &file, &filename, &download_concurrency)
-                .await?
+            if uv_publish::check_url(
+                check_url_client,
+                &file,
+                &filename,
+                &download_concurrency,
+                force,
+            )
+            .await?
             {
                 writeln!(printer.stderr(), "File {filename} already exists, skipping")?;
                 continue;
@@ -140,6 +147,7 @@ pub(crate) async fn publish(
             &download_concurrency,
             // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
             Arc::new(reporter),
+            force,
         )
         .await?; // Filename and/or URL are already attached, if applicable.
         info!("Upload succeeded");
