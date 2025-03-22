@@ -149,7 +149,7 @@ details on how to manage development dependencies.
 ### Syncing workspaces
 
 In a workspace setup, using `uv sync` in the project root folder will only sync the project
-package. All workspace depencies will be removed and the workspace packages will not be included
+package. All workspace dependencies will be removed and the workspace packages will not be included
 in the python path when running a python program using the `uv run` command.
 If you use `uv sync` in a workspace folder, it will only sync the current workspace and the parent
 project. It will remove all dependencies from the virtual environment that may have been installed 
