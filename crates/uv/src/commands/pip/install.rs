@@ -366,7 +366,7 @@ pub(crate) async fn pip_install(
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
-        let client = FlatIndexClient::new(&client, &cache);
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
         let entries = client
             .fetch(index_locations.flat_indexes().map(Index::url))
             .await?;

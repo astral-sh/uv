@@ -14,7 +14,7 @@ use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
-use crate::{Connectivity, Error, ErrorKind, OwnedArchive, RegistryClient};
+use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
@@ -91,14 +91,19 @@ impl FlatIndexEntries {
 /// remote HTML indexes).
 #[derive(Debug, Clone)]
 pub struct FlatIndexClient<'a> {
-    client: &'a RegistryClient,
+    client: &'a CachedClient,
+    connectivity: Connectivity,
     cache: &'a Cache,
 }
 
 impl<'a> FlatIndexClient<'a> {
     /// Create a new [`FlatIndexClient`].
-    pub fn new(client: &'a RegistryClient, cache: &'a Cache) -> Self {
-        Self { client, cache }
+    pub fn new(client: &'a CachedClient, connectivity: Connectivity, cache: &'a Cache) -> Self {
+        Self {
+            client,
+            connectivity,
+            cache,
+        }
     }
 
     /// Read the directories and flat remote indexes from `--find-links`.
@@ -157,7 +162,7 @@ impl<'a> FlatIndexClient<'a> {
             "html",
             format!("{}.msgpack", cache_digest(&url.to_string())),
         );
-        let cache_control = match self.client.connectivity() {
+        let cache_control = match self.connectivity {
             Connectivity::Online => CacheControl::from(
                 self.cache
                     .freshness(&cache_entry, None, None)
@@ -168,7 +173,8 @@ impl<'a> FlatIndexClient<'a> {
 
         let flat_index_request = self
             .client
-            .uncached_client(url)
+            .uncached()
+            .for_host(url)
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", "text/html")
@@ -210,7 +216,6 @@ impl<'a> FlatIndexClient<'a> {
         };
         let response = self
             .client
-            .cached_client()
             .get_cacheable_with_retry(
                 flat_index_request,
                 &cache_entry,
