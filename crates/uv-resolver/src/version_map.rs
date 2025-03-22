@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 use pubgrub::Ranges;
 use tracing::instrument;
 
-use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
+use uv_client::{FlatIndexEntry, OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
@@ -41,7 +41,7 @@ impl VersionMap {
     ///
     /// PEP 592: <https://peps.python.org/pep-0592/#warehouse-pypi-implementation-notes>
     #[instrument(skip_all, fields(package_name))]
-    pub(crate) fn from_metadata(
+    pub(crate) fn from_simple_metadata(
         simple_metadata: OwnedArchive<SimpleMetadata>,
         package_name: &PackageName,
         index: &IndexUrl,
@@ -113,6 +113,30 @@ impl VersionMap {
                 requires_python: requires_python.clone(),
                 exclude_newer: exclude_newer.copied(),
             }),
+        }
+    }
+
+    #[instrument(skip_all, fields(package_name))]
+    pub(crate) fn from_flat_metadata(
+        flat_metadata: Vec<FlatIndexEntry>,
+        tags: Option<&Tags>,
+        hasher: &HashStrategy,
+        build_options: &BuildOptions,
+    ) -> Self {
+        let mut stable = false;
+        let mut local = false;
+        let mut map = BTreeMap::new();
+
+        for (version, prioritized_dist) in
+            FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options)
+        {
+            stable |= version.is_stable();
+            local |= version.is_local();
+            map.insert(version, prioritized_dist);
+        }
+
+        Self {
+            inner: VersionMapInner::Eager(VersionMapEager { map, stable, local }),
         }
     }
 

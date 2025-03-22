@@ -1,6 +1,6 @@
 use std::future::Future;
 use std::sync::Arc;
-
+use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
@@ -158,7 +158,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             .fetcher
             .client()
             .manual(|client, semaphore| {
-                client.simple(
+                client.package_metadata(
                     package_name,
                     index.map(IndexMetadataRef::from),
                     self.capabilities,
@@ -174,11 +174,11 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
             Ok(results) => Ok(VersionsResponse::Found(
                 results
                     .into_iter()
-                    .map(|(index, metadata)| {
-                        VersionMap::from_metadata(
+                    .map(|(index, metadata)| match metadata {
+                        MetadataFormat::Simple(metadata) => VersionMap::from_simple_metadata(
                             metadata,
                             package_name,
-                            index.url(),
+                            index,
                             self.tags.as_ref(),
                             &self.requires_python,
                             &self.allowed_yanks,
@@ -188,7 +188,13 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                                 .and_then(|flat_index| flat_index.get(package_name))
                                 .cloned(),
                             self.build_options,
-                        )
+                        ),
+                        MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
+                            metadata,
+                            self.tags.as_ref(),
+                            &self.hasher,
+                            self.build_options,
+                        ),
                     })
                     .collect(),
             )),
