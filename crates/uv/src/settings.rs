@@ -466,6 +466,8 @@ pub(crate) struct ToolRunSettings {
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) env_file: Vec<PathBuf>,
+    pub(crate) no_env_file: bool,
 }
 
 impl ToolRunSettings {
@@ -485,6 +487,8 @@ impl ToolRunSettings {
             constraints,
             overrides,
             isolated,
+            env_file,
+            no_env_file,
             show_resolution,
             installer,
             build,
@@ -556,6 +560,8 @@ impl ToolRunSettings {
             settings,
             options,
             install_mirrors,
+            env_file,
+            no_env_file,
         }
     }
 }
