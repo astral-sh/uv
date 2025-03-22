@@ -45,6 +45,7 @@ fn home_assistant_core() -> Result<()> {
 
 // Source: https://github.com/konstin/transformers/blob/da3c00433d93e43bf1e7360b1057e8c160e7978e/pyproject.toml
 #[test]
+#[cfg(unix)] // deepspeed fails on windows due to missing torch
 fn transformers() -> Result<()> {
     // Takes too long on non-Linux in CI.
     if !cfg!(target_os = "linux") && std::env::var_os(EnvVars::CI).is_some() {
