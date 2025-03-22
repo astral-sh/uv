@@ -783,6 +783,13 @@ impl TestContext {
         command
     }
 
+    pub fn metadata_version(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("metadata").arg("version");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
     /// Create a `uv publish` command with options shared across scenarios.
     pub fn publish(&self) -> Command {
         let mut command = self.new_command();

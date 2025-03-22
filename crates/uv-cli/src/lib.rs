@@ -499,6 +499,8 @@ pub enum Commands {
     /// Generate shell completion
     #[command(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion(GenerateShellCompletionArgs),
+    /// Read or edit project metadata
+    Metadata(MetadataNamespace),
     /// Display documentation for a command.
     // To avoid showing the global options when displaying help for the help command, we are
     // responsible for maintaining the options using the `after_help`.
@@ -524,6 +526,47 @@ pub struct HelpArgs {
     pub no_pager: bool,
 
     pub command: Option<Vec<String>>,
+}
+
+#[derive(Args)]
+pub struct MetadataNamespace {
+    #[command(subcommand)]
+    pub command: MetadataCommand,
+}
+
+#[derive(Subcommand)]
+pub enum MetadataCommand {
+    /// Update the project's version.
+    Version(MetadataVersionArgs),
+}
+
+#[derive(Args, Debug)]
+#[command(group = clap::ArgGroup::new("operation"))]
+pub struct MetadataVersionArgs {
+    /// Set the project version to this value
+    #[arg(group = "operation")]
+    pub value: Option<String>,
+    /// Update the project version using the given semantics
+    #[arg(group = "operation", long)]
+    pub bump: Option<VersionBump>,
+    /// Don't write a new version to the `pyproject.toml`
+    ///
+    /// Instead, the version will be displayed.
+    #[arg(long)]
+    pub dry_run: bool,
+    /// Only print the final value
+    #[arg(long)]
+    pub short: bool,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, clap::ValueEnum)]
+pub enum VersionBump {
+    /// Increase the major version (1.2.3 => 2.0.0)
+    Major,
+    /// Increase the minor version (1.2.3 => 1.3.0)
+    Minor,
+    /// Increase the patch version (1.2.3 => 1.2.4)
+    Patch,
 }
 
 #[derive(Args)]
