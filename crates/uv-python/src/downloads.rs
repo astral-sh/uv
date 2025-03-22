@@ -805,19 +805,22 @@ fn parse_json_downloads(
                 }
             };
 
-            let variant = entry
+            let variant = match entry
                 .variant
                 .as_deref()
                 .map(PythonVariant::from_str)
                 .transpose()
-                .unwrap_or_else(|()| {
+            {
+                Ok(Some(variant)) => variant,
+                Ok(None) => PythonVariant::default(),
+                Err(()) => {
                     debug!(
                         "Skipping entry {key}: Unknown python variant - {}",
                         entry.variant.unwrap_or_default()
                     );
-                    None
-                })
-                .unwrap_or(PythonVariant::Default);
+                    return None;
+                }
+            };
 
             let version_str = format!(
                 "{}.{}.{}{}",
