@@ -772,10 +772,19 @@ fn parse_json_downloads(
                 _ => LenientImplementationName::Unknown(entry.name.clone()),
             };
 
+            let arch_str = match entry.arch.family.as_str() {
+                "armv5tel" => "armv5te".to_string(),
+                // The `gc` variant of riscv64 is the common base instruction set and
+                // is the target in `python-build-standalone`
+                // See https://github.com/astral-sh/python-build-standalone/issues/504
+                "riscv64" => "riscv64gc".to_string(),
+                value => value.to_string(),
+            };
+
             let arch_str = if let Some(variant) = entry.arch.variant {
-                format!("{}_{}", entry.arch.family, variant)
+                format!("{arch_str}_{variant}")
             } else {
-                entry.arch.family
+                arch_str
             };
 
             let arch = match Arch::from_str(&arch_str) {
