@@ -345,7 +345,8 @@ pub(crate) async fn add(
 
             // Resolve the flat indexes from `--find-links`.
             let flat_index = {
-                let client = FlatIndexClient::new(&client, cache);
+                let client =
+                    FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
                 let entries = client
                     .fetch(
                         settings
