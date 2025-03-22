@@ -8,6 +8,7 @@ pub use source_dist::{build_source_dist, list_source_dist};
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 
 use crate::metadata::ValidationError;
+use itertools::Itertools;
 use std::fs::FileType;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -15,7 +16,7 @@ use thiserror::Error;
 use tracing::debug;
 use uv_fs::Simplified;
 use uv_globfilter::PortableGlobError;
-use uv_pypi_types::IdentifierParseError;
+use uv_pypi_types::{Identifier, IdentifierParseError};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -54,8 +55,25 @@ pub enum Error {
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to write RECORD file")]
     Csv(#[from] csv::Error),
-    #[error("Expected a Python module with an `__init__.py` at: `{}`", _0.user_display())]
+    #[error(
+        "Expected a Python module directory at: `{}`",
+        _0.user_display()
+    )]
     MissingModule(PathBuf),
+    #[error(
+        "Expected an `__init__.py` at: `{}`",
+        _0.user_display()
+    )]
+    MissingInitPy(PathBuf),
+    #[error(
+        "Expected an `__init__.py` at `{}`, found multiple:\n* `{}`",
+        module_name,
+        paths.iter().map(Simplified::user_display).join("`\n* `")
+    )]
+    MultipleModules {
+        module_name: Identifier,
+        paths: Vec<PathBuf>,
+    },
     #[error("Absolute module root is not allowed: `{}`", _0.display())]
     AbsoluteModuleRoot(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: `{0}`")]
