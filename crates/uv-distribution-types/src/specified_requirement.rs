@@ -69,8 +69,8 @@ impl UnresolvedRequirement {
     /// Returns the extras for the requirement.
     pub fn extras(&self) -> &[ExtraName] {
         match self {
-            Self::Named(requirement) => requirement.extras.as_slice(),
-            Self::Unnamed(requirement) => requirement.extras.as_slice(),
+            Self::Named(requirement) => &requirement.extras,
+            Self::Unnamed(requirement) => &requirement.extras,
         }
     }
 

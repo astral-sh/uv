@@ -1672,7 +1672,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
 
                 requirements
-                    .flat_map(|requirement| {
+                    .flat_map(move |requirement| {
                         PubGrubDependency::from_requirement(
                             &self.conflicts,
                             requirement,
@@ -1952,7 +1952,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if name == Some(&req.name) && !req.source.is_empty() {
                     self_constraints.push(Requirement {
                         name: req.name.clone(),
-                        extras: vec![],
+                        extras: Box::new([]),
                         groups: req.groups.clone(),
                         source: req.source.clone(),
                         origin: req.origin.clone(),

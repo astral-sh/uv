@@ -306,8 +306,8 @@ impl Workspace {
                 .with_given(member.root.to_string_lossy());
             Some(Requirement {
                 name: member.pyproject_toml.project.as_ref()?.name.clone(),
-                extras: vec![],
-                groups: vec![],
+                extras: Box::new([]),
+                groups: Box::new([]),
                 marker: MarkerTree::TRUE,
                 source: if member.pyproject_toml.is_package() {
                     RequirementSource::Directory {
@@ -362,8 +362,8 @@ impl Workspace {
 
             Some(Requirement {
                 name: member.pyproject_toml.project.as_ref()?.name.clone(),
-                extras: vec![],
-                groups,
+                extras: Box::new([]),
+                groups: groups.into_boxed_slice(),
                 marker: MarkerTree::TRUE,
                 source: if member.pyproject_toml.is_package() {
                     RequirementSource::Directory {

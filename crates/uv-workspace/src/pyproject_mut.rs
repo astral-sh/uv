@@ -1169,9 +1169,11 @@ pub fn add_dependency(
 /// Update an existing requirement.
 fn update_requirement(old: &mut Requirement, new: &Requirement, has_source: bool) {
     // Add any new extras.
-    old.extras.extend(new.extras.iter().cloned());
-    old.extras.sort_unstable();
-    old.extras.dedup();
+    let mut extras = old.extras.to_vec();
+    extras.extend(new.extras.iter().cloned());
+    extras.sort_unstable();
+    extras.dedup();
+    old.extras = extras.into_boxed_slice();
 
     // Clear the requirement source if we are going to add to `tool.uv.sources`.
     if has_source {

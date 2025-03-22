@@ -426,7 +426,7 @@ impl FlatRequiresDist {
                 if !req.source.is_empty() {
                     flattened.push(Requirement {
                         name: req.name.clone(),
-                        extras: vec![],
+                        extras: Box::new([]),
                         groups: req.groups.clone(),
                         source: req.source.clone(),
                         origin: req.origin.clone(),

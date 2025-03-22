@@ -5,8 +5,8 @@ use std::str::FromStr;
 
 use thiserror::Error;
 use url::Url;
-use uv_distribution_filename::DistExtension;
 
+use uv_distribution_filename::DistExtension;
 use uv_fs::{relative_to, PortablePath, PortablePathBuf, CWD};
 use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -14,7 +14,6 @@ use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
     marker, MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl,
 };
-
 use uv_pypi_types::{
     ConflictItem, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl,
     ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
@@ -45,10 +44,10 @@ pub enum RequirementError {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Requirement {
     pub name: PackageName,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub extras: Vec<ExtraName>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub groups: Vec<GroupName>,
+    #[serde(skip_serializing_if = "<[ExtraName]>::is_empty", default)]
+    pub extras: Box<[ExtraName]>,
+    #[serde(skip_serializing_if = "<[GroupName]>::is_empty", default)]
+    pub groups: Box<[GroupName]>,
     #[serde(
         skip_serializing_if = "marker::ser::is_empty",
         serialize_with = "marker::ser::serialize",
@@ -290,7 +289,7 @@ impl From<uv_pep508::Requirement<VerbatimParsedUrl>> for Requirement {
         };
         Requirement {
             name: requirement.name,
-            groups: vec![],
+            groups: Box::new([]),
             extras: requirement.extras,
             marker: requirement.marker,
             source,
@@ -917,8 +916,8 @@ mod tests {
     fn roundtrip() {
         let requirement = Requirement {
             name: "foo".parse().unwrap(),
-            extras: vec![],
-            groups: vec![],
+            extras: Box::new([]),
+            groups: Box::new([]),
             marker: MarkerTree::TRUE,
             source: RequirementSource::Registry {
                 specifier: ">1,<2".parse().unwrap(),
@@ -939,8 +938,8 @@ mod tests {
         };
         let requirement = Requirement {
             name: "foo".parse().unwrap(),
-            extras: vec![],
-            groups: vec![],
+            extras: Box::new([]),
+            groups: Box::new([]),
             marker: MarkerTree::TRUE,
             source: RequirementSource::Directory {
                 install_path: PathBuf::from(path),

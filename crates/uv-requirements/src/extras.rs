@@ -119,7 +119,7 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
         };
 
         Ok(Requirement {
-            extras,
+            extras: extras.into_boxed_slice(),
             ..requirement
         })
     }

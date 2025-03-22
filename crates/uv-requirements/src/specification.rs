@@ -203,7 +203,7 @@ impl RequirementsSpecification {
                     requirements: vec![UnresolvedRequirementSpecification {
                         requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
                             url: VerbatimParsedUrl::parse_absolute_path(path)?,
-                            extras: vec![],
+                            extras: Box::new([]),
                             marker: MarkerTree::TRUE,
                             origin: None,
                         }),
