@@ -4577,6 +4577,11 @@ pub enum PythonCommand {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonListArgs {
+    /// A Python request to filter by.
+    ///
+    /// See `uv help python` to view supported request formats.
+    pub request: Option<String>,
+
     /// List all Python versions, including old patch versions.
     ///
     /// By default, only the latest patch version is shown for each minor version.

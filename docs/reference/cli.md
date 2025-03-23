@@ -4603,8 +4603,16 @@ Use `--only-installed` to omit available downloads.
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv python list [OPTIONS]
+uv python list [OPTIONS] [REQUEST]
 ```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="uv-python-list--request"><a href="#uv-python-list--request"<code>REQUEST</code></a></dt><dd><p>A Python request to filter by.</p>
+
+<p>See <a href="#uv-python">uv python</a> to view supported request formats.</p>
+
+</dd></dl>
 
 <h3 class="cli-reference">Options</h3>
 

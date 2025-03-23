@@ -826,6 +826,7 @@ pub(crate) enum PythonListKinds {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonListSettings {
+    pub(crate) request: Option<String>,
     pub(crate) kinds: PythonListKinds,
     pub(crate) all_platforms: bool,
     pub(crate) all_arches: bool,
@@ -839,6 +840,7 @@ impl PythonListSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let PythonListArgs {
+            request,
             all_versions,
             all_platforms,
             all_arches,
@@ -857,6 +859,7 @@ impl PythonListSettings {
         };
 
         Self {
+            request,
             kinds,
             all_platforms,
             all_arches,
