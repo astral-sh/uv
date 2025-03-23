@@ -539,7 +539,7 @@ fn build_module_name_normalization() -> Result<()> {
         ----- stdout -----
 
         ----- stderr -----
-        error: Expected a single Python module for `django_plugin` with an `__init__.py`, found multiple:
+        error: Expected an `__init__.py` at `django_plugin`, found multiple:
         * `src/Django_plugin`
         * `src/django_plugin`
         ");

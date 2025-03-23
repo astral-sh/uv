@@ -7,16 +7,19 @@ pub use metadata::{check_direct_build, PyProjectToml};
 pub use source_dist::{build_source_dist, list_source_dist};
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 
-use crate::metadata::ValidationError;
-use itertools::Itertools;
 use std::fs::FileType;
 use std::io;
 use std::path::{Path, PathBuf};
+
+use itertools::Itertools;
 use thiserror::Error;
 use tracing::debug;
+
 use uv_fs::Simplified;
 use uv_globfilter::PortableGlobError;
 use uv_pypi_types::{Identifier, IdentifierParseError};
+
+use crate::metadata::ValidationError;
 
 #[derive(Debug, Error)]
 pub enum Error {
