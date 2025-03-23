@@ -258,9 +258,25 @@ impl RegistryClient {
     fn index_urls_for(&self, package_name: &PackageName) -> impl Iterator<Item = &IndexUrl> {
         self.torch_backend
             .as_ref()
-            .and_then(|torch_backend| torch_backend.index_urls(package_name))
+            .and_then(|torch_backend| {
+                torch_backend
+                    .applies_to(package_name)
+                    .then(|| torch_backend.index_urls())
+            })
             .map(Either::Left)
             .unwrap_or_else(|| Either::Right(self.index_urls.indexes().map(Index::url)))
+    }
+
+    /// Return the appropriate [`IndexStrategy`] for the given [`PackageName`].
+    fn index_strategy_for(&self, package_name: &PackageName) -> IndexStrategy {
+        self.torch_backend
+            .as_ref()
+            .and_then(|torch_backend| {
+                torch_backend
+                    .applies_to(package_name)
+                    .then_some(IndexStrategy::UnsafeFirstMatch)
+            })
+            .unwrap_or(self.index_strategy)
     }
 
     /// Fetch a package from the `PyPI` simple API.
@@ -290,7 +306,7 @@ impl RegistryClient {
 
         let mut results = Vec::new();
 
-        match self.index_strategy {
+        match self.index_strategy_for(package_name) {
             // If we're searching for the first index that contains the package, fetch serially.
             IndexStrategy::FirstIndex => {
                 for index in indexes {
@@ -1138,13 +1154,13 @@ mod tests {
             .map(|file| uv_pypi_types::base_url_join_relative(base.as_url().as_str(), &file.url))
             .collect::<Result<Vec<_>, JoinRelativeError>>()?;
         let urls = urls.iter().map(Url::as_str).collect::<Vec<_>>();
-        insta::assert_debug_snapshot!(urls, @r###"
-    [
-        "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.1/Flask-0.1.tar.gz#sha256=9da884457e910bf0847d396cb4b778ad9f3c3d17db1c5997cb861937bd284237",
-        "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.10.1/Flask-0.10.1.tar.gz#sha256=4c83829ff83d408b5e1d4995472265411d2c414112298f2eb4b359d9e4563373",
-        "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/3.0.1/flask-3.0.1.tar.gz#sha256=6489f51bb3666def6f314e15f19d50a1869a19ae0e8c9a3641ffe66c77d42403",
-    ]
-    "###);
+        insta::assert_debug_snapshot!(urls, @r#"
+        [
+            "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.1/Flask-0.1.tar.gz",
+            "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.10.1/Flask-0.10.1.tar.gz",
+            "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/3.0.1/flask-3.0.1.tar.gz",
+        ]
+        "#);
 
         Ok(())
     }

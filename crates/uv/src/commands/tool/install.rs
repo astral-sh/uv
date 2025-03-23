@@ -167,7 +167,7 @@ pub(crate) async fn install(
             Requirement {
                 name: name.clone(),
                 extras: extras.clone(),
-                groups: vec![],
+                groups: Box::new([]),
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
                     specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
@@ -188,7 +188,7 @@ pub(crate) async fn install(
             Requirement {
                 name: name.clone(),
                 extras: extras.clone(),
-                groups: vec![],
+                groups: Box::new([]),
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
                     specifier: VersionSpecifiers::empty(),

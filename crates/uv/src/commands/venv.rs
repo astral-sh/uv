@@ -306,9 +306,9 @@ async fn venv_impl(
         // Resolve the flat indexes from `--find-links`.
         let flat_index = {
             let tags = interpreter.tags().map_err(VenvError::Tags)?;
-            let client = FlatIndexClient::new(&client, cache);
+            let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
             let entries = client
-                .fetch(index_locations.flat_indexes().map(Index::url))
+                .fetch_all(index_locations.flat_indexes().map(Index::url))
                 .await
                 .map_err(VenvError::FlatIndex)?;
             FlatIndex::from_entries(

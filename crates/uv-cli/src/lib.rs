@@ -4093,6 +4093,17 @@ pub struct ToolRunArgs {
     #[arg(long)]
     pub isolated: bool,
 
+    /// Load environment variables from a `.env` file.
+    ///
+    /// Can be provided multiple times, with subsequent files overriding values defined in previous
+    /// files.
+    #[arg(long, value_delimiter = ' ', env = EnvVars::UV_ENV_FILE)]
+    pub env_file: Vec<PathBuf>,
+
+    /// Avoid reading environment variables from a `.env` file.
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_ENV_FILE)]
+    pub no_env_file: bool,
+
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
 
@@ -4566,6 +4577,11 @@ pub enum PythonCommand {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonListArgs {
+    /// A Python request to filter by.
+    ///
+    /// See `uv help python` to view supported request formats.
+    pub request: Option<String>,
+
     /// List all Python versions, including old patch versions.
     ///
     /// By default, only the latest patch version is shown for each minor version.

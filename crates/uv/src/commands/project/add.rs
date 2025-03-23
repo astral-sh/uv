@@ -345,9 +345,10 @@ pub(crate) async fn add(
 
             // Resolve the flat indexes from `--find-links`.
             let flat_index = {
-                let client = FlatIndexClient::new(&client, cache);
+                let client =
+                    FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
                 let entries = client
-                    .fetch(
+                    .fetch_all(
                         settings
                             .resolver
                             .index_locations
@@ -438,9 +439,11 @@ pub(crate) async fn add(
     let mut edits = Vec::<DependencyEdit>::with_capacity(requirements.len());
     for mut requirement in requirements {
         // Add the specified extras.
-        requirement.extras.extend(extras.iter().cloned());
-        requirement.extras.sort_unstable();
-        requirement.extras.dedup();
+        let mut ex = requirement.extras.to_vec();
+        ex.extend(extras.iter().cloned());
+        ex.sort_unstable();
+        ex.dedup();
+        requirement.extras = ex.into_boxed_slice();
 
         let (requirement, source) = match target {
             AddTarget::Script(_, _) | AddTarget::Project(_, _) if raw_sources => {

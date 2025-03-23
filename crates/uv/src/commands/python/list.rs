@@ -52,6 +52,7 @@ struct PrintData {
 /// List available Python installations.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn list(
+    request: Option<String>,
     kinds: PythonListKinds,
     all_versions: bool,
     all_platforms: bool,
@@ -63,23 +64,31 @@ pub(crate) async fn list(
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let request = request.as_deref().map(PythonRequest::parse);
+    let base_download_request = if python_preference == PythonPreference::OnlySystem {
+        None
+    } else {
+        // If the user request cannot be mapped to a download request, we won't show any downloads
+        PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any))
+    };
+
     let mut output = BTreeSet::new();
-    if python_preference != PythonPreference::OnlySystem {
+    if let Some(base_download_request) = base_download_request {
         let download_request = match kinds {
             PythonListKinds::Installed => None,
             PythonListKinds::Downloads => Some(if all_platforms {
-                PythonDownloadRequest::default()
+                base_download_request
             } else {
-                PythonDownloadRequest::from_env()?
+                base_download_request.fill()?
             }),
             PythonListKinds::Default => {
                 if python_downloads.is_automatic() {
                     Some(if all_platforms {
-                        PythonDownloadRequest::default()
+                        base_download_request
                     } else if all_arches {
-                        PythonDownloadRequest::from_env()?.with_any_arch()
+                        base_download_request.fill()?.with_any_arch()
                     } else {
-                        PythonDownloadRequest::from_env()?
+                        base_download_request.fill()?
                     })
                 } else {
                     // If fetching is not automatic, then don't show downloads as available by default
@@ -109,7 +118,7 @@ pub(crate) async fn list(
         match kinds {
             PythonListKinds::Installed | PythonListKinds::Default => {
                 Some(find_python_installations(
-                &PythonRequest::Any,
+                request.as_ref().unwrap_or(&PythonRequest::Any),
                 EnvironmentPreference::OnlySystem,
                 python_preference,
                 cache,

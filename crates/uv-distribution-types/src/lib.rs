@@ -639,6 +639,7 @@ impl SourceDist {
         }
     }
 
+    /// Returns the [`Version`] of the distribution, if it is known.
     pub fn version(&self) -> Option<&Version> {
         match self {
             Self::Registry(source_dist) => Some(&source_dist.version),
@@ -646,7 +647,7 @@ impl SourceDist {
         }
     }
 
-    /// Return true if the distribution is editable.
+    /// Returns `true` if the distribution is editable.
     pub fn is_editable(&self) -> bool {
         match self {
             Self::Directory(DirectorySourceDist { editable, .. }) => *editable,
@@ -654,7 +655,15 @@ impl SourceDist {
         }
     }
 
-    /// Return true if the distribution refers to a local file or directory.
+    /// Returns `true` if the distribution is virtual.
+    pub fn is_virtual(&self) -> bool {
+        match self {
+            Self::Directory(DirectorySourceDist { r#virtual, .. }) => *r#virtual,
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if the distribution refers to a local file or directory.
     pub fn is_local(&self) -> bool {
         matches!(self, Self::Directory(_) | Self::Path(_))
     }
@@ -668,7 +677,7 @@ impl SourceDist {
         }
     }
 
-    /// Return the source tree of the distribution, if available.
+    /// Returns the source tree of the distribution, if available.
     pub fn source_tree(&self) -> Option<&Path> {
         match self {
             Self::Directory(dist) => Some(&dist.install_path),

@@ -96,12 +96,52 @@ pub(crate) async fn run(
     concurrency: Concurrency,
     cache: Cache,
     printer: Printer,
+    env_file: Vec<PathBuf>,
+    no_env_file: bool,
     preview: PreviewMode,
 ) -> anyhow::Result<ExitStatus> {
     /// Whether or not a path looks like a Python script based on the file extension.
     fn has_python_script_ext(path: &Path) -> bool {
         path.extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("py") || ext.eq_ignore_ascii_case("pyw"))
+    }
+
+    // Read from the `.env` file, if necessary.
+    if !no_env_file {
+        for env_file_path in env_file.iter().rev().map(PathBuf::as_path) {
+            match dotenvy::from_path(env_file_path) {
+                Err(dotenvy::Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                    bail!(
+                        "No environment file found at: `{}`",
+                        env_file_path.simplified_display()
+                    );
+                }
+                Err(dotenvy::Error::Io(err)) => {
+                    bail!(
+                        "Failed to read environment file `{}`: {err}",
+                        env_file_path.simplified_display()
+                    );
+                }
+                Err(dotenvy::Error::LineParse(content, position)) => {
+                    warn_user!(
+                        "Failed to parse environment file `{}` at position {position}: {content}",
+                        env_file_path.simplified_display(),
+                    );
+                }
+                Err(err) => {
+                    warn_user!(
+                        "Failed to parse environment file `{}`: {err}",
+                        env_file_path.simplified_display(),
+                    );
+                }
+                Ok(()) => {
+                    debug!(
+                        "Read environment file at: `{}`",
+                        env_file_path.simplified_display()
+                    );
+                }
+            }
+        }
     }
 
     let Some(command) = command else {
@@ -706,7 +746,7 @@ async fn get_or_create_environment(
                 let requirement = Requirement {
                     name: name.clone(),
                     extras: extras.clone(),
-                    groups: vec![],
+                    groups: Box::new([]),
                     marker: MarkerTree::default(),
                     source: RequirementSource::Registry {
                         specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
@@ -729,7 +769,7 @@ async fn get_or_create_environment(
                 let requirement = Requirement {
                     name: name.clone(),
                     extras: extras.clone(),
-                    groups: vec![],
+                    groups: Box::new([]),
                     marker: MarkerTree::default(),
                     source: RequirementSource::Registry {
                         specifier: VersionSpecifiers::empty(),

@@ -1122,6 +1122,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.concurrency,
                 cache,
                 printer,
+                args.env_file,
+                args.no_env_file,
                 globals.preview,
             ))
             .await
@@ -1270,6 +1272,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let cache = cache.init()?;
 
             commands::python_list(
+                args.request,
                 args.kinds,
                 args.all_versions,
                 args.all_platforms,

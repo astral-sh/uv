@@ -14,7 +14,7 @@ use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
-use crate::{Connectivity, Error, ErrorKind, OwnedArchive, RegistryClient};
+use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
@@ -91,37 +91,29 @@ impl FlatIndexEntries {
 /// remote HTML indexes).
 #[derive(Debug, Clone)]
 pub struct FlatIndexClient<'a> {
-    client: &'a RegistryClient,
+    client: &'a CachedClient,
+    connectivity: Connectivity,
     cache: &'a Cache,
 }
 
 impl<'a> FlatIndexClient<'a> {
     /// Create a new [`FlatIndexClient`].
-    pub fn new(client: &'a RegistryClient, cache: &'a Cache) -> Self {
-        Self { client, cache }
+    pub fn new(client: &'a CachedClient, connectivity: Connectivity, cache: &'a Cache) -> Self {
+        Self {
+            client,
+            connectivity,
+            cache,
+        }
     }
 
     /// Read the directories and flat remote indexes from `--find-links`.
-    #[allow(clippy::result_large_err)]
-    pub async fn fetch(
+    pub async fn fetch_all(
         &self,
         indexes: impl Iterator<Item = &IndexUrl>,
     ) -> Result<FlatIndexEntries, FlatIndexError> {
         let mut fetches = futures::stream::iter(indexes)
             .map(|index| async move {
-                let entries = match index {
-                    IndexUrl::Path(url) => {
-                        let path = url
-                            .to_file_path()
-                            .map_err(|()| FlatIndexError::NonFileUrl(url.to_url()))?;
-                        Self::read_from_directory(&path, index)
-                            .map_err(|err| FlatIndexError::FindLinksDirectory(path.clone(), err))?
-                    }
-                    IndexUrl::Pypi(url) | IndexUrl::Url(url) => self
-                        .read_from_url(url, index)
-                        .await
-                        .map_err(|err| FlatIndexError::FindLinksUrl(url.to_url(), err))?,
-                };
+                let entries = self.fetch_index(index).await?;
                 if entries.is_empty() {
                     warn!("No packages found in `--find-links` entry: {}", index);
                 } else {
@@ -146,6 +138,23 @@ impl<'a> FlatIndexClient<'a> {
         Ok(results)
     }
 
+    /// Fetch a flat remote index from a `--find-links` URL.
+    pub async fn fetch_index(&self, index: &IndexUrl) -> Result<FlatIndexEntries, FlatIndexError> {
+        match index {
+            IndexUrl::Path(url) => {
+                let path = url
+                    .to_file_path()
+                    .map_err(|()| FlatIndexError::NonFileUrl(url.to_url()))?;
+                Self::read_from_directory(&path, index)
+                    .map_err(|err| FlatIndexError::FindLinksDirectory(path.clone(), err))
+            }
+            IndexUrl::Pypi(url) | IndexUrl::Url(url) => self
+                .read_from_url(url, index)
+                .await
+                .map_err(|err| FlatIndexError::FindLinksUrl(url.to_url(), err)),
+        }
+    }
+
     /// Read a flat remote index from a `--find-links` URL.
     async fn read_from_url(
         &self,
@@ -157,7 +166,7 @@ impl<'a> FlatIndexClient<'a> {
             "html",
             format!("{}.msgpack", cache_digest(&url.to_string())),
         );
-        let cache_control = match self.client.connectivity() {
+        let cache_control = match self.connectivity {
             Connectivity::Online => CacheControl::from(
                 self.cache
                     .freshness(&cache_entry, None, None)
@@ -168,7 +177,8 @@ impl<'a> FlatIndexClient<'a> {
 
         let flat_index_request = self
             .client
-            .uncached_client(url)
+            .uncached()
+            .for_host(url)
             .get(url.clone())
             .header("Accept-Encoding", "gzip")
             .header("Accept", "text/html")
@@ -210,7 +220,6 @@ impl<'a> FlatIndexClient<'a> {
         };
         let response = self
             .client
-            .cached_client()
             .get_cacheable_with_retry(
                 flat_index_request,
                 &cache_entry,

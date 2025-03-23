@@ -466,6 +466,8 @@ pub(crate) struct ToolRunSettings {
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) env_file: Vec<PathBuf>,
+    pub(crate) no_env_file: bool,
 }
 
 impl ToolRunSettings {
@@ -485,6 +487,8 @@ impl ToolRunSettings {
             constraints,
             overrides,
             isolated,
+            env_file,
+            no_env_file,
             show_resolution,
             installer,
             build,
@@ -556,6 +560,8 @@ impl ToolRunSettings {
             settings,
             options,
             install_mirrors,
+            env_file,
+            no_env_file,
         }
     }
 }
@@ -820,6 +826,7 @@ pub(crate) enum PythonListKinds {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonListSettings {
+    pub(crate) request: Option<String>,
     pub(crate) kinds: PythonListKinds,
     pub(crate) all_platforms: bool,
     pub(crate) all_arches: bool,
@@ -833,6 +840,7 @@ impl PythonListSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let PythonListArgs {
+            request,
             all_versions,
             all_platforms,
             all_arches,
@@ -851,6 +859,7 @@ impl PythonListSettings {
         };
 
         Self {
+            request,
             kinds,
             all_platforms,
             all_arches,
