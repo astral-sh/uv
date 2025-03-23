@@ -52,10 +52,22 @@ struct SyncEntry {
     project_dir: PathBuf,
     environment: Environment,
 }
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+enum DryRunAction {
+    DiscoveredExisting,
+    ReplacingExistingVenv,
+    CreatingVenv,
+    UsingScriptEnv,
+    RecreatingScriptEnv,
+    ReplacingExistingScriptVenv,
+    CreatingScriptEnv,
+}
 #[derive(Serialize, Debug)]
 struct Environment {
     path: PathBuf,
-    action: String,
+    action: DryRunAction,
 }
 
 /// Sync the project environment.
@@ -294,7 +306,7 @@ pub(crate) async fn sync(
                     project_dir: project_dir.to_owned(),
                     environment: Environment {
                         path: environment.root().to_owned(),
-                        action: "Discovered".to_string(),
+                        action: DryRunAction::DiscoveredExisting,
                     },
                 };
                 writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
@@ -305,8 +317,8 @@ pub(crate) async fn sync(
                 let sync_json = SyncEntry {
                     project_dir: project_dir.to_owned(),
                     environment: Environment {
-                        path: environment.root().to_owned(),
-                        action: "Replace".to_string(),
+                        path: root.to_owned(),
+                        action: DryRunAction::ReplacingExistingVenv,
                     },
                 };
                 writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
@@ -318,7 +330,7 @@ pub(crate) async fn sync(
                     project_dir: project_dir.to_owned(),
                     environment: Environment {
                         path: root.to_owned(),
-                        action: "Replace".to_string(),
+                        action: DryRunAction::CreatingVenv,
                     },
                 };
                 writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
@@ -329,7 +341,7 @@ pub(crate) async fn sync(
                         project_dir: project_dir.to_owned(),
                         environment: Environment {
                             path: environment.root().to_owned(),
-                            action: "Discovered".to_string(),
+                            action: DryRunAction::DiscoveredExisting,
                         },
                     };
                     writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
@@ -338,7 +350,7 @@ pub(crate) async fn sync(
                         project_dir: project_dir.to_owned(),
                         environment: Environment {
                             path: environment.root().to_owned(),
-                            action: "Using".to_string(),
+                            action: DryRunAction::UsingScriptEnv,
                         },
                     };
                     writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
@@ -351,7 +363,7 @@ pub(crate) async fn sync(
                     project_dir: project_dir.to_owned(),
                     environment: Environment {
                         path: environment.root().to_owned(),
-                        action: "Recreating".to_string(),
+                        action: DryRunAction::RecreatingScriptEnv,
                     },
                 };
                 writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
@@ -363,7 +375,7 @@ pub(crate) async fn sync(
                     project_dir: project_dir.to_owned(),
                     environment: Environment {
                         path: environment.root().to_owned(),
-                        action: "Creating".to_string(),
+                        action: DryRunAction::CreatingScriptEnv,
                     },
                 };
                 writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
@@ -375,7 +387,7 @@ pub(crate) async fn sync(
                     project_dir: project_dir.to_owned(),
                     environment: Environment {
                         path: root.to_owned(),
-                        action: "Replace_existing".to_string(),
+                        action: DryRunAction::ReplacingExistingScriptVenv,
                     },
                 };
                 writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
@@ -387,7 +399,7 @@ pub(crate) async fn sync(
                     project_dir: project_dir.to_owned(),
                     environment: Environment {
                         path: root.to_owned(),
-                        action: "Create".to_string(),
+                        action: DryRunAction::CreatingScriptEnv,
                     },
                 };
                 writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
