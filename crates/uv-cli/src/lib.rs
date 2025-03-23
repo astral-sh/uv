@@ -53,6 +53,11 @@ pub enum SyncFormat {
     /// Display as json
     Json,
 }
+impl SyncFormat {
+    pub fn is_json(&self) -> bool {
+        matches!(self, SyncFormat::Json)
+    }
+}
 
 #[derive(Debug, Default, Clone, clap::ValueEnum)]
 pub enum ListFormat {
@@ -3064,7 +3069,7 @@ pub struct SyncArgs {
     pub extra: Option<Vec<ExtraName>>,
 
     /// Select the output format.
-    #[arg(long, value_enum, default_value_t = SyncFormat::default())]
+    #[arg(long, value_enum, requires = "dry_run", default_value_t = SyncFormat::default())]
     pub format: SyncFormat,
     /// Include all optional dependencies.
     ///
