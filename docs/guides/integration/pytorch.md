@@ -52,8 +52,8 @@ dependencies = [
 
 !!! tip "Supported Python versions"
 
-    At time of writing, PyTorch does not yet publish wheels for Python 3.13; as such projects with
-    `requires-python = ">=3.13"` may fail to resolve. See the
+    At time of writing, PyTorch does not yet publish wheels for Python 3.14; as such projects with
+    `requires-python = ">=3.14"` may fail to resolve. See the
     [compatibility matrix](https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix).
 
 This is a valid configuration for projects that want to use CPU builds on Windows and macOS, and
