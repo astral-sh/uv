@@ -128,7 +128,7 @@ fn write_wheel(
     if settings.module_root.is_absolute() {
         return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
     }
-    let strip_root = source_tree.join(settings.module_root);
+    let src_root = source_tree.join(settings.module_root);
 
     let module_name = if let Some(module_name) = settings.module_name {
         module_name
@@ -139,10 +139,8 @@ fn write_wheel(
     };
     debug!("Module name: `{:?}`", module_name);
 
-    let module_root = strip_root.join(module_name.as_ref());
-    if !module_root.join("__init__.py").is_file() {
-        return Err(Error::MissingModule(module_root));
-    }
+    let module_root = find_module_root(&src_root, module_name)?;
+
     let mut files_visited = 0;
     for entry in WalkDir::new(module_root)
         .into_iter()
@@ -169,7 +167,7 @@ fn write_wheel(
             .expect("walkdir starts with root");
         let wheel_path = entry
             .path()
-            .strip_prefix(&strip_root)
+            .strip_prefix(&src_root)
             .expect("walkdir starts with root");
         if exclude_matcher.is_match(match_path) {
             trace!("Excluding from module: `{}`", match_path.user_display());
@@ -243,6 +241,46 @@ fn write_wheel(
     Ok(())
 }
 
+/// Match the module name to its module directory with potentially different casing.
+///
+/// For example, a package may have the dist-info-normalized package name `pil_util`, but the
+/// importable module is named `PIL_util`.
+///
+/// We get the module either as dist-info-normalized package name, or explicitly from the user.
+/// For dist-info-normalizing a package name, the rules are lowercasing, replacing `.` with `_` and
+/// replace `-` with `_`. Since `.` and `-` are not allowed in module names, we can check whether a
+/// directory name matches our expected module name by lowercasing it.
+fn find_module_root(src_root: &Path, module_name: Identifier) -> Result<PathBuf, Error> {
+    let normalized = module_name.to_string();
+    let modules = fs_err::read_dir(src_root)?
+        .filter_ok(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|file_name| file_name.to_lowercase() == normalized)
+        })
+        .map_ok(|entry| entry.path())
+        .collect::<Result<Vec<_>, _>>()?;
+    match modules.as_slice() {
+        [] => {
+            // Show the normalized path in the error message, as representative example.
+            Err(Error::MissingModule(src_root.join(module_name.as_ref())))
+        }
+        [module_root] => {
+            if module_root.join("__init__.py").is_file() {
+                Ok(module_root.clone())
+            } else {
+                Err(Error::MissingInitPy(module_root.join("__init__.py")))
+            }
+        }
+        multiple => {
+            let mut paths = multiple.to_vec();
+            paths.sort();
+            Err(Error::MultipleModules { module_name, paths })
+        }
+    }
+}
+
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_editable(
     source_tree: &Path,
@@ -292,10 +330,9 @@ pub fn build_editable(
     };
     debug!("Module name: `{:?}`", module_name);
 
-    let module_root = src_root.join(module_name.as_ref());
-    if !module_root.join("__init__.py").is_file() {
-        return Err(Error::MissingModule(module_root));
-    }
+    // Check that a module root exists in the directory we're linking from the `.pth` file
+    find_module_root(&src_root, module_name)?;
+
     wheel_writer.write_bytes(
         &format!("{}.pth", pyproject_toml.name().as_dist_info_name()),
         src_root.as_os_str().as_encoded_bytes(),
