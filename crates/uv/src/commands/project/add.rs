@@ -348,7 +348,7 @@ pub(crate) async fn add(
                 let client =
                     FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
                 let entries = client
-                    .fetch(
+                    .fetch_all(
                         settings
                             .resolver
                             .index_locations
