@@ -46,13 +46,16 @@ use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings};
 
-/// JSON.
+/// Represents an entry for synchronization, formatted as JSON.
 #[derive(Debug, Serialize)]
 struct SyncEntry {
+    /// The project directory path.
     project_dir: PathBuf,
+    /// The environment details, including path and action.
     environment: Environment,
 }
 
+/// Represents the action taken during a dry run.
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
 enum DryRunAction {
@@ -63,11 +66,42 @@ enum DryRunAction {
     RecreatingScriptEnv,
     ReplacingExistingScriptVenv,
     CreatingScriptEnv,
+    /// No action is being taken(should this ever happen?).
+    None,
 }
+
 #[derive(Serialize, Debug)]
 struct Environment {
+    /// The path to the environment.
     path: PathBuf,
+    /// The action taken for the environment.
     action: DryRunAction,
+}
+
+impl SyncEntry {
+    /// Creates a new `SyncEntry` with the given project directory.
+    fn new(project_dir: &Path) -> Self {
+        Self {
+            project_dir: project_dir.to_owned(),
+            environment: Environment {
+                path: PathBuf::new(),
+                action: DryRunAction::None,
+            },
+        }
+    }
+    /// Sets the environment path and action.
+    fn set_env_path(&mut self, path: PathBuf, action: DryRunAction) {
+        self.environment.path = path;
+        self.environment.action = action;
+    }
+
+    /// Serializes the `SyncEntry` into a JSON string.
+    fn as_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
+    }
+    fn as_pretty_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
+    }
 }
 
 /// Sync the project environment.
@@ -191,11 +225,18 @@ pub(crate) async fn sync(
         ),
     };
 
-    match format {
-        SyncFormat::Text => match &environment {
-            SyncEnvironment::Project(ProjectEnvironment::Existing(environment))
-                if dry_run.enabled() =>
-            {
+    let mut sync_json = SyncEntry::new(project_dir);
+    match &environment {
+        SyncEnvironment::Project(ProjectEnvironment::Existing(environment))
+            if dry_run.enabled() =>
+        {
+            // if
+            if format.is_json() {
+                sync_json.set_env_path(
+                    environment.root().to_owned(),
+                    DryRunAction::DiscoveredExisting,
+                );
+            } else {
                 writeln!(
                     printer.stderr(),
                     "{}",
@@ -206,9 +247,13 @@ pub(crate) async fn sync(
                     .dimmed()
                 )?;
             }
-            SyncEnvironment::Project(ProjectEnvironment::WouldReplace(root, ..))
-                if dry_run.enabled() =>
-            {
+        }
+        SyncEnvironment::Project(ProjectEnvironment::WouldReplace(root, ..))
+            if dry_run.enabled() =>
+        {
+            if format.is_json() {
+                sync_json.set_env_path(root.to_owned(), DryRunAction::ReplacingExistingVenv);
+            } else {
                 writeln!(
                     printer.stderr(),
                     "{}",
@@ -219,9 +264,13 @@ pub(crate) async fn sync(
                     .dimmed()
                 )?;
             }
-            SyncEnvironment::Project(ProjectEnvironment::WouldCreate(root, ..))
-                if dry_run.enabled() =>
-            {
+        }
+        SyncEnvironment::Project(ProjectEnvironment::WouldCreate(root, ..))
+            if dry_run.enabled() =>
+        {
+            if format.is_json() {
+                sync_json.set_env_path(root.to_owned(), DryRunAction::CreatingVenv);
+            } else {
                 writeln!(
                     printer.stderr(),
                     "{}",
@@ -232,8 +281,15 @@ pub(crate) async fn sync(
                     .dimmed()
                 )?;
             }
-            SyncEnvironment::Script(ScriptEnvironment::Existing(environment)) => {
-                if dry_run.enabled() {
+        }
+        SyncEnvironment::Script(ScriptEnvironment::Existing(environment)) => {
+            if dry_run.enabled() {
+                if format.is_json() {
+                    sync_json.set_env_path(
+                        environment.root().to_owned(),
+                        DryRunAction::DiscoveredExisting,
+                    );
+                } else {
                     writeln!(
                         printer.stderr(),
                         "{}",
@@ -243,35 +299,36 @@ pub(crate) async fn sync(
                         )
                         .dimmed()
                     )?;
-                } else {
-                    writeln!(
-                        printer.stderr(),
-                        "Using script environment at: {}",
-                        environment.root().user_display().cyan()
-                    )?;
                 }
-            }
-            SyncEnvironment::Script(ScriptEnvironment::Replaced(environment))
-                if !dry_run.enabled() =>
-            {
+            } else {
                 writeln!(
                     printer.stderr(),
-                    "Recreating script environment at: {}",
+                    "Using script environment at: {}",
                     environment.root().user_display().cyan()
                 )?;
             }
-            SyncEnvironment::Script(ScriptEnvironment::Created(environment))
-                if !dry_run.enabled() =>
-            {
-                writeln!(
-                    printer.stderr(),
-                    "Creating script environment at: {}",
-                    environment.root().user_display().cyan()
-                )?;
-            }
-            SyncEnvironment::Script(ScriptEnvironment::WouldReplace(root, ..))
-                if dry_run.enabled() =>
-            {
+        }
+        SyncEnvironment::Script(ScriptEnvironment::Replaced(environment)) if !dry_run.enabled() => {
+            writeln!(
+                printer.stderr(),
+                "Recreating script environment at: {}",
+                environment.root().user_display().cyan()
+            )?;
+        }
+        SyncEnvironment::Script(ScriptEnvironment::Created(environment)) if !dry_run.enabled() => {
+            writeln!(
+                printer.stderr(),
+                "Creating script environment at: {}",
+                environment.root().user_display().cyan()
+            )?;
+        }
+        SyncEnvironment::Script(ScriptEnvironment::WouldReplace(root, ..)) if dry_run.enabled() => {
+            if format.is_json() {
+                sync_json.set_env_path(
+                    environment.root().to_owned(),
+                    DryRunAction::ReplacingExistingScriptVenv,
+                );
+            } else {
                 writeln!(
                     printer.stderr(),
                     "{}",
@@ -282,9 +339,14 @@ pub(crate) async fn sync(
                     .dimmed()
                 )?;
             }
-            SyncEnvironment::Script(ScriptEnvironment::WouldCreate(root, ..))
-                if dry_run.enabled() =>
-            {
+        }
+        SyncEnvironment::Script(ScriptEnvironment::WouldCreate(root, ..)) if dry_run.enabled() => {
+            if format.is_json() {
+                sync_json.set_env_path(
+                    environment.root().to_owned(),
+                    DryRunAction::CreatingScriptEnv,
+                );
+            } else {
                 writeln!(
                     printer.stderr(),
                     "{}",
@@ -295,118 +357,15 @@ pub(crate) async fn sync(
                     .dimmed()
                 )?;
             }
-            _ => {}
-        },
-
-        SyncFormat::Json => match &environment {
-            SyncEnvironment::Project(ProjectEnvironment::Existing(environment))
-                if dry_run.enabled() =>
-            {
-                let sync_json = SyncEntry {
-                    project_dir: project_dir.to_owned(),
-                    environment: Environment {
-                        path: environment.root().to_owned(),
-                        action: DryRunAction::DiscoveredExisting,
-                    },
-                };
-                writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
-            }
-            SyncEnvironment::Project(ProjectEnvironment::WouldReplace(root, ..))
-                if dry_run.enabled() =>
-            {
-                let sync_json = SyncEntry {
-                    project_dir: project_dir.to_owned(),
-                    environment: Environment {
-                        path: root.to_owned(),
-                        action: DryRunAction::ReplacingExistingVenv,
-                    },
-                };
-                writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
-            }
-            SyncEnvironment::Project(ProjectEnvironment::WouldCreate(root, ..))
-                if dry_run.enabled() =>
-            {
-                let sync_json = SyncEntry {
-                    project_dir: project_dir.to_owned(),
-                    environment: Environment {
-                        path: root.to_owned(),
-                        action: DryRunAction::CreatingVenv,
-                    },
-                };
-                writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
-            }
-            SyncEnvironment::Script(ScriptEnvironment::Existing(environment)) => {
-                if dry_run.enabled() {
-                    let sync_json = SyncEntry {
-                        project_dir: project_dir.to_owned(),
-                        environment: Environment {
-                            path: environment.root().to_owned(),
-                            action: DryRunAction::DiscoveredExisting,
-                        },
-                    };
-                    writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
-                } else {
-                    let sync_json = SyncEntry {
-                        project_dir: project_dir.to_owned(),
-                        environment: Environment {
-                            path: environment.root().to_owned(),
-                            action: DryRunAction::UsingScriptEnv,
-                        },
-                    };
-                    writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
-                }
-            }
-            SyncEnvironment::Script(ScriptEnvironment::Replaced(environment))
-                if !dry_run.enabled() =>
-            {
-                let sync_json = SyncEntry {
-                    project_dir: project_dir.to_owned(),
-                    environment: Environment {
-                        path: environment.root().to_owned(),
-                        action: DryRunAction::RecreatingScriptEnv,
-                    },
-                };
-                writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
-            }
-            SyncEnvironment::Script(ScriptEnvironment::Created(environment))
-                if !dry_run.enabled() =>
-            {
-                let sync_json = SyncEntry {
-                    project_dir: project_dir.to_owned(),
-                    environment: Environment {
-                        path: environment.root().to_owned(),
-                        action: DryRunAction::CreatingScriptEnv,
-                    },
-                };
-                writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
-            }
-            SyncEnvironment::Script(ScriptEnvironment::WouldReplace(root, ..))
-                if dry_run.enabled() =>
-            {
-                let sync_json = SyncEntry {
-                    project_dir: project_dir.to_owned(),
-                    environment: Environment {
-                        path: root.to_owned(),
-                        action: DryRunAction::ReplacingExistingScriptVenv,
-                    },
-                };
-                writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
-            }
-            SyncEnvironment::Script(ScriptEnvironment::WouldCreate(root, ..))
-                if dry_run.enabled() =>
-            {
-                let sync_json = SyncEntry {
-                    project_dir: project_dir.to_owned(),
-                    environment: Environment {
-                        path: root.to_owned(),
-                        action: DryRunAction::CreatingScriptEnv,
-                    },
-                };
-                writeln!(printer.stderr(), "{}", serde_json::to_string(&sync_json)?)?;
-            }
-            _ => {}
-        },
+        }
+        _ => {}
     }
+
+    // Pretty-print JSON for better readability and write it to stdout
+    if format.is_json() {
+        writeln!(printer.stdout(), "{}", sync_json.as_json()?);
+    }
+
     // Notify the user of any environment changes.
 
     // Special-case: we're syncing a script that doesn't have an associated lockfile. In that case,
