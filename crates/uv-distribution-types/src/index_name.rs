@@ -9,7 +9,7 @@ use uv_small_str::SmallString;
 /// The normalized name of an index.
 ///
 /// Index names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, serde::Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct IndexName(SmallString);
 

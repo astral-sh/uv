@@ -13,14 +13,14 @@ use reqwest_middleware::ClientWithMiddleware;
 use tokio::sync::Semaphore;
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
-use uv_auth::UrlAuthPolicies;
 
+use uv_auth::UrlAuthPolicies;
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, Index, IndexCapabilities, IndexUrl, IndexUrls, Name,
+    BuiltDist, File, FileLocation, IndexCapabilities, IndexMetadataRef, IndexUrl, IndexUrls, Name,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -255,16 +255,17 @@ impl RegistryClient {
     }
 
     /// Return the appropriate index URLs for the given [`PackageName`].
-    fn index_urls_for(&self, package_name: &PackageName) -> impl Iterator<Item = &IndexUrl> {
+    fn index_urls_for(&self, package_name: &PackageName) -> impl Iterator<Item = IndexMetadataRef> {
         self.torch_backend
             .as_ref()
             .and_then(|torch_backend| {
                 torch_backend
                     .applies_to(package_name)
                     .then(|| torch_backend.index_urls())
+                    .map(|indexes| indexes.map(IndexMetadataRef::from))
             })
             .map(Either::Left)
-            .unwrap_or_else(|| Either::Right(self.index_urls.indexes().map(Index::url)))
+            .unwrap_or_else(|| Either::Right(self.index_urls.indexes().map(IndexMetadataRef::from)))
     }
 
     /// Return the appropriate [`IndexStrategy`] for the given [`PackageName`].
@@ -288,10 +289,10 @@ impl RegistryClient {
     pub async fn simple<'index>(
         &'index self,
         package_name: &PackageName,
-        index: Option<&'index IndexUrl>,
+        index: Option<IndexMetadataRef<'index>>,
         capabilities: &IndexCapabilities,
         download_concurrency: &Semaphore,
-    ) -> Result<Vec<(&'index IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
+    ) -> Result<Vec<(IndexMetadataRef<'index>, OwnedArchive<SimpleMetadata>)>, Error> {
         // If `--no-index` is specified, avoid fetching regardless of whether the index is implicit,
         // explicit, etc.
         if self.index_urls.no_index() {
@@ -312,7 +313,7 @@ impl RegistryClient {
                 for index in indexes {
                     let _permit = download_concurrency.acquire().await;
                     if let Some(metadata) = self
-                        .simple_single_index(package_name, index, capabilities)
+                        .simple_single_index(package_name, index.url(), capabilities)
                         .await?
                     {
                         results.push((index, metadata));
@@ -327,7 +328,7 @@ impl RegistryClient {
                     .map(|index| async move {
                         let _permit = download_concurrency.acquire().await;
                         let metadata = self
-                            .simple_single_index(package_name, index, capabilities)
+                            .simple_single_index(package_name, index.url(), capabilities)
                             .await?;
                         Ok((index, metadata))
                     })
@@ -369,9 +370,9 @@ impl RegistryClient {
         capabilities: &IndexCapabilities,
     ) -> Result<Option<OwnedArchive<SimpleMetadata>>, Error> {
         // Format the URL for PyPI.
-        let mut url: Url = index.clone().into();
+        let mut url = index.url().clone();
         url.path_segments_mut()
-            .map_err(|()| ErrorKind::CannotBeABase(index.clone().into()))?
+            .map_err(|()| ErrorKind::CannotBeABase(index.url().clone()))?
             .pop_if_empty()
             .push(package_name.as_ref())
             // The URL *must* end in a trailing slash for proper relative path behavior

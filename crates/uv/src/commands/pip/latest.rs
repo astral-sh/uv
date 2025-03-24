@@ -2,7 +2,7 @@ use tokio::sync::Semaphore;
 use tracing::debug;
 use uv_client::{RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
-use uv_distribution_types::{IndexCapabilities, IndexUrl};
+use uv_distribution_types::{IndexCapabilities, IndexMetadataRef, IndexUrl};
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
@@ -34,7 +34,12 @@ impl LatestClient<'_> {
 
         let archives = match self
             .client
-            .simple(package, index, self.capabilities, download_concurrency)
+            .simple(
+                package,
+                index.map(IndexMetadataRef::from),
+                self.capabilities,
+                download_concurrency,
+            )
             .await
         {
             Ok(archives) => archives,

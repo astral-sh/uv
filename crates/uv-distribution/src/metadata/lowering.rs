@@ -8,7 +8,7 @@ use url::Url;
 
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
-    Index, IndexLocations, IndexName, Origin, Requirement, RequirementSource,
+    Index, IndexLocations, IndexMetadata, IndexName, Origin, Requirement, RequirementSource,
 };
 use uv_git_types::{GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -222,7 +222,9 @@ impl LoweredRequirement {
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
-                                .map(|Index { url: index, .. }| index.clone())
+                                .map(|index| IndexMetadata {
+                                    url: index.url.clone(),
+                                })
                             else {
                                 return Err(LoweringError::MissingIndex(
                                     requirement.name.clone(),
@@ -238,7 +240,7 @@ impl LoweredRequirement {
                                     })
                                 }
                             });
-                            let source = registry_source(&requirement, index.into_url(), conflict);
+                            let source = registry_source(&requirement, index, conflict);
                             (source, marker)
                         }
                         Source::Workspace {
@@ -445,7 +447,9 @@ impl LoweredRequirement {
                                 .find(|Index { name, .. }| {
                                     name.as_ref().is_some_and(|name| *name == index)
                                 })
-                                .map(|Index { url: index, .. }| index.clone())
+                                .map(|index| IndexMetadata {
+                                    url: index.url.clone(),
+                                })
                             else {
                                 return Err(LoweringError::MissingIndex(
                                     requirement.name.clone(),
@@ -453,7 +457,7 @@ impl LoweredRequirement {
                                 ));
                             };
                             let conflict = None;
-                            let source = registry_source(&requirement, index.into_url(), conflict);
+                            let source = registry_source(&requirement, index, conflict);
                             (source, marker)
                         }
                         Source::Workspace { .. } => {
@@ -627,7 +631,7 @@ fn url_source(
 /// Convert a registry source into a [`RequirementSource`].
 fn registry_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
-    index: Url,
+    index: IndexMetadata,
     conflict: Option<ConflictItem>,
 ) -> RequirementSource {
     match &requirement.version_or_url {

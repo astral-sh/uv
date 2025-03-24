@@ -14,6 +14,9 @@ use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
     marker, MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl,
 };
+
+use crate::{IndexMetadata, IndexUrl};
+
 use uv_pypi_types::{
     ConflictItem, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl,
     ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
@@ -320,7 +323,7 @@ impl Display for Requirement {
             } => {
                 write!(f, "{specifier}")?;
                 if let Some(index) = index {
-                    write!(f, " (index: {index})")?;
+                    write!(f, " (index: {})", index.url)?;
                 }
             }
             RequirementSource::Url { url, .. } => {
@@ -368,7 +371,7 @@ pub enum RequirementSource {
     Registry {
         specifier: VersionSpecifiers,
         /// Choose a version from the index at the given URL.
-        index: Option<Url>,
+        index: Option<IndexMetadata>,
         /// The conflict item associated with the source, if any.
         conflict: Option<ConflictItem>,
     },
@@ -600,7 +603,7 @@ impl Display for RequirementSource {
             } => {
                 write!(f, "{specifier}")?;
                 if let Some(index) = index {
-                    write!(f, " (index: {index})")?;
+                    write!(f, " (index: {})", index.url)?;
                 }
             }
             Self::Url { url, .. } => {
@@ -662,12 +665,13 @@ impl From<RequirementSource> for RequirementSourceWire {
         match value {
             RequirementSource::Registry {
                 specifier,
-                mut index,
+                index,
                 conflict,
             } => {
-                if let Some(index) = index.as_mut() {
-                    redact_credentials(index);
-                }
+                let index = index.map(|index| index.url.into_url()).map(|mut index| {
+                    redact_credentials(&mut index);
+                    index
+                });
                 Self::Registry {
                     specifier,
                     index,
@@ -775,7 +779,8 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 conflict,
             } => Ok(Self::Registry {
                 specifier,
-                index,
+                index: index
+                    .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index)))),
                 conflict,
             }),
             RequirementSourceWire::Git { git } => {

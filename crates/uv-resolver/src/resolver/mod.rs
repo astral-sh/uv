@@ -25,8 +25,8 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
-    IndexUrl, InstalledDist, PythonRequirementKind, RemoteSource, Requirement, ResolvedDist,
-    ResolvedDistRef, SourceDist, VersionOrUrlRef,
+    IndexMetadata, IndexUrl, InstalledDist, PythonRequirementKind, RemoteSource, Requirement,
+    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -494,7 +494,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let decision = self.choose_version(
                         next_package,
                         next_id,
-                        index,
+                        index.map(IndexMetadata::url),
                         term_intersection.unwrap_positive(),
                         &mut state.pins,
                         &preferences,
@@ -925,7 +925,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         package: &PubGrubPackage,
         url: Option<&VerbatimParsedUrl>,
-        index: Option<&IndexUrl>,
+        index: Option<&IndexMetadata>,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
         // Ignore unresolved URL packages, i.e., packages that use a direct URL in some forks.
@@ -945,7 +945,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         package: &PubGrubPackage,
         url: Option<&VerbatimParsedUrl>,
-        index: Option<&IndexUrl>,
+        index: Option<&IndexMetadata>,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
         // Only request real packages.
@@ -969,7 +969,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if self
                 .index
                 .explicit()
-                .register((name.clone(), index.clone()))
+                .register((name.clone(), index.url().clone()))
             {
                 request_sink.blocking_send(Request::Package(name.clone(), Some(index.clone())))?;
             }
@@ -2249,7 +2249,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 Ok(Some(Response::Package(
                     package_name,
-                    index,
+                    index.map(IndexMetadata::into_url),
                     package_versions,
                 )))
             }
@@ -2449,7 +2449,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 continue;
             }
             let versions_response = if let Some(index) = fork_indexes.get(name) {
-                self.index.explicit().get(&(name.clone(), index.clone()))
+                self.index
+                    .explicit()
+                    .get(&(name.clone(), index.url().clone()))
             } else {
                 self.index.implicit().get(name)
             };
@@ -3166,7 +3168,7 @@ impl ResolutionDependencyEdge {
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum Request {
     /// A request to fetch the metadata for a package.
-    Package(PackageName, Option<IndexUrl>),
+    Package(PackageName, Option<IndexMetadata>),
     /// A request to fetch the metadata for a built or source distribution.
     Dist(Dist),
     /// A request to fetch the metadata from an already-installed distribution.

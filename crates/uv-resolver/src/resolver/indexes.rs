@@ -1,6 +1,5 @@
-use uv_distribution_types::{IndexUrl, RequirementSource};
+use uv_distribution_types::{IndexMetadata, RequirementSource};
 use uv_normalize::PackageName;
-use uv_pep508::VerbatimUrl;
 use uv_pypi_types::ConflictItem;
 
 use crate::resolver::ForkMap;
@@ -24,7 +23,7 @@ pub(crate) struct Indexes(ForkMap<Entry>);
 
 #[derive(Debug, Clone)]
 struct Entry {
-    index: IndexUrl,
+    index: IndexMetadata,
     conflict: Option<ConflictItem>,
 }
 
@@ -46,7 +45,9 @@ impl Indexes {
             else {
                 continue;
             };
-            let index = IndexUrl::from(VerbatimUrl::from_url(index.clone()));
+            let index = IndexMetadata {
+                url: index.url.clone(),
+            };
             let conflict = conflict.clone();
             indexes.add(&requirement, Entry { index, conflict });
         }
@@ -60,7 +61,7 @@ impl Indexes {
     }
 
     /// Return the explicit index used for a package in the given fork.
-    pub(crate) fn get(&self, name: &PackageName, env: &ResolverEnvironment) -> Vec<&IndexUrl> {
+    pub(crate) fn get(&self, name: &PackageName, env: &ResolverEnvironment) -> Vec<&IndexMetadata> {
         let entries = self.0.get(name, env);
         entries
             .iter()
