@@ -3769,7 +3769,7 @@ pub struct ExportArgs {
     ///
     /// Pruned packages will be excluded from the exported requirements file, as will any
     /// dependencies that are no longer required after the pruned package is removed.
-    #[arg(long, conflicts_with = "all_packages")]
+    #[arg(long, conflicts_with = "all_packages", value_name = "PACKAGE")]
     pub prune: Vec<PackageName>,
 
     /// Include optional dependencies from the specified extra name.
