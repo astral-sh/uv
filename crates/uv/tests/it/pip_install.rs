@@ -10266,3 +10266,74 @@ fn change_layout_custom_directory() -> Result<()> {
 
     Ok(())
 }
+
+/// See: <https://github.com/astral-sh/uv/issues/12434>
+#[test]
+fn setuptools_non_normalized_setup_cfg() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-03-24T20:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.touch()?;
+
+    let setup_cfg = context.temp_dir.child("setup.cfg");
+    setup_cfg.write_str(indoc! {r"
+        [metadata]
+        name = foo
+        version = 0.1.0
+        requires-python = >=3.12
+        install_requires = iniconfig
+    "})?;
+
+    let filters = std::iter::once((r"exit code: 1", "exit status: 1"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(filters, context.pip_install()
+        .arg("."), @r#"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to build `foo @ file://[TEMP_DIR]/`
+      ├─▶ The build backend returned an error
+      ╰─▶ Call to `setuptools.build_meta:__legacy__.build_wheel` failed (exit status: 1)
+
+          [stderr]
+          Traceback (most recent call last):
+            File "<string>", line 14, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 334, in get_requires_for_build_wheel
+              return self._get_build_requires(config_settings, requirements=[])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 304, in _get_build_requires
+              self.run_setup()
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 522, in run_setup
+              super().run_setup(setup_script=setup_script)
+            File "[CACHE_DIR]/builds-v0/[TMP]/build_meta.py", line 320, in run_setup
+              exec(code, locals())
+            File "<string>", line 1, in <module>
+            File "[CACHE_DIR]/builds-v0/[TMP]/__init__.py", line 116, in setup
+              _install_setup_requires(attrs)
+            File "[CACHE_DIR]/builds-v0/[TMP]/__init__.py", line 87, in _install_setup_requires
+              dist.parse_config_files(ignore_option_errors=True)
+            File "[CACHE_DIR]/builds-v0/[TMP]/_virtualenv.py", line 20, in parse_config_files
+              result = old_parse_config_files(self, *args, **kwargs)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/dist.py", line 730, in parse_config_files
+              self._parse_config_files(filenames=inifiles)
+            File "[CACHE_DIR]/builds-v0/[TMP]/dist.py", line 599, in _parse_config_files
+              opt = self._enforce_underscore(opt, section)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            File "[CACHE_DIR]/builds-v0/[TMP]/dist.py", line 629, in _enforce_underscore
+              raise InvalidConfigError(
+          setuptools.errors.InvalidConfigError: Invalid dash-separated key 'requires-python' in 'metadata' (setup.cfg), please use the underscore name 'requires_python' instead.
+
+          hint: setuptools removed support for dash-separated and uppercased keys in v78.0.0. Consider updating the relevant `setup.cfg`, or use `tool.uv.build-constraint-dependencies` to pin `setuptools<78`:
+          ```toml
+          [tool.uv]
+          build-constraint-dependencies = ["setuptools<78"]
+          ```
+    "#
+    );
+
+    Ok(())
+}
