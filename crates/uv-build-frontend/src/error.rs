@@ -54,6 +54,12 @@ static TORCH_NOT_FOUND_RE: LazyLock<Regex> =
 static DISTUTILS_NOT_FOUND_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"ModuleNotFoundError: No module named 'distutils'").unwrap());
 
+/// e.g. `setuptools.errors.InvalidConfigError: Invalid dash-separated key`
+static SETUPTOOLS_SETUP_CFG_KEY_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"setuptools.errors.InvalidConfigError: Invalid (dash-separated|uppercase) key")
+        .unwrap()
+});
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -118,6 +124,7 @@ enum MissingLibrary {
     Linker(String),
     BuildDependency(String),
     DeprecatedModule(String, Version),
+    NonNormalizedSetupCfgKey,
 }
 
 #[derive(Debug, Error)]
@@ -131,6 +138,12 @@ pub struct MissingHeaderCause {
 impl Display for MissingHeaderCause {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.missing_library {
+            MissingLibrary::NonNormalizedSetupCfgKey => {
+                write!(
+                    f,
+                    "setuptools removed support for dash-separated and uppercased keys in v78.0.0. Consider updating the relevant `setup.cfg`, or use `tool.uv.build-constraint-dependencies` to pin `setuptools<78`:\n```toml\n[tool.uv]\nbuild-constraint-dependencies = [\"setuptools<78\"]\n```"
+                )
+            }
             MissingLibrary::Header(header) => {
                 if let (Some(package_name), Some(package_version)) =
                     (&self.package_name, &self.package_version)
@@ -352,6 +365,8 @@ impl Error {
                     "distutils".to_string(),
                     Version::new([3, 12]),
                 ))
+            } else if SETUPTOOLS_SETUP_CFG_KEY_RE.is_match(line.trim()) {
+                Some(MissingLibrary::NonNormalizedSetupCfgKey)
             } else {
                 None
             }
