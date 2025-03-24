@@ -10270,7 +10270,7 @@ fn change_layout_custom_directory() -> Result<()> {
 /// See: <https://github.com/astral-sh/uv/issues/12434>
 #[test]
 fn setuptools_non_normalized_setup_cfg() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-03-24T20:00:00Z");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-03-24T19:00:00Z");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.touch()?;
