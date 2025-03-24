@@ -1610,9 +1610,7 @@ uv sync [OPTIONS]
 <ul>
 <li><code>text</code>:  Display the result in a human-readable format</li>
 
-<li><code>json</code>:  Display the result in a machine-readable JSON format</li>
-
-<li><code>pretty-json</code>:  Output the result in a pretty-printed, human-readable JSON format</li>
+<li><code>json</code>:  Display the result in JSON format</li>
 </ul>
 </dd><dt id="uv-sync--frozen"><a href="#uv-sync--frozen"><code>--frozen</code></a></dt><dd><p>Sync without updating the <code>uv.lock</code> file.</p>
 

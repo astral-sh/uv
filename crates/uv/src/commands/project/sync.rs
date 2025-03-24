@@ -99,9 +99,6 @@ impl SyncEntry {
     fn as_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }
-    fn as_pretty_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(self)
-    }
 }
 
 /// Sync the project environment.
@@ -352,12 +349,9 @@ pub(crate) async fn sync(
     }
 
     // Pretty-print JSON for better readability and write it to stdout
-    if format.is_raw_json() {
+    if format.is_json() {
         writeln!(printer.stdout(), "{}", sync_json.as_json()?)?;
-    } else if format.is_pretty() {
-        writeln!(printer.stdout(), "{}", sync_json.as_pretty_json()?)?;
     }
-
     // Notify the user of any environment changes.
 
     // Special-case: we're syncing a script that doesn't have an associated lockfile. In that case,
