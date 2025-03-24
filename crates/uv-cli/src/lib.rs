@@ -50,21 +50,12 @@ pub enum SyncFormat {
     /// Display the result in a human-readable format.
     #[default]
     Text,
-    /// Display the result in a machine-readable JSON format.
+    /// Display the result in JSON format.
     Json,
-
-    /// Output the result in a pretty-printed, human-readable JSON format.
-    PrettyJson,
 }
 impl SyncFormat {
     pub fn is_json(&self) -> bool {
-        matches!(self, SyncFormat::Json | SyncFormat::PrettyJson)
-    }
-    pub fn is_raw_json(&self) -> bool {
         matches!(self, SyncFormat::Json)
-    }
-    pub fn is_pretty(&self) -> bool {
-        matches!(self, SyncFormat::PrettyJson)
     }
 }
 
