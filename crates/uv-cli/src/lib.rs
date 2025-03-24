@@ -47,15 +47,24 @@ pub enum PythonListFormat {
 
 #[derive(Debug, Default, Clone, clap::ValueEnum)]
 pub enum SyncFormat {
-    /// Display as a text
+    /// Display the result in a human-readable format.
     #[default]
     Text,
-    /// Display as json
+    /// Display the result in a machine-readable JSON format.
     Json,
+
+    /// Output the result in a pretty-printed, human-readable JSON format.
+    PrettyJson,
 }
 impl SyncFormat {
     pub fn is_json(&self) -> bool {
+        matches!(self, SyncFormat::Json | SyncFormat::PrettyJson)
+    }
+    pub fn is_raw_json(&self) -> bool {
         matches!(self, SyncFormat::Json)
+    }
+    pub fn is_pretty(&self) -> bool {
+        matches!(self, SyncFormat::PrettyJson)
     }
 }
 
@@ -3069,6 +3078,7 @@ pub struct SyncArgs {
     pub extra: Option<Vec<ExtraName>>,
 
     /// Select the output format.
+    /// **Note:** This option is only available when `--dry-run` is enabled.
     #[arg(long, value_enum, requires = "dry_run", default_value_t = SyncFormat::default())]
     pub format: SyncFormat,
     /// Include all optional dependencies.

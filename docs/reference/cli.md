@@ -1602,6 +1602,18 @@ uv sync [OPTIONS]
 
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
 </ul>
+</dd><dt id="uv-sync--format"><a href="#uv-sync--format"><code>--format</code></a> <i>format</i></dt><dd><p>Select the output format. <strong>Note:</strong> This option is only available when <code>--dry-run</code> is enabled</p>
+
+<p>[default: text]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>text</code>:  Display the result in a human-readable format</li>
+
+<li><code>json</code>:  Display the result in a machine-readable JSON format</li>
+
+<li><code>pretty-json</code>:  Output the result in a pretty-printed, human-readable JSON format</li>
+</ul>
 </dd><dt id="uv-sync--frozen"><a href="#uv-sync--frozen"><code>--frozen</code></a></dt><dd><p>Sync without updating the <code>uv.lock</code> file.</p>
 
 <p>Instead of checking if the lockfile is up-to-date, uses the versions in the lockfile as the source of truth. If the lockfile is missing, uv will exit with an error. If the <code>pyproject.toml</code> includes changes to dependencies that have not been included in the lockfile yet, they will not be present in the environment.</p>

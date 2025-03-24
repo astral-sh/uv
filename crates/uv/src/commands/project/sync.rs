@@ -64,8 +64,6 @@ enum DryRunAction {
     DiscoveredExisting,
     ReplacingExistingVenv,
     CreatingVenv,
-    UsingScriptEnv,
-    RecreatingScriptEnv,
     ReplacingExistingScriptVenv,
     CreatingScriptEnv,
     /// No action is being taken(should this ever happen?).
@@ -222,7 +220,7 @@ pub(crate) async fn sync(
         SyncEnvironment::Project(ProjectEnvironment::Existing(environment))
             if dry_run.enabled() =>
         {
-            // if
+            // formatting
             if format.is_json() {
                 sync_json.set_env_path(
                     environment.root().to_owned(),
@@ -354,8 +352,10 @@ pub(crate) async fn sync(
     }
 
     // Pretty-print JSON for better readability and write it to stdout
-    if format.is_json() {
-        writeln!(printer.stdout(), "{}", sync_json.as_json()?);
+    if format.is_raw_json() {
+        writeln!(printer.stdout(), "{}", sync_json.as_json()?)?;
+    } else if format.is_pretty() {
+        writeln!(printer.stdout(), "{}", sync_json.as_pretty_json()?)?;
     }
 
     // Notify the user of any environment changes.
