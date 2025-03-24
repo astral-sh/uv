@@ -188,7 +188,8 @@ pub struct GlobalArgs {
 
     /// Use quiet output.
     ///
-    /// `-q` will produce less stdout output while `-qq` will produce no stdout output.
+    /// Repeating this option, e.g., `-qq`, will enable a silent mode in which
+    /// uv will write no output to stdout.
     #[arg(global = true, action = clap::ArgAction::Count, long, short, conflicts_with = "verbose")]
     pub quiet: u8,
 
