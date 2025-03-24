@@ -229,6 +229,28 @@ impl PlatformTag {
             } | Self::Win32
         )
     }
+
+    /// Return the major and minor fields if set for the [`PlatformTag`] variant.
+    pub fn major_minor(&self) -> Option<(u16, u16)> {
+        match self {
+            Self::Manylinux {
+                major,
+                minor,
+                arch: _,
+            }
+            | Self::Musllinux {
+                major,
+                minor,
+                arch: _,
+            }
+            | Self::Macos {
+                major,
+                minor,
+                binary_format: _,
+            } => Some((*major, *minor)),
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Display for PlatformTag {

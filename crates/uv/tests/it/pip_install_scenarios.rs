@@ -4124,7 +4124,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
     uv_snapshot!(filters, command(&context)
         .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-platform-a")
-        , @r###"
+        , @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -4135,7 +4135,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
 
           hint: Wheels are available for `package-a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
-    "###);
+    ");
 
     assert_not_installed(
         &context.venv,
