@@ -10134,6 +10134,17 @@ fn add_auth_policy_always_without_credentials() -> Result<()> {
       Caused by: Missing credentials for https://pypi.org/simple/anyio/
     "
     );
+
+    uv_snapshot!(context.pip_install().arg("black"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch: `https://pypi.org/simple/black/`
+      Caused by: Missing credentials for https://pypi.org/simple/black/
+    "
+    );
     Ok(())
 }
 

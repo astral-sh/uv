@@ -184,6 +184,7 @@ impl Middleware for AuthMiddleware {
         trace!("Handling request for {url}");
 
         let auth_policy = self.url_auth_policies.policy_for(request.url());
+        trace!("Handling request with authentication policy {auth_policy}");
 
         let credentials: Option<Arc<Credentials>> = if matches!(auth_policy, AuthPolicy::Never) {
             None
