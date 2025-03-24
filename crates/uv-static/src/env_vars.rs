@@ -685,4 +685,7 @@ impl EnvVars {
 
     /// Equivalent to the `--torch-backend` command-line argument (e.g., `cpu`, `cu126`, or `auto`).
     pub const UV_TORCH_BACKEND: &'static str = "UV_TORCH_BACKEND";
+
+    /// Equivalent to the `--project` command-line argument
+    pub const UV_PROJECT: &'static str = "UV_PROJECT";
 }
