@@ -76,15 +76,14 @@ const STYLES: Styles = Styles::styled()
 #[derive(Parser)]
 #[command(name = "uv", author, long_version = crate::version::uv_self_version())]
 #[command(about = "An extremely fast Python package manager.")]
-#[command(propagate_version = true)]
 #[command(
     after_help = "Use `uv help` for more details.",
     after_long_help = "",
     disable_help_flag = true,
-    disable_help_subcommand = true,
-    disable_version_flag = true
+    disable_help_subcommand = true
 )]
 #[command(styles=STYLES)]
+#[command(version)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     #[command(subcommand)]
@@ -95,7 +94,7 @@ pub struct Cli {
 }
 
 #[derive(Parser)]
-#[command(disable_help_flag = true, disable_version_flag = true)]
+#[command(disable_help_flag = true)]
 pub struct TopLevelArgs {
     #[command(flatten)]
     pub cache_args: Box<CacheArgs>,
@@ -125,10 +124,6 @@ pub struct TopLevelArgs {
     /// Display the concise help for this command.
     #[arg(global = true, short, long, action = clap::ArgAction::HelpShort, help_heading = "Global options")]
     help: Option<bool>,
-
-    /// Display the uv version.
-    #[arg(global = true, short = 'V', long, action = clap::ArgAction::Version, help_heading = "Global options")]
-    version: Option<bool>,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -514,6 +509,7 @@ pub enum Commands {
             option = Style::new().bold(),
         ),
     )]
+    #[command(version = uv_version::version())]
     Help(HelpArgs),
 }
 
@@ -4064,6 +4060,7 @@ pub enum ToolCommand {
         after_help = "Use `uv help tool run` for more details.",
         after_long_help = ""
     )]
+    #[command(version)]
     Uvx(ToolRunArgs),
     /// Install commands provided by a Python package.
     ///
