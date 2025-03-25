@@ -375,7 +375,7 @@ pub(crate) async fn sync(
         _ => {}
     }
 
-    // Pretty-print JSON for better readability and write it to stdout
+    // Print JSON for better readability and write it to stdout
     if format.is_json() {
         writeln!(printer.stdout(), "{}", sync_json.as_json()?)?;
     }
