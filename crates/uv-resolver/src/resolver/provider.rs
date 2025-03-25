@@ -1,6 +1,8 @@
 use std::future::Future;
 use std::sync::Arc;
 
+use reqwest::StatusCode;
+
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
@@ -59,6 +61,8 @@ pub enum MetadataUnavailable {
     /// The source distribution has a `requires-python` requirement that is not met by the installed
     /// Python version (and static metadata is not available).
     RequiresPython(VersionSpecifiers, Version),
+    /// The wheel metadata could not be fetched due to a network error.
+    Network(StatusCode),
 }
 
 impl MetadataUnavailable {
@@ -70,7 +74,8 @@ impl MetadataUnavailable {
             MetadataUnavailable::InvalidMetadata(err) => Some(err),
             MetadataUnavailable::InconsistentMetadata(err) => Some(err),
             MetadataUnavailable::InvalidStructure(err) => Some(err),
-            MetadataUnavailable::RequiresPython(_, _) => None,
+            MetadataUnavailable::RequiresPython(..) => None,
+            MetadataUnavailable::Network(..) => None,
         }
     }
 }
@@ -251,6 +256,13 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                     uv_client::ErrorKind::Metadata(_, err) => Ok(MetadataResponse::Unavailable(
                         MetadataUnavailable::InvalidStructure(Arc::new(err)),
                     )),
+                    uv_client::ErrorKind::WrappedReqwestError(_, err)
+                        if err.status().is_some_and(|status| status.is_client_error()) =>
+                    {
+                        Ok(MetadataResponse::Unavailable(MetadataUnavailable::Network(
+                            err.status().unwrap(),
+                        )))
+                    }
                     kind => Err(uv_client::Error::from(kind).into()),
                 },
                 uv_distribution::Error::WheelMetadataVersionMismatch { .. } => {
