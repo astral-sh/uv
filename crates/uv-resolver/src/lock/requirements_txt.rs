@@ -316,6 +316,13 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 marker: reachability.remove(&index).unwrap_or_default(),
                 dependents: graph
                     .edges_directed(index, Direction::Incoming)
+                    .sorted_by_key(|edge| {
+                        graph
+                            .neighbors_directed(edge.source(), Direction::Incoming)
+                            .filter(|&node| node == root)
+                            .count()
+                            == 0
+                    })
                     .filter_map(|edge| {
                         let src = edge.source();
                         if src == root {

@@ -2961,12 +2961,12 @@ fn complex_conflict_markers() -> Result<()> {
         # via torch
     torch==2.6.0 ; sys_platform == 'darwin'
         # via
-        #   torchvision
         #   project
+        #   torchvision
     torch==2.6.0+cpu ; sys_platform != 'darwin'
         # via
-        #   torchvision
         #   project
+        #   torchvision
     torchvision==0.21.0 ; (platform_machine == 'aarch64' and sys_platform == 'linux') or sys_platform == 'darwin'
         # via project
     torchvision==0.21.0+cpu ; (platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')
