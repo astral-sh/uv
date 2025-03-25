@@ -1452,7 +1452,8 @@ impl Source {
                 path: PortablePathBuf::from(
                     relative_to(&install_path, root)
                         .or_else(|_| std::path::absolute(&install_path))
-                        .map_err(SourceError::Absolute)?,
+                        .map_err(SourceError::Absolute)?
+                        .into_boxed_path(),
                 ),
                 marker: MarkerTree::TRUE,
                 extra: None,

@@ -623,7 +623,7 @@ impl RegistryClient {
                 .await?
             }
             BuiltDist::Path(wheel) => {
-                let file = fs_err::tokio::File::open(&wheel.install_path)
+                let file = fs_err::tokio::File::open(wheel.install_path.as_ref())
                     .await
                     .map_err(ErrorKind::Io)?;
                 let reader = tokio::io::BufReader::new(file);
