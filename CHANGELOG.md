@@ -30,6 +30,7 @@
 - Omit fragment when querying for wheels in Simple HTML API ([#12384](https://github.com/astral-sh/uv/pull/12384))
 - Error on missing argument in `requirements.txt` ([#12354](https://github.com/astral-sh/uv/pull/12354))
 - Support modules with different casing in build backend ([#12240](https://github.com/astral-sh/uv/pull/12240))
+- Add authentication policy support for `pip` commands ([#12470](https://github.com/astral-sh/uv/pull/12470))
 
 ## 0.6.9
 
