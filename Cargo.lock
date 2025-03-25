@@ -5532,7 +5532,7 @@ dependencies = [
  "uv-trampoline-builder",
  "uv-warnings",
  "which",
- "windows-registry 0.5.0",
+ "windows-registry 0.5.1",
  "windows-result 0.3.2",
  "windows-sys 0.59.0",
 ]
@@ -5717,7 +5717,7 @@ dependencies = [
  "tracing",
  "uv-fs",
  "uv-static",
- "windows-registry 0.5.0",
+ "windows-registry 0.5.1",
  "windows-result 0.3.2",
  "windows-sys 0.59.0",
 ]
@@ -6328,13 +6328,13 @@ dependencies = [
 
 [[package]]
 name = "windows-registry"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c44a98275e31bfd112bb06ba96c8ab13c03383a3753fdddd715406a1824c7e0"
+checksum = "ad1da3e436dc7653dfdf3da67332e22bff09bb0e28b0239e1624499c7830842e"
 dependencies = [
  "windows-link",
  "windows-result 0.3.2",
- "windows-strings 0.3.1",
+ "windows-strings 0.4.0",
 ]
 
 [[package]]
