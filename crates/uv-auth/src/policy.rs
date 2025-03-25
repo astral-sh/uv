@@ -1,3 +1,5 @@
+use std::fmt::{self, Display, Formatter};
+
 use rustc_hash::FxHashMap;
 use url::Url;
 
@@ -36,6 +38,15 @@ pub enum AuthPolicy {
     Never,
 }
 
+impl Display for AuthPolicy {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            AuthPolicy::Auto => write!(f, "auto"),
+            AuthPolicy::Always => write!(f, "always"),
+            AuthPolicy::Never => write!(f, "never"),
+        }
+    }
+}
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct UrlAuthPolicies(FxHashMap<Url, AuthPolicy>);
 

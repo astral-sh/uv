@@ -181,9 +181,8 @@ impl Middleware for AuthMiddleware {
         // In the middleware, existing credentials are already moved from the URL
         // to the headers so for display purposes we restore some information
         let url = tracing_url(&request, request_credentials.as_ref());
-        trace!("Handling request for {url}");
-
         let auth_policy = self.url_auth_policies.policy_for(request.url());
+        trace!("Handling request for {url} with authentication policy {auth_policy}");
 
         let credentials: Option<Arc<Credentials>> = if matches!(auth_policy, AuthPolicy::Never) {
             None
