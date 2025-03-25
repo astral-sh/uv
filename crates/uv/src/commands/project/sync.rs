@@ -76,6 +76,10 @@ struct Environment {
     path: PathBuf,
     /// The action taken for the environment.
     action: DryRunAction,
+    // Python executable path
+    python_executable: PathBuf,
+    // Python full version
+    python_version: String,
 }
 
 impl SyncEntry {
@@ -86,6 +90,8 @@ impl SyncEntry {
             environment: Environment {
                 path: PathBuf::new(),
                 action: DryRunAction::None,
+                python_executable: PathBuf::new(),
+                python_version: String::new(),
             },
         }
     }
@@ -93,6 +99,12 @@ impl SyncEntry {
     fn set_env_path(&mut self, path: PathBuf, action: DryRunAction) {
         self.environment.path = path;
         self.environment.action = action;
+    }
+
+    /// Sets python executable path and full version.
+    fn set_python(&mut self, executable: PathBuf, version: String) {
+        self.environment.python_executable = executable;
+        self.environment.python_version = version;
     }
 
     /// Serializes the `SyncEntry` into a JSON string.
@@ -213,6 +225,13 @@ pub(crate) async fn sync(
     };
 
     let mut sync_json = SyncEntry::new(project_dir);
+    // set python version and executable path
+    sync_json.set_python(
+        environment.python_executable().to_owned(),
+        environment.interpreter().python_full_version().to_string(),
+    );
+
+    // Notify the user of any environment changes.
     match &environment {
         SyncEnvironment::Project(ProjectEnvironment::Existing(environment))
             if dry_run.enabled() =>
