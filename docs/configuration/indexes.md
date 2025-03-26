@@ -223,6 +223,25 @@ authenticate = "never"
 When `authenticate` is set to `never`, uv will never search for credentials for the given index and
 will error if credentials are provided directly.
 
+## "Flat" indexes
+
+By default, `[[tool.uv.index]]` entries are assumed to be PyPI-style registries that implement the
+[PEP 503](https://peps.python.org/pep-0503/) Simple Repository API. However, uv also supports "flat"
+indexes, which are local directories or HTML pages that contain flat lists of wheels and source
+distributions. In pip, such indexes are specified using the `--find-links` option.
+
+To define a flat index in your `pyproject.toml`, use the `kind = "flat"` option:
+
+```toml
+[[tool.uv.index]]
+name = "example"
+url = "/path/to/directory"
+kind = "flat"
+```
+
+Flat indexes support the same feature set as Simple Repository API indexes (e.g.,
+`explicit = true`); you can also pin a package to a flat index using `tool.uv.sources`.
+
 ## `--index-url` and `--extra-index-url`
 
 In addition to the `[[tool.uv.index]]` configuration option, uv supports pip-style `--index-url` and

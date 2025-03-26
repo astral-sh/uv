@@ -45,9 +45,7 @@ impl Indexes {
             else {
                 continue;
             };
-            let index = IndexMetadata {
-                url: index.url.clone(),
-            };
+            let index = index.clone();
             let conflict = conflict.clone();
             indexes.add(&requirement, Entry { index, conflict });
         }

@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_http_range_reader::AsyncHttpRangeReader;
@@ -10,7 +11,8 @@ use http::HeaderMap;
 use itertools::Either;
 use reqwest::{Proxy, Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
-use tokio::sync::Semaphore;
+use rustc_hash::FxHashMap;
+use tokio::sync::{Mutex, Semaphore};
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
@@ -20,7 +22,8 @@ use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexMetadataRef, IndexUrl, IndexUrls, Name,
+    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexMetadataRef, IndexUrl,
+    IndexUrls, Name,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -33,10 +36,14 @@ use uv_torch::TorchStrategy;
 
 use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
 use crate::cached_client::CacheControl;
+use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
-use crate::{BaseClient, CachedClient, CachedClientError, Error, ErrorKind};
+use crate::{
+    BaseClient, CachedClient, CachedClientError, Error, ErrorKind, FlatIndexClient,
+    FlatIndexEntries,
+};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
@@ -169,6 +176,7 @@ impl<'a> RegistryClientBuilder<'a> {
             connectivity,
             client,
             timeout,
+            flat_indexes: Arc::default(),
         }
     }
 
@@ -191,6 +199,7 @@ impl<'a> RegistryClientBuilder<'a> {
             connectivity,
             client,
             timeout,
+            flat_indexes: Arc::default(),
         }
     }
 }
@@ -226,6 +235,17 @@ pub struct RegistryClient {
     connectivity: Connectivity,
     /// Configured client timeout, in seconds.
     timeout: Duration,
+    /// The flat index entries for each `--find-links`-style index URL.
+    flat_indexes: Arc<Mutex<FlatIndexCache>>,
+}
+
+/// The format of the package metadata returned by querying an index.
+#[derive(Debug)]
+pub enum MetadataFormat {
+    /// The metadata adheres to the Simple Repository API format.
+    Simple(OwnedArchive<SimpleMetadata>),
+    /// The metadata consists of a list of distributions from a "flat" index.
+    Flat(Vec<FlatIndexEntry>),
 }
 
 impl RegistryClient {
@@ -280,19 +300,21 @@ impl RegistryClient {
             .unwrap_or(self.index_strategy)
     }
 
-    /// Fetch a package from the `PyPI` simple API.
+    /// Fetch package metadata from an index.
     ///
-    /// "simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
+    /// Supports both the "Simple" API and `--find-links`-style flat indexes.
+    ///
+    /// "Simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
     /// and [PEP 691 – JSON-based Simple API for Python Package Indexes](https://peps.python.org/pep-0691/),
-    /// which the pypi json api approximately implements.
-    #[instrument("simple_api", skip_all, fields(package = % package_name))]
-    pub async fn simple<'index>(
+    /// which the PyPI JSON API implements.
+    #[instrument(skip_all, fields(package = % package_name))]
+    pub async fn package_metadata<'index>(
         &'index self,
         package_name: &PackageName,
         index: Option<IndexMetadataRef<'index>>,
         capabilities: &IndexCapabilities,
         download_concurrency: &Semaphore,
-    ) -> Result<Vec<(IndexMetadataRef<'index>, OwnedArchive<SimpleMetadata>)>, Error> {
+    ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
         // If `--no-index` is specified, avoid fetching regardless of whether the index is implicit,
         // explicit, etc.
         if self.index_urls.no_index() {
@@ -312,12 +334,23 @@ impl RegistryClient {
             IndexStrategy::FirstIndex => {
                 for index in indexes {
                     let _permit = download_concurrency.acquire().await;
-                    if let Some(metadata) = self
-                        .simple_single_index(package_name, index.url(), capabilities)
-                        .await?
-                    {
-                        results.push((index, metadata));
-                        break;
+                    match index.format {
+                        IndexFormat::Simple => {
+                            if let Some(metadata) = self
+                                .simple_single_index(package_name, index.url, capabilities)
+                                .await?
+                            {
+                                results.push((index.url, MetadataFormat::Simple(metadata)));
+                                break;
+                            }
+                        }
+                        IndexFormat::Flat => {
+                            let entries = self.flat_single_index(package_name, index.url).await?;
+                            if !entries.is_empty() {
+                                results.push((index.url, MetadataFormat::Flat(entries)));
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -327,10 +360,19 @@ impl RegistryClient {
                 results = futures::stream::iter(indexes)
                     .map(|index| async move {
                         let _permit = download_concurrency.acquire().await;
-                        let metadata = self
-                            .simple_single_index(package_name, index.url(), capabilities)
-                            .await?;
-                        Ok((index, metadata))
+                        match index.format {
+                            IndexFormat::Simple => {
+                                let metadata = self
+                                    .simple_single_index(package_name, index.url, capabilities)
+                                    .await?;
+                                Ok((index.url, metadata.map(MetadataFormat::Simple)))
+                            }
+                            IndexFormat::Flat => {
+                                let entries =
+                                    self.flat_single_index(package_name, index.url).await?;
+                                Ok((index.url, Some(MetadataFormat::Flat(entries))))
+                            }
+                        }
                     })
                     .buffered(8)
                     .filter_map(|result: Result<_, Error>| async move {
@@ -355,6 +397,46 @@ impl RegistryClient {
         }
 
         Ok(results)
+    }
+
+    /// Fetch the [`FlatIndexEntry`] entries for a given package from a single `--find-links` index.
+    async fn flat_single_index(
+        &self,
+        package_name: &PackageName,
+        index: &IndexUrl,
+    ) -> Result<Vec<FlatIndexEntry>, Error> {
+        // Store the flat index entries in a cache, to avoid redundant fetches. A flat index will
+        // typically contain entries for multiple packages; as such, it's more efficient to cache
+        // the entire index rather than re-fetching it for each package.
+        let mut cache = self.flat_indexes.lock().await;
+        if let Some(entries) = cache.get(index) {
+            return Ok(entries.get(package_name).cloned().unwrap_or_default());
+        }
+
+        let client = FlatIndexClient::new(self.cached_client(), self.connectivity, &self.cache);
+
+        // Fetch the entries for the index.
+        let FlatIndexEntries { entries, .. } =
+            client.fetch_index(index).await.map_err(ErrorKind::Flat)?;
+
+        // Index by package name.
+        let mut entries_by_package: FxHashMap<PackageName, Vec<FlatIndexEntry>> =
+            FxHashMap::default();
+        for entry in entries {
+            entries_by_package
+                .entry(entry.filename.name().clone())
+                .or_default()
+                .push(entry);
+        }
+        let package_entries = entries_by_package
+            .get(package_name)
+            .cloned()
+            .unwrap_or_default();
+
+        // Write to the cache.
+        cache.insert(index.clone(), entries_by_package);
+
+        Ok(package_entries)
     }
 
     /// Fetch the [`SimpleMetadata`] from a single index for a given package.
@@ -880,6 +962,27 @@ impl RegistryClient {
         } else {
             std::io::Error::new(std::io::ErrorKind::Other, err)
         }
+    }
+}
+
+/// A map from [`IndexUrl`] to [`FlatIndexEntry`] entries found at the given URL, indexed by
+/// [`PackageName`].
+#[derive(Default, Debug, Clone)]
+struct FlatIndexCache(FxHashMap<IndexUrl, FxHashMap<PackageName, Vec<FlatIndexEntry>>>);
+
+impl FlatIndexCache {
+    /// Get the entries for a given index URL.
+    fn get(&self, index: &IndexUrl) -> Option<&FxHashMap<PackageName, Vec<FlatIndexEntry>>> {
+        self.0.get(index)
+    }
+
+    /// Insert the entries for a given index URL.
+    fn insert(
+        &mut self,
+        index: IndexUrl,
+        entries: FxHashMap<PackageName, Vec<FlatIndexEntry>>,
+    ) -> Option<FxHashMap<PackageName, Vec<FlatIndexEntry>>> {
+        self.0.insert(index, entries)
     }
 }
 

@@ -796,6 +796,15 @@
           "default": false,
           "type": "boolean"
         },
+        "format": {
+          "description": "The format used by the index.\n\nIndexes can either be PEP 503-compliant (i.e., a PyPI-style registry implementing the Simple API) or structured as a flat list of distributions (e.g., `--find-links`). In both cases, indexes can point to either local or remote resources.",
+          "default": "simple",
+          "allOf": [
+            {
+              "$ref": "#/definitions/IndexFormat"
+            }
+          ]
+        },
         "name": {
           "description": "The name of the index.\n\nIndex names can be used to reference indexes elsewhere in the configuration. For example, you can pin a package to a specific index by name:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\"\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```",
           "anyOf": [
@@ -824,6 +833,24 @@
           ]
         }
       }
+    },
+    "IndexFormat": {
+      "oneOf": [
+        {
+          "description": "A PyPI-style index implementing the Simple Repository API.",
+          "type": "string",
+          "enum": [
+            "simple"
+          ]
+        },
+        {
+          "description": "A `--find-links`-style index containing a flat list of wheels and source distributions.",
+          "type": "string",
+          "enum": [
+            "flat"
+          ]
+        }
+      ]
     },
     "IndexName": {
       "description": "The normalized name of an index.\n\nIndex names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.",
@@ -855,7 +882,7 @@
       ]
     },
     "IndexUrl": {
-      "description": "The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`).",
+      "description": "The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`), or a local path.",
       "type": "string"
     },
     "KeyringProviderType": {
