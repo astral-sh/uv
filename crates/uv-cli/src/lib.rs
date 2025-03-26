@@ -2389,7 +2389,6 @@ pub struct PipWheelArgs {
     #[arg(long)]
     pub python_platform: Option<TargetTriple>,
 
-
     /// Perform a dry run, i.e., don't actually install anything but resolve the dependencies and
     /// print the resulting plan.
     #[arg(long)]

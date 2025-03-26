@@ -1,14 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Write;
 use std::fs::File;
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Context;
-use itertools::Itertools;
-use owo_colors::OwoColorize;
-use tracing::{debug, enabled, Level};
 
 use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
@@ -20,19 +16,17 @@ use uv_configuration::{
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::DistributionDatabase;
-use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     DependencyMetadata, Index, IndexLocations, NameRequirementSpecification, Origin, Requirement,
     Resolution, UnresolvedRequirementSpecification,
 };
-use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_installer::{Plan, Planner, Preparer, SatisfiesResult, SitePackages};
+use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::GroupName;
 use uv_pep508::PackageName;
 use uv_pypi_types::Conflicts;
 use uv_python::{
-    EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
+    EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference,
     PythonRequest, PythonVersion, Target,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
@@ -45,17 +39,15 @@ use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 
-use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
-use crate::commands::pip::operations::Modifications;
-use crate::commands::pip::operations::{report_interpreter, report_target_environment};
+use crate::commands::pip::loggers::DefaultResolveLogger;
+use crate::commands::pip::operations::report_interpreter;
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
 use crate::commands::reporters::PrepareReporter;
 use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
-use zip::{ZipWriter, CompressionMethod, write::FileOptions};
 use walkdir::WalkDir;
-
+use zip::{CompressionMethod, ZipWriter};
 
 /// Puts wheels into the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -442,7 +434,7 @@ pub(crate) async fn pip_wheel(
     let total_wheels = wheels.into_iter().chain(cached).collect::<Vec<_>>();
     if !total_wheels.is_empty() {
         let output_path = target.root();
-         for wheel in &total_wheels {
+        for wheel in &total_wheels {
             let wheel_output = output_path.join(wheel.filename().to_string());
             let wheel_dir = wheel.path();
             let file = File::create(wheel_output)?;
@@ -461,9 +453,7 @@ pub(crate) async fn pip_wheel(
                     continue;
                 }
 
-                let name = path.strip_prefix(source_dir)
-                    .unwrap()
-                    .to_string_lossy();
+                let name = path.strip_prefix(source_dir).unwrap().to_string_lossy();
 
                 zip.start_file(name.to_string(), options)?;
                 let mut file = File::open(path)?;
