@@ -14,7 +14,6 @@ use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use futures::FutureExt;
 use owo_colors::OwoColorize;
-use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument};
 use uv_cache::{Cache, Refresh};
@@ -41,8 +40,8 @@ use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
 use crate::printer::Printer;
 use crate::settings::{
     CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
-    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
-    PublishSettings,
+    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipTreeSettings,
+    PipUninstallSettings, PipWheelSettings, PublishSettings,
 };
 
 pub(crate) mod commands;
@@ -868,6 +867,150 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &cache,
                 printer,
             )
+        }
+        Commands::Pip(PipNamespace {
+            command: PipCommand::Wheel(args),
+        }) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let mut args = PipWheelSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            let mut requirements = Vec::with_capacity(
+                args.package.len() + args.editables.len() + args.requirements.len(),
+            );
+            for package in args.package {
+                requirements.push(RequirementsSource::from_package_argument(&package)?);
+            }
+            for package in args.editables {
+                requirements.push(RequirementsSource::from_editable(&package)?);
+            }
+            requirements.extend(
+                args.requirements
+                    .into_iter()
+                    .map(RequirementsSource::from_requirements_file),
+            );
+            let constraints = args
+                .constraints
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
+            let overrides = args
+                .overrides
+                .into_iter()
+                .map(RequirementsSource::from_overrides_txt)
+                .collect::<Vec<_>>();
+            let build_constraints = args
+                .build_constraints
+                .into_iter()
+                .map(RequirementsSource::from_overrides_txt)
+                .collect::<Vec<_>>();
+
+            let mut groups = BTreeMap::new();
+            for group in args.settings.groups {
+                // If there's no path provided, expect a pyproject.toml in the project-dir
+                // (Which is typically the current working directory, matching pip's behaviour)
+                let pyproject_path = group
+                    .path
+                    .clone()
+                    .unwrap_or_else(|| project_dir.join("pyproject.toml"));
+                groups
+                    .entry(pyproject_path)
+                    .or_insert_with(Vec::new)
+                    .push(group.name.clone());
+            }
+
+            // Special-case: any source trees specified on the command-line are automatically
+            // reinstalled. This matches user expectations: `uv pip install .` should always
+            // re-build and re-install the package in the current working directory.
+            for requirement in &requirements {
+                let requirement = match requirement {
+                    RequirementsSource::Package(requirement) => requirement,
+                    RequirementsSource::Editable(requirement) => requirement,
+                    _ => continue,
+                };
+                match requirement {
+                    RequirementsTxtRequirement::Named(requirement) => {
+                        if let Some(VersionOrUrl::Url(url)) = requirement.version_or_url.as_ref() {
+                            if let ParsedUrl::Directory(ParsedDirectoryUrl {
+                                install_path, ..
+                            }) = &url.parsed_url
+                            {
+                                debug!(
+                                    "Marking explicit source tree for reinstall: `{}`",
+                                    install_path.display()
+                                );
+                                args.settings.reinstall = args
+                                    .settings
+                                    .reinstall
+                                    .with_package(requirement.name.clone());
+                            }
+                        }
+                    }
+                    RequirementsTxtRequirement::Unnamed(requirement) => {
+                        if let ParsedUrl::Directory(ParsedDirectoryUrl { install_path, .. }) =
+                            &requirement.url.parsed_url
+                        {
+                            debug!(
+                                "Marking explicit source tree for reinstall: `{}`",
+                                install_path.display()
+                            );
+                            args.settings.reinstall =
+                                args.settings.reinstall.with_path(install_path.clone());
+                        }
+                    }
+                }
+            }
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.upgrade.clone())),
+            );
+
+            commands::pip_wheel(
+                args.settings.target.expect("TODO"),
+                &requirements,
+                &constraints,
+                &overrides,
+                &build_constraints,
+                args.constraints_from_workspace,
+                args.overrides_from_workspace,
+                args.build_constraints_from_workspace,
+                &args.settings.extras,
+                groups,
+                args.settings.resolution,
+                args.settings.prerelease,
+                args.settings.dependency_mode,
+                args.settings.upgrade,
+                args.settings.index_locations,
+                args.settings.index_strategy,
+                args.settings.torch_backend,
+                args.settings.dependency_metadata,
+                args.settings.keyring_provider,
+                &globals.network_settings,
+                args.settings.reinstall,
+                args.settings.link_mode,
+                args.settings.hash_checking,
+                globals.installer_metadata,
+                &args.settings.config_setting,
+                args.settings.no_build_isolation,
+                args.settings.no_build_isolation_package,
+                args.settings.build_options,
+                args.settings.python_version,
+                args.settings.python_platform,
+                args.settings.exclude_newer,
+                args.settings.sources,
+                args.settings.python,
+                args.settings.system,
+                globals.python_preference,
+                globals.concurrency,
+                cache,
+                args.dry_run,
+                printer,
+                globals.preview,
+            )
+            .await
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Clean(args),
