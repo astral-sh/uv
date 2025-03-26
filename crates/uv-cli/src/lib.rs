@@ -189,9 +189,12 @@ pub struct GlobalArgs {
     #[arg(global = true, long, hide = true)]
     pub python_fetch: Option<PythonDownloads>,
 
-    /// Do not print any output.
-    #[arg(global = true, long, short, conflicts_with = "verbose")]
-    pub quiet: bool,
+    /// Use quiet output.
+    ///
+    /// Repeating this option, e.g., `-qq`, will enable a silent mode in which
+    /// uv will write no output to stdout.
+    #[arg(global = true, action = clap::ArgAction::Count, long, short, conflicts_with = "verbose")]
+    pub quiet: u8,
 
     /// Use verbose output.
     ///
@@ -4842,8 +4845,8 @@ pub struct GenerateShellCompletionArgs {
     #[arg(long, hide = true)]
     pub no_python_downloads: bool,
 
-    #[arg(long, short, conflicts_with = "verbose", hide = true)]
-    pub quiet: bool,
+    #[arg(long, short, action = clap::ArgAction::Count, conflicts_with = "verbose", hide = true)]
+    pub quiet: u8,
     #[arg(long, short, action = clap::ArgAction::Count, conflicts_with = "quiet", hide = true)]
     pub verbose: u8,
     #[arg(long, conflicts_with = "no_color", hide = true)]
