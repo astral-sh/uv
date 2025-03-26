@@ -4762,7 +4762,7 @@ pub struct GenerateShellCompletionArgs {
     #[arg(long, hide = true)]
     pub no_python_downloads: bool,
 
-    #[arg(long, short, conflicts_with = "verbose", hide = true)]
+    #[arg(long, short, action = clap::ArgAction::Count, conflicts_with = "verbose", hide = true)]
     pub quiet: u8,
     #[arg(long, short, action = clap::ArgAction::Count, conflicts_with = "quiet", hide = true)]
     pub verbose: u8,
