@@ -209,7 +209,7 @@ authenticate = "always"
 When `authenticate` is set to `always`, uv will eagerly search for credentials and error if
 credentials cannot be found. Since this is scoped to a specific index, if authentication fails, uv
 will still continue consulting the other indexes you have defined (as well as PyPI, if you have not
-overriden it as the default index).
+overridden it as the default index).
 
 ### Disabling authentication
 
