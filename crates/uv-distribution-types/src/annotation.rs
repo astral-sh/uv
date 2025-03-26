@@ -26,7 +26,11 @@ impl std::fmt::Display for SourceAnnotation {
                     write!(f, "{project_name} ({})", path.portable_display())
                 }
                 RequirementOrigin::Group(path, project_name, group) => {
-                    write!(f, "{project_name} ({}:{group})", path.portable_display())
+                    write!(
+                        f,
+                        "{project_name} ({}::dependency-groups.{group})",
+                        path.portable_display()
+                    )
                 }
                 RequirementOrigin::Workspace => {
                     write!(f, "(workspace)")
@@ -47,7 +51,7 @@ impl std::fmt::Display for SourceAnnotation {
                     // Group is not used for override
                     write!(
                         f,
-                        "--override {project_name} ({}:{group})",
+                        "--override {project_name} ({}::dependency-groups.{group})",
                         path.portable_display()
                     )
                 }
