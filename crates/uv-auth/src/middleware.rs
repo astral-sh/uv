@@ -380,7 +380,7 @@ impl AuthMiddleware {
 
         // If there's a password, send the request and cache
         if credentials.password().is_some() {
-            trace!("Request for {url} is already fully authenticated");
+            trace!("Request for {url} already contains username and password");
             return self
                 .complete_request(Some(credentials), request, extensions, next, auth_policy)
                 .await;
