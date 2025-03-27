@@ -171,6 +171,13 @@ impl Pep723Script {
         //  Extract the shebang and script content.
         let (shebang, postlude) = extract_shebang(&contents)?;
 
+        // Add a newline to the beginning if it starts with a valid metadata comment line.
+        let postlude = if postlude.starts_with("# ") || postlude.starts_with("#\n") {
+            format!("\n{}", postlude)
+        } else {
+            postlude
+        };
+
         Ok(Self {
             path: std::path::absolute(file)?,
             prelude: if shebang.is_empty() {
