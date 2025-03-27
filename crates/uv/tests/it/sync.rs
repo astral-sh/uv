@@ -8924,3 +8924,135 @@ fn locked_version_coherence() -> Result<()> {
 
     Ok(())
 }
+
+/// `uv sync` should respect build constraints. In this case, `json-merge-patch` should _not_ fail
+/// to build, despite the fact that `setuptools==78.0.1` is the most recent version and _does_ fail
+/// to build that package.
+///
+/// See: <https://github.com/astral-sh/uv/issues/12434>
+#[test]
+fn sync_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-03-24T19:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["json-merge-patch"]
+
+        [tool.uv]
+        build-constraint-dependencies = ["setuptools<78"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("json-merge-patch"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + json-merge-patch==0.2
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!(
+        {
+            filters => context.filters(),
+        },
+        {
+            assert_snapshot!(
+                lock, @r#"
+            version = 1
+            revision = 1
+            requires-python = ">=3.12"
+
+            [options]
+            exclude-newer = "2025-03-24T19:00:00Z"
+
+            [manifest]
+            build-constraints = [{ name = "setuptools", specifier = "<78" }]
+
+            [[package]]
+            name = "json-merge-patch"
+            version = "0.2"
+            source = { registry = "https://pypi.org/simple" }
+            sdist = { url = "https://files.pythonhosted.org/packages/39/62/3b783faabac9a099877397d8f7a7cc862a03fbf9fb1b90d414ea7c6bb096/json-merge-patch-0.2.tar.gz", hash = "sha256:09898b6d427c08754e2a97c709cf2dfd7e28bd10c5683a538914975eab778d39", size = 3081 }
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = { virtual = "." }
+            dependencies = [
+                { name = "json-merge-patch" },
+            ]
+
+            [package.metadata]
+            requires-dist = [{ name = "json-merge-patch" }]
+            "#
+            );
+        }
+    );
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    // We should also be able to read from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + json-merge-patch==0.2
+    ");
+
+    // Modify the build constraints.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["json-merge-patch"]
+
+        [tool.uv]
+        build-constraint-dependencies = ["setuptools<77"]
+        "#,
+    )?;
+
+    // This should fail, given that the build constraints have changed.
+    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    // Changing the build constraints should lead to a re-resolve.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    ");
+
+    Ok(())
+}

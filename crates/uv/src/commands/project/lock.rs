@@ -624,8 +624,6 @@ async fn do_lock(
         .build();
     let hasher = HashStrategy::Generate(HashGeneration::Url);
 
-    let build_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
-
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_hasher = HashStrategy::default();
@@ -647,7 +645,7 @@ async fn do_lock(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        Constraints::from_requirements(build_constraints.iter().cloned()),
         interpreter,
         index_locations,
         &flat_index,
@@ -679,6 +677,7 @@ async fn do_lock(
             &dependency_groups,
             &constraints,
             &overrides,
+            &build_constraints,
             &conflicts,
             environments,
             required_environments,
@@ -837,6 +836,7 @@ async fn do_lock(
                 requirements,
                 constraints,
                 overrides,
+                build_constraints,
                 dependency_groups,
                 dependency_metadata.values().cloned(),
             )
@@ -889,6 +889,7 @@ impl ValidatedLock {
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
         overrides: &[Requirement],
+        build_constraints: &[Requirement],
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
         required_environments: Option<&SupportedEnvironments>,
@@ -1066,6 +1067,7 @@ impl ValidatedLock {
                 requirements,
                 constraints,
                 overrides,
+                build_constraints,
                 dependency_groups,
                 dependency_metadata,
                 indexes,
@@ -1140,6 +1142,13 @@ impl ValidatedLock {
             SatisfiesResult::MismatchedOverrides(expected, actual) => {
                 debug!(
                     "Ignoring existing lockfile due to mismatched overrides:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedBuildConstraints(expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched build constraints:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))

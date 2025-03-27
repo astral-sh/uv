@@ -78,12 +78,21 @@ impl Requirement {
         self.source.is_editable()
     }
 
-    /// Convert the requirement to a [`Requirement`] relative to the given path.
+    /// Convert to a [`Requirement`] with a relative path based on the given root.
     pub fn relative_to(self, path: &Path) -> Result<Self, io::Error> {
         Ok(Self {
             source: self.source.relative_to(path)?,
             ..self
         })
+    }
+
+    /// Convert to a [`Requirement`] with an absolute path based on the given root.
+    #[must_use]
+    pub fn to_absolute(self, path: &Path) -> Self {
+        Self {
+            source: self.source.to_absolute(path),
+            ..self
+        }
     }
 
     /// Return the hashes of the requirement, as specified in the URL fragment.
@@ -591,6 +600,37 @@ impl RequirementSource {
                 r#virtual,
                 url,
             }),
+        }
+    }
+
+    /// Convert the source to a [`RequirementSource`] with an absolute path based on the given root.
+    #[must_use]
+    pub fn to_absolute(self, root: &Path) -> Self {
+        match self {
+            RequirementSource::Registry { .. }
+            | RequirementSource::Url { .. }
+            | RequirementSource::Git { .. } => self,
+            RequirementSource::Path {
+                install_path,
+                ext,
+                url,
+            } => Self::Path {
+                install_path: uv_fs::normalize_path_buf(root.join(install_path)).into_boxed_path(),
+                ext,
+                url,
+            },
+            RequirementSource::Directory {
+                install_path,
+                editable,
+                r#virtual,
+                url,
+                ..
+            } => Self::Directory {
+                install_path: uv_fs::normalize_path_buf(root.join(install_path)).into_boxed_path(),
+                editable,
+                r#virtual,
+                url,
+            },
         }
     }
 }
