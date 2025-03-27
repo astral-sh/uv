@@ -187,7 +187,12 @@ impl Pep723Script {
         let (shebang, postlude) = extract_shebang(contents)?;
 
         // Add a newline to the beginning if it starts with a valid metadata comment line.
-        let postlude = if postlude.starts_with("# ") || postlude.starts_with("#\n") {
+        let postlude = if postlude.strip_prefix('#').is_some_and(|postlude| {
+            postlude
+                .chars()
+                .next()
+                .is_some_and(|c| matches!(c, ' ' | '\r' | '\n'))
+        }) {
             format!("\n{postlude}")
         } else {
             postlude
@@ -913,7 +918,7 @@ mod tests {
             dependencies = []
             "#}
         );
-        // Note the extra line at the beginning
+        // Note the extra line at the beginning.
         assert_eq!(
             postlude,
             indoc::indoc! {r#"
