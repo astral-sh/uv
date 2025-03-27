@@ -58,10 +58,9 @@ impl PubGrubDependency {
             } else {
                 Either::Right(iter::empty())
             };
-            let extras = requirement.extras.to_vec();
-            Either::Left(Either::Left(
-                base.chain(extras.into_iter().map(|extra| (Some(extra), None))),
-            ))
+            Either::Left(Either::Left(base.chain(
+                Box::into_iter(requirement.extras.clone()).map(|extra| (Some(extra), None)),
+            )))
         } else if !requirement.groups.is_empty() {
             let base = if requirement
                 .groups
@@ -72,10 +71,9 @@ impl PubGrubDependency {
             } else {
                 Either::Right(iter::empty())
             };
-            let groups = requirement.groups.to_vec();
-            Either::Left(Either::Right(
-                base.chain(groups.into_iter().map(|group| (None, Some(group)))),
-            ))
+            Either::Left(Either::Right(base.chain(
+                Box::into_iter(requirement.groups.clone()).map(|group| (None, Some(group))),
+            )))
         } else {
             Either::Right(iter::once((None, None)))
         };
