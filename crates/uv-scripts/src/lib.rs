@@ -158,7 +158,22 @@ impl Pep723Script {
         requires_python: &VersionSpecifiers,
     ) -> Result<Self, Pep723Error> {
         let contents = fs_err::tokio::read(&file).await?;
+        let (prelude, metadata, postlude) = Self::init_metadata(&contents, requires_python)?;
+        Ok(Self {
+            path: std::path::absolute(file)?,
+            metadata,
+            prelude,
+            postlude,
+        })
+    }
 
+    /// Generates a default PEP 723 metadata table from the provided script contents.
+    ///
+    /// See: <https://peps.python.org/pep-0723/>
+    pub fn init_metadata(
+        contents: &[u8],
+        requires_python: &VersionSpecifiers,
+    ) -> Result<(String, Pep723Metadata, String), Pep723Error> {
         // Define the default metadata.
         let default_metadata = indoc::formatdoc! {r#"
             requires-python = "{requires_python}"
@@ -168,8 +183,8 @@ impl Pep723Script {
         };
         let metadata = Pep723Metadata::from_str(&default_metadata)?;
 
-        //  Extract the shebang and script content.
-        let (shebang, postlude) = extract_shebang(&contents)?;
+        // Extract the shebang and script content.
+        let (shebang, postlude) = extract_shebang(contents)?;
 
         // Add a newline to the beginning if it starts with a valid metadata comment line.
         let postlude = if postlude.starts_with("# ") || postlude.starts_with("#\n") {
@@ -178,16 +193,15 @@ impl Pep723Script {
             postlude
         };
 
-        Ok(Self {
-            path: std::path::absolute(file)?,
-            prelude: if shebang.is_empty() {
+        Ok((
+            if shebang.is_empty() {
                 String::new()
             } else {
                 format!("{shebang}\n")
             },
             metadata,
             postlude,
-        })
+        ))
     }
 
     /// Create a PEP 723 script at the given path.
@@ -561,7 +575,7 @@ fn serialize_metadata(metadata: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{serialize_metadata, Pep723Error, ScriptTag};
+    use crate::{serialize_metadata, Pep723Error, Pep723Script, ScriptTag};
 
     #[test]
     fn missing_space() {
@@ -788,5 +802,241 @@ mod tests {
 
         let result = serialize_metadata(metadata);
         assert_eq!(result, expected_output);
+    }
+
+    #[test]
+    fn test_script_init_empty() {
+        let contents = "".as_bytes();
+        let (prelude, metadata, postlude) =
+            Pep723Script::init_metadata(contents, &uv_pep440::VersionSpecifiers::default())
+                .unwrap();
+        assert_eq!(prelude, "");
+        assert_eq!(
+            metadata.raw,
+            indoc::indoc! {r#"
+            requires-python = ""
+            dependencies = []
+            "#}
+        );
+        assert_eq!(postlude, "");
+    }
+
+    #[test]
+    fn test_script_init_with_hashbang() {
+        let contents = indoc::indoc! {r#"
+        #!/usr/bin/env python3
+
+        print("Hello, world!")
+        "#}
+        .as_bytes();
+        let (prelude, metadata, postlude) =
+            Pep723Script::init_metadata(contents, &uv_pep440::VersionSpecifiers::default())
+                .unwrap();
+        assert_eq!(prelude, "#!/usr/bin/env python3\n");
+        assert_eq!(
+            metadata.raw,
+            indoc::indoc! {r#"
+            requires-python = ""
+            dependencies = []
+            "#}
+        );
+        assert_eq!(
+            postlude,
+            indoc::indoc! {r#"
+
+            print("Hello, world!")
+            "#}
+        );
+    }
+
+    #[test]
+    fn test_script_init_with_other_metadata() {
+        let contents = indoc::indoc! {r#"
+        # /// noscript
+        # Hello,
+        #
+        # World!
+        # ///
+
+        print("Hello, world!")
+        "#}
+        .as_bytes();
+        let (prelude, metadata, postlude) =
+            Pep723Script::init_metadata(contents, &uv_pep440::VersionSpecifiers::default())
+                .unwrap();
+        assert_eq!(prelude, "");
+        assert_eq!(
+            metadata.raw,
+            indoc::indoc! {r#"
+            requires-python = ""
+            dependencies = []
+            "#}
+        );
+        // Note the extra line at the beginning
+        assert_eq!(
+            postlude,
+            indoc::indoc! {r#"
+
+            # /// noscript
+            # Hello,
+            #
+            # World!
+            # ///
+
+            print("Hello, world!")
+            "#}
+        );
+    }
+
+    #[test]
+    fn test_script_init_with_hashbang_and_other_metadata() {
+        let contents = indoc::indoc! {r#"
+        #!/usr/bin/env python3
+        # /// noscript
+        # Hello,
+        #
+        # World!
+        # ///
+
+        print("Hello, world!")
+        "#}
+        .as_bytes();
+        let (prelude, metadata, postlude) =
+            Pep723Script::init_metadata(contents, &uv_pep440::VersionSpecifiers::default())
+                .unwrap();
+        assert_eq!(prelude, "#!/usr/bin/env python3\n");
+        assert_eq!(
+            metadata.raw,
+            indoc::indoc! {r#"
+            requires-python = ""
+            dependencies = []
+            "#}
+        );
+        // Note the extra line at the beginning
+        assert_eq!(
+            postlude,
+            indoc::indoc! {r#"
+
+            # /// noscript
+            # Hello,
+            #
+            # World!
+            # ///
+
+            print("Hello, world!")
+            "#}
+        );
+    }
+    #[test]
+    fn test_script_init_with_valid_metadata_line() {
+        let contents = indoc::indoc! {r#"
+        # Hello,
+        # /// noscript
+        #
+        # World!
+        # ///
+
+        print("Hello, world!")
+        "#}
+        .as_bytes();
+        let (prelude, metadata, postlude) =
+            Pep723Script::init_metadata(contents, &uv_pep440::VersionSpecifiers::default())
+                .unwrap();
+        assert_eq!(prelude, "");
+        assert_eq!(
+            metadata.raw,
+            indoc::indoc! {r#"
+            requires-python = ""
+            dependencies = []
+            "#}
+        );
+        // Note the extra line at the beginning
+        assert_eq!(
+            postlude,
+            indoc::indoc! {r#"
+
+            # Hello,
+            # /// noscript
+            #
+            # World!
+            # ///
+
+            print("Hello, world!")
+            "#}
+        );
+    }
+    #[test]
+    fn test_script_init_with_valid_empty_metadata_line() {
+        let contents = indoc::indoc! {r#"
+        #
+        # /// noscript
+        # Hello,
+        # World!
+        # ///
+
+        print("Hello, world!")
+        "#}
+        .as_bytes();
+        let (prelude, metadata, postlude) =
+            Pep723Script::init_metadata(contents, &uv_pep440::VersionSpecifiers::default())
+                .unwrap();
+        assert_eq!(prelude, "");
+        assert_eq!(
+            metadata.raw,
+            indoc::indoc! {r#"
+            requires-python = ""
+            dependencies = []
+            "#}
+        );
+        // Note the extra line at the beginning
+        assert_eq!(
+            postlude,
+            indoc::indoc! {r#"
+
+            #
+            # /// noscript
+            # Hello,
+            # World!
+            # ///
+
+            print("Hello, world!")
+            "#}
+        );
+    }
+    #[test]
+    fn test_script_init_with_non_metadata_comment() {
+        let contents = indoc::indoc! {r#"
+        #Hello,
+        # /// noscript
+        #
+        # World!
+        # ///
+
+        print("Hello, world!")
+        "#}
+        .as_bytes();
+        let (prelude, metadata, postlude) =
+            Pep723Script::init_metadata(contents, &uv_pep440::VersionSpecifiers::default())
+                .unwrap();
+        assert_eq!(prelude, "");
+        assert_eq!(
+            metadata.raw,
+            indoc::indoc! {r#"
+            requires-python = ""
+            dependencies = []
+            "#}
+        );
+        assert_eq!(
+            postlude,
+            indoc::indoc! {r#"
+            #Hello,
+            # /// noscript
+            #
+            # World!
+            # ///
+
+            print("Hello, world!")
+            "#}
+        );
     }
 }
