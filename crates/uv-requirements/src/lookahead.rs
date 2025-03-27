@@ -178,9 +178,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         };
 
         // Respect recursive extras by propagating the source extras to the dependencies.
-        let requires_dist = metadata
-            .requires_dist
-            .into_iter()
+        let requires_dist = Box::into_iter(metadata.requires_dist)
             .chain(
                 metadata
                     .dependency_groups

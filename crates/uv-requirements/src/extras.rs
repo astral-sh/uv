@@ -113,7 +113,7 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
 
         // Sort extras for consistency.
         let extras = {
-            let mut extras = metadata.provides_extras;
+            let mut extras = metadata.provides_extras.to_vec();
             extras.sort_unstable();
             extras
         };

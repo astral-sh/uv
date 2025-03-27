@@ -1849,7 +1849,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn flatten_requirements<'a>(
         &'a self,
         dependencies: &'a [Requirement],
-        dev_dependencies: &'a BTreeMap<GroupName, Vec<Requirement>>,
+        dev_dependencies: &'a BTreeMap<GroupName, Box<[Requirement]>>,
         extra: Option<&'a ExtraName>,
         dev: Option<&'a GroupName>,
         name: Option<&PackageName>,

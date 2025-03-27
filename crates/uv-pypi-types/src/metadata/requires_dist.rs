@@ -19,8 +19,8 @@ use crate::{LenientRequirement, MetadataError, VerbatimParsedUrl};
 #[serde(rename_all = "kebab-case")]
 pub struct RequiresDist {
     pub name: PackageName,
-    pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
-    pub provides_extras: Vec<ExtraName>,
+    pub requires_dist: Box<[Requirement<VerbatimParsedUrl>]>,
+    pub provides_extras: Box<[ExtraName]>,
     #[serde(default)]
     pub dynamic: bool,
 }
@@ -62,27 +62,35 @@ impl RequiresDist {
         let name = project.name;
 
         // Extract the requirements.
-        let mut requires_dist = project
+        let requires_dist = project
             .dependencies
             .unwrap_or_default()
             .into_iter()
             .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
             .map_ok(Requirement::from)
-            .collect::<Result<Vec<_>, _>>()?;
+            .chain(
+                project
+                    .optional_dependencies
+                    .as_ref()
+                    .iter()
+                    .flat_map(|index| {
+                        index.iter().flat_map(|(extras, requirements)| {
+                            requirements
+                                .iter()
+                                .map(|requires_dist| LenientRequirement::from_str(requires_dist))
+                                .map_ok(Requirement::from)
+                                .map_ok(move |requirement| requirement.with_extra_marker(extras))
+                        })
+                    }),
+            )
+            .collect::<Result<Box<_>, _>>()?;
 
         // Extract the optional dependencies.
-        let mut provides_extras: Vec<ExtraName> = Vec::new();
-        for (extra, requirements) in project.optional_dependencies.unwrap_or_default() {
-            requires_dist.extend(
-                requirements
-                    .into_iter()
-                    .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
-                    .map_ok(Requirement::from)
-                    .map_ok(|requirement| requirement.with_extra_marker(&extra))
-                    .collect::<Result<Vec<_>, _>>()?,
-            );
-            provides_extras.push(extra);
-        }
+        let provides_extras = project
+            .optional_dependencies
+            .unwrap_or_default()
+            .into_keys()
+            .collect::<Box<_>>();
 
         Ok(Self {
             name,

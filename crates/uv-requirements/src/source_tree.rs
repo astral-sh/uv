@@ -22,11 +22,11 @@ use uv_types::{BuildContext, HashStrategy};
 #[derive(Debug, Clone)]
 pub struct SourceTreeResolution {
     /// The requirements sourced from the source trees.
-    pub requirements: Vec<Requirement>,
+    pub requirements: Box<[Requirement]>,
     /// The names of the projects that were resolved.
     pub project: PackageName,
     /// The extras used when resolving the requirements.
-    pub extras: Vec<ExtraName>,
+    pub extras: Box<[ExtraName]>,
 }
 
 /// A resolver for requirements specified via source trees.
@@ -141,6 +141,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             }
         }
 
+        let requirements = requirements.into_boxed_slice();
         let project = metadata.name;
         let extras = metadata.provides_extras;
 

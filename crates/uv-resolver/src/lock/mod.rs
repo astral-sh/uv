@@ -1072,7 +1072,7 @@ impl Lock {
     /// Return a [`SatisfiesResult`] if the given extras do not match the [`Package`] metadata.
     fn satisfies_provides_extra<'lock>(
         &self,
-        provides_extra: Vec<ExtraName>,
+        provides_extra: Box<[ExtraName]>,
         package: &'lock Package,
     ) -> SatisfiesResult<'lock> {
         if !self.supports_provides_extra() {
@@ -1083,7 +1083,7 @@ impl Lock {
         let actual: BTreeSet<_> = package.metadata.provides_extras.iter().collect();
 
         if expected != actual {
-            let expected = provides_extra.into_iter().collect();
+            let expected = Box::into_iter(provides_extra).collect();
             return SatisfiesResult::MismatchedPackageProvidesExtra(
                 &package.id.name,
                 package.id.version.as_ref(),
@@ -1099,8 +1099,8 @@ impl Lock {
     #[allow(clippy::unused_self)]
     fn satisfies_requires_dist<'lock>(
         &self,
-        requires_dist: Vec<Requirement>,
-        dependency_groups: BTreeMap<GroupName, Vec<Requirement>>,
+        requires_dist: Box<[Requirement]>,
+        dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
         package: &'lock Package,
         root: &Path,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
@@ -1117,8 +1117,7 @@ impl Lock {
         };
 
         // Validate the `requires-dist` metadata.
-        let expected: BTreeSet<_> = requires_dist
-            .into_iter()
+        let expected: BTreeSet<_> = Box::into_iter(requires_dist)
             .map(|requirement| normalize_requirement(requirement, root))
             .collect::<Result<_, _>>()?;
         let actual: BTreeSet<_> = package
@@ -1145,8 +1144,7 @@ impl Lock {
             .map(|(group, requirements)| {
                 Ok::<_, LockError>((
                     group,
-                    requirements
-                        .into_iter()
+                    Box::into_iter(requirements)
                         .map(|requirement| normalize_requirement(requirement, root))
                         .collect::<Result<_, _>>()?,
                 ))
@@ -1977,7 +1975,7 @@ impl Package {
                 .map_err(LockErrorKind::RequirementRelativePath)?
         };
         let provides_extras = if id.source.is_immutable() {
-            Vec::default()
+            Box::default()
         } else {
             annotated_dist
                 .metadata
@@ -2863,7 +2861,7 @@ struct PackageMetadata {
     #[serde(default)]
     requires_dist: BTreeSet<Requirement>,
     #[serde(default)]
-    provides_extras: Vec<ExtraName>,
+    provides_extras: Box<[ExtraName]>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }

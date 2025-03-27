@@ -46,10 +46,10 @@ pub struct Metadata {
     pub name: PackageName,
     pub version: Version,
     // Optional fields
-    pub requires_dist: Vec<Requirement>,
+    pub requires_dist: Box<[Requirement]>,
     pub requires_python: Option<VersionSpecifiers>,
-    pub provides_extras: Vec<ExtraName>,
-    pub dependency_groups: BTreeMap<GroupName, Vec<Requirement>>,
+    pub provides_extras: Box<[ExtraName]>,
+    pub dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
     pub dynamic: bool,
 }
 
@@ -60,9 +60,7 @@ impl Metadata {
         Self {
             name: metadata.name,
             version: metadata.version,
-            requires_dist: metadata
-                .requires_dist
-                .into_iter()
+            requires_dist: Box::into_iter(metadata.requires_dist)
                 .map(Requirement::from)
                 .collect(),
             requires_python: metadata.requires_python,
