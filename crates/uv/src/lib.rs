@@ -1869,6 +1869,7 @@ async fn run_project(
                 args.editable,
                 args.locked,
                 args.frozen,
+                args.include_annotations,
                 args.include_header,
                 script,
                 args.python,

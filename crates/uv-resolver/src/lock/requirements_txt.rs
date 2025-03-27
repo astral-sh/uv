@@ -43,6 +43,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         prune: &[PackageName],
         extras: &ExtrasSpecification,
         dev: &DependencyGroupsWithDefaults,
+        annotate: bool,
         editable: EditableMode,
         hashes: bool,
         install_options: &'lock InstallOptions,
@@ -314,27 +315,31 @@ impl<'lock> RequirementsTxtExport<'lock> {
             .map(|(index, package)| Requirement {
                 package,
                 marker: reachability.remove(&index).unwrap_or_default(),
-                dependents: graph
-                    .edges_directed(index, Direction::Incoming)
-                    .filter_map(|edge| {
-                        let src = edge.source();
-                        if src == root {
-                            None
-                        } else if let Some(Node::Package(dependent)) = graph.node_weight(src) {
-                            let on_top = graph
-                                .neighbors_directed(src, Direction::Incoming)
-                                .filter(|&parent| parent == root)
-                                .count()
-                                == 0;
-                            Some((*dependent, on_top))
-                        } else {
-                            None
-                        }
-                    })
-                    .sorted_by_key(|(p, on_top)| (*on_top, &p.id.name))
-                    .map(|(p, _)| p)
-                    .unique_by(|&p| &p.id.name)
-                    .collect(),
+                dependents: if annotate {
+                    graph
+                        .edges_directed(index, Direction::Incoming)
+                        .filter_map(|edge| {
+                            let src = edge.source();
+                            if src == root {
+                                None
+                            } else if let Some(Node::Package(dependent)) = graph.node_weight(src) {
+                                let on_top = graph
+                                    .neighbors_directed(src, Direction::Incoming)
+                                    .filter(|&parent| parent == root)
+                                    .count()
+                                    == 0;
+                                Some((*dependent, on_top))
+                            } else {
+                                None
+                            }
+                        })
+                        .sorted_by_key(|(p, on_top)| (*on_top, &p.id.name))
+                        .map(|(p, _)| p)
+                        .unique_by(|&p| &p.id.name)
+                        .collect()
+                } else {
+                    Vec::new()
+                },
             })
             .filter(|requirement| !requirement.marker.is_false())
             .collect::<Vec<_>>();
