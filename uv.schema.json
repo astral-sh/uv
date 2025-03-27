@@ -1989,14 +1989,14 @@
           ]
         },
         {
-          "description": "An ARM-based macOS target, as seen on Apple Silicon devices\n\nBy default, assumes the least-recent, non-EOL macOS version (12.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
+          "description": "An ARM-based macOS target, as seen on Apple Silicon devices\n\nBy default, assumes the least-recent, non-EOL macOS version (13.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
           "type": "string",
           "enum": [
             "aarch64-apple-darwin"
           ]
         },
         {
-          "description": "An x86 macOS target.\n\nBy default, assumes the least-recent, non-EOL macOS version (12.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
+          "description": "An x86 macOS target.\n\nBy default, assumes the least-recent, non-EOL macOS version (13.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
           "type": "string",
           "enum": [
             "x86_64-apple-darwin"

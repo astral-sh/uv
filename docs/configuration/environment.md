@@ -496,7 +496,7 @@ Used to look for Microsoft Store Pythons installations.
 Used with `--python-platform macos` and related variants to set the
 deployment target (i.e., the minimum supported macOS version).
 
-Defaults to `12.0`, the least-recent non-EOL macOS version at time of writing.
+Defaults to `13.0`, the least-recent non-EOL macOS version at time of writing.
 
 ### `NETRC`
 
