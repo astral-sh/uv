@@ -51,8 +51,7 @@ impl RequiresDist {
         sources: SourceStrategy,
         cache: &WorkspaceCache,
     ) -> Result<Self, MetadataError> {
-        // TODO(konsti): Cache workspace discovery.
-        let discovery_options = DiscoveryOptions {
+        let discovery = DiscoveryOptions {
             stop_discovery_at: git_member.map(|git_member| {
                 git_member
                     .fetch_root
@@ -66,8 +65,7 @@ impl RequiresDist {
             },
         };
         let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &discovery_options, cache)
-                .await?
+            ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };
