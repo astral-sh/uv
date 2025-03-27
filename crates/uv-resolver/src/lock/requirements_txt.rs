@@ -316,23 +316,23 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 marker: reachability.remove(&index).unwrap_or_default(),
                 dependents: graph
                     .edges_directed(index, Direction::Incoming)
-                    .sorted_by_key(|edge| {
-                        graph
-                            .neighbors_directed(edge.source(), Direction::Incoming)
-                            .filter(|&node| node == root)
-                            .count()
-                            == 0
-                    })
                     .filter_map(|edge| {
                         let src = edge.source();
                         if src == root {
                             None
                         } else if let Some(Node::Package(dependent)) = graph.node_weight(src) {
-                            Some(*dependent)
+                            let on_top = graph
+                                .neighbors_directed(src, Direction::Incoming)
+                                .filter(|&parent| parent == root)
+                                .count()
+                                == 0;
+                            Some((*dependent, on_top))
                         } else {
                             None
                         }
                     })
+                    .sorted_by_key(|(_, on_top)| *on_top)
+                    .map(|(p, _)| {p})
                     .unique_by(|&p| &p.id.name)
                     .collect(),
             })
