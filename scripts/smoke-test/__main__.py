@@ -1,5 +1,6 @@
 import os
 import pathlib
+import shlex
 import subprocess
 import sys
 
@@ -9,7 +10,7 @@ COMMANDS_FILE = SELF_FILE.parent / "commands.sh"
 
 def read_commands() -> list[list[str]]:
     return [
-        line.split()
+        shlex.split(line)
         for line in COMMANDS_FILE.read_text().splitlines()
         # Skip empty lines and comments
         if line.strip() and not line.strip().startswith("#")
