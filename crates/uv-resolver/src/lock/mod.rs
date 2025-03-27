@@ -19,7 +19,7 @@ use tracing::debug;
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
-use uv_configuration::BuildOptions;
+use uv_configuration::{BuildOptions, Constraints};
 use uv_distribution::{DistributionDatabase, FlatRequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
@@ -674,6 +674,17 @@ impl Lock {
         &self.manifest.dependency_groups
     }
 
+    /// Returns the build constraints that were used to generate this lock.
+    pub fn build_constraints(&self, root: &Path) -> Constraints {
+        Constraints::from_requirements(
+            self.manifest
+                .build_constraints
+                .iter()
+                .cloned()
+                .map(|requirement| requirement.to_absolute(root)),
+        )
+    }
+
     /// Return the workspace root used to generate this lock.
     pub fn root(&self) -> Option<&Package> {
         self.packages.iter().find(|package| {
@@ -929,6 +940,26 @@ impl Lock {
                     overrides => each_element_on_its_line_array(overrides.iter()),
                 };
                 manifest_table.insert("overrides", value(overrides));
+            }
+
+            if !self.manifest.build_constraints.is_empty() {
+                let build_constraints = self
+                    .manifest
+                    .build_constraints
+                    .iter()
+                    .map(|requirement| {
+                        serde::Serialize::serialize(
+                            &requirement,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let build_constraints = match build_constraints.as_slice() {
+                    [] => Array::new(),
+                    [requirement] => Array::from_iter([requirement]),
+                    build_constraints => each_element_on_its_line_array(build_constraints.iter()),
+                };
+                manifest_table.insert("build-constraints", value(build_constraints));
             }
 
             if !self.manifest.dependency_groups.is_empty() {
@@ -1188,6 +1219,7 @@ impl Lock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
+        build_constraints: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
@@ -1276,6 +1308,27 @@ impl Lock {
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
+            }
+        }
+
+        // Validate that the lockfile was generated with the same build constraints.
+        {
+            let expected: BTreeSet<_> = build_constraints
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, root))
+                .collect::<Result<_, _>>()?;
+            let actual: BTreeSet<_> = self
+                .manifest
+                .build_constraints
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, root))
+                .collect::<Result<_, _>>()?;
+            if expected != actual {
+                return Ok(SatisfiesResult::MismatchedBuildConstraints(
+                    expected, actual,
+                ));
             }
         }
 
@@ -1685,6 +1738,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of overrides.
     MismatchedOverrides(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    /// The lockfile uses a different set of build constraints.
+    MismatchedBuildConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of dependency groups.
     MismatchedDependencyGroups(
         BTreeMap<GroupName, BTreeSet<Requirement>>,
@@ -1765,6 +1820,9 @@ pub struct ResolverManifest {
     /// The overrides provided to the resolver.
     #[serde(default)]
     overrides: BTreeSet<Requirement>,
+    /// The build constraints provided to the resolver.
+    #[serde(default)]
+    build_constraints: BTreeSet<Requirement>,
     /// The static metadata provided to the resolver.
     #[serde(default)]
     dependency_metadata: BTreeSet<StaticMetadata>,
@@ -1778,6 +1836,7 @@ impl ResolverManifest {
         requirements: impl IntoIterator<Item = Requirement>,
         constraints: impl IntoIterator<Item = Requirement>,
         overrides: impl IntoIterator<Item = Requirement>,
+        build_constraints: impl IntoIterator<Item = Requirement>,
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
     ) -> Self {
@@ -1786,6 +1845,7 @@ impl ResolverManifest {
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
             overrides: overrides.into_iter().collect(),
+            build_constraints: build_constraints.into_iter().collect(),
             dependency_groups: dependency_groups
                 .into_iter()
                 .map(|(group, requirements)| (group, requirements.into_iter().collect()))
@@ -1810,6 +1870,11 @@ impl ResolverManifest {
                 .collect::<Result<BTreeSet<_>, _>>()?,
             overrides: self
                 .overrides
+                .into_iter()
+                .map(|requirement| requirement.relative_to(root))
+                .collect::<Result<BTreeSet<_>, _>>()?,
+            build_constraints: self
+                .build_constraints
                 .into_iter()
                 .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<BTreeSet<_>, _>>()?,
@@ -2375,11 +2440,8 @@ impl Package {
                 url.set_query(None);
 
                 // Reconstruct the `GitUrl` from the `GitSource`.
-                let git_url = uv_git_types::GitUrl::from_commit(
-                    url,
-                    GitReference::from(git.kind.clone()),
-                    git.precise,
-                )?;
+                let git_url =
+                    GitUrl::from_commit(url, GitReference::from(git.kind.clone()), git.precise)?;
 
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                 let url = Url::from(ParsedGitUrl {

@@ -11,7 +11,7 @@ use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
+    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecification, HashCheckingMode, InstallOptions, PreviewMode,
 };
 use uv_dispatch::BuildDispatch;
@@ -644,9 +644,11 @@ pub(super) async fn do_sync(
         BuildIsolation::SharedPackage(venv, no_build_isolation_package)
     };
 
+    // Read the build constraints from the lockfile.
+    let build_constraints = target.build_constraints();
+
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
 
     // Extract the hashes from the lockfile.
