@@ -709,6 +709,7 @@ mod tests {
         assert_eq!(actual.metadata, expected_metadata);
         assert_eq!(actual.postlude, expected_data);
     }
+
     #[test]
     fn embedded_comment() {
         let contents = indoc::indoc! {r"
@@ -772,7 +773,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_metadata_formatting() {
+    fn serialize_metadata_formatting() {
         let metadata = indoc::indoc! {r"
         requires-python = '>=3.11'
         dependencies = [
@@ -796,7 +797,7 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_metadata_empty() {
+    fn serialize_metadata_empty() {
         let metadata = "";
         let expected_output = "# /// script\n# ///\n";
 
@@ -805,7 +806,7 @@ mod tests {
     }
 
     #[test]
-    fn test_script_init_empty() {
+    fn script_init_empty() {
         let contents = "".as_bytes();
         let (prelude, metadata, postlude) =
             Pep723Script::init_metadata(contents, &uv_pep440::VersionSpecifiers::default())
@@ -822,7 +823,7 @@ mod tests {
     }
 
     #[test]
-    fn test_script_init_with_hashbang() {
+    fn script_init_with_hashbang() {
         let contents = indoc::indoc! {r#"
         #!/usr/bin/env python3
 
@@ -850,7 +851,7 @@ mod tests {
     }
 
     #[test]
-    fn test_script_init_with_other_metadata() {
+    fn script_init_with_other_metadata() {
         let contents = indoc::indoc! {r#"
         # /// noscript
         # Hello,
@@ -889,7 +890,7 @@ mod tests {
     }
 
     #[test]
-    fn test_script_init_with_hashbang_and_other_metadata() {
+    fn script_init_with_hashbang_and_other_metadata() {
         let contents = indoc::indoc! {r#"
         #!/usr/bin/env python3
         # /// noscript
@@ -927,8 +928,9 @@ mod tests {
             "#}
         );
     }
+
     #[test]
-    fn test_script_init_with_valid_metadata_line() {
+    fn script_init_with_valid_metadata_line() {
         let contents = indoc::indoc! {r#"
         # Hello,
         # /// noscript
@@ -965,8 +967,9 @@ mod tests {
             "#}
         );
     }
+
     #[test]
-    fn test_script_init_with_valid_empty_metadata_line() {
+    fn script_init_with_valid_empty_metadata_line() {
         let contents = indoc::indoc! {r#"
         #
         # /// noscript
@@ -1003,8 +1006,9 @@ mod tests {
             "#}
         );
     }
+
     #[test]
-    fn test_script_init_with_non_metadata_comment() {
+    fn script_init_with_non_metadata_comment() {
         let contents = indoc::indoc! {r#"
         #Hello,
         # /// noscript
