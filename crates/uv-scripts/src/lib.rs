@@ -173,7 +173,7 @@ impl Pep723Script {
 
         // Add a newline to the beginning if it starts with a valid metadata comment line.
         let postlude = if postlude.starts_with("# ") || postlude.starts_with("#\n") {
-            format!("\n{}", postlude)
+            format!("\n{postlude}")
         } else {
             postlude
         };
