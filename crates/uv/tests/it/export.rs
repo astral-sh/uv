@@ -167,8 +167,8 @@ fn dependency_extra() -> Result<()> {
         --hash=sha256:ea3d8a3d18833cf4304cd2fc9cbb1efe188ca9b5efef2bdac7adc20594a0e46b \
         --hash=sha256:f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5
         # via
-        #   werkzeug
         #   jinja2
+        #   werkzeug
     python-dotenv==1.0.1 \
         --hash=sha256:e324ee90a023d808f1959c46bcbc04446a10ced277783dc6ee09987c37ec10ca \
         --hash=sha256:f7b63ef50f1b690dddf550d03497b66d609393b40b564ed0d674909a68ebf16a
@@ -2741,8 +2741,8 @@ fn complex_conflict_markers() -> Result<()> {
         --hash=sha256:2fc8da60df463fdefa81e323eef2e36489e1c94335b5358bcb38360adf75ac9b \
         --hash=sha256:5a796786da89203a0657eda402bcdcec6180254a8ac22d72213abc42069522dc
         # via
-        #   nvidia-cusolver-cu12
         #   nvidia-cudnn-cu12
+        #   nvidia-cusolver-cu12
         #   torch
     nvidia-cuda-cupti-cu12==12.4.127 ; platform_machine == 'x86_64' and sys_platform == 'linux' \
         --hash=sha256:5688d203301ab051449a2b1cb6690fbe90d2b372f411521c86018b950f3d7922 \
@@ -2798,9 +2798,9 @@ fn complex_conflict_markers() -> Result<()> {
         --hash=sha256:4abe7fef64914ccfa909bc2ba39739670ecc9e820c83ccc7a6ed414122599b83 \
         --hash=sha256:fd9020c501d27d135f983c6d3e244b197a7ccad769e34df53a42e276b0e25fa1
         # via
-        #   nvidia-cusparse-cu12
-        #   nvidia-cusolver-cu12
         #   nvidia-cufft-cu12
+        #   nvidia-cusolver-cu12
+        #   nvidia-cusparse-cu12
         #   torch
     nvidia-nvtx-cu12==12.4.127 ; platform_machine == 'x86_64' and sys_platform == 'linux' \
         --hash=sha256:641dccaaa1139f3ffb0d3164b4b84f9d253397e38246a4f2f36728b48566d485 \

@@ -331,8 +331,8 @@ impl<'lock> RequirementsTxtExport<'lock> {
                             None
                         }
                     })
-                    .sorted_by_key(|(_, on_top)| *on_top)
-                    .map(|(p, _)| {p})
+                    .sorted_by_key(|(p, on_top)| (*on_top, &p.id.name))
+                    .map(|(p, _)| p)
                     .unique_by(|&p| &p.id.name)
                     .collect(),
             })
