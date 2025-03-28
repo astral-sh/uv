@@ -600,7 +600,7 @@ considerations.
 
 ### `VIRTUAL_ENV`
 
-Used to detect an activated virtual environment.
+Path used to detect an activated virtual environment. Given that uv has no dependency on Python, setting `VIRTUAL_ENV=/my/virtualenv` will cause uv to install in /my/virtualenv regardless of where uv is installed. Note that if `VIRTUAL_ENV` is set to a directory that is not a [PEP 405 compliant virtual environment](https://peps.python.org/pep-0405/#specification), it will be ignored.
 
 ### `VIRTUAL_ENV_DISABLE_PROMPT`
 
