@@ -175,11 +175,18 @@ impl Pep723Script {
         requires_python: &VersionSpecifiers,
     ) -> Result<(String, Pep723Metadata, String), Pep723Error> {
         // Define the default metadata.
-        let default_metadata = indoc::formatdoc! {r#"
-            requires-python = "{requires_python}"
-            dependencies = []
-            "#,
-            requires_python = requires_python,
+        let default_metadata = if requires_python.is_empty() {
+            indoc::formatdoc! {r"
+                dependencies = []
+            ",
+            }
+        } else {
+            indoc::formatdoc! {r#"
+                requires-python = "{requires_python}"
+                dependencies = []
+                "#,
+                requires_python = requires_python,
+            }
         };
         let metadata = Pep723Metadata::from_str(&default_metadata)?;
 
@@ -581,6 +588,7 @@ fn serialize_metadata(metadata: &str) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{serialize_metadata, Pep723Error, Pep723Script, ScriptTag};
+    use std::str::FromStr;
 
     #[test]
     fn missing_space() {
@@ -750,24 +758,24 @@ mod tests {
     #[test]
     fn trailing_lines() {
         let contents = indoc::indoc! {r"
-        # /// script
-        # requires-python = '>=3.11'
-        # dependencies = [
-        #     'requests<3',
-        #     'rich',
-        # ]
-        # ///
-        #
-        #
-    "};
+            # /// script
+            # requires-python = '>=3.11'
+            # dependencies = [
+            #     'requests<3',
+            #     'rich',
+            # ]
+            # ///
+            #
+            #
+        "};
 
         let expected = indoc::indoc! {r"
-        requires-python = '>=3.11'
-        dependencies = [
-            'requests<3',
-            'rich',
-        ]
-    "};
+            requires-python = '>=3.11'
+            dependencies = [
+                'requests<3',
+                'rich',
+            ]
+        "};
 
         let actual = ScriptTag::parse(contents.as_bytes())
             .unwrap()
@@ -780,22 +788,22 @@ mod tests {
     #[test]
     fn serialize_metadata_formatting() {
         let metadata = indoc::indoc! {r"
-        requires-python = '>=3.11'
-        dependencies = [
-          'requests<3',
-          'rich',
-        ]
-    "};
+            requires-python = '>=3.11'
+            dependencies = [
+              'requests<3',
+              'rich',
+            ]
+        "};
 
         let expected_output = indoc::indoc! {r"
-        # /// script
-        # requires-python = '>=3.11'
-        # dependencies = [
-        #   'requests<3',
-        #   'rich',
-        # ]
-        # ///
-    "};
+            # /// script
+            # requires-python = '>=3.11'
+            # dependencies = [
+            #   'requests<3',
+            #   'rich',
+            # ]
+            # ///
+        "};
 
         let result = serialize_metadata(metadata);
         assert_eq!(result, expected_output);
@@ -819,8 +827,26 @@ mod tests {
         assert_eq!(prelude, "");
         assert_eq!(
             metadata.raw,
+            indoc::indoc! {r"
+            dependencies = []
+            "}
+        );
+        assert_eq!(postlude, "");
+    }
+
+    #[test]
+    fn script_init_requires_python() {
+        let contents = "".as_bytes();
+        let (prelude, metadata, postlude) = Pep723Script::init_metadata(
+            contents,
+            &uv_pep440::VersionSpecifiers::from_str(">=3.8").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(prelude, "");
+        assert_eq!(
+            metadata.raw,
             indoc::indoc! {r#"
-            requires-python = ""
+            requires-python = ">=3.8"
             dependencies = []
             "#}
         );
@@ -841,10 +867,9 @@ mod tests {
         assert_eq!(prelude, "#!/usr/bin/env python3\n");
         assert_eq!(
             metadata.raw,
-            indoc::indoc! {r#"
-            requires-python = ""
+            indoc::indoc! {r"
             dependencies = []
-            "#}
+            "}
         );
         assert_eq!(
             postlude,
@@ -873,12 +898,11 @@ mod tests {
         assert_eq!(prelude, "");
         assert_eq!(
             metadata.raw,
-            indoc::indoc! {r#"
-            requires-python = ""
+            indoc::indoc! {r"
             dependencies = []
-            "#}
+            "}
         );
-        // Note the extra line at the beginning
+        // Note the extra line at the beginning.
         assert_eq!(
             postlude,
             indoc::indoc! {r#"
@@ -913,10 +937,9 @@ mod tests {
         assert_eq!(prelude, "#!/usr/bin/env python3\n");
         assert_eq!(
             metadata.raw,
-            indoc::indoc! {r#"
-            requires-python = ""
+            indoc::indoc! {r"
             dependencies = []
-            "#}
+            "}
         );
         // Note the extra line at the beginning.
         assert_eq!(
@@ -952,12 +975,11 @@ mod tests {
         assert_eq!(prelude, "");
         assert_eq!(
             metadata.raw,
-            indoc::indoc! {r#"
-            requires-python = ""
+            indoc::indoc! {r"
             dependencies = []
-            "#}
+            "}
         );
-        // Note the extra line at the beginning
+        // Note the extra line at the beginning.
         assert_eq!(
             postlude,
             indoc::indoc! {r#"
@@ -991,12 +1013,11 @@ mod tests {
         assert_eq!(prelude, "");
         assert_eq!(
             metadata.raw,
-            indoc::indoc! {r#"
-            requires-python = ""
+            indoc::indoc! {r"
             dependencies = []
-            "#}
+            "}
         );
-        // Note the extra line at the beginning
+        // Note the extra line at the beginning.
         assert_eq!(
             postlude,
             indoc::indoc! {r#"
@@ -1030,10 +1051,9 @@ mod tests {
         assert_eq!(prelude, "");
         assert_eq!(
             metadata.raw,
-            indoc::indoc! {r#"
-            requires-python = ""
+            indoc::indoc! {r"
             dependencies = []
-            "#}
+            "}
         );
         assert_eq!(
             postlude,
