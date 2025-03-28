@@ -128,6 +128,33 @@ impl PyProjectTomlMut {
         Ok(())
     }
 
+    /// Adds a workspace source to tool.uv.sources.
+    pub fn add_workspace_source(&mut self, name: &PackageName) -> Result<(), Error> {
+        // Get or create tool.uv.sources.
+        let sources = self
+            .doc
+            .entry("tool")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("uv")
+            .or_insert(implicit())
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?
+            .entry("sources")
+            .or_insert(Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or(Error::MalformedSources)?;
+
+        // Create an inline table with workspace = true
+        let mut table = toml_edit::InlineTable::new();
+        table.insert("workspace", Value::Boolean(Formatted::new(true)));
+
+        sources.insert(name.as_ref(), Item::Value(Value::InlineTable(table)));
+
+        Ok(())
+    }
+
     /// Retrieves a mutable reference to the `project` [`Table`] of the TOML document, creating the
     /// table if necessary.
     ///
