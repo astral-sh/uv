@@ -39,7 +39,7 @@ pub enum TargetTriple {
 
     /// An ARM-based macOS target, as seen on Apple Silicon devices
     ///
-    /// By default, assumes the least-recent, non-EOL macOS version (12.0), but respects
+    /// By default, assumes the least-recent, non-EOL macOS version (13.0), but respects
     /// the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.
     #[cfg_attr(feature = "clap", value(name = "aarch64-apple-darwin"))]
     #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-apple-darwin"))]
@@ -47,7 +47,7 @@ pub enum TargetTriple {
 
     /// An x86 macOS target.
     ///
-    /// By default, assumes the least-recent, non-EOL macOS version (12.0), but respects
+    /// By default, assumes the least-recent, non-EOL macOS version (13.0), but respects
     /// the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.
     #[cfg_attr(feature = "clap", value(name = "x86_64-apple-darwin"))]
     #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-apple-darwin"))]
@@ -212,7 +212,7 @@ impl TargetTriple {
                 Arch::X86_64,
             ),
             Self::Macos | Self::Aarch64AppleDarwin => {
-                let (major, minor) = macos_deployment_target().map_or((12, 0), |(major, minor)| {
+                let (major, minor) = macos_deployment_target().map_or((13, 0), |(major, minor)| {
                     debug!("Found macOS deployment target: {}.{}", major, minor);
                     (major, minor)
                 });
@@ -220,7 +220,7 @@ impl TargetTriple {
             }
             Self::I686PcWindowsMsvc => Platform::new(Os::Windows, Arch::X86),
             Self::X8664AppleDarwin => {
-                let (major, minor) = macos_deployment_target().map_or((12, 0), |(major, minor)| {
+                let (major, minor) = macos_deployment_target().map_or((13, 0), |(major, minor)| {
                     debug!("Found macOS deployment target: {}.{}", major, minor);
                     (major, minor)
                 });
