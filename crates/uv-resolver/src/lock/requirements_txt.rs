@@ -5,7 +5,6 @@ use std::fmt::Formatter;
 use std::path::{Component, Path, PathBuf};
 
 use either::Either;
-use itertools::Itertools;
 use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::EdgeRef;
@@ -316,27 +315,17 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 package,
                 marker: reachability.remove(&index).unwrap_or_default(),
                 dependents: if annotate {
-                    graph
+                    let mut dependents = graph
                         .edges_directed(index, Direction::Incoming)
-                        .filter_map(|edge| {
-                            let src = edge.source();
-                            if src == root {
-                                None
-                            } else if let Some(Node::Package(dependent)) = graph.node_weight(src) {
-                                let on_top = graph
-                                    .neighbors_directed(src, Direction::Incoming)
-                                    .filter(|&parent| parent == root)
-                                    .count()
-                                    == 0;
-                                Some((*dependent, on_top))
-                            } else {
-                                None
-                            }
+                        .map(|edge| &graph[edge.source()])
+                        .filter_map(|node| match node {
+                            Node::Package(package) => Some(*package),
+                            Node::Root => None,
                         })
-                        .sorted_by_key(|(p, on_top)| (*on_top, &p.id.name))
-                        .map(|(p, _)| p)
-                        .unique_by(|&p| &p.id.name)
-                        .collect()
+                        .collect::<Vec<_>>();
+                    dependents.sort_unstable_by_key(|package| package.name());
+                    dependents.dedup_by_key(|package| package.name());
+                    dependents
                 } else {
                     Vec::new()
                 },

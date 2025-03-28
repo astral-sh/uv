@@ -3851,7 +3851,7 @@ pub struct ExportArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub all_groups: bool,
 
-    /// Exclude comment annotations indicating the source of each package
+    /// Exclude comment annotations indicating the source of each package.
     #[arg(long, overrides_with("annotate"))]
     pub no_annotate: bool,
 
