@@ -3851,6 +3851,13 @@ pub struct ExportArgs {
     #[arg(long, conflicts_with_all = ["only_group", "only_dev"])]
     pub all_groups: bool,
 
+    /// Exclude comment annotations indicating the source of each package.
+    #[arg(long, overrides_with("annotate"))]
+    pub no_annotate: bool,
+
+    #[arg(long, overrides_with("no_annotate"), hide = true)]
+    pub annotate: bool,
+
     /// Exclude the comment header at the top of the generated output file.
     #[arg(long, overrides_with("header"))]
     pub no_header: bool,
