@@ -95,7 +95,7 @@ enum Error {
 pub(crate) async fn build_frontend(
     project_dir: &Path,
     src: Option<PathBuf>,
-    package: Option<PackageName>,
+    packages: &[PackageName],
     all_packages: bool,
     output_dir: Option<PathBuf>,
     sdist: bool,
@@ -120,7 +120,7 @@ pub(crate) async fn build_frontend(
     let build_result = build_impl(
         project_dir,
         src.as_deref(),
-        package.as_ref(),
+        packages,
         all_packages,
         output_dir.as_deref(),
         sdist,
@@ -163,7 +163,7 @@ enum BuildResult {
 async fn build_impl(
     project_dir: &Path,
     src: Option<&Path>,
-    package: Option<&PackageName>,
+    packages: &[PackageName],
     all_packages: bool,
     output_dir: Option<&Path>,
     sdist: bool,
@@ -250,7 +250,7 @@ async fn build_impl(
     .await;
 
     // If a `--package` or `--all-packages` was provided, adjust the source directory.
-    let packages = if let Some(package) = package {
+    let packages = if !packages.is_empty() {
         if matches!(src, Source::File(_)) {
             return Err(anyhow::anyhow!(
                 "Cannot specify `--package` when building from a file"
@@ -265,20 +265,22 @@ async fn build_impl(
             }
         };
 
-        let package = workspace
-            .packages()
-            .get(package)
-            .ok_or_else(|| anyhow::anyhow!("Package `{package}` not found in workspace"))?;
+        packages.iter().map(|package| {
+            let package = workspace
+                .packages()
+                .get(package)
+                .ok_or_else(|| anyhow::anyhow!("Package `{package}` not found in workspace"))?;
 
-        if !package.pyproject_toml().is_package() {
-            let name = &package.project().name;
-            let pyproject_toml = package.root().join("pyproject.toml");
-            return Err(anyhow::anyhow!("Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```", name.cyan(), "build-system".green(), "setuptools".cyan(), pyproject_toml.user_display().cyan()));
-        }
+            if !package.pyproject_toml().is_package() {
+                let name = &package.project().name;
+                let pyproject_toml = package.root().join("pyproject.toml");
+                return Err(anyhow::anyhow!("Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```", name.cyan(), "build-system".green(), "setuptools".cyan(), pyproject_toml.user_display().cyan()));
+            }
 
-        vec![AnnotatedSource::from(Source::Directory(Cow::Borrowed(
-            package.root(),
-        )))]
+            Ok(AnnotatedSource::from(Source::Directory(Cow::Borrowed(
+                package.root(),
+            ))))
+        }).collect::<Result<Vec<_>, _>>()?
     } else if all_packages {
         if matches!(src, Source::File(_)) {
             return Err(anyhow::anyhow!(
