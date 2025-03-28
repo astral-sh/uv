@@ -29,8 +29,11 @@ def find_uv_bin() -> str:
 
     # Search in `bin` adjacent to package root (as created by `pip install --target`).
     pkg_root = os.path.dirname(os.path.dirname(__file__))
-    target_path = os.path.join(pkg_root, "bin", uv_exe)
-    if os.path.isfile(target_path):
-        return target_path
+    # Search for `bin` when inside a venv created with use system-site-packages and uv is installed in the system.
+    pkg_root2 = os.path.dirname(os.path.dirname(os.path.dirname(pkg_root)))
+    for path in (pkg_root, pkg_root2):
+        target_path = os.path.join(path, "bin", uv_exe)
+        if os.path.isfile(target_path):
+            return target_path
 
     raise FileNotFoundError(path)
