@@ -25,15 +25,15 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
-    IndexUrl, InstalledDist, PythonRequirementKind, RemoteSource, ResolvedDist, ResolvedDistRef,
-    SourceDist, VersionOrUrlRef,
+    IndexMetadata, IndexUrl, InstalledDist, PythonRequirementKind, RemoteSource, Requirement,
+    ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{release_specifiers_to_ranges, Version, VersionSpecifiers, MIN_VERSION};
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{ConflictItem, ConflictItemRef, Conflicts, Requirement, VerbatimParsedUrl};
+use uv_pypi_types::{ConflictItem, ConflictItemRef, Conflicts, VerbatimParsedUrl};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
 use uv_warnings::warn_user_once;
 
@@ -494,7 +494,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let decision = self.choose_version(
                         next_package,
                         next_id,
-                        index,
+                        index.map(IndexMetadata::url),
                         term_intersection.unwrap_positive(),
                         &mut state.pins,
                         &preferences,
@@ -925,7 +925,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         package: &PubGrubPackage,
         url: Option<&VerbatimParsedUrl>,
-        index: Option<&IndexUrl>,
+        index: Option<&IndexMetadata>,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
         // Ignore unresolved URL packages, i.e., packages that use a direct URL in some forks.
@@ -945,7 +945,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         package: &PubGrubPackage,
         url: Option<&VerbatimParsedUrl>,
-        index: Option<&IndexUrl>,
+        index: Option<&IndexMetadata>,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
         // Only request real packages.
@@ -969,7 +969,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             if self
                 .index
                 .explicit()
-                .register((name.clone(), index.clone()))
+                .register((name.clone(), index.url().clone()))
             {
                 request_sink.blocking_send(Request::Package(name.clone(), Some(index.clone())))?;
             }
@@ -1332,7 +1332,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// apply it in two cases:
     ///
     /// 1. Local versions, where the non-local version has greater platform coverage. The intent is
-    ///    such that, if we're resolving `PyTorch`, and we choose `torch==2.5.2+cpu`, we want to
+    ///    such that, if we're resolving PyTorch, and we choose `torch==2.5.2+cpu`, we want to
     ///    fork so that we can select `torch==2.5.2` on macOS (since the `+cpu` variant doesn't
     ///    include any macOS wheels).
     /// 2. Platforms that the user explicitly marks as "required" (opt-in). For example, the user
@@ -1672,7 +1672,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 );
 
                 requirements
-                    .flat_map(|requirement| {
+                    .flat_map(move |requirement| {
                         PubGrubDependency::from_requirement(
                             &self.conflicts,
                             requirement,
@@ -1849,7 +1849,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     fn flatten_requirements<'a>(
         &'a self,
         dependencies: &'a [Requirement],
-        dev_dependencies: &'a BTreeMap<GroupName, Vec<Requirement>>,
+        dev_dependencies: &'a BTreeMap<GroupName, Box<[Requirement]>>,
         extra: Option<&'a ExtraName>,
         dev: Option<&'a GroupName>,
         name: Option<&PackageName>,
@@ -1952,7 +1952,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if name == Some(&req.name) && !req.source.is_empty() {
                     self_constraints.push(Requirement {
                         name: req.name.clone(),
-                        extras: vec![],
+                        extras: Box::new([]),
                         groups: req.groups.clone(),
                         source: req.source.clone(),
                         origin: req.origin.clone(),
@@ -2249,7 +2249,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 Ok(Some(Response::Package(
                     package_name,
-                    index,
+                    index.map(IndexMetadata::into_url),
                     package_versions,
                 )))
             }
@@ -2449,7 +2449,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 continue;
             }
             let versions_response = if let Some(index) = fork_indexes.get(name) {
-                self.index.explicit().get(&(name.clone(), index.clone()))
+                self.index
+                    .explicit()
+                    .get(&(name.clone(), index.url().clone()))
             } else {
                 self.index.implicit().get(name)
             };
@@ -3166,7 +3168,7 @@ impl ResolutionDependencyEdge {
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum Request {
     /// A request to fetch the metadata for a package.
-    Package(PackageName, Option<IndexUrl>),
+    Package(PackageName, Option<IndexMetadata>),
     /// A request to fetch the metadata for a built or source distribution.
     Dist(Dist),
     /// A request to fetch the metadata from an already-installed distribution.

@@ -19,16 +19,17 @@ use tracing::debug;
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
-use uv_configuration::BuildOptions;
+use uv_configuration::{BuildOptions, Constraints};
 use uv_distribution::{DistributionDatabase, FlatRequiresDist};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
-    BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
-    Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexUrl, Name,
-    PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
-    RemoteSource, ResolvedDist, StaticMetadata, ToUrlError, UrlString,
+    redact_credentials, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
+    DirectorySourceDist, Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations,
+    IndexMetadata, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement, RequirementSource,
+    ResolvedDist, StaticMetadata, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePath, PortablePathBuf};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -40,8 +41,7 @@ use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    redact_credentials, ConflictPackage, Conflicts, HashDigest, HashDigests, ParsedArchiveUrl,
-    ParsedGitUrl, Requirement, RequirementSource,
+    ConflictPackage, Conflicts, HashDigest, HashDigests, ParsedArchiveUrl, ParsedGitUrl,
 };
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
@@ -674,13 +674,24 @@ impl Lock {
         &self.manifest.dependency_groups
     }
 
+    /// Returns the build constraints that were used to generate this lock.
+    pub fn build_constraints(&self, root: &Path) -> Constraints {
+        Constraints::from_requirements(
+            self.manifest
+                .build_constraints
+                .iter()
+                .cloned()
+                .map(|requirement| requirement.to_absolute(root)),
+        )
+    }
+
     /// Return the workspace root used to generate this lock.
     pub fn root(&self) -> Option<&Package> {
         self.packages.iter().find(|package| {
             let (Source::Editable(path) | Source::Virtual(path)) = &package.id.source else {
                 return false;
             };
-            path == Path::new("")
+            path.as_ref() == Path::new("")
         })
     }
 
@@ -931,6 +942,26 @@ impl Lock {
                 manifest_table.insert("overrides", value(overrides));
             }
 
+            if !self.manifest.build_constraints.is_empty() {
+                let build_constraints = self
+                    .manifest
+                    .build_constraints
+                    .iter()
+                    .map(|requirement| {
+                        serde::Serialize::serialize(
+                            &requirement,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let build_constraints = match build_constraints.as_slice() {
+                    [] => Array::new(),
+                    [requirement] => Array::from_iter([requirement]),
+                    build_constraints => each_element_on_its_line_array(build_constraints.iter()),
+                };
+                manifest_table.insert("build-constraints", value(build_constraints));
+            }
+
             if !self.manifest.dependency_groups.is_empty() {
                 let mut dependency_groups = Table::new();
                 for (extra, requirements) in &self.manifest.dependency_groups {
@@ -1072,7 +1103,7 @@ impl Lock {
     /// Return a [`SatisfiesResult`] if the given extras do not match the [`Package`] metadata.
     fn satisfies_provides_extra<'lock>(
         &self,
-        provides_extra: Vec<ExtraName>,
+        provides_extra: Box<[ExtraName]>,
         package: &'lock Package,
     ) -> SatisfiesResult<'lock> {
         if !self.supports_provides_extra() {
@@ -1083,7 +1114,7 @@ impl Lock {
         let actual: BTreeSet<_> = package.metadata.provides_extras.iter().collect();
 
         if expected != actual {
-            let expected = provides_extra.into_iter().collect();
+            let expected = Box::into_iter(provides_extra).collect();
             return SatisfiesResult::MismatchedPackageProvidesExtra(
                 &package.id.name,
                 package.id.version.as_ref(),
@@ -1099,8 +1130,8 @@ impl Lock {
     #[allow(clippy::unused_self)]
     fn satisfies_requires_dist<'lock>(
         &self,
-        requires_dist: Vec<Requirement>,
-        dependency_groups: BTreeMap<GroupName, Vec<Requirement>>,
+        requires_dist: Box<[Requirement]>,
+        dependency_groups: BTreeMap<GroupName, Box<[Requirement]>>,
         package: &'lock Package,
         root: &Path,
     ) -> Result<SatisfiesResult<'lock>, LockError> {
@@ -1117,8 +1148,7 @@ impl Lock {
         };
 
         // Validate the `requires-dist` metadata.
-        let expected: BTreeSet<_> = requires_dist
-            .into_iter()
+        let expected: BTreeSet<_> = Box::into_iter(requires_dist)
             .map(|requirement| normalize_requirement(requirement, root))
             .collect::<Result<_, _>>()?;
         let actual: BTreeSet<_> = package
@@ -1145,8 +1175,7 @@ impl Lock {
             .map(|(group, requirements)| {
                 Ok::<_, LockError>((
                     group,
-                    requirements
-                        .into_iter()
+                    Box::into_iter(requirements)
                         .map(|requirement| normalize_requirement(requirement, root))
                         .collect::<Result<_, _>>()?,
                 ))
@@ -1190,6 +1219,7 @@ impl Lock {
         requirements: &[Requirement],
         constraints: &[Requirement],
         overrides: &[Requirement],
+        build_constraints: &[Requirement],
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
@@ -1281,6 +1311,27 @@ impl Lock {
             }
         }
 
+        // Validate that the lockfile was generated with the same build constraints.
+        {
+            let expected: BTreeSet<_> = build_constraints
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, root))
+                .collect::<Result<_, _>>()?;
+            let actual: BTreeSet<_> = self
+                .manifest
+                .build_constraints
+                .iter()
+                .cloned()
+                .map(|requirement| normalize_requirement(requirement, root))
+                .collect::<Result<_, _>>()?;
+            if expected != actual {
+                return Ok(SatisfiesResult::MismatchedBuildConstraints(
+                    expected, actual,
+                ));
+            }
+        }
+
         // Validate that the lockfile was generated with the dependency groups.
         {
             let expected: BTreeMap<GroupName, BTreeSet<Requirement>> = dependency_groups
@@ -1356,7 +1407,8 @@ impl Lock {
                         let path = url.to_file_path().ok()?;
                         let path = relative_to(&path, root)
                             .or_else(|_| std::path::absolute(path))
-                            .ok()?;
+                            .ok()?
+                            .into_boxed_path();
                         Some(path)
                     }
                 })
@@ -1686,6 +1738,8 @@ pub enum SatisfiesResult<'lock> {
     MismatchedConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of overrides.
     MismatchedOverrides(BTreeSet<Requirement>, BTreeSet<Requirement>),
+    /// The lockfile uses a different set of build constraints.
+    MismatchedBuildConstraints(BTreeSet<Requirement>, BTreeSet<Requirement>),
     /// The lockfile uses a different set of dependency groups.
     MismatchedDependencyGroups(
         BTreeMap<GroupName, BTreeSet<Requirement>>,
@@ -1698,7 +1752,7 @@ pub enum SatisfiesResult<'lock> {
     /// The lockfile referenced a remote index that was not provided
     MissingRemoteIndex(&'lock PackageName, &'lock Version, &'lock UrlString),
     /// The lockfile referenced a local index that was not provided
-    MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock PathBuf),
+    MissingLocalIndex(&'lock PackageName, &'lock Version, &'lock Path),
     /// A package in the lockfile contains different `requires-dist` metadata than expected.
     MismatchedPackageRequirements(
         &'lock PackageName,
@@ -1766,6 +1820,9 @@ pub struct ResolverManifest {
     /// The overrides provided to the resolver.
     #[serde(default)]
     overrides: BTreeSet<Requirement>,
+    /// The build constraints provided to the resolver.
+    #[serde(default)]
+    build_constraints: BTreeSet<Requirement>,
     /// The static metadata provided to the resolver.
     #[serde(default)]
     dependency_metadata: BTreeSet<StaticMetadata>,
@@ -1779,6 +1836,7 @@ impl ResolverManifest {
         requirements: impl IntoIterator<Item = Requirement>,
         constraints: impl IntoIterator<Item = Requirement>,
         overrides: impl IntoIterator<Item = Requirement>,
+        build_constraints: impl IntoIterator<Item = Requirement>,
         dependency_groups: impl IntoIterator<Item = (GroupName, Vec<Requirement>)>,
         dependency_metadata: impl IntoIterator<Item = StaticMetadata>,
     ) -> Self {
@@ -1787,6 +1845,7 @@ impl ResolverManifest {
             requirements: requirements.into_iter().collect(),
             constraints: constraints.into_iter().collect(),
             overrides: overrides.into_iter().collect(),
+            build_constraints: build_constraints.into_iter().collect(),
             dependency_groups: dependency_groups
                 .into_iter()
                 .map(|(group, requirements)| (group, requirements.into_iter().collect()))
@@ -1811,6 +1870,11 @@ impl ResolverManifest {
                 .collect::<Result<BTreeSet<_>, _>>()?,
             overrides: self
                 .overrides
+                .into_iter()
+                .map(|requirement| requirement.relative_to(root))
+                .collect::<Result<BTreeSet<_>, _>>()?,
+            build_constraints: self
+                .build_constraints
                 .into_iter()
                 .map(|requirement| requirement.relative_to(root))
                 .collect::<Result<BTreeSet<_>, _>>()?,
@@ -1976,7 +2040,7 @@ impl Package {
                 .map_err(LockErrorKind::RequirementRelativePath)?
         };
         let provides_extras = if id.source.is_immutable() {
-            Vec::default()
+            Box::default()
         } else {
             annotated_dist
                 .metadata
@@ -2151,7 +2215,7 @@ impl Package {
                         let path_dist = PathBuiltDist {
                             filename,
                             url: verbatim_url(&install_path, &self.id)?,
-                            install_path: absolute_path(workspace_root, path)?,
+                            install_path: absolute_path(workspace_root, path)?.into_boxed_path(),
                         };
                         let built_dist = BuiltDist::Path(path_dist);
                         Ok(Dist::Built(built_dist))
@@ -2196,8 +2260,11 @@ impl Package {
             };
         }
 
-        if !no_build {
-            if let Some(sdist) = self.to_source_dist(workspace_root)? {
+        if let Some(sdist) = self.to_source_dist(workspace_root)? {
+            // Even with `--no-build`, allow virtual packages. (In the future, we may want to allow
+            // any local source tree, or at least editable source trees, which we allow in
+            // `uv pip`.)
+            if !no_build || sdist.is_virtual() {
                 return Ok(Dist::Source(sdist));
             }
         }
@@ -2327,7 +2394,7 @@ impl Package {
                     name: self.id.name.clone(),
                     version: self.id.version.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     ext,
                 };
                 uv_distribution_types::SourceDist::Path(path_dist)
@@ -2337,7 +2404,7 @@ impl Package {
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     editable: false,
                     r#virtual: false,
                 };
@@ -2348,7 +2415,7 @@ impl Package {
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     editable: true,
                     r#virtual: false,
                 };
@@ -2359,7 +2426,7 @@ impl Package {
                 let dir_dist = DirectorySourceDist {
                     name: self.id.name.clone(),
                     url: verbatim_url(&install_path, &self.id)?,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     editable: false,
                     r#virtual: true,
                 };
@@ -2373,11 +2440,8 @@ impl Package {
                 url.set_query(None);
 
                 // Reconstruct the `GitUrl` from the `GitSource`.
-                let git_url = uv_git_types::GitUrl::from_commit(
-                    url,
-                    GitReference::from(git.kind.clone()),
-                    git.precise,
-                )?;
+                let git_url =
+                    GitUrl::from_commit(url, GitReference::from(git.kind.clone()), git.precise)?;
 
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                 let url = Url::from(ParsedGitUrl {
@@ -2399,16 +2463,15 @@ impl Package {
                     return Ok(None);
                 };
                 let location = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
-                let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                 let url = Url::from(ParsedArchiveUrl {
                     url: location.clone(),
-                    subdirectory: subdirectory.clone(),
+                    subdirectory: direct.subdirectory.clone(),
                     ext: DistExtension::Source(ext),
                 });
                 let direct_dist = DirectUrlSourceDist {
                     name: self.id.name.clone(),
                     location: Box::new(location),
-                    subdirectory: subdirectory.clone(),
+                    subdirectory: direct.subdirectory.clone(),
                     ext,
                     url: VerbatimUrl::from_url(url),
                 };
@@ -2860,7 +2923,7 @@ struct PackageMetadata {
     #[serde(default)]
     requires_dist: BTreeSet<Requirement>,
     #[serde(default)]
-    provides_extras: Vec<ExtraName>,
+    provides_extras: Box<[ExtraName]>,
     #[serde(default, rename = "requires-dev", alias = "dependency-groups")]
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
@@ -3057,13 +3120,13 @@ enum Source {
     /// A direct HTTP(S) URL.
     Direct(UrlString, DirectSource),
     /// A path to a local source or built archive.
-    Path(PathBuf),
+    Path(Box<Path>),
     /// A path to a local directory.
-    Directory(PathBuf),
+    Directory(Box<Path>),
     /// A path to a local directory that should be installed as editable.
-    Editable(PathBuf),
+    Editable(Box<Path>),
     /// A path to a local directory that should not be built or installed.
-    Virtual(PathBuf),
+    Virtual(Box<Path>),
 }
 
 impl Source {
@@ -3149,14 +3212,14 @@ impl Source {
         let path = relative_to(&path_dist.install_path, root)
             .or_else(|_| std::path::absolute(&path_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
-        Ok(Source::Path(path))
+        Ok(Source::Path(path.into_boxed_path()))
     }
 
     fn from_path_source_dist(path_dist: &PathSourceDist, root: &Path) -> Result<Source, LockError> {
         let path = relative_to(&path_dist.install_path, root)
             .or_else(|_| std::path::absolute(&path_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
-        Ok(Source::Path(path))
+        Ok(Source::Path(path.into_boxed_path()))
     }
 
     fn from_directory_source_dist(
@@ -3167,11 +3230,11 @@ impl Source {
             .or_else(|_| std::path::absolute(&directory_dist.install_path))
             .map_err(LockErrorKind::DistributionRelativePath)?;
         if directory_dist.editable {
-            Ok(Source::Editable(path))
+            Ok(Source::Editable(path.into_boxed_path()))
         } else if directory_dist.r#virtual {
-            Ok(Source::Virtual(path))
+            Ok(Source::Virtual(path.into_boxed_path()))
         } else {
-            Ok(Source::Directory(path))
+            Ok(Source::Directory(path.into_boxed_path()))
         }
     }
 
@@ -3188,7 +3251,7 @@ impl Source {
                 let path = relative_to(&path, root)
                     .or_else(|_| std::path::absolute(&path))
                     .map_err(LockErrorKind::IndexRelativePath)?;
-                let source = RegistrySource::Path(path);
+                let source = RegistrySource::Path(path.into_boxed_path());
                 Ok(Source::Registry(source))
             }
         }
@@ -3415,7 +3478,7 @@ impl TryFrom<SourceWire> for Source {
             Direct { url, subdirectory } => Ok(Source::Direct(
                 url,
                 DirectSource {
-                    subdirectory: subdirectory.map(PathBuf::from),
+                    subdirectory: subdirectory.map(Box::<std::path::Path>::from),
                 },
             )),
             Path { path } => Ok(Source::Path(path.into())),
@@ -3432,7 +3495,7 @@ enum RegistrySource {
     /// Ex) `https://pypi.org/simple`
     Url(UrlString),
     /// Ex) `../path/to/local/index`
-    Path(PathBuf),
+    Path(Box<Path>),
 }
 
 impl Display for RegistrySource {
@@ -3503,7 +3566,7 @@ impl From<RegistrySourceWire> for RegistrySource {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 struct DirectSource {
-    subdirectory: Option<PathBuf>,
+    subdirectory: Option<Box<Path>>,
 }
 
 /// NOTE: Care should be taken when adding variants to this enum. Namely, new
@@ -3513,7 +3576,7 @@ struct DirectSource {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 struct GitSource {
     precise: GitOid,
-    subdirectory: Option<PathBuf>,
+    subdirectory: Option<Box<Path>>,
     kind: GitSourceKind,
 }
 
@@ -3582,7 +3645,7 @@ enum SourceDist {
         metadata: SourceDistMetadata,
     },
     Path {
-        path: PathBuf,
+        path: Box<Path>,
         #[serde(flatten)]
         metadata: SourceDistMetadata,
     },
@@ -3730,7 +3793,8 @@ impl SourceDist {
                     .map_err(|()| LockErrorKind::UrlToPath)?;
                 let path = relative_to(&reg_dist_path, index_path)
                     .or_else(|_| std::path::absolute(&reg_dist_path))
-                    .map_err(LockErrorKind::DistributionRelativePath)?;
+                    .map_err(LockErrorKind::DistributionRelativePath)?
+                    .into_boxed_path();
                 let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = reg_dist.file.size;
                 Ok(Some(SourceDist::Path {
@@ -4033,7 +4097,8 @@ impl Wheel {
                     .map_err(|()| LockErrorKind::UrlToPath)?;
                 let path = relative_to(&wheel_path, index_path)
                     .or_else(|_| std::path::absolute(&wheel_path))
-                    .map_err(LockErrorKind::DistributionRelativePath)?;
+                    .map_err(LockErrorKind::DistributionRelativePath)?
+                    .into_boxed_path();
                 Ok(Wheel {
                     url: WheelWireSource::Path { path },
                     hash: None,
@@ -4171,7 +4236,7 @@ enum WheelWireSource {
     /// Used for wheels that come from local registries (like `--find-links`).
     Path {
         /// The path to the wheel, relative to the index.
-        path: PathBuf,
+        path: Box<Path>,
     },
     /// Used for path wheels.
     ///
@@ -4517,7 +4582,8 @@ fn normalize_requirement(
             ext,
             url: _,
         } => {
-            let install_path = uv_fs::normalize_path_buf(root.join(&install_path));
+            let install_path =
+                uv_fs::normalize_path_buf(root.join(&install_path)).into_boxed_path();
             let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
@@ -4540,7 +4606,8 @@ fn normalize_requirement(
             r#virtual,
             url: _,
         } => {
-            let install_path = uv_fs::normalize_path_buf(root.join(&install_path));
+            let install_path =
+                uv_fs::normalize_path_buf(root.join(&install_path)).into_boxed_path();
             let url = VerbatimUrl::from_normalized_path(&install_path)
                 .map_err(LockErrorKind::RequirementVerbatimUrl)?;
 
@@ -4560,12 +4627,17 @@ fn normalize_requirement(
         }
         RequirementSource::Registry {
             specifier,
-            mut index,
+            index,
             conflict,
         } => {
-            if let Some(index) = index.as_mut() {
-                redact_credentials(index);
-            }
+            // Round-trip the index to remove anything apart from the URL.
+            let index = index
+                .map(|index| index.url.into_url())
+                .map(|mut index| {
+                    redact_credentials(&mut index);
+                    index
+                })
+                .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index))));
             Ok(Requirement {
                 name: requirement.name,
                 extras: requirement.extras,

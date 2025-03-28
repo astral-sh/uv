@@ -33,9 +33,9 @@ pub enum GitError {
 
 /// A global cache of the result of `which git`.
 pub static GIT: LazyLock<Result<PathBuf, GitError>> = LazyLock::new(|| {
-    which::which("git").map_err(|e| match e {
+    which::which("git").map_err(|err| match err {
         which::Error::CannotFindBinaryPath => GitError::GitNotFound,
-        e => GitError::Other(e),
+        err => GitError::Other(err),
     })
 });
 

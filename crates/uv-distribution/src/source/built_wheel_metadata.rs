@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use uv_cache::CacheShard;
@@ -15,9 +15,9 @@ use uv_pypi_types::{HashDigest, HashDigests};
 #[derive(Debug, Clone)]
 pub(crate) struct BuiltWheelMetadata {
     /// The path to the built wheel.
-    pub(crate) path: PathBuf,
+    pub(crate) path: Box<Path>,
     /// The expected path to the downloaded wheel's entry in the cache.
-    pub(crate) target: PathBuf,
+    pub(crate) target: Box<Path>,
     /// The parsed filename.
     pub(crate) filename: WheelFilename,
     /// The computed hashes of the source distribution from which the wheel was built.
@@ -48,8 +48,8 @@ impl BuiltWheelMetadata {
         let filename = path.file_name()?.to_str()?;
         let filename = WheelFilename::from_str(filename).ok()?;
         Some(Self {
-            target: cache_shard.join(filename.stem()),
-            path,
+            target: cache_shard.join(filename.stem()).into_boxed_path(),
+            path: path.into_boxed_path(),
             filename,
             cache_info: CacheInfo::default(),
             hashes: HashDigests::empty(),

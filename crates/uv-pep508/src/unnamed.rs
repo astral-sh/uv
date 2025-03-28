@@ -71,7 +71,7 @@ pub struct UnnamedRequirement<Url: UnnamedRequirementUrl = VerbatimUrl> {
     pub url: Url,
     /// The list of extras such as `security`, `tests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
-    pub extras: Vec<ExtraName>,
+    pub extras: Box<[ExtraName]>,
     /// The markers such as `python_version > "3.8"` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// Those are a nested and/or tree.
@@ -193,7 +193,7 @@ fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
 
     Ok(UnnamedRequirement {
         url,
-        extras,
+        extras: extras.into_boxed_slice(),
         marker: marker.unwrap_or_default(),
         origin: None,
     })

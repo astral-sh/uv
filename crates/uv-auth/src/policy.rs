@@ -1,9 +1,21 @@
+use std::fmt::{self, Display, Formatter};
+
 use rustc_hash::FxHashMap;
 use url::Url;
 
 /// When to use authentication.
 #[derive(
-    Copy, Clone, Debug, Default, Hash, Eq, PartialEq, serde::Serialize, serde::Deserialize,
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    Hash,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    serde::Serialize,
+    serde::Deserialize,
 )]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -26,6 +38,15 @@ pub enum AuthPolicy {
     Never,
 }
 
+impl Display for AuthPolicy {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            AuthPolicy::Auto => write!(f, "auto"),
+            AuthPolicy::Always => write!(f, "always"),
+            AuthPolicy::Never => write!(f, "never"),
+        }
+    }
+}
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct UrlAuthPolicies(FxHashMap<Url, AuthPolicy>);
 

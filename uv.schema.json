@@ -796,6 +796,15 @@
           "default": false,
           "type": "boolean"
         },
+        "format": {
+          "description": "The format used by the index.\n\nIndexes can either be PEP 503-compliant (i.e., a PyPI-style registry implementing the Simple API) or structured as a flat list of distributions (e.g., `--find-links`). In both cases, indexes can point to either local or remote resources.",
+          "default": "simple",
+          "allOf": [
+            {
+              "$ref": "#/definitions/IndexFormat"
+            }
+          ]
+        },
         "name": {
           "description": "The name of the index.\n\nIndex names can be used to reference indexes elsewhere in the configuration. For example, you can pin a package to a specific index by name:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\"\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```",
           "anyOf": [
@@ -824,6 +833,24 @@
           ]
         }
       }
+    },
+    "IndexFormat": {
+      "oneOf": [
+        {
+          "description": "A PyPI-style index implementing the Simple Repository API.",
+          "type": "string",
+          "enum": [
+            "simple"
+          ]
+        },
+        {
+          "description": "A `--find-links`-style index containing a flat list of wheels and source distributions.",
+          "type": "string",
+          "enum": [
+            "flat"
+          ]
+        }
+      ]
     },
     "IndexName": {
       "description": "The normalized name of an index.\n\nIndex names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.",
@@ -855,7 +882,7 @@
       ]
     },
     "IndexUrl": {
-      "description": "The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`).",
+      "description": "The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`), or a local path.",
       "type": "string"
     },
     "KeyringProviderType": {
@@ -1380,6 +1407,17 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "torch-backend": {
+          "description": "The backend to use when fetching packages in the PyTorch ecosystem.\n\nWhen set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem, and will instead use the defined backend.\n\nFor example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`, uv will use the PyTorch index for CUDA 12.6.\n\nThe `auto` mode will attempt to detect the appropriate PyTorch index based on the currently installed CUDA drivers.\n\nThis option is in preview and may change in any future release.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TorchMode"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "universal": {
@@ -1951,14 +1989,14 @@
           ]
         },
         {
-          "description": "An ARM-based macOS target, as seen on Apple Silicon devices\n\nBy default, assumes the least-recent, non-EOL macOS version (12.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
+          "description": "An ARM-based macOS target, as seen on Apple Silicon devices\n\nBy default, assumes the least-recent, non-EOL macOS version (13.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
           "type": "string",
           "enum": [
             "aarch64-apple-darwin"
           ]
         },
         {
-          "description": "An x86 macOS target.\n\nBy default, assumes the least-recent, non-EOL macOS version (12.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
+          "description": "An x86 macOS target.\n\nBy default, assumes the least-recent, non-EOL macOS version (13.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
           "type": "string",
           "enum": [
             "x86_64-apple-darwin"
@@ -2200,6 +2238,186 @@
         }
       },
       "additionalProperties": false
+    },
+    "TorchMode": {
+      "description": "The strategy to use when determining the appropriate PyTorch index.",
+      "oneOf": [
+        {
+          "description": "Select the appropriate PyTorch index based on the operating system and CUDA driver version.",
+          "type": "string",
+          "enum": [
+            "auto"
+          ]
+        },
+        {
+          "description": "Use the CPU-only PyTorch index.",
+          "type": "string",
+          "enum": [
+            "cpu"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.6.",
+          "type": "string",
+          "enum": [
+            "cu126"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.5.",
+          "type": "string",
+          "enum": [
+            "cu125"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.4.",
+          "type": "string",
+          "enum": [
+            "cu124"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.3.",
+          "type": "string",
+          "enum": [
+            "cu123"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.2.",
+          "type": "string",
+          "enum": [
+            "cu122"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.1.",
+          "type": "string",
+          "enum": [
+            "cu121"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.0.",
+          "type": "string",
+          "enum": [
+            "cu120"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.8.",
+          "type": "string",
+          "enum": [
+            "cu118"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.7.",
+          "type": "string",
+          "enum": [
+            "cu117"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.6.",
+          "type": "string",
+          "enum": [
+            "cu116"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.5.",
+          "type": "string",
+          "enum": [
+            "cu115"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.4.",
+          "type": "string",
+          "enum": [
+            "cu114"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.3.",
+          "type": "string",
+          "enum": [
+            "cu113"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.2.",
+          "type": "string",
+          "enum": [
+            "cu112"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.1.",
+          "type": "string",
+          "enum": [
+            "cu111"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.0.",
+          "type": "string",
+          "enum": [
+            "cu110"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 10.2.",
+          "type": "string",
+          "enum": [
+            "cu102"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 10.1.",
+          "type": "string",
+          "enum": [
+            "cu101"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 10.0.",
+          "type": "string",
+          "enum": [
+            "cu100"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 9.2.",
+          "type": "string",
+          "enum": [
+            "cu92"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 9.1.",
+          "type": "string",
+          "enum": [
+            "cu91"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 9.0.",
+          "type": "string",
+          "enum": [
+            "cu90"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 8.0.",
+          "type": "string",
+          "enum": [
+            "cu80"
+          ]
+        }
+      ]
     },
     "TrustedHost": {
       "description": "A host or host-port pair.",

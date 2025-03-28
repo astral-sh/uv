@@ -10,6 +10,7 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
+use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -17,10 +18,10 @@ use uv_configuration::{
     NoBinary, NoBuild, PreviewMode, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
+use uv_distribution_types::Requirement;
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
-use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -297,6 +298,7 @@ async fn venv_impl(
             .cache(cache.clone())
             .index_urls(index_locations.index_urls())
             .index_strategy(index_strategy)
+            .url_auth_policies(UrlAuthPolicies::from(index_locations))
             .keyring(keyring_provider)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())
             .markers(interpreter.markers())
@@ -306,9 +308,9 @@ async fn venv_impl(
         // Resolve the flat indexes from `--find-links`.
         let flat_index = {
             let tags = interpreter.tags().map_err(VenvError::Tags)?;
-            let client = FlatIndexClient::new(&client, cache);
+            let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
             let entries = client
-                .fetch(index_locations.flat_indexes().map(Index::url))
+                .fetch_all(index_locations.flat_indexes().map(Index::url))
                 .await
                 .map_err(VenvError::FlatIndex)?;
             FlatIndex::from_entries(

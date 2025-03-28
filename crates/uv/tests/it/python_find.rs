@@ -9,28 +9,18 @@ use crate::common::{uv_snapshot, venv_bin_path, TestContext};
 
 #[test]
 fn python_find() {
-    let mut context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+    let mut context: TestContext =
+        TestContext::new_with_versions(&["3.11", "3.12"]).with_filtered_python_sources();
 
     // No interpreters on the path
-    if cfg!(windows) {
-        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-        error: No interpreter found in virtual environments, managed installations, search path, or registry
-        "###);
-    } else {
-        uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
-
-        ----- stderr -----
-        error: No interpreter found in virtual environments, managed installations, or search path
-        "###);
-    }
+    ----- stderr -----
+    error: No interpreter found in [PYTHON SOURCES]
+    ");
 
     // We find the first interpreter on the path
     uv_snapshot!(context.filters(), context.python_find(), @r###"
@@ -108,25 +98,14 @@ fn python_find() {
     "###);
 
     // Request PyPy (which should be missing)
-    if cfg!(windows) {
-        uv_snapshot!(context.filters(), context.python_find().arg("pypy"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    uv_snapshot!(context.filters(), context.python_find().arg("pypy"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-        error: No interpreter found for PyPy in virtual environments, managed installations, search path, or registry
-        "###);
-    } else {
-        uv_snapshot!(context.filters(), context.python_find().arg("pypy"), @r###"
-        success: false
-        exit_code: 2
-        ----- stdout -----
-
-        ----- stderr -----
-        error: No interpreter found for PyPy in virtual environments, managed installations, or search path
-        "###);
-    }
+    ----- stderr -----
+    error: No interpreter found for PyPy in [PYTHON SOURCES]
+    ");
 
     // Swap the order of the Python versions
     context.python_versions.reverse();
@@ -665,8 +644,14 @@ fn python_find_venv_invalid() {
 }
 
 /// See: <https://github.com/astral-sh/uv/issues/11825>
+///
+/// This test will not succeed on macOS if using a Homebrew provided interpreter. The interpreter
+/// reports `sys.executable` as the canonicalized path instead of `[TEMP_DIR]/...`. For this reason,
+/// it's marked as requiring our `python-managed` feature — but it does not enforce that these are
+/// used in the test context.
 #[test]
 #[cfg(unix)]
+#[cfg(feature = "python-managed")]
 fn python_required_python_major_minor() {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
 
@@ -706,4 +691,156 @@ fn python_required_python_major_minor() {
     ----- stderr -----
     error: No interpreter found for Python >3.11.[X], <3.12 in virtual environments, managed installations, or search path
     "###);
+}
+
+#[test]
+fn python_find_script() {
+    let context = TestContext::new("3.13")
+        .with_filtered_exe_suffix()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(
+            r"environments-v2/[\w-]+",
+            "environments-v2/[HASHEDNAME]",
+        )])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(filters, context.init().arg("--script").arg("foo.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized script at `foo.py`
+    "###);
+
+    uv_snapshot!(filters, context.sync().arg("--script").arg("foo.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: [CACHE_DIR]/environments-v2/[HASHEDNAME]
+    Resolved in [TIME]
+    Audited in [TIME]
+    ");
+
+    uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [CACHE_DIR]/environments-v2/[HASHEDNAME]/[BIN]/python
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn python_find_script_no_environment() {
+    let context = TestContext::new("3.13")
+        .with_filtered_exe_suffix()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let script = context.temp_dir.child("foo.py");
+
+    script
+        .write_str(indoc! {r"
+            # /// script
+            # dependencies = []
+            # ///
+        "})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [VENV]/[BIN]/python
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+fn python_find_script_python_not_found() {
+    let context = TestContext::new_with_versions(&[]).with_filtered_python_sources();
+
+    let script = context.temp_dir.child("foo.py");
+
+    script
+        .write_str(indoc! {r"
+            # /// script
+            # dependencies = []
+            # ///
+        "})
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    No interpreter found in [PYTHON SOURCES]
+    ");
+}
+
+#[test]
+fn python_find_script_no_such_version() {
+    let context = TestContext::new("3.13")
+        .with_filtered_exe_suffix()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names()
+        .with_filtered_python_sources();
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(
+            r"environments-v2/[\w-]+",
+            "environments-v2/[HASHEDNAME]",
+        )])
+        .collect::<Vec<_>>();
+
+    let script = context.temp_dir.child("foo.py");
+    script
+        .write_str(indoc! {r#"
+            # /// script
+            # requires-python = ">=3.13"
+            # dependencies = []
+            # ///
+        "#})
+        .unwrap();
+
+    uv_snapshot!(filters, context.sync().arg("--script").arg("foo.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: [CACHE_DIR]/environments-v2/[HASHEDNAME]
+    Resolved in [TIME]
+    Audited in [TIME]
+    ");
+
+    script
+        .write_str(indoc! {r#"
+            # /// script
+            # requires-python = ">=3.14"
+            # dependencies = []
+            # ///
+        "#})
+        .unwrap();
+
+    uv_snapshot!(filters, context.python_find().arg("--script").arg("foo.py"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    No interpreter found for Python >=3.14 in [PYTHON SOURCES]
+    ");
 }

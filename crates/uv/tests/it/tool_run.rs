@@ -2012,6 +2012,100 @@ fn tool_run_python_from() {
 }
 
 #[test]
+fn run_with_env_file() -> anyhow::Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Create a project with a custom script.
+    let foo_dir = context.temp_dir.child("foo");
+    let foo_pyproject_toml = foo_dir.child("pyproject.toml");
+
+    foo_pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = []
+
+        [project.scripts]
+        script = "foo.main:run"
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+
+    // Create the `foo` module.
+    let foo_project_src = foo_dir.child("src");
+    let foo_module = foo_project_src.child("foo");
+    let foo_main_py = foo_module.child("main.py");
+    foo_main_py.write_str(indoc! { r#"
+        def run():
+            import os
+
+            print(os.environ.get('THE_EMPIRE_VARIABLE'))
+            print(os.environ.get('REBEL_1'))
+            print(os.environ.get('REBEL_2'))
+            print(os.environ.get('REBEL_3'))
+
+        __name__ == "__main__" and run()
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("./foo")
+        .arg("script")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    None
+    None
+    None
+    None
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
+    ");
+
+    context.temp_dir.child(".file").write_str(indoc! { "
+        THE_EMPIRE_VARIABLE=palpatine
+        REBEL_1=leia_organa
+        REBEL_2=obi_wan_kenobi
+        REBEL_3=C3PO
+       "
+    })?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--env-file").arg(".file")
+        .arg("--from")
+        .arg("./foo")
+        .arg("script")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    palpatine
+    leia_organa
+    obi_wan_kenobi
+    C3PO
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn tool_run_from_at() {
     let context = TestContext::new("3.12")
         .with_exclude_newer("2025-01-18T00:00:00Z")

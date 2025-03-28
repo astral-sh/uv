@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -27,7 +27,7 @@ pub enum DirectUrl {
         url: String,
         archive_info: ArchiveInfo,
         #[serde(skip_serializing_if = "Option::is_none")]
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<Box<Path>>,
     },
     /// The direct URL is path to a VCS repository. For example:
     /// ```json
@@ -37,7 +37,7 @@ pub enum DirectUrl {
         url: String,
         vcs_info: VcsInfo,
         #[serde(skip_serializing_if = "Option::is_none")]
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<Box<Path>>,
     },
 }
 

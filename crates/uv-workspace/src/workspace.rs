@@ -8,14 +8,12 @@ use glob::{glob, GlobError, PatternError};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace, warn};
 
-use uv_distribution_types::Index;
+use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{Simplified, CWD};
 use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
-use uv_pypi_types::{
-    Conflicts, Requirement, RequirementSource, SupportedEnvironments, VerbatimParsedUrl,
-};
+use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
@@ -308,19 +306,19 @@ impl Workspace {
                 .with_given(member.root.to_string_lossy());
             Some(Requirement {
                 name: member.pyproject_toml.project.as_ref()?.name.clone(),
-                extras: vec![],
-                groups: vec![],
+                extras: Box::new([]),
+                groups: Box::new([]),
                 marker: MarkerTree::TRUE,
                 source: if member.pyproject_toml.is_package() {
                     RequirementSource::Directory {
-                        install_path: member.root.clone(),
+                        install_path: member.root.clone().into_boxed_path(),
                         editable: true,
                         r#virtual: false,
                         url,
                     }
                 } else {
                     RequirementSource::Directory {
-                        install_path: member.root.clone(),
+                        install_path: member.root.clone().into_boxed_path(),
                         editable: false,
                         r#virtual: true,
                         url,
@@ -364,19 +362,19 @@ impl Workspace {
 
             Some(Requirement {
                 name: member.pyproject_toml.project.as_ref()?.name.clone(),
-                extras: vec![],
-                groups,
+                extras: Box::new([]),
+                groups: groups.into_boxed_slice(),
                 marker: MarkerTree::TRUE,
                 source: if member.pyproject_toml.is_package() {
                     RequirementSource::Directory {
-                        install_path: member.root.clone(),
+                        install_path: member.root.clone().into_boxed_path(),
                         editable: true,
                         r#virtual: false,
                         url,
                     }
                 } else {
                     RequirementSource::Directory {
-                        install_path: member.root.clone(),
+                        install_path: member.root.clone().into_boxed_path(),
                         editable: false,
                         r#virtual: true,
                         url,

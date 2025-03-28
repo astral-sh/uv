@@ -216,7 +216,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 {
                     Ok(archive) => Ok(LocalWheel {
                         dist: Dist::Built(dist.clone()),
-                        archive: self.build_context.cache().archive(&archive.id),
+                        archive: self
+                            .build_context
+                            .cache()
+                            .archive(&archive.id)
+                            .into_boxed_path(),
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
                         cache: CacheInfo::default(),
@@ -247,7 +251,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                         Ok(LocalWheel {
                             dist: Dist::Built(dist.clone()),
-                            archive: self.build_context.cache().archive(&archive.id),
+                            archive: self
+                                .build_context
+                                .cache()
+                                .archive(&archive.id)
+                                .into_boxed_path(),
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
                             cache: CacheInfo::default(),
@@ -279,7 +287,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 {
                     Ok(archive) => Ok(LocalWheel {
                         dist: Dist::Built(dist.clone()),
-                        archive: self.build_context.cache().archive(&archive.id),
+                        archive: self
+                            .build_context
+                            .cache()
+                            .archive(&archive.id)
+                            .into_boxed_path(),
                         hashes: archive.hashes,
                         filename: wheel.filename.clone(),
                         cache: CacheInfo::default(),
@@ -303,7 +315,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                             .await?;
                         Ok(LocalWheel {
                             dist: Dist::Built(dist.clone()),
-                            archive: self.build_context.cache().archive(&archive.id),
+                            archive: self
+                                .build_context
+                                .cache()
+                                .archive(&archive.id)
+                                .into_boxed_path(),
                             hashes: archive.hashes,
                             filename: wheel.filename.clone(),
                             cache: CacheInfo::default(),
@@ -368,7 +384,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Ok(archive) => {
                 return Ok(LocalWheel {
                     dist: Dist::Source(dist.clone()),
-                    archive,
+                    archive: archive.into_boxed_path(),
                     filename: built_wheel.filename,
                     hashes: built_wheel.hashes,
                     cache: built_wheel.cache_info,
@@ -385,7 +401,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
         Ok(LocalWheel {
             dist: Dist::Source(dist.clone()),
-            archive: self.build_context.cache().archive(&id),
+            archive: self.build_context.cache().archive(&id).into_boxed_path(),
             hashes: built_wheel.hashes,
             filename: built_wheel.filename,
             cache: built_wheel.cache_info,
@@ -837,7 +853,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         if let Some(archive) = archive {
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
-                archive: self.build_context.cache().archive(&archive.id),
+                archive: self
+                    .build_context
+                    .cache()
+                    .archive(&archive.id)
+                    .into_boxed_path(),
                 hashes: archive.hashes,
                 filename: filename.clone(),
                 cache: CacheInfo::from_timestamp(modified),
@@ -859,7 +879,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
-                archive: self.build_context.cache().archive(&archive.id),
+                archive: self
+                    .build_context
+                    .cache()
+                    .archive(&archive.id)
+                    .into_boxed_path(),
                 hashes: archive.hashes,
                 filename: filename.clone(),
                 cache: CacheInfo::from_timestamp(modified),
@@ -905,7 +929,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
             Ok(LocalWheel {
                 dist: Dist::Built(dist.clone()),
-                archive: self.build_context.cache().archive(&archive.id),
+                archive: self
+                    .build_context
+                    .cache()
+                    .archive(&archive.id)
+                    .into_boxed_path(),
                 hashes: archive.hashes,
                 filename: filename.clone(),
                 cache: CacheInfo::from_timestamp(modified),

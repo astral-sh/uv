@@ -20,11 +20,11 @@ uv-auth = { workspace = true }
 uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
+uv-distribution-types = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true, features = ["schemars"] }
 uv-platform-tags = { workspace = true }
-uv-pypi-types = { workspace = true }
 uv-static = { workspace = true }
 
 clap = { workspace = true, features = ["derive"], optional = true }

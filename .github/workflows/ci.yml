@@ -81,7 +81,7 @@ jobs:
         run: rustup component add rustfmt
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5
+        uses: astral-sh/setup-uv@22695119d769bdb6f7032ad67b9bca0ef8c4a174 # v5
 
       - name: "rustfmt"
         run: cargo fmt --all --check
@@ -125,7 +125,7 @@ jobs:
     name: "cargo clippy | ubuntu"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Check uv_build dependencies"
@@ -155,7 +155,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
 
@@ -174,7 +174,7 @@ jobs:
     name: "cargo dev generate-all"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Generate all"
@@ -187,7 +187,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@2c41309d51ede152b6f2ee6bf3b71e6dc9a8b7df # v2
+        uses: taiki-e/install-action@914ac1e29db2d22aef69891f032778d9adc3990d # v2
         with:
           tool: cargo-shear
       - run: cargo shear
@@ -207,17 +207,17 @@ jobs:
 
       - uses: rui314/setup-mold@v1
 
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
 
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5
+      - uses: astral-sh/setup-uv@22695119d769bdb6f7032ad67b9bca0ef8c4a174 # v5
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@2c41309d51ede152b6f2ee6bf3b71e6dc9a8b7df # v2
+        uses: taiki-e/install-action@914ac1e29db2d22aef69891f032778d9adc3990d # v2
         with:
           tool: cargo-nextest
 
@@ -239,17 +239,17 @@ jobs:
 
       - uses: rui314/setup-mold@v1
 
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
 
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5
+      - uses: astral-sh/setup-uv@22695119d769bdb6f7032ad67b9bca0ef8c4a174 # v5
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@2c41309d51ede152b6f2ee6bf3b71e6dc9a8b7df # v2
+        uses: taiki-e/install-action@914ac1e29db2d22aef69891f032778d9adc3990d # v2
         with:
           tool: cargo-nextest
 
@@ -278,11 +278,11 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5
+      - uses: astral-sh/setup-uv@22695119d769bdb6f7032ad67b9bca0ef8c4a174 # v5
       - name: "Install required Python versions"
         run: uv python install
 
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
 
@@ -291,7 +291,7 @@ jobs:
         run: rustup show
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@2c41309d51ede152b6f2ee6bf3b71e6dc9a8b7df # v2
+        uses: taiki-e/install-action@914ac1e29db2d22aef69891f032778d9adc3990d # v2
         with:
           tool: cargo-nextest
 
@@ -331,7 +331,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
 
@@ -342,7 +342,7 @@ jobs:
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
 
       - name: "Install cargo-bloat"
-        uses: taiki-e/install-action@2c41309d51ede152b6f2ee6bf3b71e6dc9a8b7df # v2
+        uses: taiki-e/install-action@914ac1e29db2d22aef69891f032778d9adc3990d # v2
         with:
           tool: cargo-bloat
 
@@ -383,7 +383,7 @@ jobs:
       - name: Copy Git Repo to Dev Drive
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
       - name: "Install Rust toolchain"
@@ -425,11 +425,11 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5
+      - uses: astral-sh/setup-uv@22695119d769bdb6f7032ad67b9bca0ef8c4a174 # v5
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5
       - name: "Add SSH key"
         if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
-        uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
+        uses: webfactory/ssh-agent@a6f90b1f127823b31d4d4a8d96047790581349bd # v0.9.1
         with:
           ssh-private-key: ${{ secrets.MKDOCS_INSIDERS_SSH_KEY }}
 
@@ -451,7 +451,7 @@ jobs:
 
       - uses: rui314/setup-mold@v1
 
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
 
       - name: "Build"
         run: cargo build
@@ -481,7 +481,7 @@ jobs:
           sudo apt-get install musl-tools
           rustup target add x86_64-unknown-linux-musl
 
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
 
       - name: "Build"
         run: cargo build --target x86_64-unknown-linux-musl --bin uv --bin uvx
@@ -506,7 +506,7 @@ jobs:
 
       - uses: rui314/setup-mold@v1
 
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
       - name: "Build"
         run: cargo build --bin uv --bin uvx
 
@@ -530,7 +530,7 @@ jobs:
 
       - uses: rui314/setup-mold@v1
 
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
       - name: "Build"
         run: cargo build --bin uv --bin uvx
 
@@ -560,7 +560,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
 
@@ -595,7 +595,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
         with:
           workspaces: ${{ env.UV_WORKSPACE }}
 
@@ -632,7 +632,7 @@ jobs:
         run: rustup default ${{ steps.msrv.outputs.value }}
       - name: "Install mold"
         uses: rui314/setup-mold@v1
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
       - run: cargo +${{ steps.msrv.outputs.value }} build
       - run: ./target/debug/uv --version
 
@@ -645,7 +645,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
       - name: "Cross build"
         run: |
           # Install cross from `freebsd-firecracker`
@@ -740,6 +740,8 @@ jobs:
     name: "smoke test | linux"
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: "Download binary"
         uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
@@ -752,9 +754,10 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          ./uv venv -v
-          ./uv pip install ruff -v
-          ./uvx -v ruff --version
+          ./uv run scripts/smoke-test
+
+      - name: "Test shell completions"
+        run: |
           eval "$(./uv generate-shell-completion bash)"
           eval "$(./uvx --generate-shell-completion bash)"
 
@@ -779,14 +782,7 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          # Overwrite the 3.13.0 pin from the project, there are not functional
-          # musl distributions for it
-          ./uv python pin 3.13
-          ./uv venv -v
-          ./uv pip install ruff -v
-          ./uvx -v ruff --version
-          ./uv pip install numpy -v
-          ./uv run python -c "import numpy; print(numpy.__version__)"
+          ./uv run scripts/smoke-test
 
   smoke-test-macos:
     timeout-minutes: 10
@@ -794,6 +790,8 @@ jobs:
     name: "smoke test | macos"
     runs-on: macos-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: "Download binary"
         uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
@@ -806,9 +804,10 @@ jobs:
 
       - name: "Smoke test"
         run: |
-          ./uv venv -v
-          ./uv pip install ruff -v
-          ./uvx -v ruff --version
+          ./uv run scripts/smoke-test
+
+      - name: "Test shell completions"
+        run: |
           eval "$(./uv generate-shell-completion bash)"
           eval "$(./uvx --generate-shell-completion bash)"
 
@@ -818,6 +817,8 @@ jobs:
     name: "smoke test | windows x86_64"
     runs-on: windows-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: "Download binary"
         uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
@@ -826,10 +827,16 @@ jobs:
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
-          ./uv venv -v
-          ./uv pip install ruff -v
-          ./uvx -v ruff --version
+          ./uv run scripts/smoke-test
+
+      - name: "Test uv shell completions"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
           (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
+
+      - name: "Test uvx shell completions"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
 
   smoke-test-windows-aarch64:
@@ -838,6 +845,8 @@ jobs:
     name: "smoke test | windows aarch64"
     runs-on: github-windows-11-aarch64-4
     steps:
+      - uses: actions/checkout@v4
+
       - name: "Download binary"
         uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
@@ -846,13 +855,16 @@ jobs:
       - name: "Smoke test"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
-          $ErrorActionPreference = "Stop"
-          $PSNativeCommandUseErrorActionPreference = $true
+          ./uv run scripts/smoke-test
 
-          ./uv venv -v
-          ./uv pip install ruff -v
-          ./uvx -v ruff --version
+      - name: "Test uv shell completions"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
           (& ./uv generate-shell-completion powershell) | Out-String | Invoke-Expression
+
+      - name: "Test uvx shell completions"
+        working-directory: ${{ env.UV_WORKSPACE }}
+        run: |
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
 
   integration-test-conda:
@@ -2161,13 +2173,13 @@ jobs:
       - name: "Checkout Branch"
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
 
       - name: "Install Rust toolchain"
         run: rustup show
 
       - name: "Install codspeed"
-        uses: taiki-e/install-action@2c41309d51ede152b6f2ee6bf3b71e6dc9a8b7df # v2
+        uses: taiki-e/install-action@914ac1e29db2d22aef69891f032778d9adc3990d # v2
         with:
           tool: cargo-codspeed
 

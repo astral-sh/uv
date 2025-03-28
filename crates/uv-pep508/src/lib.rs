@@ -124,7 +124,7 @@ pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     pub name: PackageName,
     /// The list of extras such as `security`, `tests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
-    pub extras: Vec<ExtraName>,
+    pub extras: Box<[ExtraName]>,
     /// The version specifier such as `>= 2.8.1`, `== 2.8.*` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// or a URL.
@@ -964,7 +964,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
 
     Ok(Requirement {
         name,
-        extras,
+        extras: extras.into_boxed_slice(),
         version_or_url: requirement_kind,
         marker: marker.unwrap_or_default(),
         origin: None,
@@ -1058,10 +1058,10 @@ mod tests {
         assert_eq!(input, requests.to_string());
         let expected = Requirement {
             name: PackageName::from_str("requests").unwrap(),
-            extras: vec![
+            extras: Box::new([
                 ExtraName::from_str("security").unwrap(),
                 ExtraName::from_str("tests").unwrap(),
-            ],
+            ]),
             version_or_url: Some(VersionOrUrl::VersionSpecifier(
                 [
                     VersionSpecifier::from_pattern(
@@ -1126,7 +1126,7 @@ mod tests {
     fn direct_url_no_extras() {
         let numpy = crate::UnnamedRequirement::<VerbatimUrl>::from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl").unwrap();
         assert_eq!(numpy.url.to_string(), "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl");
-        assert_eq!(numpy.extras, vec![]);
+        assert_eq!(*numpy.extras, []);
     }
 
     #[test]
@@ -1140,7 +1140,7 @@ mod tests {
             numpy.url.to_string(),
             "file:///path/to/numpy-1.26.4-cp312-cp312-win32.whl"
         );
-        assert_eq!(numpy.extras, vec![ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(*numpy.extras, [ExtraName::from_str("dev").unwrap()]);
     }
 
     #[test]
@@ -1154,7 +1154,7 @@ mod tests {
             numpy.url.to_string(),
             "file:///C:/path/to/numpy-1.26.4-cp312-cp312-win32.whl"
         );
-        assert_eq!(numpy.extras, vec![ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(*numpy.extras, [ExtraName::from_str("dev").unwrap()]);
     }
 
     #[test]
@@ -1244,15 +1244,15 @@ mod tests {
     #[test]
     fn error_extras1() {
         let numpy = Requirement::<Url>::from_str("black[d]").unwrap();
-        assert_eq!(numpy.extras, vec![ExtraName::from_str("d").unwrap()]);
+        assert_eq!(*numpy.extras, [ExtraName::from_str("d").unwrap()]);
     }
 
     #[test]
     fn error_extras2() {
         let numpy = Requirement::<Url>::from_str("black[d,jupyter]").unwrap();
         assert_eq!(
-            numpy.extras,
-            vec![
+            *numpy.extras,
+            [
                 ExtraName::from_str("d").unwrap(),
                 ExtraName::from_str("jupyter").unwrap(),
             ]
@@ -1262,13 +1262,13 @@ mod tests {
     #[test]
     fn empty_extras() {
         let black = Requirement::<Url>::from_str("black[]").unwrap();
-        assert_eq!(black.extras, vec![]);
+        assert_eq!(*black.extras, []);
     }
 
     #[test]
     fn empty_extras_with_spaces() {
         let black = Requirement::<Url>::from_str("black[  ]").unwrap();
-        assert_eq!(black.extras, vec![]);
+        assert_eq!(*black.extras, []);
     }
 
     #[test]
@@ -1325,7 +1325,7 @@ mod tests {
         let url = "https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686";
         let expected = Requirement {
             name: PackageName::from_str("pip").unwrap(),
-            extras: vec![],
+            extras: Box::new([]),
             marker: MarkerTree::TRUE,
             version_or_url: Some(VersionOrUrl::Url(Url::parse(url).unwrap())),
             origin: None,

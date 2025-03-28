@@ -26,9 +26,9 @@ pub struct ResolutionMetadata {
     pub name: PackageName,
     pub version: Version,
     // Optional fields
-    pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
+    pub requires_dist: Box<[Requirement<VerbatimParsedUrl>]>,
     pub requires_python: Option<VersionSpecifiers>,
-    pub provides_extras: Vec<ExtraName>,
+    pub provides_extras: Box<[ExtraName]>,
     /// Whether the version field is dynamic.
     #[serde(default)]
     pub dynamic: bool,
@@ -55,7 +55,7 @@ impl ResolutionMetadata {
             .get_all_values("Requires-Dist")
             .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
             .map_ok(Requirement::from)
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Box<_>, _>>()?;
         let requires_python = headers
             .get_first_value("Requires-Python")
             .map(|requires_python| LenientVersionSpecifiers::from_str(&requires_python))
@@ -72,7 +72,7 @@ impl ResolutionMetadata {
                     }
                 },
             )
-            .collect::<Vec<_>>();
+            .collect::<Box<_>>();
         let dynamic = headers
             .get_all_values("Dynamic")
             .any(|field| field == "Version");
@@ -135,7 +135,7 @@ impl ResolutionMetadata {
             .get_all_values("Requires-Dist")
             .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
             .map_ok(Requirement::from)
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Box<_>, _>>()?;
         let requires_python = headers
             .get_first_value("Requires-Python")
             .map(|requires_python| LenientVersionSpecifiers::from_str(&requires_python))
@@ -152,7 +152,7 @@ impl ResolutionMetadata {
                     }
                 },
             )
-            .collect::<Vec<_>>();
+            .collect::<Box<_>>();
 
         Ok(Self {
             name,
@@ -223,27 +223,35 @@ impl ResolutionMetadata {
             .transpose()?;
 
         // Extract the requirements.
-        let mut requires_dist = project
+        let requires_dist = project
             .dependencies
             .unwrap_or_default()
             .into_iter()
             .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
             .map_ok(Requirement::from)
-            .collect::<Result<Vec<_>, _>>()?;
+            .chain(
+                project
+                    .optional_dependencies
+                    .as_ref()
+                    .iter()
+                    .flat_map(|index| {
+                        index.iter().flat_map(|(extras, requirements)| {
+                            requirements
+                                .iter()
+                                .map(|requires_dist| LenientRequirement::from_str(requires_dist))
+                                .map_ok(Requirement::from)
+                                .map_ok(move |requirement| requirement.with_extra_marker(extras))
+                        })
+                    }),
+            )
+            .collect::<Result<Box<_>, _>>()?;
 
         // Extract the optional dependencies.
-        let mut provides_extras: Vec<ExtraName> = Vec::new();
-        for (extra, requirements) in project.optional_dependencies.unwrap_or_default() {
-            requires_dist.extend(
-                requirements
-                    .into_iter()
-                    .map(|requires_dist| LenientRequirement::from_str(&requires_dist))
-                    .map_ok(Requirement::from)
-                    .map_ok(|requirement| requirement.with_extra_marker(&extra))
-                    .collect::<Result<Vec<_>, _>>()?,
-            );
-            provides_extras.push(extra);
-        }
+        let provides_extras = project
+            .optional_dependencies
+            .unwrap_or_default()
+            .into_keys()
+            .collect::<Box<_>>();
 
         Ok(Self {
             name,
@@ -326,7 +334,7 @@ mod tests {
         let meta = ResolutionMetadata::parse_pkg_info(s.as_bytes()).unwrap();
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
-        assert_eq!(meta.requires_dist, vec!["foo".parse().unwrap()]);
+        assert_eq!(*meta.requires_dist, ["foo".parse().unwrap()]);
     }
 
     #[test]
@@ -387,7 +395,7 @@ mod tests {
         assert_eq!(meta.name, PackageName::from_str("asdf").unwrap());
         assert_eq!(meta.version, Version::new([1, 0]));
         assert_eq!(meta.requires_python, Some(">=3.6".parse().unwrap()));
-        assert_eq!(meta.requires_dist, vec!["foo".parse().unwrap()]);
+        assert_eq!(*meta.requires_dist, ["foo".parse().unwrap()]);
         assert!(meta.provides_extras.is_empty());
 
         let s = r#"
@@ -406,12 +414,12 @@ mod tests {
         assert_eq!(meta.version, Version::new([1, 0]));
         assert_eq!(meta.requires_python, Some(">=3.6".parse().unwrap()));
         assert_eq!(
-            meta.requires_dist,
-            vec![
+            *meta.requires_dist,
+            [
                 "foo".parse().unwrap(),
                 "bar; extra == \"dotenv\"".parse().unwrap()
             ]
         );
-        assert_eq!(meta.provides_extras, vec!["dotenv".parse().unwrap()]);
+        assert_eq!(*meta.provides_extras, ["dotenv".parse().unwrap()]);
     }
 }

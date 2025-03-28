@@ -371,6 +371,10 @@ impl PrioritizedDist {
                 self.0.markers.or(implied_markers(&dist.filename));
             }
         }
+        // Track the hashes.
+        if !compatibility.is_excluded() {
+            self.0.hashes.extend(hashes);
+        }
         // Track the highest-priority wheel.
         if let Some((.., existing_compatibility)) = self.best_wheel() {
             if compatibility.is_more_compatible(existing_compatibility) {
@@ -379,7 +383,6 @@ impl PrioritizedDist {
         } else {
             self.0.best_wheel_index = Some(self.0.wheels.len());
         }
-        self.0.hashes.extend(hashes);
         self.0.wheels.push((dist, compatibility));
     }
 
@@ -394,6 +397,10 @@ impl PrioritizedDist {
         if compatibility.is_compatible() {
             self.0.markers = MarkerTree::TRUE;
         }
+        // Track the hashes.
+        if !compatibility.is_excluded() {
+            self.0.hashes.extend(hashes);
+        }
         // Track the highest-priority source.
         if let Some((.., existing_compatibility)) = &self.0.source {
             if compatibility.is_more_compatible(existing_compatibility) {
@@ -402,7 +409,6 @@ impl PrioritizedDist {
         } else {
             self.0.source = Some((dist, compatibility));
         }
-        self.0.hashes.extend(hashes);
     }
 
     /// Return the highest-priority distribution for the package version, if any.
@@ -441,16 +447,19 @@ impl PrioritizedDist {
             // wheel. We assume that all distributions have the same metadata for a given package
             // version. If a compatible source distribution exists, we assume we can build it, but
             // using the wheel is faster.
+            //
+            // (If the incompatible wheel should actually be ignored entirely, fall through to
+            // using the source distribution.)
             (
-                Some((wheel, WheelCompatibility::Incompatible(_))),
+                Some((wheel, compatibility @ WheelCompatibility::Incompatible(_))),
                 Some((sdist, SourceDistCompatibility::Compatible(_))),
-            ) => Some(CompatibleDist::IncompatibleWheel {
+            ) if !compatibility.is_excluded() => Some(CompatibleDist::IncompatibleWheel {
                 sdist,
                 wheel,
                 prioritized: self,
             }),
             // Otherwise, if we have a source distribution, return it.
-            (None, Some((sdist, SourceDistCompatibility::Compatible(_)))) => {
+            (.., Some((sdist, SourceDistCompatibility::Compatible(_)))) => {
                 Some(CompatibleDist::SourceDist {
                     sdist,
                     prioritized: self,
@@ -497,16 +506,25 @@ impl PrioritizedDist {
     /// a built distribution with the best wheel in this prioritized dist.
     pub fn built_dist(&self) -> Option<RegistryBuiltDist> {
         let best_wheel_index = self.0.best_wheel_index?;
-        let wheels = self
-            .0
-            .wheels
-            .iter()
-            .map(|(wheel, _)| wheel.clone())
-            .collect();
+
+        // Remove any excluded wheels from the list of wheels, and adjust the wheel index to be
+        // relative to the filtered list.
+        let mut adjusted_wheels = Vec::with_capacity(self.0.wheels.len());
+        let mut adjusted_best_index = 0;
+        for (i, (wheel, compatibility)) in self.0.wheels.iter().enumerate() {
+            if compatibility.is_excluded() {
+                continue;
+            }
+            if i == best_wheel_index {
+                adjusted_best_index = adjusted_wheels.len();
+            }
+            adjusted_wheels.push(wheel.clone());
+        }
+
         let sdist = self.0.source.as_ref().map(|(sdist, _)| sdist.clone());
         Some(RegistryBuiltDist {
-            wheels,
-            best_wheel_index,
+            wheels: adjusted_wheels,
+            best_wheel_index: adjusted_best_index,
             sdist,
         })
     }
@@ -514,7 +532,12 @@ impl PrioritizedDist {
     /// If this prioritized dist has an sdist, then this creates a source
     /// distribution.
     pub fn source_dist(&self) -> Option<RegistrySourceDist> {
-        let mut sdist = self.0.source.as_ref().map(|(sdist, _)| sdist.clone())?;
+        let mut sdist = self
+            .0
+            .source
+            .as_ref()
+            .filter(|(_, compatibility)| !compatibility.is_excluded())
+            .map(|(sdist, _)| sdist.clone())?;
         assert!(
             sdist.wheels.is_empty(),
             "source distribution should not have any wheels yet"
@@ -623,6 +646,11 @@ impl WheelCompatibility {
         matches!(self, Self::Compatible(_, _, _))
     }
 
+    /// Return `true` if the distribution is excluded.
+    pub fn is_excluded(&self) -> bool {
+        matches!(self, Self::Incompatible(IncompatibleWheel::ExcludeNewer(_)))
+    }
+
     /// Return `true` if the current compatibility is more compatible than another.
     ///
     /// Compatible wheels are always higher more compatible than incompatible wheels.
@@ -648,6 +676,14 @@ impl SourceDistCompatibility {
     /// Return `true` if the distribution is compatible.
     pub fn is_compatible(&self) -> bool {
         matches!(self, Self::Compatible(_))
+    }
+
+    /// Return `true` if the distribution is excluded.
+    pub fn is_excluded(&self) -> bool {
+        matches!(
+            self,
+            Self::Incompatible(IncompatibleSource::ExcludeNewer(_))
+        )
     }
 
     /// Return the higher priority compatibility.

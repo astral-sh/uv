@@ -1,9 +1,11 @@
 use uv_distribution_filename::DistExtension;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{HashDigest, HashDigests, RequirementSource};
+use uv_pypi_types::{HashDigest, HashDigests};
 
-use crate::{BuiltDist, Diagnostic, Dist, Name, ResolvedDist, SourceDist};
+use crate::{
+    BuiltDist, Diagnostic, Dist, IndexMetadata, Name, RequirementSource, ResolvedDist, SourceDist,
+};
 
 /// A set of packages pinned at specific versions.
 ///
@@ -229,7 +231,7 @@ impl From<&ResolvedDist> for RequirementSource {
                                 wheel.filename.version.clone(),
                             ),
                         ),
-                        index: Some(wheel.index.url().clone()),
+                        index: Some(IndexMetadata::from(wheel.index.clone())),
                         conflict: None,
                     }
                 }
@@ -252,7 +254,7 @@ impl From<&ResolvedDist> for RequirementSource {
                     specifier: uv_pep440::VersionSpecifiers::from(
                         uv_pep440::VersionSpecifier::equals_version(sdist.version.clone()),
                     ),
-                    index: Some(sdist.index.url().clone()),
+                    index: Some(IndexMetadata::from(sdist.index.clone())),
                     conflict: None,
                 },
                 Dist::Source(SourceDist::DirectUrl(sdist)) => {

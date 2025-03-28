@@ -2,13 +2,11 @@ use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 
 use serde::Deserialize;
-use toml_edit::value;
-use toml_edit::Table;
-use toml_edit::Value;
-use toml_edit::{Array, Item};
+use toml_edit::{value, Array, Item, Table, Value};
 
+use uv_distribution_types::Requirement;
 use uv_fs::{PortablePath, Simplified};
-use uv_pypi_types::{Requirement, VerbatimParsedUrl};
+use uv_pypi_types::VerbatimParsedUrl;
 use uv_settings::ToolOptions;
 
 /// A tool entry.

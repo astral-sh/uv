@@ -217,7 +217,7 @@ impl SimpleHtml {
             requires_python,
             hashes,
             filename: filename.into(),
-            url: decoded.into(),
+            url: path.into(),
             size,
             upload_time,
         }))
@@ -275,7 +275,7 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
                 Url {
@@ -309,12 +309,12 @@ mod tests {
                     requires_python: None,
                     size: None,
                     upload_time: None,
-                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
                     yanked: None,
                 },
             ],
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -331,7 +331,7 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
                 Url {
@@ -365,12 +365,12 @@ mod tests {
                     requires_python: None,
                     size: None,
                     upload_time: None,
-                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl#md5=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
                     yanked: None,
                 },
             ],
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -390,7 +390,7 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
                 Url {
@@ -424,12 +424,12 @@ mod tests {
                     requires_python: None,
                     size: None,
                     upload_time: None,
-                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
                     yanked: None,
                 },
             ],
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -446,7 +446,7 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
                 Url {
@@ -480,12 +480,12 @@ mod tests {
                     requires_python: None,
                     size: None,
                     upload_time: None,
-                    url: "/whl/Jinja2-3.1.2+233fca715f49-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                    url: "/whl/Jinja2-3.1.2+233fca715f49-py3-none-any.whl",
                     yanked: None,
                 },
             ],
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -502,7 +502,7 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
                 Url {
@@ -536,12 +536,12 @@ mod tests {
                     requires_python: None,
                     size: None,
                     upload_time: None,
-                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl#sha256%3D4095ada29e51070f7d199a0a5bdf5c8d8e238e03f0bf4dcc02571e78c9ae800d",
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
                     yanked: None,
                 },
             ],
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -742,7 +742,7 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
                 Url {
@@ -774,12 +774,12 @@ mod tests {
                     requires_python: None,
                     size: None,
                     upload_time: None,
-                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl#",
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
                     yanked: None,
                 },
             ],
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -850,7 +850,7 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base);
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         Ok(
             SimpleHtml {
                 base: BaseUrl(
@@ -883,13 +883,13 @@ mod tests {
                         requires_python: None,
                         size: None,
                         upload_time: None,
-                        url: "/whl/Jinja2-3.1.2-py3-none-any.whl#main",
+                        url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
                         yanked: None,
                     },
                 ],
             },
         )
-        "###);
+        "#);
     }
 
     #[test]
@@ -906,7 +906,7 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base);
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         Ok(
             SimpleHtml {
                 base: BaseUrl(
@@ -939,13 +939,13 @@ mod tests {
                         requires_python: None,
                         size: None,
                         upload_time: None,
-                        url: "/whl/Jinja2-3.1.2-py3-none-any.whl#main",
+                        url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
                         yanked: None,
                     },
                 ],
             },
         )
-        "###);
+        "#);
     }
 
     #[test]
@@ -1060,7 +1060,7 @@ mod tests {
         let base = Url::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/")
             .unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
                 Url {
@@ -1094,7 +1094,7 @@ mod tests {
                     requires_python: None,
                     size: None,
                     upload_time: None,
-                    url: "0.1/Flask-0.1.tar.gz#sha256=9da884457e910bf0847d396cb4b778ad9f3c3d17db1c5997cb861937bd284237",
+                    url: "0.1/Flask-0.1.tar.gz",
                     yanked: None,
                 },
                 File {
@@ -1111,7 +1111,7 @@ mod tests {
                     requires_python: None,
                     size: None,
                     upload_time: None,
-                    url: "0.10.1/Flask-0.10.1.tar.gz#sha256=4c83829ff83d408b5e1d4995472265411d2c414112298f2eb4b359d9e4563373",
+                    url: "0.10.1/Flask-0.10.1.tar.gz",
                     yanked: None,
                 },
                 File {
@@ -1139,12 +1139,12 @@ mod tests {
                     ),
                     size: None,
                     upload_time: None,
-                    url: "3.0.1/flask-3.0.1.tar.gz#sha256=6489f51bb3666def6f314e15f19d50a1869a19ae0e8c9a3641ffe66c77d42403",
+                    url: "3.0.1/flask-3.0.1.tar.gz",
                     yanked: None,
                 },
             ],
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -1160,7 +1160,7 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
                 Url {
@@ -1205,12 +1205,12 @@ mod tests {
                     ),
                     size: None,
                     upload_time: None,
-                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
                     yanked: None,
                 },
             ],
         }
-        "###);
+        "#);
     }
 
     /// Respect PEP 714 (see: <https://peps.python.org/pep-0714/>).

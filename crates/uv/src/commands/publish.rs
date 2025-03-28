@@ -1,17 +1,15 @@
-use crate::commands::reporters::PublishReporter;
-use crate::commands::{human_readable_bytes, ExitStatus};
-use crate::printer::Printer;
-use crate::settings::NetworkSettings;
-use anyhow::{bail, Context, Result};
-use console::Term;
-use owo_colors::OwoColorize;
 use std::fmt::Write;
 use std::iter;
 use std::sync::Arc;
 use std::time::Duration;
+
+use anyhow::{bail, Context, Result};
+use console::Term;
+use owo_colors::OwoColorize;
 use tokio::sync::Semaphore;
 use tracing::{debug, info};
 use url::Url;
+
 use uv_cache::Cache;
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
@@ -20,6 +18,11 @@ use uv_publish::{
     check_trusted_publishing, files_for_publishing, upload, CheckUrlClient, TrustedPublishResult,
 };
 use uv_warnings::warn_user_once;
+
+use crate::commands::reporters::PublishReporter;
+use crate::commands::{human_readable_bytes, ExitStatus};
+use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 pub(crate) async fn publish(
     paths: Vec<String>,
@@ -295,7 +298,7 @@ async fn gather_credentials(
             if let Some(username) = &username {
                 debug!("Fetching password from keyring");
                 if let Some(keyring_password) = keyring_provider
-                    .fetch(&publish_url, username)
+                    .fetch(&publish_url, Some(username))
                     .await
                     .as_ref()
                     .and_then(|credentials| credentials.password())

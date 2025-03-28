@@ -1,9 +1,11 @@
 use std::future::Future;
 use std::sync::Arc;
-
+use uv_client::MetadataFormat;
 use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
-use uv_distribution_types::{Dist, IndexCapabilities, IndexUrl, InstalledDist, RequestedDist};
+use uv_distribution_types::{
+    Dist, IndexCapabilities, IndexMetadata, IndexMetadataRef, InstalledDist, RequestedDist,
+};
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Tags;
@@ -78,7 +80,7 @@ pub trait ResolverProvider {
     fn get_package_versions<'io>(
         &'io self,
         package_name: &'io PackageName,
-        index: Option<&'io IndexUrl>,
+        index: Option<&'io IndexMetadata>,
     ) -> impl Future<Output = PackageVersionsResult> + 'io;
 
     /// Get the metadata for a distribution.
@@ -150,22 +152,30 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     async fn get_package_versions<'io>(
         &'io self,
         package_name: &'io PackageName,
-        index: Option<&'io IndexUrl>,
+        index: Option<&'io IndexMetadata>,
     ) -> PackageVersionsResult {
         let result = self
             .fetcher
             .client()
             .manual(|client, semaphore| {
-                client.simple(package_name, index, self.capabilities, semaphore)
+                client.package_metadata(
+                    package_name,
+                    index.map(IndexMetadataRef::from),
+                    self.capabilities,
+                    semaphore,
+                )
             })
             .await;
+
+        // If a package is pinned to an explicit index, ignore any `--find-links` entries.
+        let flat_index = index.is_none().then_some(&self.flat_index);
 
         match result {
             Ok(results) => Ok(VersionsResponse::Found(
                 results
                     .into_iter()
-                    .map(|(index, metadata)| {
-                        VersionMap::from_metadata(
+                    .map(|(index, metadata)| match metadata {
+                        MetadataFormat::Simple(metadata) => VersionMap::from_simple_metadata(
                             metadata,
                             package_name,
                             index,
@@ -174,31 +184,48 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
                             &self.allowed_yanks,
                             &self.hasher,
                             self.exclude_newer.as_ref(),
-                            self.flat_index.get(package_name).cloned(),
+                            flat_index
+                                .and_then(|flat_index| flat_index.get(package_name))
+                                .cloned(),
                             self.build_options,
-                        )
+                        ),
+                        MetadataFormat::Flat(metadata) => VersionMap::from_flat_metadata(
+                            metadata,
+                            self.tags.as_ref(),
+                            &self.hasher,
+                            self.build_options,
+                        ),
                     })
                     .collect(),
             )),
             Err(err) => match err.into_kind() {
                 uv_client::ErrorKind::PackageNotFound(_) => {
-                    if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
+                    if let Some(flat_index) = flat_index
+                        .and_then(|flat_index| flat_index.get(package_name))
+                        .cloned()
+                    {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else {
                         Ok(VersionsResponse::NotFound)
                     }
                 }
                 uv_client::ErrorKind::NoIndex(_) => {
-                    if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
+                    if let Some(flat_index) = flat_index
+                        .and_then(|flat_index| flat_index.get(package_name))
+                        .cloned()
+                    {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
-                    } else if self.flat_index.offline() {
+                    } else if flat_index.is_some_and(FlatIndex::offline) {
                         Ok(VersionsResponse::Offline)
                     } else {
                         Ok(VersionsResponse::NoIndex)
                     }
                 }
                 uv_client::ErrorKind::Offline(_) => {
-                    if let Some(flat_index) = self.flat_index.get(package_name).cloned() {
+                    if let Some(flat_index) = flat_index
+                        .and_then(|flat_index| flat_index.get(package_name))
+                        .cloned()
+                    {
                         Ok(VersionsResponse::Found(vec![VersionMap::from(flat_index)]))
                     } else {
                         Ok(VersionsResponse::Offline)

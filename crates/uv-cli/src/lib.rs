@@ -21,6 +21,7 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
+use uv_torch::TorchMode;
 
 pub mod comma;
 pub mod compat;
@@ -154,6 +155,7 @@ pub struct GlobalArgs {
         long,
         help_heading = "Python options",
         env = EnvVars::UV_MANAGED_PYTHON,
+        value_parser = clap::builder::BoolishValueParser::new(),
         overrides_with = "no_managed_python",
         conflicts_with = "python_preference"
     )]
@@ -167,6 +169,7 @@ pub struct GlobalArgs {
         long,
         help_heading = "Python options",
         env = EnvVars::UV_NO_MANAGED_PYTHON,
+        value_parser = clap::builder::BoolishValueParser::new(),
         overrides_with = "managed_python",
         conflicts_with = "python_preference"
     )]
@@ -186,9 +189,12 @@ pub struct GlobalArgs {
     #[arg(global = true, long, hide = true)]
     pub python_fetch: Option<PythonDownloads>,
 
-    /// Do not print any output.
-    #[arg(global = true, long, short, conflicts_with = "verbose")]
-    pub quiet: bool,
+    /// Use quiet output.
+    ///
+    /// Repeating this option, e.g., `-qq`, will enable a silent mode in which
+    /// uv will write no output to stdout.
+    #[arg(global = true, action = clap::ArgAction::Count, long, short, conflicts_with = "verbose")]
+    pub quiet: u8,
 
     /// Use verbose output.
     ///
@@ -1290,6 +1296,21 @@ pub struct PipCompileArgs {
     #[arg(long, overrides_with("emit_index_annotation"), hide = true)]
     pub no_emit_index_annotation: bool,
 
+    /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`).
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
+    pub torch_backend: Option<TorchMode>,
+
     #[command(flatten)]
     pub compat_args: compat::PipCompileCompatArgs,
 }
@@ -1530,6 +1551,21 @@ pub struct PipSyncArgs {
     /// print the resulting plan.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`).
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
+    pub torch_backend: Option<TorchMode>,
 
     #[command(flatten)]
     pub compat_args: compat::PipSyncCompatArgs,
@@ -1830,6 +1866,21 @@ pub struct PipInstallArgs {
     /// print the resulting plan.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// The backend to use when fetching packages in the PyTorch ecosystem (e.g., `cpu`, `cu126`, or `auto`)
+    ///
+    /// When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+    /// and will instead use the defined backend.
+    ///
+    /// For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+    /// uv will use the PyTorch index for CUDA 12.6.
+    ///
+    /// The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+    /// installed CUDA drivers.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_enum, env = EnvVars::UV_TORCH_BACKEND)]
+    pub torch_backend: Option<TorchMode>,
 
     #[command(flatten)]
     pub compat_args: compat::PipInstallCompatArgs,
@@ -3237,6 +3288,15 @@ pub struct SyncArgs {
         value_parser = parse_maybe_string,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// Check if the Python environment is synchronized with the project.
+    ///
+    /// If the environment is not up to date, uv will exit with an error.
+    #[arg(long, overrides_with("no_check"))]
+    pub check: bool,
+
+    #[arg(long, overrides_with("check"), hide = true)]
+    pub no_check: bool,
 }
 
 #[derive(Args)]
@@ -3712,7 +3772,7 @@ pub struct ExportArgs {
     ///
     /// Pruned packages will be excluded from the exported requirements file, as will any
     /// dependencies that are no longer required after the pruned package is removed.
-    #[arg(long, conflicts_with = "all_packages")]
+    #[arg(long, conflicts_with = "all_packages", value_name = "PACKAGE")]
     pub prune: Vec<PackageName>,
 
     /// Include optional dependencies from the specified extra name.
@@ -4042,6 +4102,17 @@ pub struct ToolRunArgs {
     /// Run the tool in an isolated virtual environment, ignoring any already-installed tools.
     #[arg(long)]
     pub isolated: bool,
+
+    /// Load environment variables from a `.env` file.
+    ///
+    /// Can be provided multiple times, with subsequent files overriding values defined in previous
+    /// files.
+    #[arg(long, value_delimiter = ' ', env = EnvVars::UV_ENV_FILE)]
+    pub env_file: Vec<PathBuf>,
+
+    /// Avoid reading environment variables from a `.env` file.
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), env = EnvVars::UV_NO_ENV_FILE)]
+    pub no_env_file: bool,
 
     #[command(flatten)]
     pub installer: ResolverInstallerArgs,
@@ -4516,6 +4587,11 @@ pub enum PythonCommand {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonListArgs {
+    /// A Python request to filter by.
+    ///
+    /// See `uv help python` to view supported request formats.
+    pub request: Option<String>,
+
     /// List all Python versions, including old patch versions.
     ///
     /// By default, only the latest patch version is shown for each minor version.
@@ -4699,6 +4775,16 @@ pub struct PythonFindArgs {
 
     #[arg(long, overrides_with("system"), hide = true)]
     pub no_system: bool,
+
+    /// Find the environment for a Python script, rather than the current project.
+    #[arg(
+        long,
+        conflicts_with = "request",
+        conflicts_with = "no_project",
+        conflicts_with = "system",
+        conflicts_with = "no_system"
+    )]
+    pub script: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -4766,8 +4852,8 @@ pub struct GenerateShellCompletionArgs {
     #[arg(long, hide = true)]
     pub no_python_downloads: bool,
 
-    #[arg(long, short, conflicts_with = "verbose", hide = true)]
-    pub quiet: bool,
+    #[arg(long, short, action = clap::ArgAction::Count, conflicts_with = "verbose", hide = true)]
+    pub quiet: u8,
     #[arg(long, short, action = clap::ArgAction::Count, conflicts_with = "quiet", hide = true)]
     pub verbose: u8,
     #[arg(long, conflicts_with = "no_color", hide = true)]

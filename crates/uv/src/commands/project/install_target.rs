@@ -5,7 +5,7 @@ use std::str::FromStr;
 use itertools::Either;
 use rustc_hash::FxHashSet;
 
-use uv_configuration::{DependencyGroupsWithDefaults, ExtrasSpecification};
+use uv_configuration::{Constraints, DependencyGroupsWithDefaults, ExtrasSpecification};
 use uv_distribution_types::Index;
 use uv_normalize::PackageName;
 use uv_pypi_types::{DependencyGroupSpecifier, LenientRequirement, VerbatimParsedUrl};
@@ -234,6 +234,10 @@ impl<'lock> InstallTarget<'lock> {
                     .map(Cow::Borrowed),
             ),
         }
+    }
+
+    pub(crate) fn build_constraints(&self) -> Constraints {
+        self.lock().build_constraints(self.install_path())
     }
 
     /// Validate the extras requested by the [`ExtrasSpecification`].

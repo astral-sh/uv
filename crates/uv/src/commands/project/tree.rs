@@ -172,6 +172,7 @@ pub(crate) async fn tree(
             .packages()
             .iter()
             .filter_map(|package| {
+                // TODO(charlie): We would need to know the format here.
                 let index = match package.index(target.install_path()) {
                     Ok(Some(index)) => index,
                     Ok(None) => return None,
@@ -232,6 +233,7 @@ pub(crate) async fn tree(
             let download_concurrency = &download_concurrency;
             let mut fetches = futures::stream::iter(packages)
                 .map(|(package, index)| async move {
+                    // This probably already doesn't work for `--find-links`?
                     let Some(filename) = client
                         .find_latest(package.name(), Some(&index), download_concurrency)
                         .await?

@@ -3,6 +3,58 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.6.10
+
+### Enhancements
+
+- Add `uv sync --check` flag ([#12342](https://github.com/astral-sh/uv/pull/12342))
+- Add support for Python version requests in `uv python list` ([#12375](https://github.com/astral-sh/uv/pull/12375))
+- Support `.env` files in `uv tool run` ([#12386](https://github.com/astral-sh/uv/pull/12386))
+- Support `python find --script` ([#11891](https://github.com/astral-sh/uv/pull/11891))
+
+### Preview features
+
+- Check all compatible torch indexes when `--torch-backend` is enabled ([#12385](https://github.com/astral-sh/uv/pull/12385))
+
+### Performance
+
+- Use a boxed slice for extras and groups ([#12391](https://github.com/astral-sh/uv/pull/12391))
+- Use small string for index name type ([#12355](https://github.com/astral-sh/uv/pull/12355))
+
+### Bug fixes
+
+- Allow virtual packages with `--no-build` ([#12314](https://github.com/astral-sh/uv/pull/12314))
+- Ignore `--find-links` entries for pinned indexes ([#12396](https://github.com/astral-sh/uv/pull/12396))
+- Omit wheels from lockfile based on `--exclude-newer` ([#12299](https://github.com/astral-sh/uv/pull/12299))
+- Retain end-of-line comment position when adding dependency ([#12360](https://github.com/astral-sh/uv/pull/12360))
+- Omit fragment when querying for wheels in Simple HTML API ([#12384](https://github.com/astral-sh/uv/pull/12384))
+- Error on missing argument in `requirements.txt` ([#12354](https://github.com/astral-sh/uv/pull/12354))
+- Support modules with different casing in build backend ([#12240](https://github.com/astral-sh/uv/pull/12240))
+- Add authentication policy support for `pip` commands ([#12470](https://github.com/astral-sh/uv/pull/12470))
+
+## 0.6.9
+
+### Enhancements
+
+- Use `keyring --mode creds` when `authenticate = "always"` ([#12316](https://github.com/astral-sh/uv/pull/12316))
+- Fail with specific error message when no password is present and `authenticate = "always"` ([#12313](https://github.com/astral-sh/uv/pull/12313))
+
+### Bug fixes
+
+- Add boolish value parser for `UV_MANAGED_PYTHON` flags ([#12345](https://github.com/astral-sh/uv/pull/12345))
+- Make deserialization non-fatal when assessing source tree revisions ([#12319](https://github.com/astral-sh/uv/pull/12319))
+- Use resolver-returned wheel over alternate cached wheel ([#12301](https://github.com/astral-sh/uv/pull/12301))
+
+### Documentation
+
+- Add experimental `--torch-backend` to the PyTorch guide ([#12317](https://github.com/astral-sh/uv/pull/12317))
+- Fix `#keyring-provider` references in alternative index docs ([#12315](https://github.com/astral-sh/uv/pull/12315))
+- Fix `--directory` path in examples ([#12165](https://github.com/astral-sh/uv/pull/12165))
+
+### Preview changes
+
+- Automatically infer the PyTorch index via `--torch-backend=auto` ([#12070](https://github.com/astral-sh/uv/pull/12070))
+
 ## 0.6.8
 
 ### Enhancements

@@ -1,5 +1,5 @@
 /// The origin of a piece of configuration.
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Origin {
     /// The setting was provided via the CLI.
     Cli,

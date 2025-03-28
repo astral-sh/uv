@@ -19,12 +19,12 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
-    UnresolvedRequirementSpecification,
+    Requirement, UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments};
+use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::ExtrasResolver;
@@ -624,8 +624,6 @@ async fn do_lock(
         .build();
     let hasher = HashStrategy::Generate(HashGeneration::Url);
 
-    let build_constraints = Constraints::from_requirements(build_constraints.iter().cloned());
-
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
     let build_hasher = HashStrategy::default();
@@ -634,9 +632,9 @@ async fn do_lock(
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
-        let client = FlatIndexClient::new(&client, cache);
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
         let entries = client
-            .fetch(index_locations.flat_indexes().map(Index::url))
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
@@ -647,7 +645,7 @@ async fn do_lock(
     let build_dispatch = BuildDispatch::new(
         &client,
         cache,
-        build_constraints,
+        Constraints::from_requirements(build_constraints.iter().cloned()),
         interpreter,
         index_locations,
         &flat_index,
@@ -679,6 +677,7 @@ async fn do_lock(
             &dependency_groups,
             &constraints,
             &overrides,
+            &build_constraints,
             &conflicts,
             environments,
             required_environments,
@@ -837,6 +836,7 @@ async fn do_lock(
                 requirements,
                 constraints,
                 overrides,
+                build_constraints,
                 dependency_groups,
                 dependency_metadata.values().cloned(),
             )
@@ -889,6 +889,7 @@ impl ValidatedLock {
         dependency_groups: &BTreeMap<GroupName, Vec<Requirement>>,
         constraints: &[Requirement],
         overrides: &[Requirement],
+        build_constraints: &[Requirement],
         conflicts: &Conflicts,
         environments: Option<&SupportedEnvironments>,
         required_environments: Option<&SupportedEnvironments>,
@@ -1066,6 +1067,7 @@ impl ValidatedLock {
                 requirements,
                 constraints,
                 overrides,
+                build_constraints,
                 dependency_groups,
                 dependency_metadata,
                 indexes,
@@ -1140,6 +1142,13 @@ impl ValidatedLock {
             SatisfiesResult::MismatchedOverrides(expected, actual) => {
                 debug!(
                     "Ignoring existing lockfile due to mismatched overrides:\n  Requested: {:?}\n  Existing: {:?}",
+                    expected, actual
+                );
+                Ok(Self::Preferable(lock))
+            }
+            SatisfiesResult::MismatchedBuildConstraints(expected, actual) => {
+                debug!(
+                    "Ignoring existing lockfile due to mismatched build constraints:\n  Requested: {:?}\n  Existing: {:?}",
                     expected, actual
                 );
                 Ok(Self::Preferable(lock))

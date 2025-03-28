@@ -14,12 +14,6 @@ automated pull requests. Several of them support uv, or have work underway to su
 
 uv is supported by [Renovate](https://github.com/renovatebot/renovate).
 
-!!! note
-
-    Updating `uv pip compile` outputs such as `requirements.txt` is not yet supported. Progress can
-    be tracked
-    at [renovatebot/renovate#30909](https://github.com/renovatebot/renovate/issues/30909).
-
 ### `uv.lock` output
 
 Renovate uses the presence of a `uv.lock` file to determine that uv is used for managing

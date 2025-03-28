@@ -50,7 +50,7 @@ impl CachedWheel {
     pub fn into_registry_dist(self) -> CachedRegistryDist {
         CachedRegistryDist {
             filename: self.filename,
-            path: self.entry.into_path_buf(),
+            path: self.entry.into_path_buf().into_boxed_path(),
             hashes: self.hashes,
             cache_info: self.cache_info,
         }
@@ -65,7 +65,7 @@ impl CachedWheel {
                 parsed_url: dist.parsed_url(),
                 verbatim: dist.url.clone(),
             },
-            path: self.entry.into_path_buf(),
+            path: self.entry.into_path_buf().into_boxed_path(),
             hashes: self.hashes,
             cache_info: self.cache_info,
         }
@@ -80,7 +80,7 @@ impl CachedWheel {
                 parsed_url: dist.parsed_url(),
                 verbatim: dist.url.clone(),
             },
-            path: self.entry.into_path_buf(),
+            path: self.entry.into_path_buf().into_boxed_path(),
             hashes: self.hashes,
             cache_info: self.cache_info,
         }
@@ -95,7 +95,7 @@ impl CachedWheel {
                 parsed_url: dist.parsed_url(),
                 verbatim: dist.url.clone(),
             },
-            path: self.entry.into_path_buf(),
+            path: self.entry.into_path_buf().into_boxed_path(),
             hashes: self.hashes,
             cache_info: self.cache_info,
         }
@@ -110,7 +110,7 @@ impl CachedWheel {
                 parsed_url: dist.parsed_url(),
                 verbatim: dist.url.clone(),
             },
-            path: self.entry.into_path_buf(),
+            path: self.entry.into_path_buf().into_boxed_path(),
             hashes: self.hashes,
             cache_info: self.cache_info,
         }

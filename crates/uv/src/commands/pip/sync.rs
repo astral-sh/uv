@@ -6,6 +6,7 @@ use anyhow::Result;
 use owo_colors::OwoColorize;
 use tracing::debug;
 
+use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -29,7 +30,9 @@ use uv_resolver::{
     DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
     ResolutionMode, ResolverEnvironment,
 };
+use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
+use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
@@ -52,6 +55,7 @@ pub(crate) async fn pip_sync(
     hash_checking: Option<HashCheckingMode>,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
+    torch_backend: Option<TorchMode>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
     network_settings: &NetworkSettings,
@@ -260,11 +264,29 @@ pub(crate) async fn pip_sync(
         }
     }
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend.map(|mode| {
+        if preview.is_disabled() {
+            warn_user!("The `--torch-backend` setting is experimental and may change without warning. Pass `--preview` to disable this warning.");
+        }
+
+        TorchStrategy::from_mode(
+            mode,
+            python_platform
+                .map(TargetTriple::platform)
+                .as_ref()
+                .unwrap_or(interpreter.platform())
+                .os(),
+        )
+    }).transpose()?;
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
+        .url_auth_policies(UrlAuthPolicies::from(&index_locations))
+        .torch_backend(torch_backend)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -274,9 +296,9 @@ pub(crate) async fn pip_sync(
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
-        let client = FlatIndexClient::new(&client, &cache);
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
         let entries = client
-            .fetch(index_locations.flat_indexes().map(Index::url))
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
         FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
     };

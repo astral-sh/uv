@@ -98,7 +98,7 @@ impl schemars::JsonSchema for IndexUrl {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
             metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`).".to_string()),
+                description: Some("The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`), or a local path.".to_string()),
               ..schemars::schema::Metadata::default()
             })),
             ..schemars::schema::SchemaObject::default()
@@ -527,6 +527,11 @@ impl<'a> IndexUrls {
                 }),
             )
         }
+    }
+
+    /// Return the `--no-index` flag.
+    pub fn no_index(&self) -> bool {
+        self.no_index
     }
 }
 

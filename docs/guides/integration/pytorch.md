@@ -14,8 +14,7 @@ CUDA).
 
 !!! note
 
-    Some of the features outlined in this guide require uv version 0.5.3 or later. If you're using an
-    older version of uv, we recommend upgrading prior to configuring PyTorch.
+    Some of the features outlined in this guide require uv version 0.5.3 or later. We recommend upgrading prior to configuring PyTorch.
 
 ## Installing PyTorch
 
@@ -53,8 +52,8 @@ dependencies = [
 
 !!! tip "Supported Python versions"
 
-    At time of writing, PyTorch does not yet publish wheels for Python 3.13; as such projects with
-    `requires-python = ">=3.13"` may fail to resolve. See the
+    At time of writing, PyTorch does not yet publish wheels for Python 3.14; as such projects with
+    `requires-python = ">=3.14"` may fail to resolve. See the
     [compatibility matrix](https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix).
 
 This is a valid configuration for projects that want to use CPU builds on Windows and macOS, and
@@ -396,3 +395,28 @@ To use the same workflow with uv, replace `pip3` with `uv pip`:
 ```shell
 $ uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 ```
+
+## Automatic backend selection
+
+In [preview](../../reference/settings.md#preview), uv can automatically select the appropriate
+PyTorch index at runtime by inspecting the system configuration via `--torch-backend=auto` (or
+`UV_TORCH_BACKEND=auto`):
+
+```shell
+$ UV_TORCH_BACKEND=auto uv pip install torch
+```
+
+When enabled, uv will query for the installed CUDA driver version and use the most-compatible
+PyTorch index for all relevant packages (e.g., `torch`, `torchvision`, etc.). If no such CUDA driver
+is found, uv will fall back to the CPU-only index. uv will continue to respect existing index
+configuration for any packages outside the PyTorch ecosystem.
+
+To select a specific backend (e.g., `cu126`), set `--torch-backend=cu126` (or
+`UV_TORCH_BACKEND=cu126`).
+
+At present, `--torch-backend` is only available in the `uv pip` interface, and only supports
+detection of CUDA drivers (as opposed to other accelerators like ROCm or Intel GPUs).
+
+As `--torch-backend` is a preview feature, it should be considered experimental and is not governed
+by uv's standard [versioning policy](../../reference/policies/versioning.md). `--torch-backend` may
+change or be removed entirely in future versions of uv.

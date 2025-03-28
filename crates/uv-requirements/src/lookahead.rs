@@ -7,8 +7,7 @@ use tracing::trace;
 
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::{DistributionDatabase, Reporter};
-use uv_distribution_types::{Dist, DistributionMetadata};
-use uv_pypi_types::{Requirement, RequirementSource};
+use uv_distribution_types::{Dist, DistributionMetadata, Requirement, RequirementSource};
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
@@ -179,9 +178,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         };
 
         // Respect recursive extras by propagating the source extras to the dependencies.
-        let requires_dist = metadata
-            .requires_dist
-            .into_iter()
+        let requires_dist = Box::into_iter(metadata.requires_dist)
             .chain(
                 metadata
                     .dependency_groups

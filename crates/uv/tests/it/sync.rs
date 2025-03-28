@@ -352,6 +352,68 @@ fn mixed_requires_python() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn check() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running `uv sync --check` should fail.
+    uv_snapshot!(context.filters(), context.sync().arg("--check"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Discovered existing environment at: .venv
+    Resolved 2 packages in [TIME]
+    Would create lockfile at: uv.lock
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    error: The environment is outdated; run `uv sync` to update the environment
+    "###);
+
+    // Sync the environment.
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    // Running `uv sync --check` should pass now that the environment is up to date.
+    uv_snapshot!(context.filters(), context.sync().arg("--check"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Discovered existing environment at: .venv
+    Resolved 2 packages in [TIME]
+    Found up-to-date lockfile at: uv.lock
+    Audited 1 package in [TIME]
+    Would make no changes
+    "###);
+    Ok(())
+}
+
 /// Sync development dependencies in a (legacy) non-project workspace root.
 #[test]
 fn sync_legacy_non_project_dev_dependencies() -> Result<()> {
@@ -3482,6 +3544,133 @@ fn no_install_project_no_build() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn virtual_no_build() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // Clear the cache.
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    // `--no-build` should not raise an error, since we don't install virtual projects.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn virtual_no_build_dynamic_cached() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+
+        [tool.setuptools.dynamic]
+        dependencies = {file = ["requirements.txt"]}
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("anyio==3.7.0")?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // `--no-build` should not raise an error, since we don't build or install the project (given
+    // that it's virtual and the metadata is cached).
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn virtual_no_build_dynamic_no_cache() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dynamic = ["dependencies"]
+
+        [tool.setuptools.dynamic]
+        dependencies = {file = ["requirements.txt"]}
+        "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("anyio==3.7.0")?;
+
+    // Generate a lockfile.
+    context.lock().assert().success();
+
+    // Clear the cache.
+    fs_err::remove_dir_all(&context.cache_dir)?;
+
+    // `--no-build` should raise an error, since we need to build the project.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to generate package metadata for `project==0.1.0 @ virtual+.`
+      Caused by: Building source distributions for `project` is disabled
+    ");
+
+    Ok(())
+}
+
 /// Convert from a package to a virtual project.
 #[test]
 fn convert_to_virtual() -> Result<()> {
@@ -4753,25 +4942,25 @@ fn no_build_error() -> Result<()> {
     error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
     "###);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--no-build"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    error: Distribution `project==0.1.0 @ virtual+.` can't be installed because it is marked as `--no-build` but has no binary distribution
-    "###);
+    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    ");
 
-    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD", "1"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD", "1"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Resolved 19 packages in [TIME]
-    error: Distribution `project==0.1.0 @ virtual+.` can't be installed because it is marked as `--no-build` but has no binary distribution
-    "###);
+    error: Distribution `django-allauth==0.51.0 @ registry+https://pypi.org/simple` can't be installed because it is marked as `--no-build` but has no binary distribution
+    ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--reinstall").env("UV_NO_BUILD_PACKAGE", "django-allauth"), @r###"
     success: false
@@ -8731,6 +8920,138 @@ fn locked_version_coherence() -> Result<()> {
     ----- stderr -----
     error: Failed to parse `uv.lock`
       Caused by: The entry for package `iniconfig` v1.0.0 has wheel `iniconfig-2.0.0-py3-none-any.whl` with inconsistent version: v2.0.0
+    ");
+
+    Ok(())
+}
+
+/// `uv sync` should respect build constraints. In this case, `json-merge-patch` should _not_ fail
+/// to build, despite the fact that `setuptools==78.0.1` is the most recent version and _does_ fail
+/// to build that package.
+///
+/// See: <https://github.com/astral-sh/uv/issues/12434>
+#[test]
+fn sync_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-03-24T19:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["json-merge-patch"]
+
+        [tool.uv]
+        build-constraint-dependencies = ["setuptools<78"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-binary-package").arg("json-merge-patch"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + json-merge-patch==0.2
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!(
+        {
+            filters => context.filters(),
+        },
+        {
+            assert_snapshot!(
+                lock, @r#"
+            version = 1
+            revision = 1
+            requires-python = ">=3.12"
+
+            [options]
+            exclude-newer = "2025-03-24T19:00:00Z"
+
+            [manifest]
+            build-constraints = [{ name = "setuptools", specifier = "<78" }]
+
+            [[package]]
+            name = "json-merge-patch"
+            version = "0.2"
+            source = { registry = "https://pypi.org/simple" }
+            sdist = { url = "https://files.pythonhosted.org/packages/39/62/3b783faabac9a099877397d8f7a7cc862a03fbf9fb1b90d414ea7c6bb096/json-merge-patch-0.2.tar.gz", hash = "sha256:09898b6d427c08754e2a97c709cf2dfd7e28bd10c5683a538914975eab778d39", size = 3081 }
+
+            [[package]]
+            name = "project"
+            version = "0.1.0"
+            source = { virtual = "." }
+            dependencies = [
+                { name = "json-merge-patch" },
+            ]
+
+            [package.metadata]
+            requires-dist = [{ name = "json-merge-patch" }]
+            "#
+            );
+        }
+    );
+
+    fs_err::remove_dir_all(&context.cache_dir)?;
+    fs_err::remove_dir_all(&context.venv)?;
+
+    // We should also be able to read from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + json-merge-patch==0.2
+    ");
+
+    // Modify the build constraints.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["json-merge-patch"]
+
+        [tool.uv]
+        build-constraint-dependencies = ["setuptools<77"]
+        "#,
+    )?;
+
+    // This should fail, given that the build constraints have changed.
+    uv_snapshot!(context.filters(), context.sync().arg("--locked"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    // Changing the build constraints should lead to a re-resolve.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
     ");
 
     Ok(())

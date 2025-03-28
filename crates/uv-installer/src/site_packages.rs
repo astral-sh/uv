@@ -9,14 +9,14 @@ use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 use url::Url;
 
 use uv_distribution_types::{
-    Diagnostic, InstalledDist, Name, NameRequirementSpecification, UnresolvedRequirement,
-    UnresolvedRequirementSpecification,
+    Diagnostic, InstalledDist, Name, NameRequirementSpecification, Requirement,
+    UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VersionOrUrl;
-use uv_pypi_types::{Requirement, ResolverMarkerEnvironment, VerbatimParsedUrl};
+use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_types::InstalledPackagesProvider;
 use uv_warnings::warn_user;

@@ -384,6 +384,10 @@ Specifies the "bin" directory for installing tool executables.
 
 Specifies the directory where uv stores managed tools.
 
+### `UV_TORCH_BACKEND`
+
+Equivalent to the `--torch-backend` command-line argument (e.g., `cpu`, `cu126`, or `auto`).
+
 ### `UV_UNMANAGED_INSTALL`
 
 Used ephemeral environments like CI to install uv to a specific path while preventing
@@ -492,7 +496,7 @@ Used to look for Microsoft Store Pythons installations.
 Used with `--python-platform macos` and related variants to set the
 deployment target (i.e., the minimum supported macOS version).
 
-Defaults to `12.0`, the least-recent non-EOL macOS version at time of writing.
+Defaults to `13.0`, the least-recent non-EOL macOS version at time of writing.
 
 ### `NETRC`
 

@@ -557,16 +557,15 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                     let url = Url::from(ParsedGitUrl {
                         url: git_url.clone(),
-                        subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
+                        subdirectory: git.subdirectory.clone(),
                     });
 
                     write!(f, "{} @ {}", package.id.name, url)?;
                 }
                 Source::Direct(url, direct) => {
-                    let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                     let url = Url::from(ParsedArchiveUrl {
                         url: url.to_url().map_err(|_| std::fmt::Error)?,
-                        subdirectory: subdirectory.clone(),
+                        subdirectory: direct.subdirectory.clone(),
                         ext: DistExtension::Source(SourceDistExtension::TarGz),
                     });
                     write!(f, "{} @ {}", package.id.name, url)?;

@@ -1,12 +1,12 @@
 use std::fmt::{Display, Formatter};
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use thiserror::Error;
 use url::Url;
-use uv_distribution_filename::DistExtension;
 
+use uv_distribution_filename::DistExtension;
 use uv_fs::{relative_to, PortablePath, PortablePathBuf, CWD};
 use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -15,7 +15,9 @@ use uv_pep508::{
     marker, MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl,
 };
 
-use crate::{
+use crate::{IndexMetadata, IndexUrl};
+
+use uv_pypi_types::{
     ConflictItem, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl,
     ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
 };
@@ -45,10 +47,10 @@ pub enum RequirementError {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Requirement {
     pub name: PackageName,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub extras: Vec<ExtraName>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub groups: Vec<GroupName>,
+    #[serde(skip_serializing_if = "<[ExtraName]>::is_empty", default)]
+    pub extras: Box<[ExtraName]>,
+    #[serde(skip_serializing_if = "<[GroupName]>::is_empty", default)]
+    pub groups: Box<[GroupName]>,
     #[serde(
         skip_serializing_if = "marker::ser::is_empty",
         serialize_with = "marker::ser::serialize",
@@ -76,12 +78,21 @@ impl Requirement {
         self.source.is_editable()
     }
 
-    /// Convert the requirement to a [`Requirement`] relative to the given path.
+    /// Convert to a [`Requirement`] with a relative path based on the given root.
     pub fn relative_to(self, path: &Path) -> Result<Self, io::Error> {
         Ok(Self {
             source: self.source.relative_to(path)?,
             ..self
         })
+    }
+
+    /// Convert to a [`Requirement`] with an absolute path based on the given root.
+    #[must_use]
+    pub fn to_absolute(self, path: &Path) -> Self {
+        Self {
+            source: self.source.to_absolute(path),
+            ..self
+        }
     }
 
     /// Return the hashes of the requirement, as specified in the URL fragment.
@@ -290,7 +301,7 @@ impl From<uv_pep508::Requirement<VerbatimParsedUrl>> for Requirement {
         };
         Requirement {
             name: requirement.name,
-            groups: vec![],
+            groups: Box::new([]),
             extras: requirement.extras,
             marker: requirement.marker,
             source,
@@ -321,7 +332,7 @@ impl Display for Requirement {
             } => {
                 write!(f, "{specifier}")?;
                 if let Some(index) = index {
-                    write!(f, " (index: {index})")?;
+                    write!(f, " (index: {})", index.url)?;
                 }
             }
             RequirementSource::Url { url, .. } => {
@@ -369,7 +380,7 @@ pub enum RequirementSource {
     Registry {
         specifier: VersionSpecifiers,
         /// Choose a version from the index at the given URL.
-        index: Option<Url>,
+        index: Option<IndexMetadata>,
         /// The conflict item associated with the source, if any.
         conflict: Option<ConflictItem>,
     },
@@ -383,7 +394,7 @@ pub enum RequirementSource {
         location: Url,
         /// For source distributions, the path to the distribution if it is not in the archive
         /// root.
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<Box<Path>>,
         /// The file extension, e.g. `tar.gz`, `zip`, etc.
         ext: DistExtension,
         /// The PEP 508 style URL in the format
@@ -395,7 +406,7 @@ pub enum RequirementSource {
         /// The repository URL and reference to the commit to use.
         git: GitUrl,
         /// The path to the source distribution if it is not in the repository root.
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<Box<Path>>,
         /// The PEP 508 style url in the format
         /// `git+<scheme>://<domain>/<path>@<rev>#subdirectory=<subdirectory>`.
         url: VerbatimUrl,
@@ -405,7 +416,7 @@ pub enum RequirementSource {
     /// `.tar.gz` file).
     Path {
         /// The absolute path to the distribution which we use for installing.
-        install_path: PathBuf,
+        install_path: Box<Path>,
         /// The file extension, e.g. `tar.gz`, `zip`, etc.
         ext: DistExtension,
         /// The PEP 508 style URL in the format
@@ -416,7 +427,7 @@ pub enum RequirementSource {
     /// source distribution with only a setup.py but non pyproject.toml in it).
     Directory {
         /// The absolute path to the distribution which we use for installing.
-        install_path: PathBuf,
+        install_path: Box<Path>,
         /// For a source tree (a directory), whether to install as an editable.
         editable: bool,
         /// For a source tree (a directory), whether the project should be built and installed.
@@ -570,7 +581,8 @@ impl RequirementSource {
                 url,
             } => Ok(Self::Path {
                 install_path: relative_to(&install_path, path)
-                    .or_else(|_| std::path::absolute(install_path))?,
+                    .or_else(|_| std::path::absolute(install_path))?
+                    .into_boxed_path(),
                 ext,
                 url,
             }),
@@ -582,11 +594,43 @@ impl RequirementSource {
                 ..
             } => Ok(Self::Directory {
                 install_path: relative_to(&install_path, path)
-                    .or_else(|_| std::path::absolute(install_path))?,
+                    .or_else(|_| std::path::absolute(install_path))?
+                    .into_boxed_path(),
                 editable,
                 r#virtual,
                 url,
             }),
+        }
+    }
+
+    /// Convert the source to a [`RequirementSource`] with an absolute path based on the given root.
+    #[must_use]
+    pub fn to_absolute(self, root: &Path) -> Self {
+        match self {
+            RequirementSource::Registry { .. }
+            | RequirementSource::Url { .. }
+            | RequirementSource::Git { .. } => self,
+            RequirementSource::Path {
+                install_path,
+                ext,
+                url,
+            } => Self::Path {
+                install_path: uv_fs::normalize_path_buf(root.join(install_path)).into_boxed_path(),
+                ext,
+                url,
+            },
+            RequirementSource::Directory {
+                install_path,
+                editable,
+                r#virtual,
+                url,
+                ..
+            } => Self::Directory {
+                install_path: uv_fs::normalize_path_buf(root.join(install_path)).into_boxed_path(),
+                editable,
+                r#virtual,
+                url,
+            },
         }
     }
 }
@@ -601,7 +645,7 @@ impl Display for RequirementSource {
             } => {
                 write!(f, "{specifier}")?;
                 if let Some(index) = index {
-                    write!(f, " (index: {index})")?;
+                    write!(f, " (index: {})", index.url)?;
                 }
             }
             Self::Url { url, .. } => {
@@ -663,12 +707,13 @@ impl From<RequirementSource> for RequirementSourceWire {
         match value {
             RequirementSource::Registry {
                 specifier,
-                mut index,
+                index,
                 conflict,
             } => {
-                if let Some(index) = index.as_mut() {
-                    redact_credentials(index);
-                }
+                let index = index.map(|index| index.url.into_url()).map(|mut index| {
+                    redact_credentials(&mut index);
+                    index
+                });
                 Self::Registry {
                     specifier,
                     index,
@@ -776,7 +821,8 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 conflict,
             } => Ok(Self::Registry {
                 specifier,
-                index,
+                index: index
+                    .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index)))),
                 conflict,
             }),
             RequirementSourceWire::Git { git } => {
@@ -817,7 +863,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 
                 Ok(Self::Git {
                     git: GitUrl::from_fields(repository, reference, precise)?,
-                    subdirectory: subdirectory.map(PathBuf::from),
+                    subdirectory: subdirectory.map(Box::<Path>::from),
                     url,
                 })
             }
@@ -832,7 +878,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 
                 Ok(Self::Url {
                     location,
-                    subdirectory: subdirectory.map(PathBuf::from),
+                    subdirectory: subdirectory.map(Box::<Path>::from),
                     ext: DistExtension::from_path(url.path())
                         .map_err(|err| ParsedUrlError::MissingExtensionUrl(url.to_string(), err))?,
                     url: VerbatimUrl::from_url(url.clone()),
@@ -843,18 +889,19 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
             // sources in the lockfile, we replace the URL anyway. Ideally, we'd either remove the
             // URL field or make it optional.
             RequirementSourceWire::Path { path } => {
-                let path = PathBuf::from(path);
+                let path = Box::<Path>::from(path);
                 let url =
                     VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(CWD.join(&path)))?;
                 Ok(Self::Path {
-                    ext: DistExtension::from_path(path.as_path())
-                        .map_err(|err| ParsedUrlError::MissingExtensionPath(path.clone(), err))?,
+                    ext: DistExtension::from_path(&path).map_err(|err| {
+                        ParsedUrlError::MissingExtensionPath(path.to_path_buf(), err)
+                    })?,
                     install_path: path,
                     url,
                 })
             }
             RequirementSourceWire::Directory { directory } => {
-                let directory = PathBuf::from(directory);
+                let directory = Box::<Path>::from(directory);
                 let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
                     CWD.join(&directory),
                 ))?;
@@ -866,7 +913,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 })
             }
             RequirementSourceWire::Editable { editable } => {
-                let editable = PathBuf::from(editable);
+                let editable = Box::<Path>::from(editable);
                 let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
                     CWD.join(&editable),
                 ))?;
@@ -878,7 +925,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 })
             }
             RequirementSourceWire::Virtual { r#virtual } => {
-                let r#virtual = PathBuf::from(r#virtual);
+                let r#virtual = Box::<Path>::from(r#virtual);
                 let url = VerbatimUrl::from_normalized_path(uv_fs::normalize_path_buf(
                     CWD.join(&r#virtual),
                 ))?;
@@ -917,8 +964,8 @@ mod tests {
     fn roundtrip() {
         let requirement = Requirement {
             name: "foo".parse().unwrap(),
-            extras: vec![],
-            groups: vec![],
+            extras: Box::new([]),
+            groups: Box::new([]),
             marker: MarkerTree::TRUE,
             source: RequirementSource::Registry {
                 specifier: ">1,<2".parse().unwrap(),
@@ -939,11 +986,11 @@ mod tests {
         };
         let requirement = Requirement {
             name: "foo".parse().unwrap(),
-            extras: vec![],
-            groups: vec![],
+            extras: Box::new([]),
+            groups: Box::new([]),
             marker: MarkerTree::TRUE,
             source: RequirementSource::Directory {
-                install_path: PathBuf::from(path),
+                install_path: PathBuf::from(path).into_boxed_path(),
                 editable: false,
                 r#virtual: false,
                 url: VerbatimUrl::from_absolute_path(path).unwrap(),
