@@ -254,16 +254,16 @@ If you need to remove uv from your system, follow these steps:
 
     === "macOS and Linux"
 
-        ```console
-        $ rm ~/.local/bin/uv ~/.local/bin/uvx
-        ```
+    ```console
+    $ rm ~/.local/bin/uv ~/.local/bin/uvx
+    ```
 
     === "Windows"
 
-        ```powershell
-        $ rm $HOME\.local\bin\uv.exe
-        $ rm $HOME\.local\bin\uvx.exe
-        ```
+    ```powershell
+    $ rm $HOME\.local\bin\uv.exe
+    $ rm $HOME\.local\bin\uvx.exe
+    ```
 
     !!! note
 
