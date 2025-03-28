@@ -241,9 +241,9 @@ If you need to remove uv from your system, follow these steps:
 1.  Clean up stored data (optional):
 
     ```console
-    $ uv cache clean
-    $ rm -r "$(uv python dir)"
-    $ rm -r "$(uv tool dir)"
+    uv cache clean
+    rm -r "$(uv python dir)"
+    rm -r "$(uv tool dir)"
     ```
 
     !!! tip
@@ -255,14 +255,14 @@ If you need to remove uv from your system, follow these steps:
     === "macOS and Linux"
 
     ```console
-    $ rm ~/.local/bin/uv ~/.local/bin/uvx
+    rm ~/.local/bin/uv ~/.local/bin/uvx
     ```
 
     === "Windows"
 
     ```powershell
-    $ rm $HOME\.local\bin\uv.exe
-    $ rm $HOME\.local\bin\uvx.exe
+    rm $HOME\.local\bin\uv.exe
+    rm $HOME\.local\bin\uvx.exe
     ```
 
     !!! note
