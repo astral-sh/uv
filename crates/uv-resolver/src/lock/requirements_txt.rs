@@ -609,22 +609,18 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
 
             writeln!(f)?;
 
-            // Add "via ..." comments for all dependents
-            if !dependents.is_empty() {
-                write!(f, "{}", "    # via".green())?;
-            }
-            let via_prefix = if dependents.len() > 1 {
-                writeln!(f)?;
-                "    #   "
-            } else {
-                " "
-            };
-            for &dependent in dependents {
-                writeln!(
-                    f,
-                    "{}",
-                    format!("{}{}", via_prefix, dependent.id.name).green()
-                )?;
+            // Add "via ..." comments for all dependents.
+            match dependents.as_slice() {
+                [] => {}
+                [dependent] => {
+                    writeln!(f, "{}", format!("    # via {}", dependent.id.name).green())?;
+                }
+                _ => {
+                    writeln!(f, "{}", "    # via".green())?;
+                    for &dependent in dependents {
+                        writeln!(f, "{}", format!("    #   {}", dependent.id.name).green())?;
+                    }
+                }
             }
         }
 
