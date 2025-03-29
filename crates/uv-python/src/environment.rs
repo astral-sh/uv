@@ -153,6 +153,7 @@ impl PythonEnvironment {
             // Ignore managed installations when looking for environments
             PythonPreference::OnlySystem,
             cache,
+            crate::current_dir()?.as_path(),
         )? {
             Ok(installation) => installation,
             Err(err) => return Err(EnvironmentNotFound::from(err).into()),
