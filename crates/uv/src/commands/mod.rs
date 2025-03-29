@@ -25,6 +25,7 @@ pub(crate) use project::add::add;
 pub(crate) use project::export::export;
 pub(crate) use project::init::{init, InitKind, InitProjectKind};
 pub(crate) use project::lock::lock;
+pub(crate) use project::metadata::metadata_version;
 pub(crate) use project::remove::remove;
 pub(crate) use project::run::{run, RunCommand};
 pub(crate) use project::sync::sync;
