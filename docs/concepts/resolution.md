@@ -183,7 +183,7 @@ install the resulting built distribution.
 Some packages (like PyTorch) publish built distributions, but omit a source distribution. Such
 packages are _only_ installable on platforms for which a built distribution is available. For
 example, if a package publishes built distributions for Linux, but not macOS or Windows, then that
-package will _only_ be installable on Windows.
+package will _only_ be installable on Linux.
 
 Packages that lack source distributions cause problems for universal resolution, since there will
 typically be at least one platform or Python version for which the package is not installable.
