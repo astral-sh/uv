@@ -1340,6 +1340,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             if let Some(Pep723Item::Script(script)) = script {
                 commands::python_find_script(
                     Pep723ItemRef::Script(&script),
+                    args.show_version,
                     &globals.network_settings,
                     globals.python_preference,
                     globals.python_downloads,
@@ -1352,11 +1353,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 commands::python_find(
                     &project_dir,
                     args.request,
+                    args.show_version,
                     args.no_project,
                     cli.top_level.no_config,
                     args.system,
                     globals.python_preference,
                     &cache,
+                    printer,
                 )
                 .await
             }
