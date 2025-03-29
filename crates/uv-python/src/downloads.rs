@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -7,8 +9,11 @@ use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
 
 use futures::TryStreamExt;
+use itertools::Itertools;
+use once_cell::sync::OnceCell;
 use owo_colors::OwoColorize;
 use reqwest_retry::RetryPolicy;
+use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -30,6 +35,7 @@ use crate::installation::PythonInstallationKey;
 use crate::libc::LibcDetectionError;
 use crate::managed::ManagedPythonInstallation;
 use crate::platform::{self, Arch, Libc, Os};
+use crate::PythonVariant;
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
 #[derive(Error, Debug)]
@@ -86,9 +92,13 @@ pub enum Error {
     Mirror(&'static str, &'static str),
     #[error(transparent)]
     LibcDetection(#[from] LibcDetectionError),
+    #[error("Remote python downloads JSON is not yet supported, please use a local path (without `file://` prefix)")]
+    RemoteJSONNotSupported(),
+    #[error("The json of the python downloads is invalid: {0}")]
+    InvalidPythonDownloadsJSON(String, #[source] serde_json::Error),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ManagedPythonDownload {
     key: PythonInstallationKey,
     url: &'static str,
@@ -245,9 +255,11 @@ impl PythonDownloadRequest {
     }
 
     /// Iterate over all [`PythonDownload`]'s that match this request.
-    pub fn iter_downloads(&self) -> impl Iterator<Item = &'static ManagedPythonDownload> + '_ {
-        ManagedPythonDownload::iter_all()
-            .filter(move |download| self.satisfied_by_download(download))
+    pub fn iter_downloads(
+        &self,
+    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload> + use<'_>, Error> {
+        Ok(ManagedPythonDownload::iter_all()?
+            .filter(move |download| self.satisfied_by_download(download)))
     }
 
     /// Whether this request is satisfied by an installation key.
@@ -445,7 +457,30 @@ impl FromStr for PythonDownloadRequest {
     }
 }
 
-include!("downloads.inc");
+const BUILTIN_PYTHON_DOWNLOADS_JSON: &str = include_str!("download-metadata-minified.json");
+static PYTHON_DOWNLOADS: OnceCell<std::borrow::Cow<'static, [ManagedPythonDownload]>> =
+    OnceCell::new();
+
+#[derive(Debug, Deserialize, Clone)]
+struct JsonPythonDownload {
+    name: String,
+    arch: JsonArch,
+    os: String,
+    libc: String,
+    major: u8,
+    minor: u8,
+    patch: u8,
+    prerelease: Option<String>,
+    url: String,
+    sha256: Option<String>,
+    variant: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct JsonArch {
+    family: String,
+    variant: Option<String>,
+}
 
 #[derive(Debug, Clone)]
 pub enum DownloadResult {
@@ -459,14 +494,40 @@ impl ManagedPythonDownload {
         request: &PythonDownloadRequest,
     ) -> Result<&'static ManagedPythonDownload, Error> {
         request
-            .iter_downloads()
+            .iter_downloads()?
             .next()
             .ok_or(Error::NoDownloadFound(request.clone()))
     }
 
     /// Iterate over all [`ManagedPythonDownload`]s.
-    pub fn iter_all() -> impl Iterator<Item = &'static ManagedPythonDownload> {
-        PYTHON_DOWNLOADS.iter()
+    pub fn iter_all() -> Result<impl Iterator<Item = &'static ManagedPythonDownload>, Error> {
+        let runtime_source = std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL);
+
+        let downloads = PYTHON_DOWNLOADS.get_or_try_init(|| {
+            let json_downloads: HashMap<String, JsonPythonDownload> =
+                if let Ok(json_source) = &runtime_source {
+                    if Url::parse(json_source).is_ok() {
+                        return Err(Error::RemoteJSONNotSupported());
+                    }
+
+                    let file = match fs_err::File::open(json_source) {
+                        Ok(file) => file,
+                        Err(e) => { Err(Error::Io(e)) }?,
+                    };
+
+                    serde_json::from_reader(file)
+                        .map_err(|e| Error::InvalidPythonDownloadsJSON(json_source.clone(), e))?
+                } else {
+                    serde_json::from_str(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
+                        Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_string(), e)
+                    })?
+                };
+
+            let result = parse_json_downloads(json_downloads);
+            Ok(Cow::Owned(result))
+        })?;
+
+        Ok(downloads.iter())
     }
 
     pub fn url(&self) -> &'static str {
@@ -700,6 +761,115 @@ impl ManagedPythonDownload {
 
         Ok(Url::parse(self.url)?)
     }
+}
+
+fn parse_json_downloads(
+    json_downloads: HashMap<String, JsonPythonDownload>,
+) -> Vec<ManagedPythonDownload> {
+    json_downloads
+        .into_iter()
+        .filter_map(|(key, entry)| {
+            let implementation = match entry.name.as_str() {
+                "cpython" => LenientImplementationName::Known(ImplementationName::CPython),
+                "pypy" => LenientImplementationName::Known(ImplementationName::PyPy),
+                _ => LenientImplementationName::Unknown(entry.name.clone()),
+            };
+
+            let arch_str = match entry.arch.family.as_str() {
+                "armv5tel" => "armv5te".to_string(),
+                // The `gc` variant of riscv64 is the common base instruction set and
+                // is the target in `python-build-standalone`
+                // See https://github.com/astral-sh/python-build-standalone/issues/504
+                "riscv64" => "riscv64gc".to_string(),
+                value => value.to_string(),
+            };
+
+            let arch_str = if let Some(variant) = entry.arch.variant {
+                format!("{arch_str}_{variant}")
+            } else {
+                arch_str
+            };
+
+            let arch = match Arch::from_str(&arch_str) {
+                Ok(arch) => arch,
+                Err(e) => {
+                    debug!("Skipping entry {key}: Invalid arch '{arch_str}' - {e}");
+                    return None;
+                }
+            };
+
+            let os = match Os::from_str(&entry.os) {
+                Ok(os) => os,
+                Err(e) => {
+                    debug!("Skipping entry {}: Invalid OS '{}' - {}", key, entry.os, e);
+                    return None;
+                }
+            };
+
+            let libc = match Libc::from_str(&entry.libc) {
+                Ok(libc) => libc,
+                Err(e) => {
+                    debug!(
+                        "Skipping entry {}: Invalid libc '{}' - {}",
+                        key, entry.libc, e
+                    );
+                    return None;
+                }
+            };
+
+            let variant = match entry
+                .variant
+                .as_deref()
+                .map(PythonVariant::from_str)
+                .transpose()
+            {
+                Ok(Some(variant)) => variant,
+                Ok(None) => PythonVariant::default(),
+                Err(()) => {
+                    debug!(
+                        "Skipping entry {key}: Unknown python variant - {}",
+                        entry.variant.unwrap_or_default()
+                    );
+                    return None;
+                }
+            };
+
+            let version_str = format!(
+                "{}.{}.{}{}",
+                entry.major,
+                entry.minor,
+                entry.patch,
+                entry.prerelease.as_deref().unwrap_or_default()
+            );
+
+            let version = match PythonVersion::from_str(&version_str) {
+                Ok(version) => version,
+                Err(e) => {
+                    debug!("Skipping entry {key}: Invalid version '{version_str}' - {e}");
+                    return None;
+                }
+            };
+
+            let url = Box::leak(entry.url.into_boxed_str()) as &'static str;
+            let sha256 = entry
+                .sha256
+                .map(|s| Box::leak(s.into_boxed_str()) as &'static str);
+
+            Some(ManagedPythonDownload {
+                key: PythonInstallationKey::new_from_version(
+                    implementation,
+                    &version,
+                    os,
+                    arch,
+                    libc,
+                    variant,
+                ),
+                url,
+                sha256,
+            })
+        })
+        .sorted_by(|a, b| Ord::cmp(&b.key, &a.key))
+        .collect()
 }
 
 impl Error {
