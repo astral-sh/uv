@@ -81,6 +81,10 @@ However, `pip` can also be used:
 $ pip install uv
 ```
 
+!!! warning
+
+    The [`uvx`](https://pypi.org/project/uvx/) package available on PyPI is not an official package. The official `uvx` tool is included as part of the [`uv`](https://pypi.org/project/uv/) package.
+
 !!! note
 
     uv ships with prebuilt distributions (wheels) for many platforms; if a wheel is not available for a given
