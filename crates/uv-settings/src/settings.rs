@@ -145,7 +145,11 @@ pub struct Options {
 
 impl Options {
     /// Construct an [`Options`] with the given global and top-level settings.
-    pub fn simple(globals: GlobalOptions, top_level: ResolverInstallerOptions, install_mirrors: PythonInstallMirrors) -> Self {
+    pub fn simple(
+        globals: GlobalOptions,
+        top_level: ResolverInstallerOptions,
+        install_mirrors: PythonInstallMirrors,
+    ) -> Self {
         Self {
             globals,
             top_level,
