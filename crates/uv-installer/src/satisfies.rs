@@ -6,9 +6,9 @@ use url::Url;
 
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
-use uv_distribution_types::{InstalledDirectUrlDist, InstalledDist};
+use uv_distribution_types::{InstalledDirectUrlDist, InstalledDist, RequirementSource};
 use uv_git_types::GitOid;
-use uv_pypi_types::{DirInfo, DirectUrl, RequirementSource, VcsInfo, VcsKind};
+use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum RequirementSatisfaction {
@@ -189,7 +189,7 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 };
 
-                if !(*requested_path == installed_path
+                if !(**requested_path == installed_path
                     || is_same_file(requested_path, &installed_path).unwrap_or(false))
                 {
                     trace!(
@@ -258,7 +258,7 @@ impl RequirementSatisfaction {
                     return Self::Mismatch;
                 };
 
-                if !(*requested_path == installed_path
+                if !(**requested_path == installed_path
                     || is_same_file(requested_path, &installed_path).unwrap_or(false))
                 {
                     trace!(

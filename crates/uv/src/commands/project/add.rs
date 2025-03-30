@@ -13,6 +13,7 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 use url::Url;
 
+use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -23,14 +24,15 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
-    Index, IndexName, IndexUrls, NameRequirementSpecification, UnresolvedRequirement, VersionId,
+    redact_credentials, Index, IndexName, IndexUrls, NameRequirementSpecification, Requirement,
+    RequirementSource, UnresolvedRequirement, VersionId,
 };
 use uv_fs::Simplified;
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
 use uv_normalize::{DefaultGroups, PackageName, DEV_DEPENDENCIES};
-use uv_pep508::{ExtraName, MarkerTree, Requirement, UnnamedRequirement, VersionOrUrl};
-use uv_pypi_types::{redact_credentials, ParsedUrl, RequirementSource, VerbatimParsedUrl};
+use uv_pep508::{ExtraName, MarkerTree, UnnamedRequirement, VersionOrUrl};
+use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
@@ -323,6 +325,7 @@ pub(crate) async fn add(
             let client = RegistryClientBuilder::try_from(client_builder)?
                 .index_urls(settings.resolver.index_locations.index_urls())
                 .index_strategy(settings.resolver.index_strategy)
+                .url_auth_policies(UrlAuthPolicies::from(&settings.resolver.index_locations))
                 .markers(target.interpreter().markers())
                 .platform(target.interpreter().platform())
                 .build();
@@ -344,9 +347,10 @@ pub(crate) async fn add(
 
             // Resolve the flat indexes from `--find-links`.
             let flat_index = {
-                let client = FlatIndexClient::new(&client, cache);
+                let client =
+                    FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
                 let entries = client
-                    .fetch(
+                    .fetch_all(
                         settings
                             .resolver
                             .index_locations
@@ -437,9 +441,11 @@ pub(crate) async fn add(
     let mut edits = Vec::<DependencyEdit>::with_capacity(requirements.len());
     for mut requirement in requirements {
         // Add the specified extras.
-        requirement.extras.extend(extras.iter().cloned());
-        requirement.extras.sort_unstable();
-        requirement.extras.dedup();
+        let mut ex = requirement.extras.to_vec();
+        ex.extend(extras.iter().cloned());
+        ex.sort_unstable();
+        ex.dedup();
+        requirement.extras = ex.into_boxed_slice();
 
         let (requirement, source) = match target {
             AddTarget::Script(_, _) | AddTarget::Project(_, _) if raw_sources => {
@@ -928,7 +934,7 @@ fn augment_requirement(
 ) -> UnresolvedRequirement {
     match requirement {
         UnresolvedRequirement::Named(mut requirement) => {
-            UnresolvedRequirement::Named(uv_pypi_types::Requirement {
+            UnresolvedRequirement::Named(Requirement {
                 marker: marker
                     .map(|marker| {
                         requirement.marker.and(marker);
@@ -996,7 +1002,7 @@ fn augment_requirement(
 
 /// Resolves the source for a requirement and processes it into a PEP 508 compliant format.
 fn resolve_requirement(
-    requirement: uv_pypi_types::Requirement,
+    requirement: Requirement,
     workspace: bool,
     editable: Option<bool>,
     index: Option<IndexName>,
@@ -1004,7 +1010,7 @@ fn resolve_requirement(
     tag: Option<String>,
     branch: Option<String>,
     root: &Path,
-) -> Result<(Requirement, Option<Source>), anyhow::Error> {
+) -> Result<(uv_pep508::Requirement, Option<Source>), anyhow::Error> {
     let result = Source::from_requirement(
         &requirement.name,
         requirement.source.clone(),
@@ -1197,7 +1203,7 @@ impl AddTargetSnapshot {
 #[derive(Debug, Clone)]
 struct DependencyEdit {
     dependency_type: DependencyType,
-    requirement: Requirement,
+    requirement: uv_pep508::Requirement,
     source: Option<Source>,
     edit: ArrayEdit,
 }

@@ -4,11 +4,12 @@ use std::iter;
 use either::Either;
 use pubgrub::Ranges;
 
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{
     Conflicts, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl,
-    Requirement, RequirementSource, VerbatimParsedUrl,
+    VerbatimParsedUrl,
 };
 
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner};
@@ -57,15 +58,9 @@ impl PubGrubDependency {
             } else {
                 Either::Right(iter::empty())
             };
-            Either::Left(Either::Left(
-                base.chain(
-                    requirement
-                        .extras
-                        .clone()
-                        .into_iter()
-                        .map(|extra| (Some(extra), None)),
-                ),
-            ))
+            Either::Left(Either::Left(base.chain(
+                Box::into_iter(requirement.extras.clone()).map(|extra| (Some(extra), None)),
+            )))
         } else if !requirement.groups.is_empty() {
             let base = if requirement
                 .groups
@@ -76,15 +71,9 @@ impl PubGrubDependency {
             } else {
                 Either::Right(iter::empty())
             };
-            Either::Left(Either::Right(
-                base.chain(
-                    requirement
-                        .groups
-                        .clone()
-                        .into_iter()
-                        .map(|group| (None, Some(group))),
-                ),
-            ))
+            Either::Left(Either::Right(base.chain(
+                Box::into_iter(requirement.groups.clone()).map(|group| (None, Some(group))),
+            )))
         } else {
             Either::Right(iter::once((None, None)))
         };

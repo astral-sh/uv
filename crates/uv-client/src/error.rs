@@ -8,8 +8,8 @@ use url::Url;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_normalize::PackageName;
 
-use crate::html;
 use crate::middleware::OfflineError;
+use crate::{html, FlatIndexError};
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
@@ -154,6 +154,9 @@ pub enum ErrorKind {
 
     #[error(transparent)]
     JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
+
+    #[error(transparent)]
+    Flat(#[from] FlatIndexError),
 
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(Url),

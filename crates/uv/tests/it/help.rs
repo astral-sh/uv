@@ -48,8 +48,8 @@ fn help() {
                                  "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
@@ -127,8 +127,8 @@ fn help_flag() {
                                  "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
@@ -205,8 +205,8 @@ fn help_short_flag() {
                                  "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
@@ -335,8 +335,11 @@ fn help_subcommand() {
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output.
+              
+              Repeating this option, e.g., `-qq`, will enable a silent mode in which uv will write no
+              output to stdout.
 
       -v, --verbose...
               Use verbose output.
@@ -585,8 +588,11 @@ fn help_subsubcommand() {
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output.
+              
+              Repeating this option, e.g., `-qq`, will enable a silent mode in which uv will write no
+              output to stdout.
 
       -v, --verbose...
               Use verbose output.
@@ -728,8 +734,8 @@ fn help_flag_subcommand() {
                                  "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
@@ -800,8 +806,8 @@ fn help_flag_subsubcommand() {
                                  "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
@@ -956,8 +962,8 @@ fn help_with_global_option() {
                                  "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
@@ -1071,8 +1077,8 @@ fn help_with_no_pager() {
                                  "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>

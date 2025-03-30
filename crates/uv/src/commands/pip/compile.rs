@@ -10,6 +10,7 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use tracing::debug;
 
+use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -20,12 +21,12 @@ use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
-    Origin, UnresolvedRequirementSpecification, Verbatim,
+    Origin, Requirement, UnresolvedRequirementSpecification, Verbatim,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_normalize::{GroupName, PackageName};
-use uv_pypi_types::{Conflicts, Requirement, SupportedEnvironments};
+use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersion, VersionRequest,
@@ -360,6 +361,7 @@ pub(crate) async fn pip_compile(
         .cache(cache.clone())
         .index_urls(index_locations.index_urls())
         .index_strategy(index_strategy)
+        .url_auth_policies(UrlAuthPolicies::from(&index_locations))
         .torch_backend(torch_backend)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
@@ -373,9 +375,9 @@ pub(crate) async fn pip_compile(
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
-        let client = FlatIndexClient::new(&client, &cache);
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
         let entries = client
-            .fetch(index_locations.flat_indexes().map(Index::url))
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
         FlatIndex::from_entries(entries, tags.as_deref(), &hasher, &build_options)
     };

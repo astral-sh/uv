@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
@@ -22,7 +22,7 @@ pub enum CachedDist {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct CachedRegistryDist {
     pub filename: WheelFilename,
-    pub path: PathBuf,
+    pub path: Box<Path>,
     pub hashes: HashDigests,
     pub cache_info: CacheInfo,
 }
@@ -31,7 +31,7 @@ pub struct CachedRegistryDist {
 pub struct CachedDirectUrlDist {
     pub filename: WheelFilename,
     pub url: VerbatimParsedUrl,
-    pub path: PathBuf,
+    pub path: Box<Path>,
     pub hashes: HashDigests,
     pub cache_info: CacheInfo,
 }
@@ -43,7 +43,7 @@ impl CachedDist {
         filename: WheelFilename,
         hashes: HashDigests,
         cache_info: CacheInfo,
-        path: PathBuf,
+        path: Box<Path>,
     ) -> Self {
         match remote {
             Dist::Built(BuiltDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {

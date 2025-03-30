@@ -13,7 +13,9 @@ use crate::resolver::Request;
 use crate::{
     InMemoryIndex, PythonRequirement, ResolveError, ResolverEnvironment, VersionsResponse,
 };
-use uv_distribution_types::{CompatibleDist, DistributionMetadata, IndexCapabilities, IndexUrl};
+use uv_distribution_types::{
+    CompatibleDist, DistributionMetadata, IndexCapabilities, IndexMetadata,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -81,7 +83,7 @@ impl BatchPrefetcher {
     pub(crate) fn prefetch_batches(
         &mut self,
         next: &PubGrubPackage,
-        index: Option<&IndexUrl>,
+        index: Option<&IndexMetadata>,
         version: &Version,
         current_range: &Range<Version>,
         unchangeable_constraints: Option<&Term<Range<Version>>>,
@@ -110,7 +112,7 @@ impl BatchPrefetcher {
             self.prefetch_runner
                 .index
                 .explicit()
-                .wait_blocking(&(name.clone(), index.clone()))
+                .wait_blocking(&(name.clone(), index.url().clone()))
                 .ok_or_else(|| ResolveError::UnregisteredTask(name.to_string()))?
         } else {
             self.prefetch_runner

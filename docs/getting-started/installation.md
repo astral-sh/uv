@@ -25,7 +25,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.6.8/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.6.10/install.sh | sh
     ```
 
 === "Windows"
@@ -41,7 +41,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.6.8/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.6.10/install.ps1 | iex"
     ```
 
 !!! tip
@@ -179,7 +179,7 @@ To enable shell autocompletion for uv commands, run one of the following:
 === "fish"
 
     ```bash
-    echo 'uv generate-shell-completion fish | source' >> ~/.config/fish/config.fish
+    echo 'uv generate-shell-completion fish | source' >> ~/.config/fish/completions/uv.fish
     ```
 
 === "Elvish"
@@ -214,7 +214,7 @@ To enable shell autocompletion for uvx, run one of the following:
 === "fish"
 
     ```bash
-    echo 'uvx --generate-shell-completion fish | source' >> ~/.config/fish/config.fish
+    echo 'uvx --generate-shell-completion fish | source' >> ~/.config/fish/completions/uvx.fish
     ```
 
 === "Elvish"

@@ -1,7 +1,11 @@
-3.13.0
-3.12.6
-3.11.10
-3.10.15
-3.9.20
+3.13.2
+3.12.9
+3.11.11
+3.10.16
+3.9.21
+3.8.20
+# The following are required for packse scenarios
 3.8.18
 3.8.12
+# The following is needed for `==3.13` request tests
+3.13.0

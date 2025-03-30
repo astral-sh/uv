@@ -10,11 +10,13 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DryRun, PreviewMode, Reinstall, Upgrade};
-use uv_distribution_types::{NameRequirementSpecification, UnresolvedRequirementSpecification};
+use uv_distribution_types::{
+    NameRequirementSpecification, Requirement, RequirementSource,
+    UnresolvedRequirementSpecification,
+};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{Requirement, RequirementSource};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -165,7 +167,7 @@ pub(crate) async fn install(
             Requirement {
                 name: name.clone(),
                 extras: extras.clone(),
-                groups: vec![],
+                groups: Box::new([]),
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
                     specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
@@ -186,7 +188,7 @@ pub(crate) async fn install(
             Requirement {
                 name: name.clone(),
                 extras: extras.clone(),
-                groups: vec![],
+                groups: Box::new([]),
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
                     specifier: VersionSpecifiers::empty(),

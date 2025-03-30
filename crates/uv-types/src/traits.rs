@@ -11,11 +11,10 @@ use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, Sou
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, DependencyMetadata, DistributionId, IndexCapabilities, IndexLocations,
-    InstalledDist, IsBuildBackendError, Resolution, SourceDist,
+    InstalledDist, IsBuildBackendError, Requirement, Resolution, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_pep508::PackageName;
-use uv_pypi_types::Requirement;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_workspace::WorkspaceCache;
 

@@ -4,7 +4,7 @@ use futures::{stream::FuturesOrdered, TryStreamExt};
 
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::DistributionMetadata;
-use uv_pypi_types::Requirement;
+use uv_distribution_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
@@ -113,13 +113,13 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
 
         // Sort extras for consistency.
         let extras = {
-            let mut extras = metadata.provides_extras;
+            let mut extras = metadata.provides_extras.to_vec();
             extras.sort_unstable();
             extras
         };
 
         Ok(Requirement {
-            extras,
+            extras: extras.into_boxed_slice(),
             ..requirement
         })
     }

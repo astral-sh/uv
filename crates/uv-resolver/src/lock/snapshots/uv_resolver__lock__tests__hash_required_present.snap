@@ -116,6 +116,7 @@ Ok(
             dependency_groups: {},
             constraints: {},
             overrides: {},
+            build_constraints: {},
             dependency_metadata: {},
         },
     },

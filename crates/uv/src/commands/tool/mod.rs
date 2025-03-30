@@ -62,9 +62,9 @@ pub(crate) enum Target<'a> {
     /// e.g., `ruff`
     Unspecified(&'a str),
     /// e.g., `ruff[extra]@0.6.0`
-    Version(&'a str, PackageName, Vec<ExtraName>, Version),
+    Version(&'a str, PackageName, Box<[ExtraName]>, Version),
     /// e.g., `ruff[extra]@latest`
-    Latest(&'a str, PackageName, Vec<ExtraName>),
+    Latest(&'a str, PackageName, Box<[ExtraName]>),
 }
 
 impl<'a> Target<'a> {
@@ -105,7 +105,7 @@ impl<'a> Target<'a> {
             .map(str::trim)
             .filter(|extra| !extra.is_empty())
             .map(ExtraName::from_str)
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<Result<Box<_>, _>>()
         else {
             debug!("Ignoring invalid extras `{extras}` in command");
             return Self::Unspecified(target);
@@ -142,7 +142,7 @@ mod tests {
         let expected = Target::Version(
             "flask",
             PackageName::from_str("flask").unwrap(),
-            vec![],
+            Box::new([]),
             Version::new([3, 0, 0]),
         );
         assert_eq!(target, expected);
@@ -151,20 +151,24 @@ mod tests {
         let expected = Target::Version(
             "flask",
             PackageName::from_str("flask").unwrap(),
-            vec![],
+            Box::new([]),
             Version::new([3, 0, 0]),
         );
         assert_eq!(target, expected);
 
         let target = Target::parse("flask@latest");
-        let expected = Target::Latest("flask", PackageName::from_str("flask").unwrap(), vec![]);
+        let expected = Target::Latest(
+            "flask",
+            PackageName::from_str("flask").unwrap(),
+            Box::new([]),
+        );
         assert_eq!(target, expected);
 
         let target = Target::parse("flask[dotenv]@3.0.0");
         let expected = Target::Version(
             "flask",
             PackageName::from_str("flask").unwrap(),
-            vec![ExtraName::from_str("dotenv").unwrap()],
+            Box::new([ExtraName::from_str("dotenv").unwrap()]),
             Version::new([3, 0, 0]),
         );
         assert_eq!(target, expected);
@@ -173,7 +177,7 @@ mod tests {
         let expected = Target::Latest(
             "flask",
             PackageName::from_str("flask").unwrap(),
-            vec![ExtraName::from_str("dotenv").unwrap()],
+            Box::new([ExtraName::from_str("dotenv").unwrap()]),
         );
         assert_eq!(target, expected);
 

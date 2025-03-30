@@ -46,6 +46,7 @@ reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
 rkyv = { workspace = true }
 rmp-serde = { workspace = true }
+rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sys-info = { workspace = true }

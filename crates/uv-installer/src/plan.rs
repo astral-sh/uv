@@ -10,11 +10,11 @@ use uv_distribution::{
 };
 use uv_distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, Dist, Error, Hashed, IndexLocations, InstalledDist,
-    Name, Resolution, ResolvedDist, SourceDist,
+    Name, RequirementSource, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_platform_tags::Tags;
-use uv_pypi_types::{RequirementSource, VerbatimParsedUrl};
+use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
 
@@ -196,7 +196,7 @@ impl<'a> Planner<'a> {
                                     },
                                     hashes: archive.hashes,
                                     cache_info,
-                                    path: cache.archive(&archive.id),
+                                    path: cache.archive(&archive.id).into_boxed_path(),
                                 };
 
                                 debug!("URL wheel requirement already cached: {cached_dist}");
@@ -256,7 +256,7 @@ impl<'a> Planner<'a> {
                                                 },
                                                 hashes: archive.hashes,
                                                 cache_info,
-                                                path: cache.archive(&archive.id),
+                                                path: cache.archive(&archive.id).into_boxed_path(),
                                             };
 
                                             debug!("Path wheel requirement already cached: {cached_dist}");

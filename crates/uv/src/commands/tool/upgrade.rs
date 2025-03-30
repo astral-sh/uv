@@ -8,9 +8,9 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{Concurrency, DryRun, PreviewMode};
+use uv_distribution_types::Requirement;
 use uv_fs::CWD;
 use uv_normalize::PackageName;
-use uv_pypi_types::Requirement;
 use uv_python::{
     EnvironmentPreference, Interpreter, PythonDownloads, PythonInstallation, PythonPreference,
     PythonRequest,

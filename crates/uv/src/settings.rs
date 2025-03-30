@@ -28,11 +28,11 @@ use uv_configuration::{
     RequiredVersion, SourceStrategy, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
     VersionControlSystem,
 };
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl};
+use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, IndexUrl, Requirement};
 use uv_install_wheel::LinkMode;
 use uv_normalize::{PackageName, PipGroupName};
 use uv_pep508::{ExtraName, MarkerTree, RequirementOrigin};
-use uv_pypi_types::{Requirement, SupportedEnvironments};
+use uv_pypi_types::SupportedEnvironments;
 use uv_python::{Prefix, PythonDownloads, PythonPreference, PythonVersion, Target};
 use uv_resolver::{
     AnnotationStyle, DependencyMode, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode,
@@ -57,7 +57,7 @@ const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";
 #[derive(Debug, Clone)]
 pub(crate) struct GlobalSettings {
     pub(crate) required_version: Option<RequiredVersion>,
-    pub(crate) quiet: bool,
+    pub(crate) quiet: u8,
     pub(crate) verbose: u8,
     pub(crate) color: ColorChoice,
     pub(crate) network_settings: NetworkSettings,
@@ -466,6 +466,8 @@ pub(crate) struct ToolRunSettings {
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) env_file: Vec<PathBuf>,
+    pub(crate) no_env_file: bool,
 }
 
 impl ToolRunSettings {
@@ -485,6 +487,8 @@ impl ToolRunSettings {
             constraints,
             overrides,
             isolated,
+            env_file,
+            no_env_file,
             show_resolution,
             installer,
             build,
@@ -556,6 +560,8 @@ impl ToolRunSettings {
             settings,
             options,
             install_mirrors,
+            env_file,
+            no_env_file,
         }
     }
 }
@@ -820,6 +826,7 @@ pub(crate) enum PythonListKinds {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PythonListSettings {
+    pub(crate) request: Option<String>,
     pub(crate) kinds: PythonListKinds,
     pub(crate) all_platforms: bool,
     pub(crate) all_arches: bool,
@@ -833,6 +840,7 @@ impl PythonListSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let PythonListArgs {
+            request,
             all_versions,
             all_platforms,
             all_arches,
@@ -851,6 +859,7 @@ impl PythonListSettings {
         };
 
         Self {
+            request,
             kinds,
             all_platforms,
             all_arches,
@@ -976,6 +985,7 @@ impl PythonFindSettings {
             no_project,
             system,
             no_system,
+            script: _,
         } = args;
 
         Self {
@@ -1074,6 +1084,8 @@ impl SyncSettings {
             package,
             script,
             python,
+            check,
+            no_check,
         } = args;
         let install_mirrors = filesystem
             .clone()
@@ -1085,10 +1097,17 @@ impl SyncSettings {
             filesystem,
         );
 
+        let check = flag(check, no_check).unwrap_or_default();
+        let dry_run = if check {
+            DryRun::Check
+        } else {
+            DryRun::from_args(dry_run)
+        };
+
         Self {
             locked,
             frozen,
-            dry_run: DryRun::from_args(dry_run),
+            dry_run,
             script,
             active: flag(active, no_active),
             extras: ExtrasSpecification::from_args(
@@ -1504,6 +1523,7 @@ pub(crate) struct ExportSettings {
     pub(crate) output_file: Option<PathBuf>,
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
+    pub(crate) include_annotations: bool,
     pub(crate) include_header: bool,
     pub(crate) script: Option<PathBuf>,
     pub(crate) python: Option<String>,
@@ -1533,6 +1553,8 @@ impl ExportSettings {
             no_default_groups,
             only_group,
             all_groups,
+            annotate,
+            no_annotate,
             header,
             no_header,
             no_editable,
@@ -1585,6 +1607,7 @@ impl ExportSettings {
             output_file,
             locked,
             frozen,
+            include_annotations: flag(annotate, no_annotate).unwrap_or(true),
             include_header: flag(header, no_header).unwrap_or(true),
             script,
             python: python.and_then(Maybe::into_option),

@@ -6,14 +6,12 @@ use url::Url;
 
 use uv_configuration::HashCheckingMode;
 use uv_distribution_types::{
-    DistributionMetadata, HashGeneration, HashPolicy, Name, Resolution, UnresolvedRequirement,
-    VersionId,
+    DistributionMetadata, HashGeneration, HashPolicy, Name, Requirement, RequirementSource,
+    Resolution, UnresolvedRequirement, VersionId,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pypi_types::{
-    HashDigest, HashDigests, HashError, Requirement, RequirementSource, ResolverMarkerEnvironment,
-};
+use uv_pypi_types::{HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
 
 #[derive(Debug, Default, Clone)]
 pub enum HashStrategy {

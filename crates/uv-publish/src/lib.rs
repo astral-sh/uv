@@ -28,7 +28,8 @@ use trusted_publishing::TrustedPublishingToken;
 use url::Url;
 use uv_cache::{Cache, Refresh};
 use uv_client::{
-    BaseClient, OwnedArchive, RegistryClientBuilder, UvRetryableStrategy, DEFAULT_RETRIES,
+    BaseClient, MetadataFormat, OwnedArchive, RegistryClientBuilder, UvRetryableStrategy,
+    DEFAULT_RETRIES,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -477,9 +478,9 @@ pub async fn check_url(
 
     debug!("Checking for {filename} in the registry");
     let response = match registry_client
-        .simple(
+        .package_metadata(
             filename.name(),
-            Some(index_url),
+            Some(index_url.into()),
             index_capabilities,
             download_concurrency,
         )
@@ -499,7 +500,7 @@ pub async fn check_url(
             };
         }
     };
-    let [(_, simple_metadata)] = response.as_slice() else {
+    let [(_, MetadataFormat::Simple(simple_metadata))] = response.as_slice() else {
         unreachable!("We queried a single index, we must get a single response");
     };
     let simple_metadata = OwnedArchive::deserialize(simple_metadata);

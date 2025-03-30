@@ -1036,7 +1036,7 @@ fn workspace_dev() -> Result<()> {
     "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1046,28 +1046,30 @@ fn workspace_dev() -> Result<()> {
     │   └── sniffio v1.3.1
     └── child v0.1.0 (group: dev)
         └── iniconfig v2.0.0
+    child v0.1.0 (*)
+    (*) Package tree already displayed
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // Under `--no-dev`, the member should still be included, since we show the entire workspace.
     // But it shouldn't be considered a dependency of the root.
-    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--no-dev"), @r###"
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--no-dev"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    child v0.1.0
-    └── iniconfig v2.0.0
     project v0.1.0
     └── anyio v4.3.0
         ├── idna v3.6
         └── sniffio v1.3.1
+    child v0.1.0
+    └── iniconfig v2.0.0
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     // `uv tree` should update the lockfile
@@ -1582,6 +1584,88 @@ fn script() -> Result<()> {
         "###
         );
     });
+
+    Ok(())
+}
+
+#[test]
+fn only_group() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig",
+            "pip",
+        ]
+
+        [dependency-groups]
+        dev = [
+            "plotly",
+            "pip",
+        ]
+        test = [
+            "pytest",
+        ]
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── iniconfig v2.0.0
+    ├── pip v24.0
+    ├── pip v24.0 (group: dev)
+    └── plotly v5.20.0 (group: dev)
+        ├── packaging v24.0
+        └── tenacity v8.2.3
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--only-group").arg("dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    ├── pip v24.0 (group: dev)
+    └── plotly v5.20.0 (group: dev)
+        ├── packaging v24.0
+        └── tenacity v8.2.3
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.tree().arg("--universal").arg("--only-group").arg("test"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    project v0.1.0
+    └── pytest v8.1.1 (group: test)
+        ├── colorama v0.4.6
+        ├── iniconfig v2.0.0
+        ├── packaging v24.0
+        └── pluggy v1.4.0
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    "
+    );
+
+    // `uv tree` should update the lockfile
+    let lock = context.read("uv.lock");
+    assert!(!lock.is_empty());
 
     Ok(())
 }

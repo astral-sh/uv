@@ -5,6 +5,7 @@ use std::fmt::Formatter;
 use std::path::{Component, Path, PathBuf};
 
 use either::Either;
+use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::prelude::EdgeRef;
 use petgraph::visit::IntoNodeReferences;
@@ -41,6 +42,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
         prune: &[PackageName],
         extras: &ExtrasSpecification,
         dev: &DependencyGroupsWithDefaults,
+        annotate: bool,
         editable: EditableMode,
         hashes: bool,
         install_options: &'lock InstallOptions,
@@ -73,12 +75,9 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
             if dev.prod() {
                 // Add the workspace package to the graph.
-                if let Entry::Vacant(entry) = inverse.entry(&dist.id) {
-                    entry.insert(graph.add_node(Node::Package(dist)));
-                }
-
-                // Add an edge from the root.
-                let index = inverse[&dist.id];
+                let index = *inverse
+                    .entry(&dist.id)
+                    .or_insert_with(|| graph.add_node(Node::Package(dist)));
                 graph.add_edge(root, index, Edge::Prod(MarkerTree::TRUE));
 
                 // Push its dependencies on the queue.
@@ -124,14 +123,13 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 let dep_dist = target.lock().find_by_id(&dep.package_id);
 
                 // Add the dependency to the graph.
-                if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
-                    entry.insert(graph.add_node(Node::Package(dep_dist)));
-                }
+                let dep_index = *inverse
+                    .entry(&dep.package_id)
+                    .or_insert_with(|| graph.add_node(Node::Package(dep_dist)));
 
                 // Add an edge from the root. Development dependencies may be installed without
                 // installing the workspace package itself (which can never have markers on it
                 // anyway), so they're directly connected to the root.
-                let dep_index = inverse[&dep.package_id];
                 graph.add_edge(
                     root,
                     dep_index,
@@ -213,13 +211,12 @@ impl<'lock> RequirementsTxtExport<'lock> {
                     // Simplify the marker.
                     let marker = target.lock().simplify_environment(marker);
 
-                    // Add the dependency to the graph.
-                    if let Entry::Vacant(entry) = inverse.entry(&dist.id) {
-                        entry.insert(graph.add_node(Node::Package(dist)));
-                    }
+                    // Add the dependency to the graph and get its index.
+                    let dep_index = *inverse
+                        .entry(&dist.id)
+                        .or_insert_with(|| graph.add_node(Node::Package(dist)));
 
                     // Add an edge from the root.
-                    let dep_index = inverse[&dist.id];
                     graph.add_edge(root, dep_index, Edge::Prod(marker));
 
                     // Push its dependencies on the queue.
@@ -260,12 +257,11 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 let dep_dist = target.lock().find_by_id(&dep.package_id);
 
                 // Add the dependency to the graph.
-                if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
-                    entry.insert(graph.add_node(Node::Package(dep_dist)));
-                }
+                let dep_index = *inverse
+                    .entry(&dep.package_id)
+                    .or_insert_with(|| graph.add_node(Node::Package(dep_dist)));
 
-                // Add the edge.
-                let dep_index = inverse[&dep.package_id];
+                // Add an edge from the dependency.
                 graph.add_edge(
                     index,
                     dep_index,
@@ -312,6 +308,21 @@ impl<'lock> RequirementsTxtExport<'lock> {
             .map(|(index, package)| Requirement {
                 package,
                 marker: reachability.remove(&index).unwrap_or_default(),
+                dependents: if annotate {
+                    let mut dependents = graph
+                        .edges_directed(index, Direction::Incoming)
+                        .map(|edge| &graph[edge.source()])
+                        .filter_map(|node| match node {
+                            Node::Package(package) => Some(*package),
+                            Node::Root => None,
+                        })
+                        .collect::<Vec<_>>();
+                    dependents.sort_unstable_by_key(|package| package.name());
+                    dependents.dedup_by_key(|package| package.name());
+                    dependents
+                } else {
+                    Vec::new()
+                },
             })
             .filter(|requirement| !requirement.marker.is_false())
             .collect::<Vec<_>>();
@@ -496,7 +507,12 @@ fn conflict_marker_reachability<'lock>(
 impl std::fmt::Display for RequirementsTxtExport<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Write out each package.
-        for Requirement { package, marker } in &self.nodes {
+        for Requirement {
+            package,
+            marker,
+            dependents,
+        } in &self.nodes
+        {
             match &package.id.source {
                 Source::Registry(_) => {
                     let version = package
@@ -524,16 +540,15 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     // Reconstruct the PEP 508-compatible URL from the `GitSource`.
                     let url = Url::from(ParsedGitUrl {
                         url: git_url.clone(),
-                        subdirectory: git.subdirectory.as_ref().map(PathBuf::from),
+                        subdirectory: git.subdirectory.clone(),
                     });
 
                     write!(f, "{} @ {}", package.id.name, url)?;
                 }
                 Source::Direct(url, direct) => {
-                    let subdirectory = direct.subdirectory.as_ref().map(PathBuf::from);
                     let url = Url::from(ParsedArchiveUrl {
                         url: url.to_url().map_err(|_| std::fmt::Error)?,
-                        subdirectory: subdirectory.clone(),
+                        subdirectory: direct.subdirectory.clone(),
                         ext: DistExtension::Source(SourceDistExtension::TarGz),
                     });
                     write!(f, "{} @ {}", package.id.name, url)?;
@@ -587,6 +602,20 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
             }
 
             writeln!(f)?;
+
+            // Add "via ..." comments for all dependents.
+            match dependents.as_slice() {
+                [] => {}
+                [dependent] => {
+                    writeln!(f, "{}", format!("    # via {}", dependent.id.name).green())?;
+                }
+                _ => {
+                    writeln!(f, "{}", "    # via".green())?;
+                    for &dependent in dependents {
+                        writeln!(f, "{}", format!("    #   {}", dependent.id.name).green())?;
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -638,6 +667,7 @@ impl Reachable<MarkerTree> for Edge<'_> {
 struct Requirement<'lock> {
     package: &'lock Package,
     marker: MarkerTree,
+    dependents: Vec<&'lock Package>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

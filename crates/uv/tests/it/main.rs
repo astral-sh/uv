@@ -72,6 +72,9 @@ mod python_dir;
 #[cfg(feature = "python")]
 mod python_find;
 
+#[cfg(feature = "python")]
+mod python_list;
+
 #[cfg(feature = "python-managed")]
 mod python_install;
 

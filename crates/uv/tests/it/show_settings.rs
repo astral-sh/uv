@@ -57,7 +57,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -134,6 +134,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -216,7 +217,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -293,6 +294,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -376,7 +378,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -453,6 +455,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -568,7 +571,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -645,6 +648,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -729,7 +733,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -868,7 +872,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -945,6 +949,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -1052,7 +1057,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -1129,6 +1134,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -1159,6 +1165,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -1243,7 +1250,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -1322,6 +1329,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -1352,6 +1360,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -1382,6 +1391,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -1489,7 +1499,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -1567,6 +1577,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Flat,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -1672,7 +1683,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -1817,7 +1828,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -1894,6 +1905,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -1924,6 +1936,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -2006,7 +2019,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -2083,6 +2096,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -2113,6 +2127,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -2218,7 +2233,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -2353,7 +2368,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -2488,7 +2503,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -2625,7 +2640,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -2781,7 +2796,7 @@ fn resolve_tool() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -2944,7 +2959,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -3107,7 +3122,7 @@ fn resolve_both() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -3184,6 +3199,7 @@ fn resolve_both() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -3391,7 +3407,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -3468,6 +3484,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -3651,7 +3668,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -3789,7 +3806,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -3935,7 +3952,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -4095,7 +4112,7 @@ fn index_priority() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -4174,6 +4191,7 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -4204,6 +4222,7 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -4286,7 +4305,7 @@ fn index_priority() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -4365,6 +4384,7 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -4395,6 +4415,7 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: false,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -4483,7 +4504,7 @@ fn index_priority() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -4562,6 +4583,7 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -4592,6 +4614,7 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -4675,7 +4698,7 @@ fn index_priority() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -4754,6 +4777,7 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -4784,6 +4808,7 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -4874,7 +4899,7 @@ fn index_priority() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -4953,6 +4978,7 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -4983,6 +5009,7 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -5066,7 +5093,7 @@ fn index_priority() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -5145,6 +5172,7 @@ fn index_priority() -> anyhow::Result<()> {
                         origin: Some(
                             Cli,
                         ),
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -5175,6 +5203,7 @@ fn index_priority() -> anyhow::Result<()> {
                         explicit: false,
                         default: true,
                         origin: None,
+                        format: Simple,
                         publish_url: None,
                         authenticate: Auto,
                     },
@@ -5271,7 +5300,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -5400,7 +5429,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -5527,7 +5556,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -5656,7 +5685,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -5783,7 +5812,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {
@@ -5911,7 +5940,7 @@ fn verify_hashes() -> anyhow::Result<()> {
     ----- stdout -----
     GlobalSettings {
         required_version: None,
-        quiet: false,
+        quiet: 0,
         verbose: 0,
         color: Auto,
         network_settings: NetworkSettings {

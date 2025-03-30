@@ -111,7 +111,7 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
                 _ = sigterm_handle.recv() => {
                     // If the child has already exited, we can't send it signals
                     let Some(child_pid) = *ChildPid::from(&handle) else {
-                        debug!("Received SIGINT, but the child has already exited");
+                        debug!("Received SIGTERM, but the child has already exited");
                         continue;
                     };
 
