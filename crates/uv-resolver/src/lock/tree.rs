@@ -1,10 +1,11 @@
 use std::collections::{BTreeSet, VecDeque};
 
+use either::Either;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
-use petgraph::Direction;
+use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 use uv_configuration::DependencyGroupsWithDefaults;
@@ -43,110 +44,6 @@ impl<'env> TreeDisplay<'env> {
         no_dedupe: bool,
         invert: bool,
     ) -> Self {
-        // Create a graph.
-        let mut graph = petgraph::graph::Graph::<Node, Edge, petgraph::Directed>::new();
-
-        // Create the complete graph.
-        let mut inverse = FxHashMap::default();
-        for package in &lock.packages {
-            if prune.contains(&package.id.name) {
-                continue;
-            }
-
-            // Insert the package into the graph.
-            let package_node = if let Some(index) = inverse.get(&package.id) {
-                *index
-            } else {
-                let index = graph.add_node(Node::Package(&package.id));
-                inverse.insert(&package.id, index);
-                index
-            };
-
-            if dev.prod() {
-                for dependency in &package.dependencies {
-                    if markers.is_some_and(|markers| {
-                        !dependency.complexified_marker.evaluate_no_extras(markers)
-                    }) {
-                        continue;
-                    }
-
-                    // Insert the dependency into the graph.
-                    let dependency_node = if let Some(index) = inverse.get(&dependency.package_id) {
-                        *index
-                    } else {
-                        let index = graph.add_node(Node::Package(&dependency.package_id));
-                        inverse.insert(&dependency.package_id, index);
-                        index
-                    };
-
-                    // Add an edge between the package and the dependency.
-                    graph.add_edge(
-                        package_node,
-                        dependency_node,
-                        Edge::Prod(Some(&dependency.extra)),
-                    );
-                }
-            }
-
-            if dev.prod() {
-                for (extra, dependencies) in &package.optional_dependencies {
-                    for dependency in dependencies {
-                        if markers.is_some_and(|markers| {
-                            !dependency.complexified_marker.evaluate_no_extras(markers)
-                        }) {
-                            continue;
-                        }
-
-                        // Insert the dependency into the graph.
-                        let dependency_node =
-                            if let Some(index) = inverse.get(&dependency.package_id) {
-                                *index
-                            } else {
-                                let index = graph.add_node(Node::Package(&dependency.package_id));
-                                inverse.insert(&dependency.package_id, index);
-                                index
-                            };
-
-                        // Add an edge between the package and the dependency.
-                        graph.add_edge(
-                            package_node,
-                            dependency_node,
-                            Edge::Optional(extra, Some(&dependency.extra)),
-                        );
-                    }
-                }
-            }
-
-            for (group, dependencies) in &package.dependency_groups {
-                if dev.contains(group) {
-                    for dependency in dependencies {
-                        if markers.is_some_and(|markers| {
-                            !dependency.complexified_marker.evaluate_no_extras(markers)
-                        }) {
-                            continue;
-                        }
-
-                        // Insert the dependency into the graph.
-                        let dependency_node =
-                            if let Some(index) = inverse.get(&dependency.package_id) {
-                                *index
-                            } else {
-                                let index = graph.add_node(Node::Package(&dependency.package_id));
-                                inverse.insert(&dependency.package_id, index);
-                                index
-                            };
-
-                        // Add an edge between the package and the dependency.
-                        graph.add_edge(
-                            package_node,
-                            dependency_node,
-                            Edge::Dev(group, Some(&dependency.extra)),
-                        );
-                    }
-                }
-            }
-        }
-
         // Identify any workspace members.
         //
         // These include:
@@ -154,7 +51,7 @@ impl<'env> TreeDisplay<'env> {
         // - The root package, if it's not in the list of members. (The root package is omitted from
         //   the list of workspace members for single-member workspaces with a `[project]` section,
         //   to avoid cluttering the lockfile.
-        let members: FxHashSet<&PackageId> = if lock.members().is_empty() {
+        let members: BTreeSet<&PackageId> = if lock.members().is_empty() {
             lock.root().into_iter().map(|package| &package.id).collect()
         } else {
             lock.packages
@@ -169,6 +66,91 @@ impl<'env> TreeDisplay<'env> {
                 .collect()
         };
 
+        // Create a graph.
+        let size_guess = lock.packages.len();
+        let mut graph =
+            Graph::<Node, Edge, petgraph::Directed>::with_capacity(size_guess, size_guess);
+        let mut inverse = FxHashMap::with_capacity_and_hasher(size_guess, FxBuildHasher);
+        let mut queue: VecDeque<(&PackageId, Option<&ExtraName>)> = VecDeque::new();
+        let mut seen = FxHashSet::default();
+
+        let root = graph.add_node(Node::Root);
+
+        // Add the root packages to the graph.
+        for id in members.iter().copied() {
+            if prune.contains(&id.name) {
+                continue;
+            }
+
+            let dist = lock.find_by_id(id);
+
+            // Add the workspace package to the graph. Under `--only-group`, the workspace member
+            // may not be installed, but it's still relevant for the dependency tree, since we want
+            // to show the connection from the workspace package to the enabled dependency groups.
+            let index = *inverse
+                .entry(id)
+                .or_insert_with(|| graph.add_node(Node::Package(id)));
+
+            // Add an edge from the root.
+            graph.add_edge(root, index, Edge::Prod(None));
+
+            if dev.prod() {
+                // Push its dependencies on the queue.
+                if seen.insert((id, None)) {
+                    queue.push_back((id, None));
+                }
+
+                // Push any extras on the queue.
+                for extra in dist.optional_dependencies.keys() {
+                    if seen.insert((id, Some(extra))) {
+                        queue.push_back((id, Some(extra)));
+                    }
+                }
+            }
+
+            // Add any development dependencies.
+            for (group, dep) in dist
+                .dependency_groups
+                .iter()
+                .filter_map(|(group, deps)| {
+                    if dev.contains(group) {
+                        Some(deps.iter().map(move |dep| (group, dep)))
+                    } else {
+                        None
+                    }
+                })
+                .flatten()
+            {
+                if prune.contains(&dep.package_id.name) {
+                    continue;
+                }
+
+                if markers
+                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
+                {
+                    continue;
+                }
+
+                // Add the dependency to the graph and get its index.
+                let dep_index = *inverse
+                    .entry(&dep.package_id)
+                    .or_insert_with(|| graph.add_node(Node::Package(&dep.package_id)));
+
+                // Add an edge from the workspace package.
+                graph.add_edge(index, dep_index, Edge::Dev(group, Some(&dep.extra)));
+
+                // Push its dependencies on the queue.
+                if seen.insert((&dep.package_id, None)) {
+                    queue.push_back((&dep.package_id, None));
+                }
+                for extra in &dep.extra {
+                    if seen.insert((&dep.package_id, Some(extra))) {
+                        queue.push_back((&dep.package_id, Some(extra)));
+                    }
+                }
+            }
+        }
+
         // Identify any packages that are connected directly to the synthetic root node, i.e.,
         // requirements that are attached to the workspace itself.
         //
@@ -177,7 +159,6 @@ impl<'env> TreeDisplay<'env> {
         //    `[project]` table, since those roots are not workspace members, but they _can_ define
         //    dependencies.
         // - `dependencies` in PEP 723 scripts.
-        let root = graph.add_node(Node::Root);
         {
             // Index the lockfile by name.
             let by_name: FxHashMap<_, Vec<_>> = {
@@ -211,7 +192,18 @@ impl<'env> TreeDisplay<'env> {
                     if markers.is_some_and(|markers| !marker.evaluate(markers, &[])) {
                         continue;
                     }
-                    graph.add_edge(root, inverse[&package.id], Edge::Prod(None));
+                    // Add the package to the graph.
+                    let index = inverse
+                        .entry(&package.id)
+                        .or_insert_with(|| graph.add_node(Node::Package(&package.id)));
+
+                    // Add an edge from the root.
+                    graph.add_edge(root, *index, Edge::Prod(None));
+
+                    // Push its dependencies on the queue.
+                    if seen.insert((&package.id, None)) {
+                        queue.push_back((&package.id, None));
+                    }
                 }
             }
 
@@ -237,7 +229,74 @@ impl<'env> TreeDisplay<'env> {
                         if markers.is_some_and(|markers| !marker.evaluate(markers, &[])) {
                             continue;
                         }
-                        graph.add_edge(root, inverse[&package.id], Edge::Dev(group, None));
+                        // Add the package to the graph.
+                        let index = inverse
+                            .entry(&package.id)
+                            .or_insert_with(|| graph.add_node(Node::Package(&package.id)));
+
+                        // Add an edge from the root.
+                        graph.add_edge(root, *index, Edge::Dev(group, None));
+
+                        // Push its dependencies on the queue.
+                        if seen.insert((&package.id, None)) {
+                            queue.push_back((&package.id, None));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Create all the relevant nodes.
+        while let Some((id, extra)) = queue.pop_front() {
+            let index = inverse[&id];
+            let package = lock.find_by_id(id);
+
+            let deps = if let Some(extra) = extra {
+                Either::Left(
+                    package
+                        .optional_dependencies
+                        .get(extra)
+                        .into_iter()
+                        .flatten(),
+                )
+            } else {
+                Either::Right(package.dependencies.iter())
+            };
+
+            for dep in deps {
+                if prune.contains(&dep.package_id.name) {
+                    continue;
+                }
+
+                if markers
+                    .is_some_and(|markers| !dep.complexified_marker.evaluate_no_extras(markers))
+                {
+                    continue;
+                }
+
+                // Add the dependency to the graph.
+                let dep_index = *inverse
+                    .entry(&dep.package_id)
+                    .or_insert_with(|| graph.add_node(Node::Package(&dep.package_id)));
+
+                // Add an edge from the workspace package.
+                graph.add_edge(
+                    index,
+                    dep_index,
+                    if let Some(extra) = extra {
+                        Edge::Optional(extra, Some(&dep.extra))
+                    } else {
+                        Edge::Prod(Some(&dep.extra))
+                    },
+                );
+
+                // Push its dependencies on the queue.
+                if seen.insert((&dep.package_id, None)) {
+                    queue.push_back((&dep.package_id, None));
+                }
+                for extra in &dep.extra {
+                    if seen.insert((&dep.package_id, Some(extra))) {
+                        queue.push_back((&dep.package_id, Some(extra)));
                     }
                 }
             }
