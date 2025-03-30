@@ -75,12 +75,9 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
             if dev.prod() {
                 // Add the workspace package to the graph.
-                if let Entry::Vacant(entry) = inverse.entry(&dist.id) {
-                    entry.insert(graph.add_node(Node::Package(dist)));
-                }
-
-                // Add an edge from the root.
-                let index = inverse[&dist.id];
+                let index = *inverse
+                    .entry(&dist.id)
+                    .or_insert_with(|| graph.add_node(Node::Package(dist)));
                 graph.add_edge(root, index, Edge::Prod(MarkerTree::TRUE));
 
                 // Push its dependencies on the queue.
@@ -126,14 +123,13 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 let dep_dist = target.lock().find_by_id(&dep.package_id);
 
                 // Add the dependency to the graph.
-                if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
-                    entry.insert(graph.add_node(Node::Package(dep_dist)));
-                }
+                let dep_index = *inverse
+                    .entry(&dep.package_id)
+                    .or_insert_with(|| graph.add_node(Node::Package(dep_dist)));
 
                 // Add an edge from the root. Development dependencies may be installed without
                 // installing the workspace package itself (which can never have markers on it
                 // anyway), so they're directly connected to the root.
-                let dep_index = inverse[&dep.package_id];
                 graph.add_edge(
                     root,
                     dep_index,
@@ -215,13 +211,12 @@ impl<'lock> RequirementsTxtExport<'lock> {
                     // Simplify the marker.
                     let marker = target.lock().simplify_environment(marker);
 
-                    // Add the dependency to the graph.
-                    if let Entry::Vacant(entry) = inverse.entry(&dist.id) {
-                        entry.insert(graph.add_node(Node::Package(dist)));
-                    }
+                    // Add the dependency to the graph and get its index.
+                    let dep_index = *inverse
+                        .entry(&dist.id)
+                        .or_insert_with(|| graph.add_node(Node::Package(dist)));
 
                     // Add an edge from the root.
-                    let dep_index = inverse[&dist.id];
                     graph.add_edge(root, dep_index, Edge::Prod(marker));
 
                     // Push its dependencies on the queue.
@@ -262,12 +257,11 @@ impl<'lock> RequirementsTxtExport<'lock> {
                 let dep_dist = target.lock().find_by_id(&dep.package_id);
 
                 // Add the dependency to the graph.
-                if let Entry::Vacant(entry) = inverse.entry(&dep.package_id) {
-                    entry.insert(graph.add_node(Node::Package(dep_dist)));
-                }
+                let dep_index = *inverse
+                    .entry(&dep.package_id)
+                    .or_insert_with(|| graph.add_node(Node::Package(dep_dist)));
 
-                // Add the edge.
-                let dep_index = inverse[&dep.package_id];
+                // Add an edge from the dependency.
                 graph.add_edge(
                     index,
                     dep_index,
