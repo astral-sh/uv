@@ -12,6 +12,10 @@
 - Support `--find-links`-style "flat" indexes in `[[tool.uv.index]]` ([#12407](https://github.com/astral-sh/uv/pull/12407))
 - Distinguish between `-q` and `-qq` ([#12300](https://github.com/astral-sh/uv/pull/12300))
 
+### Configuration
+
+- Support `UV_PROJECT` environment to set project directory. ([#12327](https://github.com/astral-sh/uv/pull/12327))
+
 ### Performance
 
 - Use a boxed slice for various requirement types ([#12514](https://github.com/astral-sh/uv/pull/12514))
