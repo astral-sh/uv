@@ -3,6 +3,26 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.6.11
+
+### Enhancements
+
+- Add dependents ("via ..." comments) in `uv export` command ([#12350](https://github.com/astral-sh/uv/pull/12350))
+- Bump least-recent non-EOL macOS version to 13.0 ([#12518](https://github.com/astral-sh/uv/pull/12518))
+- Support `--find-links`-style "flat" indexes in `[[tool.uv.index]]` ([#12407](https://github.com/astral-sh/uv/pull/12407))
+- Distinguish between `-q` and `-qq` ([#12300](https://github.com/astral-sh/uv/pull/12300))
+
+### Performance
+
+- Use a boxed slice for various requirement types ([#12514](https://github.com/astral-sh/uv/pull/12514))
+
+### Bug fixes
+
+- Add a newline after metadata when initializing scripts with other metadata blocks ([#12501](https://github.com/astral-sh/uv/pull/12501))
+- Avoid writing empty `requires-python` to script blocks ([#12517](https://github.com/astral-sh/uv/pull/12517))
+- Respect build constraints in `uv sync` ([#12502](https://github.com/astral-sh/uv/pull/12502))
+- Respect transitive dependencies in `uv tree --only-group` ([#12560](https://github.com/astral-sh/uv/pull/12560))
+
 ## 0.6.10
 
 ### Enhancements
