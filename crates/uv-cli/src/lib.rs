@@ -319,7 +319,7 @@ pub struct GlobalArgs {
     /// See `--directory` to change the working directory entirely.
     ///
     /// This setting has no effect when used in the `uv pip` interface.
-    #[arg(global = true, long)]
+    #[arg(global = true, long, env = EnvVars::UV_PROJECT)]
     pub project: Option<PathBuf>,
 }
 

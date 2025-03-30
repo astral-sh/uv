@@ -274,6 +274,10 @@ Equivalent to the `--prerelease` command-line argument. For example, if set to
 
 Equivalent to the `--preview` argument. Enables preview mode.
 
+### `UV_PROJECT`
+
+Equivalent to the `--project` command-line argument.
+
 ### `UV_PROJECT_ENVIRONMENT`
 
 Specifies the path to the directory to use for a project virtual environment.
