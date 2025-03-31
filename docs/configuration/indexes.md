@@ -230,13 +230,13 @@ By default, `[[tool.uv.index]]` entries are assumed to be PyPI-style registries 
 indexes, which are local directories or HTML pages that contain flat lists of wheels and source
 distributions. In pip, such indexes are specified using the `--find-links` option.
 
-To define a flat index in your `pyproject.toml`, use the `kind = "flat"` option:
+To define a flat index in your `pyproject.toml`, use the `format = "flat"` option:
 
 ```toml
 [[tool.uv.index]]
 name = "example"
 url = "/path/to/directory"
-kind = "flat"
+format = "flat"
 ```
 
 Flat indexes support the same feature set as Simple Repository API indexes (e.g.,
