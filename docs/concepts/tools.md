@@ -203,6 +203,16 @@ $ uvx --with <extra-package>==<version> <tool-package>
 If the requested version conflicts with the requirements of the tool package, package resolution
 will fail and the command will error.
 
+## Python versions
+
+Each tool's virtual environment will be linked to a particular Python version. This uses the same
+Python version [discovery logic](./python-versions.md#discovery-of-python-versions) as other virtual
+environments created by uv.
+
+If more control is needed, you can use the `--python` option to specify a version and
+`--python-preference` option to set a preference for system or managed versions. See the
+[Python Versions concept](./python-versions.md) page for further information.
+
 ## Tool executables
 
 Tool executables include all console entry points, script entry points, and binary scripts provided
