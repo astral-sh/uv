@@ -858,6 +858,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         version = "0.0.0"
 
         [tool.uv.pip]
+        python-platform = "x86_64-unknown-linux-gnu"
         resolution = "lowest-direct"
         generate-hashes = true
         index-url = "https://pypi.org/simple"
@@ -997,7 +998,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 {},
             ),
             python_version: None,
-            python_platform: None,
+            python_platform: Some(
+                X8664UnknownLinuxGnu,
+            ),
             universal: false,
             exclude_newer: None,
             no_emit_package: [],
