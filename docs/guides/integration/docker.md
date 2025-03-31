@@ -373,18 +373,31 @@ WORKDIR /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project
+    uv sync --frozen --no-install-project --link-mode=copy --compile-bytecode
 
 # Copy the project into the image
 ADD . /app
 
 # Sync the project
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=README.md,target=README.md \
+    uv sync --frozen --link-mode=copy --compile-bytecode
 ```
 
-Note that the `pyproject.toml` is required to identify the project root and name, but the project
-_contents_ are not copied into the image until the final `uv sync` command.
+!!! note Explanation
+
+    * The `pyproject.toml` is required to identify the project root and name, but the project
+      _contents_ are not copied into the image until the final `uv sync` command.
+    * The `README.md` is required if your `pyproject.toml` references it in the `project.readme`
+      key. Update this if your configuration references a different file (or remove it if your
+      `pyproject.toml` references no readme).
+    * Uv by default hardlinks files from the cache directory into the virtual environment. The
+      cache directory here is only mounted at build time, which Uv will detect and fall back to
+      copy the files, but issue a warning. Hence, we tell Uv explicitly to copy files instead of
+      linking them with `--link-mode=copy`.
+    * Adding `--compile-bytecode` improves the startup performance of your project.
 
 !!! tip
 
