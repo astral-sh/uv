@@ -2270,8 +2270,8 @@ pub struct BuildArgs {
     /// directory if no source directory is provided.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long, conflicts_with("all_packages"))]
-    pub package: Option<PackageName>,
+    #[arg(long, conflicts_with("all_packages"), alias = "package")]
+    pub packages: Vec<PackageName>,
 
     /// Builds all packages in the workspace.
     ///
@@ -2279,7 +2279,7 @@ pub struct BuildArgs {
     /// directory if no source directory is provided.
     ///
     /// If the workspace member does not exist, uv will exit with an error.
-    #[arg(long, alias = "all", conflicts_with("package"))]
+    #[arg(long, alias = "all", conflicts_with("packages"))]
     pub all_packages: bool,
 
     /// The output directory to which distributions should be written.
