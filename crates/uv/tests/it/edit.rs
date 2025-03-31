@@ -4821,6 +4821,152 @@ fn add_group() -> Result<()> {
     Ok(())
 }
 
+/// Normalize group names when adding or removing.
+#[test]
+fn add_group_normalize() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        cloud_export_to_parquet = [
+            "anyio==3.7.0",
+        ]
+    "#})?;
+
+    // Add with a non-normalized group name.
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--group").arg("cloud_export_to_parquet"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    assert_snapshot!(pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
+
+    [dependency-groups]
+    cloud_export_to_parquet = [
+        "anyio==3.7.0",
+        "iniconfig>=2.0.0",
+    ]
+    "#
+    );
+
+    // Add with a normalized group name (which doesn't match the `pyproject.toml`).
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--group").arg("cloud-export-to-parquet"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    assert_snapshot!(pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
+
+    [dependency-groups]
+    cloud_export_to_parquet = [
+        "anyio==3.7.0",
+        "iniconfig>=2.0.0",
+        "typing-extensions>=4.10.0",
+    ]
+    "#
+    );
+
+    // Remove with a non-normalized group name.
+    uv_snapshot!(context.filters(), context.remove().arg("iniconfig").arg("--group").arg("cloud_export_to_parquet"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Uninstalled 5 packages in [TIME]
+     - anyio==3.7.0
+     - idna==3.6
+     - iniconfig==2.0.0
+     - sniffio==1.3.1
+     - typing-extensions==4.10.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    assert_snapshot!(pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
+
+    [dependency-groups]
+    cloud_export_to_parquet = [
+        "anyio==3.7.0",
+        "typing-extensions>=4.10.0",
+    ]
+    "#
+    );
+
+    // Remove with a normalized group name (which doesn't match the `pyproject.toml`).
+    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions").arg("--group").arg("cloud-export-to-parquet"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Audited in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    assert_snapshot!(pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
+
+    [dependency-groups]
+    cloud_export_to_parquet = [
+        "anyio==3.7.0",
+    ]
+    "#
+    );
+
+    Ok(())
+}
+
 /// Add a requirement to a dependency group (sorted before the other groups).
 #[test]
 fn add_group_before_commented_groups() -> Result<()> {
@@ -10344,6 +10490,149 @@ fn add_ambiguous() -> Result<()> {
     - `anyio>=4.1.0`
     - `anyio>=4.2.0`
     "###);
+
+    Ok(())
+}
+
+/// Normalize extra names when adding or removing.
+#[test]
+fn add_optional_normalize() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.optional-dependencies]
+        cloud_export_to_parquet = [
+            "anyio==3.7.0",
+        ]
+    "#})?;
+
+    // Add with a non-normalized group name.
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--optional").arg("cloud_export_to_parquet"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    assert_snapshot!(pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
+
+    [project.optional-dependencies]
+    cloud_export_to_parquet = [
+        "anyio==3.7.0",
+        "iniconfig>=2.0.0",
+    ]
+    "#
+    );
+
+    // Add with a normalized group name (which doesn't match the `pyproject.toml`).
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions").arg("--optional").arg("cloud-export-to-parquet"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    assert_snapshot!(pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
+
+    [project.optional-dependencies]
+    cloud_export_to_parquet = [
+        "anyio==3.7.0",
+        "iniconfig>=2.0.0",
+        "typing-extensions>=4.10.0",
+    ]
+    "#
+    );
+
+    // Remove with a non-normalized group name.
+    uv_snapshot!(context.filters(), context.remove().arg("iniconfig").arg("--optional").arg("cloud_export_to_parquet"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    assert_snapshot!(pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
+
+    [project.optional-dependencies]
+    cloud_export_to_parquet = [
+        "anyio==3.7.0",
+        "typing-extensions>=4.10.0",
+    ]
+    "#
+    );
+
+    // Remove with a normalized group name (which doesn't match the `pyproject.toml`).
+    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions").arg("--optional").arg("cloud-export-to-parquet"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - typing-extensions==4.10.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    assert_snapshot!(pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = []
+
+    [project.optional-dependencies]
+    cloud_export_to_parquet = [
+        "anyio==3.7.0",
+    ]
+    "#
+    );
 
     Ok(())
 }

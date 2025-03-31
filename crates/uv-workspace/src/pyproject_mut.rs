@@ -406,11 +406,24 @@ impl PyProjectTomlMut {
             .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let group = optional_dependencies
-            .entry(group.as_ref())
-            .or_insert(Item::Value(Value::Array(Array::new())))
-            .as_array_mut()
-            .ok_or(Error::MalformedDependencies)?;
+        // Try to find the existing group.
+        let existing_group = optional_dependencies.iter_mut().find_map(|(key, value)| {
+            if ExtraName::from_str(key.get()).is_ok_and(|g| g == *group) {
+                Some(value)
+            } else {
+                None
+            }
+        });
+
+        // If the group doesn't exist, create it.
+        let group = match existing_group {
+            Some(value) => value,
+            None => optional_dependencies
+                .entry(group.as_ref())
+                .or_insert(Item::Value(Value::Array(Array::new()))),
+        }
+        .as_array_mut()
+        .ok_or(Error::MalformedDependencies)?;
 
         let added = add_dependency(req, group, source.is_some())?;
 
@@ -457,11 +470,24 @@ impl PyProjectTomlMut {
             .map(|k| k.get())
             .is_sorted();
 
-        let group = dependency_groups
-            .entry(group.as_ref())
-            .or_insert(Item::Value(Value::Array(Array::new())))
-            .as_array_mut()
-            .ok_or(Error::MalformedDependencies)?;
+        // Try to find the existing group.
+        let existing_group = dependency_groups.iter_mut().find_map(|(key, value)| {
+            if GroupName::from_str(key.get()).is_ok_and(|g| g == *group) {
+                Some(value)
+            } else {
+                None
+            }
+        });
+
+        // If the group doesn't exist, create it.
+        let group = match existing_group {
+            Some(value) => value,
+            None => dependency_groups
+                .entry(group.as_ref())
+                .or_insert(Item::Value(Value::Array(Array::new()))),
+        }
+        .as_array_mut()
+        .ok_or(Error::MalformedDependencies)?;
 
         let added = add_dependency(req, group, source.is_some())?;
 
@@ -573,11 +599,24 @@ impl PyProjectTomlMut {
             .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let group = optional_dependencies
-            .entry(group.as_ref())
-            .or_insert(Item::Value(Value::Array(Array::new())))
-            .as_array_mut()
-            .ok_or(Error::MalformedDependencies)?;
+        // Try to find the existing group.
+        let existing_group = optional_dependencies.iter_mut().find_map(|(key, value)| {
+            if ExtraName::from_str(key.get()).is_ok_and(|g| g == *group) {
+                Some(value)
+            } else {
+                None
+            }
+        });
+
+        // If the group doesn't exist, create it.
+        let group = match existing_group {
+            Some(value) => value,
+            None => optional_dependencies
+                .entry(group.as_ref())
+                .or_insert(Item::Value(Value::Array(Array::new()))),
+        }
+        .as_array_mut()
+        .ok_or(Error::MalformedDependencies)?;
 
         let Some(req) = group.get(index) else {
             return Err(Error::MissingDependency(index));
@@ -610,11 +649,24 @@ impl PyProjectTomlMut {
             .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let group = dependency_groups
-            .entry(group.as_ref())
-            .or_insert(Item::Value(Value::Array(Array::new())))
-            .as_array_mut()
-            .ok_or(Error::MalformedDependencies)?;
+        // Try to find the existing group.
+        let existing_group = dependency_groups.iter_mut().find_map(|(key, value)| {
+            if GroupName::from_str(key.get()).is_ok_and(|g| g == *group) {
+                Some(value)
+            } else {
+                None
+            }
+        });
+
+        // If the group doesn't exist, create it.
+        let group = match existing_group {
+            Some(value) => value,
+            None => dependency_groups
+                .entry(group.as_ref())
+                .or_insert(Item::Value(Value::Array(Array::new()))),
+        }
+        .as_array_mut()
+        .ok_or(Error::MalformedDependencies)?;
 
         let Some(req) = group.get(index) else {
             return Err(Error::MissingDependency(index));
@@ -724,7 +776,15 @@ impl PyProjectTomlMut {
                     .ok_or(Error::MalformedDependencies)
             })
             .transpose()?
-            .and_then(|extras| extras.get_mut(group.as_ref()))
+            .and_then(|extras| {
+                extras.iter_mut().find_map(|(key, value)| {
+                    if ExtraName::from_str(key.get()).is_ok_and(|g| g == *group) {
+                        Some(value)
+                    } else {
+                        None
+                    }
+                })
+            })
             .map(|dependencies| {
                 dependencies
                     .as_array_mut()
@@ -757,7 +817,15 @@ impl PyProjectTomlMut {
                     .ok_or(Error::MalformedDependencies)
             })
             .transpose()?
-            .and_then(|groups| groups.get_mut(group.as_ref()))
+            .and_then(|groups| {
+                groups.iter_mut().find_map(|(key, value)| {
+                    if GroupName::from_str(key.get()).is_ok_and(|g| g == *group) {
+                        Some(value)
+                    } else {
+                        None
+                    }
+                })
+            })
             .map(|dependencies| {
                 dependencies
                     .as_array_mut()
