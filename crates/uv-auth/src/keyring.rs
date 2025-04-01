@@ -80,7 +80,7 @@ impl KeyringProvider {
             };
         }
 
-        credentials.map(|(username, password)| Credentials::new(Some(username), Some(password)))
+        credentials.map(|(username, password)| Credentials::basic(Some(username), Some(password)))
     }
 
     #[instrument(skip(self))]
@@ -265,7 +265,7 @@ mod tests {
         let keyring = KeyringProvider::dummy([(url.host_str().unwrap(), "user", "password")]);
         assert_eq!(
             keyring.fetch(&url, Some("user")).await,
-            Some(Credentials::new(
+            Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("password".to_string())
             ))
@@ -274,7 +274,7 @@ mod tests {
             keyring
                 .fetch(&url.join("test").unwrap(), Some("user"))
                 .await,
-            Some(Credentials::new(
+            Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("password".to_string())
             ))
@@ -298,21 +298,21 @@ mod tests {
         ]);
         assert_eq!(
             keyring.fetch(&url.join("foo").unwrap(), Some("user")).await,
-            Some(Credentials::new(
+            Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("password".to_string())
             ))
         );
         assert_eq!(
             keyring.fetch(&url, Some("user")).await,
-            Some(Credentials::new(
+            Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("other-password".to_string())
             ))
         );
         assert_eq!(
             keyring.fetch(&url.join("bar").unwrap(), Some("user")).await,
-            Some(Credentials::new(
+            Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("other-password".to_string())
             ))
@@ -326,7 +326,7 @@ mod tests {
         let credentials = keyring.fetch(&url, Some("user")).await;
         assert_eq!(
             credentials,
-            Some(Credentials::new(
+            Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("password".to_string())
             ))
@@ -340,7 +340,7 @@ mod tests {
         let credentials = keyring.fetch(&url, None).await;
         assert_eq!(
             credentials,
-            Some(Credentials::new(
+            Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("password".to_string())
             ))
