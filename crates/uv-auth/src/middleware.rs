@@ -397,7 +397,7 @@ impl AuthMiddleware {
             None
         } else if let Some(credentials) = self
             .cache()
-            .get_url(request.url(), credentials.as_username())
+            .get_url(request.url(), credentials.as_username().as_ref())
         {
             request = credentials.authenticate(request);
             // Do not insert already-cached credentials
@@ -653,7 +653,7 @@ mod tests {
         let cache = CredentialsCache::new();
         cache.insert(
             &base_url,
-            Arc::new(Credentials::new(
+            Arc::new(Credentials::basic(
                 Some(username.to_string()),
                 Some(password.to_string()),
             )),
@@ -707,7 +707,7 @@ mod tests {
         let cache = CredentialsCache::new();
         cache.insert(
             &base_url,
-            Arc::new(Credentials::new(Some(username.to_string()), None)),
+            Arc::new(Credentials::basic(Some(username.to_string()), None)),
         );
 
         let client = test_client_builder()
@@ -1097,7 +1097,7 @@ mod tests {
         // URL.
         cache.insert(
             &base_url,
-            Arc::new(Credentials::new(Some(username.to_string()), None)),
+            Arc::new(Credentials::basic(Some(username.to_string()), None)),
         );
         let client = test_client_builder()
             .with(AuthMiddleware::new().with_cache(cache).with_keyring(Some(
@@ -1146,14 +1146,14 @@ mod tests {
         // Seed the cache with our credentials
         cache.insert(
             &base_url_1,
-            Arc::new(Credentials::new(
+            Arc::new(Credentials::basic(
                 Some(username_1.to_string()),
                 Some(password_1.to_string()),
             )),
         );
         cache.insert(
             &base_url_2,
-            Arc::new(Credentials::new(
+            Arc::new(Credentials::basic(
                 Some(username_2.to_string()),
                 Some(password_2.to_string()),
             )),
@@ -1341,14 +1341,14 @@ mod tests {
         // Seed the cache with our credentials
         cache.insert(
             &base_url_1,
-            Arc::new(Credentials::new(
+            Arc::new(Credentials::basic(
                 Some(username_1.to_string()),
                 Some(password_1.to_string()),
             )),
         );
         cache.insert(
             &base_url_2,
-            Arc::new(Credentials::new(
+            Arc::new(Credentials::basic(
                 Some(username_2.to_string()),
                 Some(password_2.to_string()),
             )),
