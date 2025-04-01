@@ -198,9 +198,9 @@ dependencies = [
 The `tool.uv.sources` table extends the standard dependency tables with alternative dependency
 sources, which are used during development.
 
-Dependency sources add support for common patterns that are not supported by the `project.dependencies`
-standard, like editable installations and relative paths. For example, to install `foo` from a
-directory relative to the project root:
+Dependency sources add support for common patterns that are not supported by the
+`project.dependencies` standard, like editable installations and relative paths. For example, to
+install `foo` from a directory relative to the project root:
 
 ```toml title="pyproject.toml" hl_lines="7"
 [project]
