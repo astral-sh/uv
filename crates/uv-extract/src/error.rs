@@ -14,7 +14,7 @@ pub enum Error {
     NonSingularArchive(Vec<OsString>),
     #[error("The top-level of the archive must only contain a list directory, but it's empty")]
     EmptyArchive,
-    #[error("Bad CRC (got {computed:08x}, expected {expected:08x}): {}", path.display())]
+    #[error("Bad CRC (got {computed:08x}, expected {expected:08x}) for file: {}", path.display())]
     BadCrc32 {
         path: PathBuf,
         computed: u32,
