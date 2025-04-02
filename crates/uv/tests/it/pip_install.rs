@@ -8889,6 +8889,8 @@ fn missing_subdirectory_url() -> Result<()> {
     Ok(())
 }
 
+// This wheel was uploaded with a bad crc32 and we weren't detecting that
+// (Could be replaced with a checked-in hand-crafted corrupt wheel?)
 #[test]
 fn bad_crc32() -> Result<()> {
     let context = TestContext::new("3.11");
