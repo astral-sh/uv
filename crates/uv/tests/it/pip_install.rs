@@ -8889,6 +8889,32 @@ fn missing_subdirectory_url() -> Result<()> {
     Ok(())
 }
 
+// This wheel was uploaded with a bad crc32 and we weren't detecting that
+// (Could be replaced with a checked-in hand-crafted corrupt wheel?)
+#[test]
+fn bad_crc32() -> Result<()> {
+    let context = TestContext::new("3.11");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("--python-platform").arg("linux")
+        .arg("osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+      × Failed to download `osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl`
+      ├─▶ Failed to extract archive
+      ╰─▶ Bad CRC (got ca5f1131, expected d5c95dfa): osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
+    "
+    );
+
+    Ok(())
+}
+
 #[test]
 fn static_metadata_pyproject_toml() -> Result<()> {
     let context = TestContext::new("3.12");

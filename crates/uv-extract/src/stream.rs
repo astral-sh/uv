@@ -52,7 +52,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
         let path = entry.reader().entry().filename().as_str()?;
 
         // Sanitize the file name to prevent directory traversal attacks.
-        let Some(path) = enclosed_name(path) else {
+        let Some(relpath) = enclosed_name(path) else {
             warn!("Skipping unsafe file name: {path}");
 
             // Close current file prior to proceeding, as per:
@@ -60,7 +60,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             zip = entry.skip().await?;
             continue;
         };
-        let path = target.join(path);
+        let path = target.join(&relpath);
         let is_dir = entry.reader().entry().dir()?;
 
         // Either create the directory or write the file to disk.
@@ -85,6 +85,19 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             };
             let mut reader = entry.reader_mut().compat();
             tokio::io::copy(&mut reader, &mut writer).await?;
+
+            // Validate the CRC of any file we unpack
+            // (It would be nice if async_zip made it harder to Not do this...)
+            let reader = reader.into_inner();
+            let computed = reader.compute_hash();
+            let expected = reader.entry().crc32();
+            if computed != expected {
+                return Err(Error::BadCrc32 {
+                    path: relpath,
+                    computed,
+                    expected,
+                });
+            }
         }
 
         // Close current file prior to proceeding, as per:

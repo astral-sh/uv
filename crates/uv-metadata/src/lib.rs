@@ -33,6 +33,12 @@ pub enum Error {
     InvalidName(#[from] InvalidNameError),
     #[error("The metadata at {0} is invalid")]
     InvalidMetadata(String, Box<uv_pypi_types::MetadataError>),
+    #[error("Bad CRC (got {computed:08x}, expected {expected:08x}): {path}")]
+    BadCrc32 {
+        path: String,
+        computed: u32,
+        expected: u32,
+    },
     #[error("Failed to read from zip file")]
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to read from zip file")]
@@ -239,12 +245,25 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
 
     while let Some(mut entry) = zip.next_with_entry().await? {
         // Find the `METADATA` entry.
-        let path = entry.reader().entry().filename().as_str()?;
+        let path = entry.reader().entry().filename().as_str()?.to_owned();
 
-        if is_metadata_entry(path, filename)? {
+        if is_metadata_entry(&path, filename)? {
             let mut reader = entry.reader_mut().compat();
             let mut contents = Vec::new();
             reader.read_to_end(&mut contents).await.unwrap();
+
+            // Validate the CRC of any file we unpack
+            // (It would be nice if async_zip made it harder to Not do this...)
+            let reader = reader.into_inner();
+            let computed = reader.compute_hash();
+            let expected = reader.entry().crc32();
+            if computed != expected {
+                return Err(Error::BadCrc32 {
+                    path,
+                    computed,
+                    expected,
+                });
+            }
 
             let metadata = ResolutionMetadata::parse_metadata(&contents)
                 .map_err(|err| Error::InvalidMetadata(debug_path.to_string(), Box::new(err)))?;
