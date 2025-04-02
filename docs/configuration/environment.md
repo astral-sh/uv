@@ -115,7 +115,7 @@ space-separated list of URLs as additional indexes when searching for packages.
 
 Equivalent to the `--index-strategy` command-line argument.
 
-For example, if set to `unsafe-any-match`, uv will consider versions of a given package
+For example, if set to `unsafe-best-match`, uv will consider versions of a given package
 available across all index URLs, rather than limiting its search to the first index URL
 that contains the package.
 
