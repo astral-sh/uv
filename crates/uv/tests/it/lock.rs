@@ -18869,6 +18869,13 @@ fn lock_keyring_explicit_always() -> Result<()> {
                 .join("packages")
                 .join("keyring_test_plugin"),
         )
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        // (from `echo "keyring==v25.6.0" | uv pip compile - --no-annotate --no-header -q`)
+        .arg("jaraco-classes==3.4.0")
+        .arg("jaraco-context==6.0.1")
+        .arg("jaraco-functools==4.1.0")
+        .arg("keyring==25.6.0")
+        .arg("more-itertools==10.6.0")
         .assert()
         .success();
 
@@ -18906,6 +18913,8 @@ fn lock_keyring_explicit_always() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
+    Request for https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/
+    Request for pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
@@ -18916,15 +18925,14 @@ fn lock_keyring_explicit_always() -> Result<()> {
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
-    success: false
-    exit_code: 1
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
-
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    Request for https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/
+    Request for pypi-proxy.fly.dev
+    Resolved 2 packages in [TIME]
     ");
 
     Ok(())
