@@ -492,6 +492,10 @@ impl EnvVars {
     #[attr_hidden]
     pub const GIT_SSL_NO_VERIFY: &'static str = "GIT_SSL_NO_VERIFY";
 
+    /// Set allowed protocols for git operations.
+    #[attr_hidden]
+    pub const GIT_ALLOW_PROTOCOL: &'static str = "GIT_ALLOW_PROTOCOL";
+
     /// Disable interactive git prompts in terminals, e.g., for credentials. Does not disable
     /// GUI prompts.
     #[attr_hidden]

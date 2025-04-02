@@ -109,6 +109,7 @@ impl GitResolver {
         url: &GitUrl,
         client: ClientWithMiddleware,
         disable_ssl: bool,
+        offline: bool,
         cache: PathBuf,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Fetch, GitResolverError> {
@@ -138,9 +139,9 @@ impl GitResolver {
 
         // Fetch the Git repository.
         let source = if let Some(reporter) = reporter {
-            GitSource::new(url.as_ref().clone(), client, cache).with_reporter(reporter)
+            GitSource::new(url.as_ref().clone(), client, cache, offline).with_reporter(reporter)
         } else {
-            GitSource::new(url.as_ref().clone(), client, cache)
+            GitSource::new(url.as_ref().clone(), client, cache, offline)
         };
 
         // If necessary, disable SSL.

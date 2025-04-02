@@ -3294,6 +3294,27 @@ fn install_constraints_respects_offline_mode() {
     );
 }
 
+#[test]
+#[cfg(feature = "git")]
+fn install_git_source_respects_offline_mode() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+            .arg("--offline")
+            .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage`
+      ├─▶ Git operation failed
+      ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
+      ╰─▶ Network connectivity is disabled for Git operations. Local file-based paths are still allowed (via GIT_ALLOW_PROTOCOL=file)
+    "###
+    );
+}
+
 /// Test that constraint markers are respected when validating the current environment (i.e., we
 /// skip resolution entirely).
 #[test]
