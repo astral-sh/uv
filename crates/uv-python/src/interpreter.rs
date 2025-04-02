@@ -54,6 +54,7 @@ pub struct Interpreter {
     prefix: Option<Prefix>,
     pointer_size: PointerSize,
     gil_disabled: bool,
+    real_executable: PathBuf,
 }
 
 impl Interpreter {
@@ -86,6 +87,7 @@ impl Interpreter {
             tags: OnceLock::new(),
             target: None,
             prefix: None,
+            real_executable: executable.as_ref().to_path_buf(),
         })
     }
 
@@ -391,6 +393,11 @@ impl Interpreter {
     /// Return the `sys.executable` path for this Python interpreter.
     pub fn sys_executable(&self) -> &Path {
         &self.sys_executable
+    }
+
+    /// Return the "real" queried executable path for this Python interpreter.
+    pub fn real_executable(&self) -> &Path {
+        &self.real_executable
     }
 
     /// Return the `sys.path` for this Python interpreter.

@@ -148,7 +148,7 @@ pub(crate) async fn list(
             output.insert((
                 installation.key(),
                 kind,
-                Either::Left(installation.interpreter().sys_executable().to_path_buf()),
+                Either::Left(installation.interpreter().real_executable().to_path_buf()),
             ));
         }
     }
