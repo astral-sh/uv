@@ -8907,8 +8907,8 @@ fn bad_crc32() -> Result<()> {
     ----- stderr -----
     Resolved 7 packages in [TIME]
       × Failed to download `osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl`
-      ├─▶ Failed to extract archive
-      ╰─▶ Bad CRC (got ca5f1131, expected d5c95dfa): osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
+      ├─▶ Failed to extract archive: osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+      ╰─▶ Bad CRC (got ca5f1131, expected d5c95dfa) for file: osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
     "
     );
 

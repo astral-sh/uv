@@ -2089,7 +2089,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Download and unzip the source distribution into a temporary directory.
         let span = info_span!("download_source_dist", source_dist = %source);
-        uv_extract::stream::archive(&mut hasher, ext, temp_dir.path()).await?;
+        uv_extract::stream::archive(&mut hasher, ext, temp_dir.path())
+            .await
+            .map_err(|err| Error::Extract(source.to_string(), err))?;
         drop(span);
 
         // If necessary, exhaust the reader to compute the hash.
@@ -2103,7 +2105,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let extracted = match uv_extract::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
             Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.into_path(),
-            Err(err) => return Err(err.into()),
+            Err(err) => {
+                return Err(Error::Extract(
+                    temp_dir.path().to_string_lossy().into_owned(),
+                    err,
+                ))
+            }
         };
 
         // Persist it to the cache.
@@ -2151,7 +2158,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
         // Unzip the archive into a temporary directory.
-        uv_extract::stream::archive(&mut hasher, ext, &temp_dir.path()).await?;
+        uv_extract::stream::archive(&mut hasher, ext, &temp_dir.path())
+            .await
+            .map_err(|err| Error::Extract(temp_dir.path().to_string_lossy().into_owned(), err))?;
 
         // If necessary, exhaust the reader to compute the hash.
         if !algorithms.is_empty() {
@@ -2164,7 +2173,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let extracted = match uv_extract::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
             Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
-            Err(err) => return Err(err.into()),
+            Err(err) => {
+                return Err(Error::Extract(
+                    temp_dir.path().to_string_lossy().into_owned(),
+                    err,
+                ))
+            }
         };
 
         // Persist it to the cache.

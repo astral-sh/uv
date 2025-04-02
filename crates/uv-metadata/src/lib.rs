@@ -33,7 +33,7 @@ pub enum Error {
     InvalidName(#[from] InvalidNameError),
     #[error("The metadata at {0} is invalid")]
     InvalidMetadata(String, Box<uv_pypi_types::MetadataError>),
-    #[error("Bad CRC (got {computed:08x}, expected {expected:08x}): {path}")]
+    #[error("Bad CRC (got {computed:08x}, expected {expected:08x}) for file: {path}")]
     BadCrc32 {
         path: String,
         computed: u32,

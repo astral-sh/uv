@@ -84,8 +84,8 @@ pub enum Error {
     ReadInstalled(Box<InstalledDist>, #[source] InstalledDistError),
     #[error("Failed to read zip archive from built wheel")]
     Zip(#[from] ZipError),
-    #[error("Failed to extract archive")]
-    Extract(#[from] uv_extract::Error),
+    #[error("Failed to extract archive: {0}")]
+    Extract(String, #[source] uv_extract::Error),
     #[error("The source distribution is missing a `PKG-INFO` file")]
     MissingPkgInfo,
     #[error("The source distribution `{}` has no subdirectory `{}`", _0, _1.display())]
