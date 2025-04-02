@@ -87,7 +87,7 @@ impl EnvVars {
 
     /// Equivalent to the `--index-strategy` command-line argument.
     ///
-    /// For example, if set to `unsafe-any-match`, uv will consider versions of a given package
+    /// For example, if set to `unsafe-best-match`, uv will consider versions of a given package
     /// available across all index URLs, rather than limiting its search to the first index URL
     /// that contains the package.
     pub const UV_INDEX_STRATEGY: &'static str = "UV_INDEX_STRATEGY";
