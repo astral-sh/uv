@@ -7822,7 +7822,7 @@ fn lock_redact_https() -> Result<()> {
 
     let lock = context.read("uv.lock");
 
-    // The lockfile shout omit the credentials.
+    // The lockfile should omit the credentials.
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -8485,7 +8485,7 @@ fn lock_env_credentials() -> Result<()> {
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-    // The lockfile shout omit the credentials.
+    // The lockfile should omit the credentials.
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -18759,7 +18759,7 @@ fn lock_change_requires_python() -> Result<()> {
     Ok(())
 }
 
-/// Pass credentials for a named index via environment variables.
+/// Retrieve credentials for a named index from the keyring.
 #[test]
 fn lock_keyring_credentials() -> Result<()> {
     let keyring_context = TestContext::new("3.12");
@@ -18798,7 +18798,7 @@ fn lock_keyring_credentials() -> Result<()> {
         "#,
     )?;
 
-    // Provide credentials via environment variables.
+    // Provide credentials via the keyring
     uv_snapshot!(context.filters(), context.lock()
         .env(EnvVars::index_username("PROXY"), "public")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
@@ -18815,7 +18815,7 @@ fn lock_keyring_credentials() -> Result<()> {
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-    // The lockfile shout omit the credentials.
+    // The lockfile should omit the credentials.
     insta::with_settings!({
         filters => context.filters(),
     }, {
@@ -18850,6 +18850,90 @@ fn lock_keyring_credentials() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// Get credentials from the keyring with `explicit = true` and `authenticate = always`
+#[test]
+fn lock_keyring_explicit_always() -> Result<()> {
+    let keyring_context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    keyring_context
+        .pip_install()
+        .arg(
+            keyring_context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        // (from `echo "keyring==v25.6.0" | uv pip compile - --no-annotate --no-header -q`)
+        .arg("jaraco-classes==3.4.0")
+        .arg("jaraco-context==6.0.1")
+        .arg("jaraco-functools==4.1.0")
+        .arg("keyring==25.6.0")
+        .arg("more-itertools==10.6.0")
+        .assert()
+        .success();
+
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [tool.uv]
+        keyring-provider = "subprocess"
+
+        [tool.uv.sources]
+        iniconfig = {index = "proxy"}
+
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        authenticate = "always"
+        explicit = true
+        "#,
+    )?;
+
+    // First, try some invalid credentials — we should not fall back to the default index
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "frog"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Request for https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/
+    Request for pypi-proxy.fly.dev
+      × No solution found when resolving dependencies:
+      ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+    ");
+
+    // With valid credentials, we should succeed
+    uv_snapshot!(context.filters(), context.lock()
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Request for https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/
+    Request for pypi-proxy.fly.dev
+    Resolved 2 packages in [TIME]
+    ");
 
     Ok(())
 }
@@ -18919,7 +19003,7 @@ fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()>
 
     let lock = fs_err::read_to_string(context.temp_dir.join("uv.lock")).unwrap();
 
-    // The lockfile shout omit the credentials.
+    // The lockfile should omit the credentials.
     insta::with_settings!({
         filters => context.filters(),
     }, {
