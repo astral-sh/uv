@@ -144,7 +144,7 @@ nav:
       - pip/index.md
       - Using environments: pip/environments.md
       - Managing packages: pip/packages.md
-      - Inspecting packages: pip/inspection.md
+      - Inspecting environments: pip/inspection.md
       - Declaring dependencies: pip/dependencies.md
       - Locking environments: pip/compile.md
       - Compatibility with pip: pip/compatibility.md
