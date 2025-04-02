@@ -89,8 +89,14 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             // Validate the CRC of any file we unpack
             // (It would be nice if async_zip made it harder to Not do this...)
             let reader = reader.into_inner();
-            if reader.compute_hash() != reader.entry().crc32() {
-                return Err(async_zip::error::ZipError::CRC32CheckError)?;
+            let computed = reader.compute_hash();
+            let expected = reader.entry().crc32();
+            if computed != expected {
+                return Err(Error::BadCrc32 {
+                    path: path,
+                    computed,
+                    expected,
+                });
             }
         }
 
@@ -142,6 +148,8 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
 
     Ok(())
 }
+
+pub async fn check_crc() {}
 
 /// Unpack the given tar archive into the destination directory.
 ///
