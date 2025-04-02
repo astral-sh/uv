@@ -3,6 +3,26 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.6.12
+
+### Enhancements
+
+- Report the queried executable path in `uv python list` ([#12628](https://github.com/astral-sh/uv/pull/12628))
+- Improve archive unpack error messages ([#12627](https://github.com/astral-sh/uv/pull/12627))
+
+### Bug fixes
+
+- Respect `authenticate` when using `explicit = true` ([#12631](https://github.com/astral-sh/uv/pull/12631))
+- Normalize extra and group names in `uv add` and `uv remove` ([#12586](https://github.com/astral-sh/uv/pull/12586))
+- Enforce CRC-32 checks when unpacking archives ([#12623](https://github.com/astral-sh/uv/pull/12623))
+- Fix parsing of `python-platform` in settings files ([#12592](https://github.com/astral-sh/uv/pull/12592))
+
+### Documentation
+
+- Add note about `uv build` to `package = false` ([#12608](https://github.com/astral-sh/uv/pull/12608))
+- Add index fallback note to `authenticate = always` documentation ([#12498](https://github.com/astral-sh/uv/pull/12498))
+- Fix invalid 'kind' reference in flat index docs ([#12583](https://github.com/astral-sh/uv/pull/12583))
+
 ## 0.6.11
 
 ### Enhancements
