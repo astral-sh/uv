@@ -246,6 +246,13 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
             let mut contents = Vec::new();
             reader.read_to_end(&mut contents).await.unwrap();
 
+            // Validate the CRC of any file we unpack
+            // (It would be nice if async_zip made it harder to Not do this...)
+            let reader = reader.into_inner();
+            if reader.compute_hash() != reader.entry().crc32() {
+                return Err(async_zip::error::ZipError::CRC32CheckError)?;
+            }
+
             let metadata = ResolutionMetadata::parse_metadata(&contents)
                 .map_err(|err| Error::InvalidMetadata(debug_path.to_string(), Box::new(err)))?;
             return Ok(metadata);

@@ -85,6 +85,13 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             };
             let mut reader = entry.reader_mut().compat();
             tokio::io::copy(&mut reader, &mut writer).await?;
+
+            // Validate the CRC of any file we unpack
+            // (It would be nice if async_zip made it harder to Not do this...)
+            let reader = reader.into_inner();
+            if reader.compute_hash() != reader.entry().crc32() {
+                return Err(async_zip::error::ZipError::CRC32CheckError)?;
+            }
         }
 
         // Close current file prior to proceeding, as per:
