@@ -280,3 +280,71 @@ fn python_list_unsupported_version() {
     error: Invalid version request: Python <3.13 does not support free-threading but 3.12t was requested.
     ");
 }
+
+#[test]
+fn python_list_duplicate_path_entries() {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_python_symlinks()
+        .with_filtered_python_keys();
+
+    // Construct a `PATH` with all entries duplicated
+    let path = std::env::join_paths(
+        std::env::split_paths(&context.python_path())
+            .chain(std::env::split_paths(&context.python_path())),
+    )
+    .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_list().env(EnvVars::UV_TEST_PYTHON_PATH, &path), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]
+    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+
+    ----- stderr -----
+    ");
+
+    #[cfg(unix)]
+    {
+        // Construct a `PATH` with symlinks
+        let path = std::env::join_paths(std::env::split_paths(&context.python_path()).chain(
+            std::env::split_paths(&context.python_path()).map(|path| {
+                let dst = format!("{}-link", path.display());
+                fs_err::os::unix::fs::symlink(&path, &dst).unwrap();
+                std::path::PathBuf::from(dst)
+            }),
+        ))
+        .unwrap();
+
+        uv_snapshot!(context.filters(), context.python_list().env(EnvVars::UV_TEST_PYTHON_PATH, &path), @r"
+            success: true
+            exit_code: 0
+            ----- stdout -----
+            cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]
+            cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+
+            ----- stderr -----
+            ");
+
+        // Reverse the order so the symlinks are first
+        let path = std::env::join_paths(
+            {
+                let mut paths = std::env::split_paths(&path).collect::<Vec<_>>();
+                paths.reverse();
+                paths
+            }
+            .iter(),
+        )
+        .unwrap();
+
+        uv_snapshot!(context.filters(), context.python_list().env(EnvVars::UV_TEST_PYTHON_PATH, &path), @r"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+        cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]-link/python3
+        cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]-link/python3
+
+        ----- stderr -----
+        ");
+    }
+}
