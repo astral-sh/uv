@@ -133,12 +133,6 @@ impl CompatArgs for PipCompileCompatArgs {
             ));
         }
 
-        if self.no_config {
-            warn_user!(
-                "pip-compile's `--no-config` has no effect (uv does not use a configuration file)"
-            );
-        }
-
         if self.emit_options {
             return Err(anyhow!(
                 "pip-compile's `--emit-options` is unsupported (uv never emits options)"
@@ -250,12 +244,6 @@ impl CompatArgs for PipSyncCompatArgs {
             return Err(anyhow!(
                 "pip-sync's `--config` is unsupported (uv does not use a configuration file)"
             ));
-        }
-
-        if self.no_config {
-            warn_user!(
-                "pip-sync's `--no-config` has no effect (uv does not use a configuration file)"
-            );
         }
 
         if self.pip_args.is_some() {
