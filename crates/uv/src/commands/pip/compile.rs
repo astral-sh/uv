@@ -10,7 +10,6 @@ use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use tracing::debug;
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -380,9 +379,8 @@ pub(crate) async fn pip_compile(
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_urls(index_locations.index_urls())
+        .index_locations(&index_locations)
         .index_strategy(index_strategy)
-        .url_auth_policies(UrlAuthPolicies::from(&index_locations))
         .torch_backend(torch_backend)
         .markers(interpreter.markers())
         .platform(interpreter.platform())

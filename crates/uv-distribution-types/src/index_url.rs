@@ -10,7 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use url::{ParseError, Url};
 
-use uv_auth::UrlAuthPolicies;
+use uv_auth::{AuthIndex, AuthIndexes};
 use uv_pep508::{split_scheme, Scheme, VerbatimUrl, VerbatimUrlError};
 
 use crate::{Index, Verbatim};
@@ -411,16 +411,20 @@ impl<'a> IndexLocations {
     }
 }
 
-impl From<&IndexLocations> for UrlAuthPolicies {
-    fn from(index_locations: &IndexLocations) -> UrlAuthPolicies {
-        UrlAuthPolicies::from_tuples(index_locations.allowed_indexes().into_iter().map(|index| {
-            let mut url = index
-                .url()
-                .root()
-                .unwrap_or_else(|| index.url().url().clone());
-            url.set_username("").ok();
-            url.set_password(None).ok();
-            (url, index.authenticate)
+impl From<&IndexLocations> for AuthIndexes {
+    fn from(index_locations: &IndexLocations) -> AuthIndexes {
+        AuthIndexes::from_auth_indexes(index_locations.allowed_indexes().into_iter().map(|index| {
+            let mut index_url = index.url().url().clone();
+            index_url.set_username("").ok();
+            index_url.set_password(None).ok();
+            let mut policy_url = index.url().root().unwrap_or_else(|| index_url.clone());
+            policy_url.set_username("").ok();
+            policy_url.set_password(None).ok();
+            AuthIndex {
+                index_url,
+                policy_url,
+                auth_policy: index.authenticate,
+            }
         }))
     }
 }

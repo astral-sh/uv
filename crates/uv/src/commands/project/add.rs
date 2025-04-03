@@ -13,7 +13,6 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 use url::Url;
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -323,9 +322,8 @@ pub(crate) async fn add(
 
             // Initialize the registry client.
             let client = RegistryClientBuilder::try_from(client_builder)?
-                .index_urls(settings.resolver.index_locations.index_urls())
+                .index_locations(&settings.resolver.index_locations)
                 .index_strategy(settings.resolver.index_strategy)
-                .url_auth_policies(UrlAuthPolicies::from(&settings.resolver.index_locations))
                 .markers(target.interpreter().markers())
                 .platform(target.interpreter().platform())
                 .build();

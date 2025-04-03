@@ -7,15 +7,15 @@ use cache::CredentialsCache;
 pub use credentials::Credentials;
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
-pub use policy::{AuthPolicy, UrlAuthPolicies};
 use realm::Realm;
+pub use auth_index::{AuthIndex, AuthIndexes, AuthPolicy};
 
 mod cache;
 mod credentials;
 mod keyring;
 mod middleware;
-mod policy;
 mod realm;
+mod auth_index;
 
 // TODO(zanieb): Consider passing a cache explicitly throughout
 
