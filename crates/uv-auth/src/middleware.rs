@@ -520,7 +520,7 @@ impl AuthMiddleware {
                         debug!("Checking keyring for credentials for index URL {}@{}", username, index_url);
                         keyring.fetch(index_url, Some(username)).await
                     } else {
-                        debug!("Checking keyring for credentials for full URL {}@{}", username, *url);
+                        debug!("Checking keyring for credentials for full URL {}@{}", username, url);
                         keyring.fetch(url, Some(username)).await
                     }
                 } else if matches!(auth_policy, AuthPolicy::Always) {
@@ -530,10 +530,7 @@ impl AuthMiddleware {
                         );
                         keyring.fetch(index_url, None).await
                     } else {
-                        debug!(
-                            "Checking keyring for credentials for full URL {url} without username due to `authenticate = always`"
-                        );
-                        keyring.fetch(url, None).await
+                        None
                     }
                 } else {
                     debug!("Skipping keyring fetch for {url} without username; use `authenticate = always` to force");
