@@ -50,7 +50,10 @@ impl Display for AuthPolicy {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct AuthIndex {
+    /// The PEP 503 simple endpoint for the index
     pub index_url: Url,
+    /// The root endpoint where the auth policy is applied.
+    /// For PEP 503 endpoints, this excludes `/simple`.
     pub policy_url: Url,
     pub auth_policy: AuthPolicy,
 }

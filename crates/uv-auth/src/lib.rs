@@ -3,19 +3,19 @@ use std::sync::{Arc, LazyLock};
 use tracing::trace;
 use url::Url;
 
+pub use auth_index::{AuthIndex, AuthIndexes, AuthPolicy};
 use cache::CredentialsCache;
 pub use credentials::Credentials;
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
 use realm::Realm;
-pub use auth_index::{AuthIndex, AuthIndexes, AuthPolicy};
 
+mod auth_index;
 mod cache;
 mod credentials;
 mod keyring;
 mod middleware;
 mod realm;
-mod auth_index;
 
 // TODO(zanieb): Consider passing a cache explicitly throughout
 

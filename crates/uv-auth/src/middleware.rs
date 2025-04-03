@@ -4,9 +4,9 @@ use http::{Extensions, StatusCode};
 use url::Url;
 
 use crate::{
+    auth_index::{AuthIndexes, AuthPolicy},
     credentials::{Credentials, Username},
     realm::Realm,
-    auth_index::{AuthIndexes, AuthPolicy},
     CredentialsCache, KeyringProvider, CREDENTIALS_CACHE,
 };
 use anyhow::{anyhow, format_err};
