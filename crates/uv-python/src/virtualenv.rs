@@ -111,7 +111,7 @@ pub(crate) fn conda_environment_from_env(kind: CondaEnvironmentKind) -> Option<P
 
     if kind != CondaEnvironmentKind::from_prefix_path(&path) {
         return None;
-    };
+    }
 
     Some(path)
 }

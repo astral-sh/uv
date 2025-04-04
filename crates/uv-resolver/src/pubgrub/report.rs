@@ -711,7 +711,7 @@ impl PubGrubReportFormatter<'_> {
                     output_hints,
                 );
             }
-        };
+        }
     }
 
     /// Generate a [`PubGrubHint`] for a package that doesn't have any wheels matching the current
@@ -1957,7 +1957,7 @@ impl std::fmt::Display for PackageRange<'_> {
                 (Bound::Excluded(v), Bound::Unbounded) => write!(f, "{package}>{v}")?,
                 (Bound::Excluded(v), Bound::Included(b)) => write!(f, "{package}>{v},<={b}")?,
                 (Bound::Excluded(v), Bound::Excluded(b)) => write!(f, "{package}>{v},<{b}")?,
-            };
+            }
         }
         if segments.len() > 1 {
             writeln!(f)?;
@@ -2015,7 +2015,7 @@ impl std::fmt::Display for DependsOn<'_> {
             write!(f, "depend on ")?;
         } else {
             write!(f, "depends on ")?;
-        };
+        }
 
         match self.dependency2 {
             Some(ref dependency2) => write!(

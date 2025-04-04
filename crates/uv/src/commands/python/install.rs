@@ -463,7 +463,7 @@ pub(crate) async fn install(
                         event.key.bold(),
                     )?;
                 }
-            };
+            }
         }
 
         if preview.is_enabled() {

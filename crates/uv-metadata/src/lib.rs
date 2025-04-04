@@ -96,7 +96,7 @@ pub fn find_archive_dist_info<'a, T: Copy>(
             dist_info_prefix.to_string(),
             filename.name.to_string(),
         ));
-    };
+    }
 
     Ok((payload, dist_info_prefix))
 }
@@ -125,7 +125,7 @@ pub fn is_metadata_entry(path: &str, filename: &WheelFilename) -> Result<bool, E
             dist_info_prefix.to_string(),
             filename.name.to_string(),
         ));
-    };
+    }
 
     Ok(true)
 }
@@ -189,7 +189,7 @@ pub fn find_flat_dist_info(
             dist_info_prefix.to_string(),
             filename.name.to_string(),
         ));
-    };
+    }
 
     Ok(dist_info_prefix)
 }

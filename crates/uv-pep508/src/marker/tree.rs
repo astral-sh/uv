@@ -931,14 +931,14 @@ impl MarkerTree {
                                     MarkerWarningKind::LexicographicComparison,
                                     format!("Comparing {l_string} and {value} lexicographically"),
                                 );
-                            };
+                            }
 
                             if let Bound::Included(value) | Bound::Excluded(value) = end {
                                 reporter.report(
                                     MarkerWarningKind::LexicographicComparison,
                                     format!("Comparing {l_string} and {value} lexicographically"),
                                 );
-                            };
+                            }
                         }
                     }
 

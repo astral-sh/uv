@@ -15,6 +15,6 @@ pub(crate) fn version(output_format: VersionFormat, buffer: &mut dyn std::io::Wr
             // Add a trailing newline
             writeln!(buffer)?;
         }
-    };
+    }
     Ok(())
 }

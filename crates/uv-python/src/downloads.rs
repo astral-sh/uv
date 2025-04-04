@@ -555,7 +555,7 @@ impl ManagedPythonDownload {
             return Ok(DownloadResult::AlreadyAvailable(path));
         }
 
-        let filename = url.path_segments().unwrap().last().unwrap();
+        let filename = url.path_segments().unwrap().next_back().unwrap();
         let ext = SourceDistExtension::from_path(filename)
             .map_err(|err| Error::MissingExtension(url.to_string(), err))?;
         let (reader, size) = read_url(&url, client).await?;
@@ -593,7 +593,7 @@ impl ManagedPythonDownload {
                     .await
                     .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
             }
-        };
+        }
 
         hasher.finish().await.map_err(Error::HashExhaustion)?;
 

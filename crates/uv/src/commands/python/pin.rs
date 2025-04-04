@@ -116,11 +116,11 @@ pub(crate) async fn pin(
                 ) {
                     if resolved {
                         return Err(err);
-                    };
+                    }
                     warn_user_once!("{err}");
                 }
             }
-        };
+        }
     }
 
     let request = if resolved {

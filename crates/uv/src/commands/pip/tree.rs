@@ -379,17 +379,23 @@ impl<'env> DisplayDependencyGraph<'env> {
                 if self.invert {
                     let parent = self.graph.edge_endpoints(edge).unwrap().0;
                     let parent = &self.graph[parent].name;
-                    let version = match source.version_or_url.as_ref() {
-                        None => "*".to_string(),
-                        Some(version) => version.to_string(),
-                    };
-                    line.push_str(&format!("[requires: {parent} {version}]"));
+                    match source.version_or_url.as_ref() {
+                        None => {
+                            let _ = write!(line, "[requires: {parent} *]");
+                        }
+                        Some(version) => {
+                            let _ = write!(line, "[requires: {parent} {version}]");
+                        }
+                    }
                 } else {
-                    let version = match source.version_or_url.as_ref() {
-                        None => "*".to_string(),
-                        Some(version) => version.to_string(),
-                    };
-                    line.push_str(&format!("[required: {version}]"));
+                    match source.version_or_url.as_ref() {
+                        None => {
+                            let _ = write!(line, "[required: *]");
+                        }
+                        Some(version) => {
+                            let _ = write!(line, "[required: {version}]");
+                        }
+                    }
                 }
             }
         }

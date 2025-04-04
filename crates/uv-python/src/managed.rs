@@ -496,7 +496,7 @@ impl ManagedPythonInstallation {
                         err,
                     })
                 }
-            };
+            }
         }
 
         Ok(())

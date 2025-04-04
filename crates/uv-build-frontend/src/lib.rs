@@ -568,7 +568,7 @@ impl SourceBuild {
                                 nor `setup.cfg` are present in the directory",
                                 source_tree.simplified_display().cyan(),
                             );
-                        };
+                        }
                     }
                     default_backend.clone()
                 };

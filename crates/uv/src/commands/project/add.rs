@@ -506,7 +506,7 @@ pub(crate) async fn add(
 
                     // Redact the credentials.
                     redact_credentials(&mut git);
-                };
+                }
                 Some(Source::Git {
                     git,
                     subdirectory,

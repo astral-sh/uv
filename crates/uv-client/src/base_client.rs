@@ -1,3 +1,11 @@
+use std::error::Error;
+use std::fmt::Debug;
+use std::fmt::Write;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
+use std::{env, iter};
+
 use itertools::Itertools;
 use reqwest::{Client, ClientBuilder, Proxy, Response};
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
@@ -5,14 +13,9 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
 };
-use std::error::Error;
-use std::fmt::Debug;
-use std::path::Path;
-use std::sync::Arc;
-use std::time::Duration;
-use std::{env, iter};
 use tracing::{debug, trace};
 use url::Url;
+
 use uv_auth::{AuthMiddleware, UrlAuthPolicies};
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
@@ -186,7 +189,7 @@ impl<'a> BaseClientBuilder<'a> {
         if let Some(markers) = self.markers {
             let linehaul = LineHaul::new(markers, self.platform);
             if let Ok(output) = serde_json::to_string(&linehaul) {
-                user_agent_string += &format!(" {output}");
+                let _ = write!(user_agent_string, " {output}");
             }
         }
 

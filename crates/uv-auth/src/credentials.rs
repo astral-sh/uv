@@ -131,7 +131,7 @@ impl Credentials {
         // Ensure the username matches if provided
         if username.is_some_and(|username| username != entry.login) {
             return None;
-        };
+        }
 
         Some(Credentials::Basic {
             username: Username::new(Some(entry.login.clone())),

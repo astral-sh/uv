@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, VecDeque};
+use std::fmt::Write;
 
 use either::Either;
 use itertools::Itertools;
@@ -431,17 +432,17 @@ impl<'env> TreeDisplay<'env> {
             if let Some(version) = package_id.version.as_ref() {
                 line.push(' ');
                 line.push('v');
-                line.push_str(&format!("{version}"));
+                let _ = write!(line, "{version}");
             }
 
             if let Some(edge) = edge {
                 match edge {
                     Edge::Prod(_) => {}
                     Edge::Optional(extra, _) => {
-                        line.push_str(&format!(" (extra: {extra})"));
+                        let _ = write!(line, " (extra: {extra})");
                     }
                     Edge::Dev(group, _) => {
-                        line.push_str(&format!(" (group: {group})"));
+                        let _ = write!(line, " (group: {group})");
                     }
                 }
             }

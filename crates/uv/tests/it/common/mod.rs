@@ -564,7 +564,7 @@ impl TestContext {
                 ),
                 "[SITE_PACKAGES]/".to_string(),
             ));
-        };
+        }
 
         // Filter non-deterministic temporary directory names
         // Note we apply this _after_ all the full paths to avoid breaking their matching

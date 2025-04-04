@@ -113,6 +113,7 @@ fn generate() -> String {
     output
 }
 
+#[allow(clippy::format_push_string)]
 fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut Vec<&'a Command>) {
     if command.is_hide_set() && !SHOW_HIDDEN_COMMANDS.contains(&command.get_name()) {
         return;
@@ -137,7 +138,7 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
     if let Some(about) = command.get_long_about().or_else(|| command.get_about()) {
         output.push_str(&about.to_string());
         output.push_str("\n\n");
-    };
+    }
 
     // Display the usage
     {

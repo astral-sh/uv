@@ -243,7 +243,7 @@ pub fn remove_registry_entry<'a>(
                         .context("Failed to clear registry entries under HKCU:\\{python_entry}"),
                 ));
             }
-        };
+        }
     }
 }
 
@@ -284,6 +284,6 @@ pub fn remove_orphan_registry_entries(installations: &[ManagedPythonInstallation
         if let Err(err) = CURRENT_USER.remove_tree(&python_entry) {
             // TODO(konsti): We don't have an installation key here.
             warn_user_once!("Failed to remove orphan registry key HKCU:\\{python_entry}: {err}");
-        };
+        }
     }
 }
