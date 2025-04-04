@@ -6113,6 +6113,10 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 
 Sync an environment with a `requirements.txt` file
 
+When syncing an environment, any packages not listed in the `requirements.txt` file will be removed. To retain extraneous packages, use `uv pip install` instead.
+
+The `requirements.txt` file is presumed to be the output of a `pip compile` or `uv export` operation, in which it will include all transitive dependencies. If transitive dependencies are not present in the file, they will not be installed. Use `--strict` to warn if any transitive dependencies are missing.
+
 <h3 class="cli-reference">Usage</h3>
 
 ```
