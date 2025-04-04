@@ -16,7 +16,7 @@ use reqwest_retry::{
 use tracing::{debug, trace};
 use url::Url;
 
-use uv_auth::{AuthMiddleware, Indexes, UrlAuthPolicies};
+use uv_auth::{AuthMiddleware, Indexes};
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
