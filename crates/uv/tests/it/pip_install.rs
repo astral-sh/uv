@@ -8034,13 +8034,13 @@ fn install_unsupported_environment_yml() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let environment_yml = context.temp_dir.child("environment.yml");
-    environment_yml.write_str(indoc! {r#"
+    environment_yml.write_str(indoc! {r"
         name: test-env
         channels:
           - conda-forge
         dependencies:
           - python>=3.12
-    "#})?;
+    "})?;
 
     uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("environment.yml"), @r"
     success: false

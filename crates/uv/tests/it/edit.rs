@@ -3677,13 +3677,13 @@ fn add_environment_yml_error() -> Result<()> {
     "#})?;
 
     let environment_yml = context.temp_dir.child("environment.yml");
-    environment_yml.write_str(indoc! {r#"
+    environment_yml.write_str(indoc! {r"
         name: test-env
         channels:
           - conda-forge
         dependencies:
           - python>=3.12
-    "#})?;
+    "})?;
 
     uv_snapshot!(context.filters(), context.add().arg("-r").arg("environment.yml"), @r"
     success: false
