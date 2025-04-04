@@ -29,7 +29,7 @@ pub enum GitError {
     GitNotFound,
     #[error(transparent)]
     Other(#[from] which::Error),
-    #[error("Network connectivity is disabled for Git operations. Local file-based paths are still allowed (via GIT_ALLOW_PROTOCOL=file)")]
+    #[error("Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)")]
     TransportNotAllowed,
 }
 
@@ -613,11 +613,11 @@ fn fetch_with_cli(
         cmd.arg("--tags");
     }
     if disable_ssl {
-        debug!("Disabling SSL verification for Git fetch");
+        debug!("Disabling SSL verification for Git fetch via `GIT_SSL_NO_VERIFY`");
         cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
     }
     if offline {
-        debug!("Offline - setting GIT_ALLOW_PROTOCOL=file");
+        debug!("Disabling remote protocols for Git fetch via `GIT_ALLOW_PROTOCOL=file`");
         cmd.env(EnvVars::GIT_ALLOW_PROTOCOL, "file");
     }
     cmd.arg("--force") // handle force pushes

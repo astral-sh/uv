@@ -3301,7 +3301,7 @@ fn install_git_source_respects_offline_mode() {
 
     uv_snapshot!(context.filters(), context.pip_install()
             .arg("--offline")
-            .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"), @r###"
+            .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3310,8 +3310,8 @@ fn install_git_source_respects_offline_mode() {
       × Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage`
       ├─▶ Git operation failed
       ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8dab139913c4b566
-      ╰─▶ Network connectivity is disabled for Git operations. Local file-based paths are still allowed (via GIT_ALLOW_PROTOCOL=file)
-    "###
+      ╰─▶ Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
+    "
     );
 }
 
