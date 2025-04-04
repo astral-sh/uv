@@ -16234,3 +16234,38 @@ fn compile_quotes() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn compile_invalid_output_file() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio==3.7.0")?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("-o")
+        .arg("pyproject.toml"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `pyproject.toml` is not a supported output format for `uv pip compile` (only `requirements.txt`-style output is supported)
+    ");
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("-o")
+        .arg("uv.toml"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: TOML is not a supported output format for `uv pip compile` (only `requirements.txt`-style output is supported)
+    ");
+
+    Ok(())
+}

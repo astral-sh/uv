@@ -107,6 +107,27 @@ pub(crate) async fn pip_compile(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    // If the user provides a `pyproject.toml` or other TOML file as the output file, raise an
+    // error.
+    if output_file
+        .and_then(Path::file_name)
+        .is_some_and(|name| name.eq_ignore_ascii_case("pyproject.toml"))
+    {
+        return Err(anyhow!(
+            "`pyproject.toml` is not a supported output format for `{}` (only `requirements.txt`-style output is supported)",
+            "uv pip compile".green()
+        ));
+    }
+    if output_file
+        .and_then(Path::extension)
+        .is_some_and(|name| name.eq_ignore_ascii_case("toml"))
+    {
+        return Err(anyhow!(
+            "TOML is not a supported output format for `{}` (only `requirements.txt`-style output is supported)",
+            "uv pip compile".green()
+        ));
+    }
+
     // Respect `UV_PYTHON`
     if python.is_none() && python_version.is_none() {
         if let Ok(request) = std::env::var("UV_PYTHON") {
