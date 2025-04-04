@@ -553,12 +553,12 @@ impl Workspace {
 
             if value.is_empty() {
                 return None;
-            };
+            }
 
             let path = PathBuf::from(value);
             if path.is_absolute() {
                 return Some(path);
-            };
+            }
 
             // Resolve the path relative to the install path.
             Some(workspace.install_path.join(path))
@@ -570,12 +570,12 @@ impl Workspace {
 
             if value.is_empty() {
                 return None;
-            };
+            }
 
             let path = PathBuf::from(value);
             if path.is_absolute() {
                 return Some(path);
-            };
+            }
 
             // Resolve the path relative to current directory.
             // Note this differs from `UV_PROJECT_ENVIRONMENT`

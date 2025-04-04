@@ -838,8 +838,8 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                         "subdirectory" => {
                             subdirectory = Some(PortablePathBuf::from(val.as_ref()));
                         }
-                        _ => continue,
-                    };
+                        _ => {}
+                    }
                 }
 
                 let precise = repository.fragment().map(GitOid::from_str).transpose()?;

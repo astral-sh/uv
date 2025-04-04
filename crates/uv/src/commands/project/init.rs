@@ -866,7 +866,7 @@ impl InitProjectKind {
         // Generate `src` files
         if !bare {
             generate_package_scripts(name, path, build_backend, true)?;
-        };
+        }
 
         // Initialize the version control system.
         init_vcs(path, vcs)?;
@@ -1136,7 +1136,7 @@ fn generate_package_scripts(
             let pyi_file = pkg_dir.join("_core.pyi");
             if !pyi_file.try_exists()? {
                 fs_err::write(pyi_file, pyi_contents)?;
-            };
+            }
             // Return python script calling binary
             binary_call_script
         }
@@ -1167,7 +1167,7 @@ fn generate_package_scripts(
             let pyi_file = pkg_dir.join("_core.pyi");
             if !pyi_file.try_exists()? {
                 fs_err::write(pyi_file, pyi_contents)?;
-            };
+            }
             // Return python script calling binary
             binary_call_script
         }

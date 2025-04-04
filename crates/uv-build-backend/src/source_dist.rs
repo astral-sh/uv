@@ -231,7 +231,7 @@ fn write_source_dist(
         if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
             trace!("Excluding: `{}`", relative.user_display());
             continue;
-        };
+        }
 
         debug!("Including {}", relative.user_display());
         if entry.file_type().is_dir() {

@@ -497,12 +497,14 @@ mod test {
     }
 
     async fn format_err(input: &str) -> String {
+        use std::fmt::Write;
+
         let err = requires_dist_from_pyproject_toml(input).await.unwrap_err();
         let mut causes = err.chain();
         let mut message = String::new();
-        message.push_str(&format!("error: {}\n", causes.next().unwrap()));
+        let _ = writeln!(message, "error: {}", causes.next().unwrap());
         for err in causes {
-            message.push_str(&format!("  Caused by: {err}\n"));
+            let _ = writeln!(message, "  Caused by: {err}");
         }
         message
     }

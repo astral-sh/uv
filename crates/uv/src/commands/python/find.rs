@@ -88,7 +88,7 @@ pub(crate) async fn find(
                 warn_user!("{err}");
             }
         }
-    };
+    }
 
     if show_version {
         writeln!(

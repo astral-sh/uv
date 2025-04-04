@@ -224,7 +224,7 @@ fn find_sysconfigdata(
         let metadata = entry.metadata()?;
         if metadata.is_symlink() {
             continue;
-        };
+        }
 
         if metadata.is_file() {
             return Ok(entry.path());

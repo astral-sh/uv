@@ -2420,8 +2420,6 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
                         }
                     }
                 }
-
-                continue;
             }
 
             // If we find a `revision.rev` file, read the pointer, and remove any extraneous
@@ -2445,8 +2443,6 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
                         }
                     }
                 }
-
-                continue;
             }
         }
     }

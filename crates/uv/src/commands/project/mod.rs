@@ -340,7 +340,11 @@ impl std::fmt::Display for ConflictError {
                                 }
                                 ConflictPackage::Group(ref group) => format!("group `{group}`"),
                             };
-                            (i == 0).then(|| capitalize(&conflict)).unwrap_or(conflict)
+                            if i == 0 {
+                                capitalize(&conflict)
+                            } else {
+                                conflict
+                            }
                         })
                         .collect()
                 )
@@ -561,12 +565,12 @@ impl ScriptInterpreter {
 
             if value.is_empty() {
                 return None;
-            };
+            }
 
             let path = PathBuf::from(value);
             if path.is_absolute() {
                 return Some(path);
-            };
+            }
 
             // Resolve the path relative to current directory.
             Some(CWD.join(path))
@@ -689,7 +693,7 @@ impl ScriptInterpreter {
             }
             Err(uv_python::Error::MissingEnvironment(_)) => {}
             Err(err) => warn!("Ignoring existing script environment: {err}"),
-        };
+        }
 
         let client_builder = BaseClientBuilder::new()
             .connectivity(network_settings.connectivity)
@@ -849,7 +853,7 @@ impl ProjectInterpreter {
                     }
                     // If the environment is an empty directory, it's fine to use
                     InvalidEnvironmentKind::Empty => {}
-                };
+                }
             }
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(path))) => {
                 if path.is_symlink() {
@@ -862,7 +866,7 @@ impl ProjectInterpreter {
                 }
             }
             Err(err) => return Err(err.into()),
-        };
+        }
 
         let client_builder = BaseClientBuilder::default()
             .connectivity(network_settings.connectivity)
@@ -1033,7 +1037,7 @@ impl WorkspacePython {
                 "Using Python request `{}` from {source}",
                 python_request.to_canonical_string()
             );
-        };
+        }
 
         Ok(Self {
             source,
@@ -1098,7 +1102,7 @@ impl ScriptPython {
 
         if let Some(python_request) = python_request.as_ref() {
             debug!("Using Python request {python_request} from {source}");
-        };
+        }
 
         Ok(Self {
             source,

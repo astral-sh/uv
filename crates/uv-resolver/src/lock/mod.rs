@@ -1459,7 +1459,7 @@ impl Lock {
                             return Ok(SatisfiesResult::MissingLocalIndex(name, version, path));
                         }
                     }
-                };
+                }
             }
 
             // If the package is immutable, we don't need to validate it (or its dependencies).
@@ -2257,7 +2257,7 @@ impl Package {
                     }
                     .into()),
                 };
-            };
+            }
         }
 
         if let Some(sdist) = self.to_source_dist(workspace_root)? {
@@ -3599,8 +3599,8 @@ impl GitSource {
                 "branch" => kind = GitSourceKind::Branch(val.into_owned()),
                 "rev" => kind = GitSourceKind::Rev(val.into_owned()),
                 "subdirectory" => subdirectory = Some(PortablePathBuf::from(val.as_ref()).into()),
-                _ => continue,
-            };
+                _ => {}
+            }
         }
         let precise = GitOid::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
             .map_err(|_| GitSourceError::InvalidSha)?;

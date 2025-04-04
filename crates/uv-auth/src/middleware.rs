@@ -361,7 +361,7 @@ impl AuthMiddleware {
         {
             trace!("Updating cached credentials for {url} to {credentials:?}");
             self.cache().insert(&url, credentials);
-        };
+        }
 
         result
     }
@@ -449,7 +449,7 @@ impl AuthMiddleware {
                 trace!("Using credentials from previous fetch for {url}");
             } else {
                 trace!("Skipping fetch of credentials for {url}, previous attempt failed");
-            };
+            }
 
             return credentials;
         }
@@ -513,14 +513,14 @@ fn tracing_url(request: &Request, credentials: Option<&Credentials>) -> String {
             .and_then(|credentials| credentials.username())
         {
             let _ = url.set_username(username);
-        };
+        }
         if credentials
             .as_ref()
             .and_then(|credentials| credentials.password())
             .is_some()
         {
             let _ = url.set_password(Some("****"));
-        };
+        }
         url.to_string()
     } else {
         request.url().to_string()

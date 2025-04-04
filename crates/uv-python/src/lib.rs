@@ -162,7 +162,7 @@ mod tests {
             match self.search_path.as_mut() {
                 Some(paths) => paths.push(path),
                 None => self.search_path = Some(vec![path]),
-            };
+            }
         }
 
         /// Create a new directory and add it to the search path.

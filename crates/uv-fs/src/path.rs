@@ -258,7 +258,7 @@ fn normalized(path: &Path) -> PathBuf {
                 normalized.push(component);
             }
             Component::ParentDir => {
-                match normalized.components().last() {
+                match normalized.components().next_back() {
                     None | Some(Component::ParentDir | Component::RootDir) => {
                         // Preserve leading and above-root `..`
                         normalized.push(component);
@@ -331,7 +331,7 @@ pub fn relative_to(
 
     // go as many levels up as required
     let levels_up = base.components().count() - common_prefix.components().count();
-    let up = std::iter::repeat("..").take(levels_up).collect::<PathBuf>();
+    let up = std::iter::repeat_n("..", levels_up).collect::<PathBuf>();
 
     Ok(up.join(stripped))
 }

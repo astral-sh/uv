@@ -177,7 +177,7 @@ impl PythonEnvironment {
                 }));
             }
             Err(err) => return Err(Error::Discovery(err.into())),
-        };
+        }
 
         if root.as_ref().is_file() {
             return Err(InvalidEnvironment {
@@ -211,7 +211,7 @@ impl PythonEnvironment {
                 kind: InvalidEnvironmentKind::MissingExecutable(executable.clone()),
             }
             .into());
-        };
+        }
 
         let interpreter = Interpreter::query(executable, cache)?;
 

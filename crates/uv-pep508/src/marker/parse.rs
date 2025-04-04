@@ -50,7 +50,7 @@ fn parse_marker_operator<T: Pep508Url>(
                     input: cursor.to_string(),
                 });
             }
-        };
+        }
         cursor.eat_whitespace();
         cursor.next_expect_char('i', cursor.pos())?;
         cursor.next_expect_char('n', cursor.pos())?;
@@ -607,7 +607,7 @@ pub(crate) fn parse_markers_cursor<T: Pep508Url>(
             len: cursor.remaining(),
             input: cursor.to_string(),
         });
-    };
+    }
 
     Ok(marker)
 }

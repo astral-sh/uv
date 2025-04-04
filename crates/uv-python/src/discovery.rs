@@ -978,7 +978,7 @@ pub fn find_python_installations<'a>(
         PythonRequest::Version(version) => {
             if let Err(err) = version.check_supported() {
                 return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
-            };
+            }
             Box::new({
                 debug!("Searching for {request} in {sources}");
                 python_interpreters(version, None, environments, preference, cache)
@@ -1004,7 +1004,7 @@ pub fn find_python_installations<'a>(
         PythonRequest::ImplementationVersion(implementation, version) => {
             if let Err(err) = version.check_supported() {
                 return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
-            };
+            }
             Box::new({
                 debug!("Searching for {request} in {sources}");
                 python_interpreters(
@@ -1026,8 +1026,8 @@ pub fn find_python_installations<'a>(
             if let Some(version) = request.version() {
                 if let Err(err) = version.check_supported() {
                     return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
-                };
-            };
+                }
+            }
             Box::new({
                 debug!("Searching for {request} in {sources}");
                 python_interpreters(

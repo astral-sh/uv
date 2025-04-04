@@ -560,7 +560,7 @@ fn wheel_subdir_from_globs(
         if !matcher.match_path(relative) {
             trace!("Excluding {}: `{}`", globs_field, relative.user_display());
             continue;
-        };
+        }
 
         let relative_licenses = Path::new(target)
             .join(relative)

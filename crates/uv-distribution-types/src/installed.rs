@@ -202,7 +202,7 @@ impl InstalledDist {
                         path: path.to_path_buf().into_boxed_path(),
                     })));
                 }
-            };
+            }
 
             if metadata.is_dir() {
                 let Some(egg_metadata) = read_metadata(&path.join("PKG-INFO")) else {

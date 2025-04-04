@@ -112,7 +112,7 @@ pub(crate) async fn list(
                 Either::Right(download.url()),
             ));
         }
-    };
+    }
 
     let installed =
         match kinds {
@@ -223,7 +223,7 @@ pub(crate) async fn list(
                         Either::Right(url) => {
                             url_or_none = Some((*url).to_string());
                         }
-                    };
+                    }
                     let version = key.version();
                     let release = version.release();
 

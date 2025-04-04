@@ -635,7 +635,7 @@ fn parse_extras_cursor<T: Pep508Url>(
                 });
             }
             _ => {}
-        };
+        }
         // wsp* after the identifier
         cursor.eat_whitespace();
 

@@ -68,7 +68,7 @@ impl Urls {
                             debug!("Allowing an editable variant of {}", &package_url.verbatim);
                             *editable = true;
                         }
-                    };
+                    }
                 }
             } else {
                 package_urls.push(url);

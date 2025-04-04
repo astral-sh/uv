@@ -254,7 +254,7 @@ async fn venv_impl(
                 warn_user!("{err}");
             }
         }
-    };
+    }
 
     writeln!(
         printer.stderr(),

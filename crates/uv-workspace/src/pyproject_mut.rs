@@ -1121,7 +1121,7 @@ pub fn add_dependency(
                     decor.set_prefix(targeted_decor.prefix().unwrap().clone());
                     targeted_decor.set_prefix(""); // Re-formatted later by `reformat_array_multiline`
                 }
-            };
+            }
 
             deps.insert_formatted(index, value);
 

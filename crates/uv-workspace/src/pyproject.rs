@@ -830,10 +830,10 @@ impl TryFrom<SourcesWire> for Sources {
                 for (lhs, rhs) in sources.iter().zip(sources.iter().skip(1)) {
                     if lhs.extra() != rhs.extra() {
                         continue;
-                    };
+                    }
                     if lhs.group() != rhs.group() {
                         continue;
-                    };
+                    }
 
                     let lhs = lhs.marker();
                     let rhs = rhs.marker();
@@ -1070,7 +1070,7 @@ impl<'de> Deserialize<'de> for Source {
                         "expected at most one of `rev`, `tag`, or `branch`",
                     ));
                 }
-            };
+            }
 
             // If the user prefixed the URL with `git+`, strip it.
             let git = if let Some(git) = git.as_str().strip_prefix("git+") {

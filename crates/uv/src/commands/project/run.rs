@@ -937,14 +937,14 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
         // If `--system-site-packages` is enabled, add the system site packages to the ephemeral
         // environment.
-        if base_interpreter
-            .is_virtualenv()
-            .then(|| {
+        if if base_interpreter.is_virtualenv() {
+            {
                 PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
                     .is_ok_and(|cfg| cfg.include_system_site_packages())
-            })
-            .unwrap_or(false)
-        {
+            }
+        } else {
+            false
+        } {
             ephemeral_env.set_system_site_packages()?;
         } else {
             ephemeral_env.clear_system_site_packages()?;
@@ -1068,7 +1068,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     // Ensure `VIRTUAL_ENV` is set.
     if interpreter.is_virtualenv() {
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
-    };
+    }
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited

@@ -1363,7 +1363,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         // packages that include a source distribution), we don't need to fork.
         if dist.implied_markers().is_true() {
             return Ok(None);
-        };
+        }
 
         // If the user explicitly marked a platform as required, ensure it has coverage.
         for marker in self.options.required_environments.iter().copied() {
@@ -2813,7 +2813,7 @@ impl ForkState {
                 .partial_solution
                 .add_decision(self.next, version);
             return;
-        };
+        }
         self.pubgrub
             .add_incompatibility(Incompatibility::custom_version(
                 self.next,

@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, Bound};
 use std::ffi::OsStr;
 use std::fmt::Display;
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -603,7 +604,7 @@ impl PyProjectToml {
             return Err(ValidationError::InvalidGroup(group.to_string()));
         }
 
-        writer.push_str(&format!("[{group}]\n"));
+        let _ = writeln!(writer, "[{group}]");
         for (name, object_reference) in entries {
             // More strict than the spec, we enforce the recommendation
             if !name
@@ -614,7 +615,7 @@ impl PyProjectToml {
             }
 
             // TODO(konsti): Validate that the object references are valid Python identifiers.
-            writer.push_str(&format!("{name} = {object_reference}\n"));
+            let _ = writeln!(writer, "{name} = {object_reference}");
         }
         writer.push('\n');
         Ok(())
@@ -963,7 +964,7 @@ mod tests {
     fn format_err(err: impl std::error::Error) -> String {
         let mut formatted = err.to_string();
         for source in iter::successors(err.source(), |&err| err.source()) {
-            formatted += &format!("\n  Caused by: {source}");
+            let _ = write!(formatted, "\n  Caused by: {source}");
         }
         formatted
     }
