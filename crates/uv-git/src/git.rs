@@ -29,6 +29,8 @@ pub enum GitError {
     GitNotFound,
     #[error(transparent)]
     Other(#[from] which::Error),
+    #[error("Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)")]
+    TransportNotAllowed,
 }
 
 /// A global cache of the result of `which git`.
@@ -230,6 +232,7 @@ impl GitRemote {
         locked_rev: Option<GitOid>,
         client: &ClientWithMiddleware,
         disable_ssl: bool,
+        offline: bool,
     ) -> Result<(GitDatabase, GitOid)> {
         let reference = locked_rev
             .map(ReferenceOrOid::Oid)
@@ -237,8 +240,15 @@ impl GitRemote {
         let enable_lfs_fetch = env::var(EnvVars::UV_GIT_LFS).is_ok();
 
         if let Some(mut db) = db {
-            fetch(&mut db.repo, &self.url, reference, client, disable_ssl)
-                .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
+            fetch(
+                &mut db.repo,
+                &self.url,
+                reference,
+                client,
+                disable_ssl,
+                offline,
+            )
+            .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
 
             let resolved_commit_hash = match locked_rev {
                 Some(rev) => db.contains(rev).then_some(rev),
@@ -265,8 +275,15 @@ impl GitRemote {
 
         fs_err::create_dir_all(into)?;
         let mut repo = GitRepository::init(into)?;
-        fetch(&mut repo, &self.url, reference, client, disable_ssl)
-            .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
+        fetch(
+            &mut repo,
+            &self.url,
+            reference,
+            client,
+            disable_ssl,
+            offline,
+        )
+        .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = match locked_rev {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
@@ -441,6 +458,7 @@ fn fetch(
     reference: ReferenceOrOid<'_>,
     client: &ClientWithMiddleware,
     disable_ssl: bool,
+    offline: bool,
 ) -> Result<()> {
     let oid_to_fetch = match github_fast_path(repo, remote_url, reference, client) {
         Ok(FastPathRev::UpToDate) => return Ok(()),
@@ -516,9 +534,14 @@ fn fetch(
 
     debug!("Performing a Git fetch for: {remote_url}");
     let result = match refspec_strategy {
-        RefspecStrategy::All => {
-            fetch_with_cli(repo, remote_url, refspecs.as_slice(), tags, disable_ssl)
-        }
+        RefspecStrategy::All => fetch_with_cli(
+            repo,
+            remote_url,
+            refspecs.as_slice(),
+            tags,
+            disable_ssl,
+            offline,
+        ),
         RefspecStrategy::First => {
             // Try each refspec
             let mut errors = refspecs
@@ -530,6 +553,7 @@ fn fetch(
                         std::slice::from_ref(refspec),
                         tags,
                         disable_ssl,
+                        offline,
                     );
 
                     // Stop after the first success and log failures
@@ -576,6 +600,7 @@ fn fetch_with_cli(
     refspecs: &[String],
     tags: bool,
     disable_ssl: bool,
+    offline: bool,
 ) -> Result<()> {
     let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
     // Disable interactive prompts in the terminal, as they'll be erased by the progress bar
@@ -588,8 +613,12 @@ fn fetch_with_cli(
         cmd.arg("--tags");
     }
     if disable_ssl {
-        debug!("Disabling SSL verification for Git fetch");
+        debug!("Disabling SSL verification for Git fetch via `GIT_SSL_NO_VERIFY`");
         cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
+    }
+    if offline {
+        debug!("Disabling remote protocols for Git fetch via `GIT_ALLOW_PROTOCOL=file`");
+        cmd.env(EnvVars::GIT_ALLOW_PROTOCOL, "file");
     }
     cmd.arg("--force") // handle force pushes
         .arg("--update-head-ok") // see discussion in #2078
@@ -611,7 +640,13 @@ fn fetch_with_cli(
     // We capture the output to avoid streaming it to the user's console during clones.
     // The required `on...line` callbacks currently do nothing.
     // The output appears to be included in error messages by default.
-    cmd.exec_with_output()?;
+    cmd.exec_with_output().map_err(|err| {
+        let msg = err.to_string();
+        if msg.contains("transport '") && msg.contains("' not allowed") && offline {
+            return GitError::TransportNotAllowed.into();
+        }
+        err
+    })?;
 
     Ok(())
 }

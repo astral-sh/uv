@@ -492,6 +492,12 @@ impl EnvVars {
     #[attr_hidden]
     pub const GIT_SSL_NO_VERIFY: &'static str = "GIT_SSL_NO_VERIFY";
 
+    /// Sets allowed protocols for git operations.
+    ///
+    /// When uv is in "offline" mode, only the "file" protocol is allowed.
+    #[attr_hidden]
+    pub const GIT_ALLOW_PROTOCOL: &'static str = "GIT_ALLOW_PROTOCOL";
+
     /// Disable interactive git prompts in terminals, e.g., for credentials. Does not disable
     /// GUI prompts.
     #[attr_hidden]

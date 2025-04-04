@@ -25,6 +25,8 @@ pub struct GitSource {
     client: ClientWithMiddleware,
     /// Whether to disable SSL verification.
     disable_ssl: bool,
+    /// Whether to operate without network connectivity.
+    offline: bool,
     /// The path to the Git source database.
     cache: PathBuf,
     /// The reporter to use for this source.
@@ -37,10 +39,12 @@ impl GitSource {
         git: GitUrl,
         client: impl Into<ClientWithMiddleware>,
         cache: impl Into<PathBuf>,
+        offline: bool,
     ) -> Self {
         Self {
             git,
             disable_ssl: false,
+            offline,
             client: client.into(),
             cache: cache.into(),
             reporter: None,
@@ -110,6 +114,7 @@ impl GitSource {
                     locked_rev,
                     &self.client,
                     self.disable_ssl,
+                    self.offline,
                 )?;
 
                 (db, actual_rev, task)
