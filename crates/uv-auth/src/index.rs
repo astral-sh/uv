@@ -48,6 +48,9 @@ impl Display for AuthPolicy {
     }
 }
 
+// TODO(john): We are not using `uv_distribution_types::Index` directly
+// here because it would cause circular crate dependencies. However, this
+// could potentially make sense for a future refactor.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Index {
     pub url: Url,
