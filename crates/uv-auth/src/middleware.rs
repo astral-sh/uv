@@ -872,9 +872,8 @@ mod tests {
             )
             .build();
 
-        assert_eq!(
-            client.get(server.uri()).send().await?.status(),
-            401,
+        assert!(
+            client.get(server.uri()).send().await.is_err(),
             "Credentials should not be pulled from the netrc file due to host mismatch"
         );
 
@@ -956,9 +955,8 @@ mod tests {
             )
             .build();
 
-        assert_eq!(
-            client.get(server.uri()).send().await?.status(),
-            401,
+        assert!(
+            client.get(server.uri()).send().await.is_err(),
             "Credentials are not pulled from the keyring without a username"
         );
 
