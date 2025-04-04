@@ -156,6 +156,13 @@ built from source. We recommend running `uv cache prune --ci` at the end of your
 integration job to ensure maximum cache efficiency. For an example, see the
 [GitHub integration guide](../guides/integration/github.md#caching).
 
+## Sharing the cache
+
+uv shares a cache across processes on the same machine by default.
+
+See the [Docker integration guide](../guides/integration/docker.md) for details on how to share the
+cache across containers.
+
 ## Cache directory
 
 uv determines the cache directory according to, in order:
