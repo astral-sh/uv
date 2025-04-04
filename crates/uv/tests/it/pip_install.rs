@@ -5433,8 +5433,6 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
     ----- stderr -----
     Request for public@https://pypi-proxy.fly.dev/basic-auth/simple
     Request for public@pypi-proxy.fly.dev
-    Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
-    Request for public@pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
