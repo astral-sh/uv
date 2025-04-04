@@ -481,15 +481,9 @@ impl AuthMiddleware {
                         debug!("Checking keyring for credentials for index URL {}@{}", username, index_url);
                         keyring.fetch(index_url, Some(username)).await
                     } else {
-                        None
-                    };
-
-                    if index_credentials.is_some() {
-                        index_credentials
-                    } else {
                         debug!("Checking keyring for credentials for full URL {}@{}", username, *url);
                         keyring.fetch(url, Some(username)).await
-                    }
+                    };
                 } else if matches!(auth_policy, AuthPolicy::Always) {
                     let index_credentials = if let Some(index_url) = self.auth_indexes.index_url_for(url) {
                         debug!(
@@ -497,17 +491,11 @@ impl AuthMiddleware {
                         );
                         keyring.fetch(index_url, None).await
                     } else {
-                        None
-                    };
-
-                    if index_credentials.is_some() {
-                        index_credentials
-                    } else {
                         debug!(
                             "Checking keyring for credentials for full URL {url} without username due to `authenticate = always`"
                         );
                         keyring.fetch(url, None).await
-                    }
+                    };
                 } else {
                     debug!("Skipping keyring fetch for {url} without username; use `authenticate = always` to force");
                     None
