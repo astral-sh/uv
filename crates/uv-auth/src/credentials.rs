@@ -70,7 +70,7 @@ impl From<Option<String>> for Username {
 impl Credentials {
     /// Create a set of HTTP Basic Authentication credentials.
     #[allow(dead_code)]
-    pub(crate) fn basic(username: Option<String>, password: Option<String>) -> Self {
+    pub fn basic(username: Option<String>, password: Option<String>) -> Self {
         Self::Basic {
             username: Username::new(username),
             password,
@@ -79,7 +79,7 @@ impl Credentials {
 
     /// Create a set of Bearer Authentication credentials.
     #[allow(dead_code)]
-    pub(crate) fn bearer(token: Vec<u8>) -> Self {
+    pub fn bearer(token: Vec<u8>) -> Self {
         Self::Bearer { token }
     }
 
@@ -245,7 +245,7 @@ impl Credentials {
     /// Create an HTTP Basic Authentication header for the credentials.
     ///
     /// Panics if the username or password cannot be base64 encoded.
-    pub(crate) fn to_header_value(&self) -> HeaderValue {
+    pub fn to_header_value(&self) -> HeaderValue {
         match self {
             Self::Basic { .. } => {
                 // See: <https://github.com/seanmonstar/reqwest/blob/2c11ef000b151c2eebeed2c18a7b81042220c6b0/src/util.rs#L3>
@@ -291,7 +291,7 @@ impl Credentials {
     ///
     /// Any existing credentials will be overridden.
     #[must_use]
-    pub(crate) fn authenticate(&self, mut request: Request) -> Request {
+    pub fn authenticate(&self, mut request: Request) -> Request {
         request
             .headers_mut()
             .insert(reqwest::header::AUTHORIZATION, Self::to_header_value(self));

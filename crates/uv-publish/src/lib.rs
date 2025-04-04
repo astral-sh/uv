@@ -1,8 +1,10 @@
 mod trusted_publishing;
 
-use crate::trusted_publishing::TrustedPublishingError;
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
+use std::{env, fmt, io};
+
 use fs_err::tokio::File;
 use futures::TryStreamExt;
 use glob::{glob, GlobError, PatternError};
@@ -15,10 +17,6 @@ use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{RetryPolicy, Retryable, RetryableStrategy};
 use rustc_hash::FxHashSet;
 use serde::Deserialize;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-use std::{env, fmt, io};
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, BufReader};
 use tokio::sync::Semaphore;
@@ -26,6 +24,8 @@ use tokio_util::io::ReaderStream;
 use tracing::{debug, enabled, trace, warn, Level};
 use trusted_publishing::TrustedPublishingToken;
 use url::Url;
+
+use uv_auth::Credentials;
 use uv_cache::{Cache, Refresh};
 use uv_client::{
     BaseClient, MetadataFormat, OwnedArchive, RegistryClientBuilder, UvRetryableStrategy,
@@ -40,6 +40,8 @@ use uv_metadata::read_metadata_async_seek;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
+
+use crate::trusted_publishing::TrustedPublishingError;
 
 #[derive(Error, Debug)]
 pub enum PublishError {
@@ -370,8 +372,7 @@ pub async fn upload(
     filename: &DistFilename,
     registry: &Url,
     client: &BaseClient,
-    username: Option<&str>,
-    password: Option<&str>,
+    credentials: &Credentials,
     check_url_client: Option<&CheckUrlClient<'_>>,
     download_concurrency: &Semaphore,
     reporter: Arc<impl Reporter>,
@@ -391,8 +392,7 @@ pub async fn upload(
             filename,
             registry,
             client,
-            username,
-            password,
+            credentials,
             &form_metadata,
             reporter.clone(),
         )
@@ -744,8 +744,7 @@ async fn build_request(
     filename: &DistFilename,
     registry: &Url,
     client: &BaseClient,
-    username: Option<&str>,
-    password: Option<&str>,
+    credentials: &Credentials,
     form_metadata: &[(&'static str, String)],
     reporter: Arc<impl Reporter>,
 ) -> Result<(RequestBuilder, usize), PublishPrepareError> {
@@ -767,17 +766,15 @@ async fn build_request(
     let part = Part::stream_with_length(file_reader, file_size).file_name(raw_filename.to_string());
     form = form.part("content", part);
 
-    let url = if let Some(username) = username {
-        if password.is_none() {
-            // Attach the username to the URL so the authentication middleware can find the matching
-            // password.
-            let mut url = registry.clone();
-            let _ = url.set_username(username);
-            url
-        } else {
-            // We set the authorization header below.
-            registry.clone()
-        }
+    // If we have a username but no password, attach the username to the URL so the authentication
+    // middleware can find the matching password.
+    let url = if let Some(username) = credentials
+        .username()
+        .filter(|_| credentials.password().is_none())
+    {
+        let mut url = registry.clone();
+        let _ = url.set_username(username);
+        url
     } else {
         registry.clone()
     };
@@ -793,11 +790,20 @@ async fn build_request(
             reqwest::header::ACCEPT,
             "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
         );
-    if let (Some(username), Some(password)) = (username, password) {
-        debug!("Using username/password basic auth");
-        let credentials = BASE64_STANDARD.encode(format!("{username}:{password}"));
-        request = request.header(AUTHORIZATION, format!("Basic {credentials}"));
+
+    match credentials {
+        Credentials::Basic { password, .. } => {
+            if password.is_some() {
+                debug!("Using HTTP Basic authentication");
+                request = request.header(AUTHORIZATION, credentials.to_header_value());
+            }
+        }
+        Credentials::Bearer { .. } => {
+            debug!("Using Bearer token authentication");
+            request = request.header(AUTHORIZATION, credentials.to_header_value());
+        }
     }
+
     Ok((request, idx))
 }
 
@@ -875,6 +881,7 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
     use url::Url;
+    use uv_auth::Credentials;
     use uv_client::BaseClientBuilder;
     use uv_distribution_filename::DistFilename;
 
@@ -958,8 +965,7 @@ mod tests {
             &filename,
             &Url::parse("https://example.org/upload").unwrap(),
             &BaseClientBuilder::new().build(),
-            Some("ferris"),
-            Some("F3RR!S"),
+            &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
             &form_metadata,
             Arc::new(DummyReporter),
         )
@@ -969,35 +975,35 @@ mod tests {
         insta::with_settings!({
             filters => [("boundary=[0-9a-f-]+", "boundary=[...]")],
         }, {
-            assert_debug_snapshot!(&request, @r###"
-        RequestBuilder {
-            inner: RequestBuilder {
-                method: POST,
-                url: Url {
-                    scheme: "https",
-                    cannot_be_a_base: false,
-                    username: "",
-                    password: None,
-                    host: Some(
-                        Domain(
-                            "example.org",
+            assert_debug_snapshot!(&request, @r#"
+            RequestBuilder {
+                inner: RequestBuilder {
+                    method: POST,
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "example.org",
+                            ),
                         ),
-                    ),
-                    port: None,
-                    path: "/upload",
-                    query: None,
-                    fragment: None,
+                        port: None,
+                        path: "/upload",
+                        query: None,
+                        fragment: None,
+                    },
+                    headers: {
+                        "content-type": "multipart/form-data; boundary=[...]",
+                        "content-length": "6803",
+                        "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
+                        "authorization": Sensitive,
+                    },
                 },
-                headers: {
-                    "content-type": "multipart/form-data; boundary=[...]",
-                    "content-length": "6803",
-                    "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
-                    "authorization": "Basic ZmVycmlzOkYzUlIhUw==",
-                },
-            },
-            ..
-        }
-        "###);
+                ..
+            }
+            "#);
         });
     }
 
@@ -1109,8 +1115,7 @@ mod tests {
             &filename,
             &Url::parse("https://example.org/upload").unwrap(),
             &BaseClientBuilder::new().build(),
-            Some("ferris"),
-            Some("F3RR!S"),
+            &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
             &form_metadata,
             Arc::new(DummyReporter),
         )
@@ -1120,35 +1125,35 @@ mod tests {
         insta::with_settings!({
             filters => [("boundary=[0-9a-f-]+", "boundary=[...]")],
         }, {
-            assert_debug_snapshot!(&request, @r###"
-        RequestBuilder {
-            inner: RequestBuilder {
-                method: POST,
-                url: Url {
-                    scheme: "https",
-                    cannot_be_a_base: false,
-                    username: "",
-                    password: None,
-                    host: Some(
-                        Domain(
-                            "example.org",
+            assert_debug_snapshot!(&request, @r#"
+            RequestBuilder {
+                inner: RequestBuilder {
+                    method: POST,
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "example.org",
+                            ),
                         ),
-                    ),
-                    port: None,
-                    path: "/upload",
-                    query: None,
-                    fragment: None,
+                        port: None,
+                        path: "/upload",
+                        query: None,
+                        fragment: None,
+                    },
+                    headers: {
+                        "content-type": "multipart/form-data; boundary=[...]",
+                        "content-length": "19330",
+                        "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
+                        "authorization": Sensitive,
+                    },
                 },
-                headers: {
-                    "content-type": "multipart/form-data; boundary=[...]",
-                    "content-length": "19330",
-                    "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
-                    "authorization": "Basic ZmVycmlzOkYzUlIhUw==",
-                },
-            },
-            ..
-        }
-        "###);
+                ..
+            }
+            "#);
         });
     }
 }
