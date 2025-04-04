@@ -56,7 +56,7 @@ use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
-pub(crate) use version::version;
+pub(crate) use version::{project_version, self_version};
 
 use crate::printer::Printer;
 
