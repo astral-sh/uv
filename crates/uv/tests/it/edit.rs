@@ -3662,6 +3662,41 @@ fn add_error() -> Result<()> {
     Ok(())
 }
 
+/// Emit dedicated error message when adding Conda `enviroment.yml`
+#[test]
+fn add_environment_yml_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let environment_yml = context.temp_dir.child("environment.yml");
+    environment_yml.write_str(indoc! {r#"
+        name: test-env
+        channels:
+          - conda-forge
+        dependencies:
+          - python>=3.12
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("environment.yml"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Conda environment file `environment.yml` is not supported
+    ");
+
+    Ok(())
+}
+
 /// Set a lower bound when adding unconstrained dependencies.
 #[test]
 fn add_lower_bound() -> Result<()> {
