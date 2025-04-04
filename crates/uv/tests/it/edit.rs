@@ -3662,7 +3662,7 @@ fn add_error() -> Result<()> {
     Ok(())
 }
 
-/// Emit dedicated error message when adding Conda `enviroment.yml`
+/// Emit dedicated error message when adding Conda `environment.yml`
 #[test]
 fn add_environment_yml_error() -> Result<()> {
     let context = TestContext::new("3.12");

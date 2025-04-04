@@ -8028,7 +8028,7 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
     Ok(())
 }
 
-/// Emit dedicated error message when adding Conda `enviroment.yml`
+/// Emit dedicated error message when installing Conda `environment.yml`
 #[test]
 fn install_unsupported_environment_yml() -> Result<()> {
     let context = TestContext::new("3.12");
