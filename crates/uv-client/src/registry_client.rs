@@ -16,7 +16,7 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
-use uv_auth::AuthIndexes;
+use uv_auth::Indexes;
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
@@ -73,7 +73,7 @@ impl<'a> RegistryClientBuilder<'a> {
         self.index_urls = index_locations.index_urls();
         self.base_client_builder = self
             .base_client_builder
-            .auth_indexes(AuthIndexes::from(index_locations));
+            .auth_indexes(Indexes::from(index_locations));
         self
     }
 

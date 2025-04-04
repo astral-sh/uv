@@ -4,8 +4,8 @@ use http::{Extensions, StatusCode};
 use url::Url;
 
 use crate::{
-    auth_index::{AuthIndexes, AuthPolicy},
     credentials::{Credentials, Username},
+    index::{AuthPolicy, Indexes},
     realm::Realm,
     CredentialsCache, KeyringProvider, CREDENTIALS_CACHE,
 };
@@ -58,7 +58,7 @@ pub struct AuthMiddleware {
     keyring: Option<KeyringProvider>,
     cache: Option<CredentialsCache>,
     /// Auth policies for specific URLs.
-    auth_indexes: AuthIndexes,
+    auth_indexes: Indexes,
     /// Set all endpoints as needing authentication. We never try to send an
     /// unauthenticated request, avoiding cloning an uncloneable request.
     only_authenticated: bool,
@@ -70,7 +70,7 @@ impl AuthMiddleware {
             netrc: NetrcMode::default(),
             keyring: None,
             cache: None,
-            auth_indexes: AuthIndexes::new(),
+            auth_indexes: Indexes::new(),
             only_authenticated: false,
         }
     }
@@ -104,7 +104,7 @@ impl AuthMiddleware {
 
     /// Configure the [`AuthPolicy`]s to use for URLs.
     #[must_use]
-    pub fn with_auth_indexes(mut self, auth_indexes: AuthIndexes) -> Self {
+    pub fn with_auth_indexes(mut self, auth_indexes: Indexes) -> Self {
         self.auth_indexes = auth_indexes;
         self
     }
@@ -477,19 +477,31 @@ impl AuthMiddleware {
                 // URLs; instead, we fetch if there's a username or if the user has requested to
                 // always authenticate.
                 if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
-                    if let Some(index_url) = self.auth_indexes.auth_index_url_for(url) {
-                        debug!("Checking keyring for credentials for index URL {username}@{index_url}");
+                    let index_credentials = if let Some(index_url) = self.auth_indexes.index_url_for(url) {
+                        debug!("Checking keyring for credentials for index URL {}@{}", username, index_url);
                         keyring.fetch(index_url, Some(username)).await
                     } else {
-                        debug!("Checking keyring for credentials for full URL {username}@{url}");
+                        None
+                    };
+
+                    if index_credentials.is_some() {
+                        index_credentials
+                    } else {
+                        debug!("Checking keyring for credentials for full URL {}@{}", username, *url);
                         keyring.fetch(url, Some(username)).await
                     }
                 } else if matches!(auth_policy, AuthPolicy::Always) {
-                    if let Some(index_url) = self.auth_indexes.auth_index_url_for(url) {
+                    let index_credentials = if let Some(index_url) = self.auth_indexes.index_url_for(url) {
                         debug!(
                             "Checking keyring for credentials for index URL {index_url} without username due to `authenticate = always`"
                         );
                         keyring.fetch(index_url, None).await
+                    } else {
+                        None
+                    };
+
+                    if index_credentials.is_some() {
+                        index_credentials
                     } else {
                         debug!(
                             "Checking keyring for credentials for full URL {url} without username due to `authenticate = always`"
@@ -551,7 +563,7 @@ mod tests {
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use crate::AuthIndex;
+    use crate::Index;
 
     use super::*;
 
@@ -1669,12 +1681,12 @@ mod tests {
         Ok(())
     }
 
-    fn auth_indexes_for(url: &Url, policy: AuthPolicy) -> AuthIndexes {
+    fn auth_indexes_for(url: &Url, policy: AuthPolicy) -> Indexes {
         let mut url = url.clone();
         url.set_password(None).ok();
         url.set_username("").ok();
-        AuthIndexes::from_auth_indexes(vec![AuthIndex {
-            index_url: url.clone(),
+        Indexes::from_indexes(vec![Index {
+            url: url.clone(),
             policy_url: url,
             auth_policy: policy,
         }])

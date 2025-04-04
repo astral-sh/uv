@@ -49,9 +49,8 @@ impl Display for AuthPolicy {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub struct AuthIndex {
-    /// The PEP 503 simple endpoint for the index
-    pub index_url: Url,
+pub struct Index {
+    pub url: Url,
     /// The root endpoint where the auth policy is applied.
     /// For PEP 503 endpoints, this excludes `/simple`.
     pub policy_url: Url,
@@ -59,31 +58,31 @@ pub struct AuthIndex {
 }
 
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
-pub struct AuthIndexes(FxHashSet<AuthIndex>);
+pub struct Indexes(FxHashSet<Index>);
 
-impl AuthIndexes {
+impl Indexes {
     pub fn new() -> Self {
         Self(FxHashSet::default())
     }
 
     /// Create a new [`AuthIndexUrls`] from an iterator of [`AuthIndexUrl`]s.
-    pub fn from_auth_indexes(urls: impl IntoIterator<Item = AuthIndex>) -> Self {
-        let mut auth_index_urls = Self::new();
+    pub fn from_indexes(urls: impl IntoIterator<Item = Index>) -> Self {
+        let mut index_urls = Self::new();
         for url in urls {
-            auth_index_urls.0.insert(url);
+            index_urls.0.insert(url);
         }
-        auth_index_urls
+        index_urls
     }
 
     /// Get the index URL prefix for a URL if one exists.
-    pub fn auth_index_url_for(&self, url: &Url) -> Option<&Url> {
+    pub fn index_url_for(&self, url: &Url) -> Option<&Url> {
         // TODO(john): There are probably not many URLs to iterate through,
         // but we could use a trie instead of a HashSet here for more
         // efficient search.
         self.0
             .iter()
-            .find(|auth_index| url.as_str().starts_with(auth_index.index_url.as_str()))
-            .map(|auth_index| &auth_index.index_url)
+            .find(|index| url.as_str().starts_with(index.url.as_str()))
+            .map(|index| &index.url)
     }
 
     /// Get the [`AuthPolicy`] for a URL.
@@ -91,9 +90,9 @@ impl AuthIndexes {
         // TODO(john): There are probably not many URLs to iterate through,
         // but we could use a trie instead of a HashMap here for more
         // efficient search.
-        for auth_index in &self.0 {
-            if url.as_str().starts_with(auth_index.policy_url.as_str()) {
-                return auth_index.auth_policy;
+        for index in &self.0 {
+            if url.as_str().starts_with(index.policy_url.as_str()) {
+                return index.auth_policy;
             }
         }
         AuthPolicy::Auto

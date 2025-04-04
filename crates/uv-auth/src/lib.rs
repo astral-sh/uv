@@ -3,16 +3,16 @@ use std::sync::{Arc, LazyLock};
 use tracing::trace;
 use url::Url;
 
-pub use auth_index::{AuthIndex, AuthIndexes, AuthPolicy};
 use cache::CredentialsCache;
 pub use credentials::Credentials;
+pub use index::{AuthPolicy, Index, Indexes};
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
 use realm::Realm;
 
-mod auth_index;
 mod cache;
 mod credentials;
+mod index;
 mod keyring;
 mod middleware;
 mod realm;

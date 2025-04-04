@@ -16,7 +16,7 @@ use reqwest_retry::{
 use tracing::{debug, trace};
 use url::Url;
 
-use uv_auth::{AuthIndexes, AuthMiddleware, UrlAuthPolicies};
+use uv_auth::{AuthMiddleware, Indexes, UrlAuthPolicies};
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
@@ -56,7 +56,7 @@ pub struct BaseClientBuilder<'a> {
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
-    auth_indexes: Option<AuthIndexes>,
+    auth_indexes: Option<Indexes>,
     default_timeout: Duration,
     extra_middleware: Option<ExtraMiddleware>,
     proxies: Vec<Proxy>,
@@ -149,7 +149,7 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn auth_indexes(mut self, auth_indexes: AuthIndexes) -> Self {
+    pub fn auth_indexes(mut self, auth_indexes: Indexes) -> Self {
         self.auth_indexes = Some(auth_indexes);
         self
     }
@@ -342,25 +342,25 @@ impl<'a> BaseClientBuilder<'a> {
                 // Initialize the authentication middleware to set headers.
                 match self.auth_integration {
                     AuthIntegration::Default => {
-                        let auth_middleware =
-                            AuthMiddleware::new().with_keyring(self.keyring.to_provider());
-                        if let Some(auth_indexes) = &self.auth_indexes {
-                            client = client
-                                .with(auth_middleware.with_auth_indexes(auth_indexes.clone()));
+                        let auth_middleware = if let Some(auth_indexes) = &self.auth_indexes {
+                            AuthMiddleware::new().with_auth_indexes(auth_indexes.clone())
                         } else {
-                            client = client.with(auth_middleware);
+                            AuthMiddleware::new()
                         }
+                        .with_keyring(self.keyring.to_provider());
+
+                        client = client.with(auth_middleware);
                     }
                     AuthIntegration::OnlyAuthenticated => {
-                        let auth_middleware = AuthMiddleware::new()
-                            .with_keyring(self.keyring.to_provider())
-                            .with_only_authenticated(true);
-                        if let Some(auth_indexes) = &self.auth_indexes {
-                            client = client
-                                .with(auth_middleware.with_auth_indexes(auth_indexes.clone()));
+                        let auth_middleware = if let Some(auth_indexes) = &self.auth_indexes {
+                            AuthMiddleware::new().with_auth_indexes(auth_indexes.clone())
                         } else {
-                            client = client.with(auth_middleware);
+                            AuthMiddleware::new()
                         }
+                        .with_keyring(self.keyring.to_provider())
+                        .with_only_authenticated(true);
+
+                        client = client.with(auth_middleware);
                     }
                     AuthIntegration::NoAuthMiddleware => {
                         // The downstream code uses custom auth logic.
