@@ -73,7 +73,7 @@ impl<'a> RegistryClientBuilder<'a> {
         self.index_urls = index_locations.index_urls();
         self.base_client_builder = self
             .base_client_builder
-            .auth_indexes(Indexes::from(index_locations));
+            .indexes(Indexes::from(index_locations));
         self
     }
 

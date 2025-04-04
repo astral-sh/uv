@@ -56,7 +56,7 @@ pub struct BaseClientBuilder<'a> {
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
-    auth_indexes: Option<Indexes>,
+    indexes: Indexes,
     default_timeout: Duration,
     extra_middleware: Option<ExtraMiddleware>,
     proxies: Vec<Proxy>,
@@ -91,7 +91,7 @@ impl BaseClientBuilder<'_> {
             markers: None,
             platform: None,
             auth_integration: AuthIntegration::default(),
-            auth_indexes: None,
+            indexes: Indexes::new(),
             default_timeout: Duration::from_secs(30),
             extra_middleware: None,
             proxies: vec![],
@@ -149,8 +149,8 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn auth_indexes(mut self, auth_indexes: Indexes) -> Self {
-        self.auth_indexes = Some(auth_indexes);
+    pub fn indexes(mut self, indexes: Indexes) -> Self {
+        self.indexes = indexes;
         self
     }
 
@@ -342,23 +342,16 @@ impl<'a> BaseClientBuilder<'a> {
                 // Initialize the authentication middleware to set headers.
                 match self.auth_integration {
                     AuthIntegration::Default => {
-                        let auth_middleware = if let Some(auth_indexes) = &self.auth_indexes {
-                            AuthMiddleware::new().with_auth_indexes(auth_indexes.clone())
-                        } else {
-                            AuthMiddleware::new()
-                        }
-                        .with_keyring(self.keyring.to_provider());
-
+                        let auth_middleware = AuthMiddleware::new()
+                            .with_auth_indexes(self.indexes.clone())
+                            .with_keyring(self.keyring.to_provider());
                         client = client.with(auth_middleware);
                     }
                     AuthIntegration::OnlyAuthenticated => {
-                        let auth_middleware = if let Some(auth_indexes) = &self.auth_indexes {
-                            AuthMiddleware::new().with_auth_indexes(auth_indexes.clone())
-                        } else {
-                            AuthMiddleware::new()
-                        }
-                        .with_keyring(self.keyring.to_provider())
-                        .with_only_authenticated(true);
+                        let auth_middleware = AuthMiddleware::new()
+                            .with_auth_indexes(self.indexes.clone())
+                            .with_keyring(self.keyring.to_provider())
+                            .with_only_authenticated(true);
 
                         client = client.with(auth_middleware);
                     }
