@@ -250,11 +250,15 @@ impl Middleware for AuthMiddleware {
 
             // If we don't fail with authorization related codes or
             // authentication policy is Never, return the response.
-            if !matches!(
-                response.status(),
-                StatusCode::FORBIDDEN | StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED
-            ) || matches!(auth_policy, AuthPolicy::Never)
+            if matches!(auth_policy, AuthPolicy::Never)
+                || !matches!(
+                    response.status(),
+                    StatusCode::FORBIDDEN | StatusCode::NOT_FOUND | StatusCode::UNAUTHORIZED
+                )
             {
+                if credentials.is_none() && response.status() == StatusCode::UNAUTHORIZED {
+                    return Err(missing_credentials_error(&url));
+                }
                 return Ok(response);
             }
 
@@ -323,12 +327,11 @@ impl Middleware for AuthMiddleware {
         }
 
         if let Some(response) = response {
-            Ok(response)
-        } else {
-            Err(Error::Middleware(format_err!(
-                "Missing credentials for {url}"
-            )))
+            if !(response.status() == StatusCode::UNAUTHORIZED && credentials.is_none()) {
+                return Ok(response);
+            }
         }
+        Err(missing_credentials_error(&url))
     }
 }
 
@@ -527,6 +530,10 @@ fn tracing_url(request: &Request, credentials: Option<&Credentials>) -> String {
     }
 }
 
+fn missing_credentials_error(url: &str) -> reqwest_middleware::Error {
+    Error::Middleware(format_err!("Missing credentials for {url}"))
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Write;
@@ -575,22 +582,22 @@ mod tests {
             .with(AuthMiddleware::new().with_cache(CredentialsCache::new()))
             .build();
 
-        assert_eq!(
+        assert!(
             client
                 .get(format!("{}/foo", server.uri()))
                 .send()
-                .await?
-                .status(),
-            401
+                .await
+                .is_err(),
+            "Requests should require credentials"
         );
 
-        assert_eq!(
+        assert!(
             client
                 .get(format!("{}/bar", server.uri()))
                 .send()
-                .await?
-                .status(),
-            401
+                .await
+                .is_err(),
+            "Requests should require credentials"
         );
 
         Ok(())
@@ -1237,14 +1244,12 @@ mod tests {
             .build();
 
         // Both servers do not work without a username
-        assert_eq!(
-            client.get(server_1.uri()).send().await?.status(),
-            401,
+        assert!(
+            client.get(server_1.uri()).send().await.is_err(),
             "Requests should require a username"
         );
-        assert_eq!(
-            client.get(server_2.uri()).send().await?.status(),
-            401,
+        assert!(
+            client.get(server_2.uri()).send().await.is_err(),
             "Requests should require a username"
         );
 
@@ -1255,9 +1260,8 @@ mod tests {
             200,
             "Requests with a username should succeed"
         );
-        assert_eq!(
-            client.get(server_2.uri()).send().await?.status(),
-            401,
+        assert!(
+            client.get(server_2.uri()).send().await.is_err(),
             "Credentials should not be re-used for the second server"
         );
 
@@ -1487,14 +1491,12 @@ mod tests {
             .build();
 
         // Both servers do not work without a username
-        assert_eq!(
-            client.get(base_url_1.clone()).send().await?.status(),
-            401,
+        assert!(
+            client.get(base_url_1.clone()).send().await.is_err(),
             "Requests should require a username"
         );
-        assert_eq!(
-            client.get(base_url_2.clone()).send().await?.status(),
-            401,
+        assert!(
+            client.get(base_url_2.clone()).send().await.is_err(),
             "Requests should require a username"
         );
 
@@ -1602,14 +1604,12 @@ mod tests {
             .build();
 
         // Both servers do not work without a username
-        assert_eq!(
-            client.get(base_url_1.clone()).send().await?.status(),
-            401,
+        assert!(
+            client.get(base_url_1.clone()).send().await.is_err(),
             "Requests should require a username"
         );
-        assert_eq!(
-            client.get(base_url_2.clone()).send().await?.status(),
-            401,
+        assert!(
+            client.get(base_url_2.clone()).send().await.is_err(),
             "Requests should require a username"
         );
 
@@ -1795,13 +1795,12 @@ mod tests {
         url.set_username(username).unwrap();
         url.set_password(Some(password)).unwrap();
 
-        assert_eq!(
+        assert!(
             client
                 .get(format!("{}/foo", server.uri()))
                 .send()
-                .await?
-                .status(),
-            401,
+                .await
+                .is_err(),
             "Requests should not be completed if credentials are required"
         );
 

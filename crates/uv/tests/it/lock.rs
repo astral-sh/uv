@@ -7517,16 +7517,15 @@ fn lock_index_workspace_member() -> Result<()> {
     )?;
 
     // Locking without the necessary credentials should fail.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because iniconfig was not found in the package registry and child depends on iniconfig>=2, we can conclude that child's requirements are unsatisfiable.
-          And because your workspace requires child, we can conclude that your workspace's requirements are unsatisfiable.
-    "###);
+    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/`
+      Caused by: Missing credentials for https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/
+    ");
 
     uv_snapshot!(context.filters(), context.lock()
         .env("UV_INDEX_MY_INDEX_USERNAME", "public")
@@ -7870,7 +7869,7 @@ fn lock_redact_https() -> Result<()> {
 
     // Installing from the lockfile should fail without credentials. Omit the root, so that we fail
     // when installing `iniconfig`, rather than when building `foo`.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://pypi-proxy.fly.dev/basic-auth/simple").arg("--no-install-project"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://pypi-proxy.fly.dev/basic-auth/simple").arg("--no-install-project"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7878,12 +7877,12 @@ fn lock_redact_https() -> Result<()> {
     ----- stderr -----
       × Failed to download `iniconfig==2.0.0`
       ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+      ╰─▶ Missing credentials for https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
       help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
-    "###);
+    ");
 
     // Installing from the lockfile should fail without an index.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-install-project"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-install-project"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7891,9 +7890,9 @@ fn lock_redact_https() -> Result<()> {
     ----- stderr -----
       × Failed to download `iniconfig==2.0.0`
       ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+      ╰─▶ Missing credentials for https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
       help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
-    "###);
+    ");
 
     // Installing from the lockfile should succeed when credentials are included on the command-line.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--index-url").arg("https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
@@ -7921,7 +7920,7 @@ fn lock_redact_https() -> Result<()> {
     "###);
 
     // Installing without credentials will fail without a cache.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").arg("--no-install-project"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").arg("--no-install-project"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7929,9 +7928,9 @@ fn lock_redact_https() -> Result<()> {
     ----- stderr -----
       × Failed to download `iniconfig==2.0.0`
       ├─▶ Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl`
-      ╰─▶ HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+      ╰─▶ Missing credentials for https://pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl
       help: `iniconfig` (v2.0.0) was included because `foo` (v0.1.0) depends on `iniconfig`
-    "###);
+    ");
 
     // Installing with credentials from with `UV_INDEX_URL` should succeed.
     uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache").env(EnvVars::UV_INDEX_URL, "https://public:heron@pypi-proxy.fly.dev/basic-auth/simple"), @r###"
@@ -8459,17 +8458,15 @@ fn lock_env_credentials() -> Result<()> {
     )?;
 
     // Without credentials, the resolution should fail.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
-
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-    "###);
+    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/`
+      Caused by: Missing credentials for https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/
+    ");
 
     // Provide credentials via environment variables.
     uv_snapshot!(context.filters(), context.lock()

@@ -10358,7 +10358,7 @@ fn add_auth_policy_never_with_url_credentials() -> Result<()> {
 
     ----- stderr -----
     error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata)
+      Caused by: Missing credentials for https://pypi-proxy.fly.dev/basic-auth/files/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl.metadata
     "
     );
 
@@ -10391,15 +10391,12 @@ fn add_auth_policy_never_with_env_var_credentials() -> Result<()> {
         .env("UV_INDEX_MY_INDEX_USERNAME", "public")
         .env("UV_INDEX_MY_INDEX_PASSWORD", "heron"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
-
-          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/anyio/`
+      Caused by: Missing credentials for https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
     "
     );
 
