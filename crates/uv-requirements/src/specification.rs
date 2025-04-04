@@ -212,6 +212,12 @@ impl RequirementsSpecification {
                     ..Self::default()
                 }
             }
+            RequirementsSource::EnvironmentYml(path) => {
+                return Err(anyhow::anyhow!(
+                    "Conda environment file `{}` is not supported",
+                    path.user_display()
+                ))
+            }
         })
     }
 
