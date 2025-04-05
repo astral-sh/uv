@@ -8048,7 +8048,7 @@ fn install_unsupported_environment_yml() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Conda environment file `environment.yml` is not supported
+    error: Conda environment files (i.e. `environment.yml`) are not supported
     ");
 
     Ok(())
