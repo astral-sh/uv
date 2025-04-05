@@ -36,6 +36,9 @@ fn help() {
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
+    Options:
+      -V, --version  Print version
+
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
                                    directory for the duration of the operation [env: UV_NO_CACHE=]
@@ -73,8 +76,6 @@ fn help() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     Use `uv help <command>` for more information on a specific command.
 
@@ -115,6 +116,9 @@ fn help_flag() {
       version  Display uv's version
       help     Display documentation for a command
 
+    Options:
+      -V, --version  Print version
+
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
                                    directory for the duration of the operation [env: UV_NO_CACHE=]
@@ -152,8 +156,6 @@ fn help_flag() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     Use `uv help` for more details.
 
@@ -193,6 +195,9 @@ fn help_short_flag() {
       version  Display uv's version
       help     Display documentation for a command
 
+    Options:
+      -V, --version  Print version
+
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
                                    directory for the duration of the operation [env: UV_NO_CACHE=]
@@ -230,8 +235,6 @@ fn help_short_flag() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     Use `uv help` for more details.
 
@@ -440,9 +443,6 @@ fn help_subcommand() {
 
       -h, --help
               Display the concise help for this command
-
-      -V, --version
-              Display the uv version
 
     Use `uv help python <command>` for more information on a specific command.
 
@@ -694,9 +694,6 @@ fn help_subsubcommand() {
       -h, --help
               Display the concise help for this command
 
-      -V, --version
-              Display the uv version
-
 
     ----- stderr -----
     "#);
@@ -759,8 +756,6 @@ fn help_flag_subcommand() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     Use `uv help python` for more details.
 
@@ -831,8 +826,6 @@ fn help_flag_subsubcommand() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     ----- stderr -----
     "#);
@@ -950,6 +943,9 @@ fn help_with_global_option() {
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
+    Options:
+      -V, --version  Print version
+
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
                                    directory for the duration of the operation [env: UV_NO_CACHE=]
@@ -987,8 +983,6 @@ fn help_with_global_option() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     Use `uv help <command>` for more information on a specific command.
 
@@ -1065,6 +1059,9 @@ fn help_with_no_pager() {
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
+    Options:
+      -V, --version  Print version
+
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
                                    directory for the duration of the operation [env: UV_NO_CACHE=]
@@ -1102,8 +1099,6 @@ fn help_with_no_pager() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     Use `uv help <command>` for more information on a specific command.
 
