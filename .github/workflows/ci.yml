@@ -1349,6 +1349,37 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: "/home/runner/example"
 
+  integration-test-github-actions-freethreaded:
+    timeout-minutes: 10
+    needs: build-binary-linux-libc
+    name: "integration test | free-threaded python on github actions"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5
+        with:
+          python-version: "3.13t"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: uv-linux-libc-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Install a package without system opt-in"
+        run: |
+          ./uv pip install anyio && exit 1 || echo "Failed as expected"
+
+      - name: "Install a package with system opt-in but without free-threaded opt-in"
+        run: |
+          ./uv pip install anyio --system --python 3.13 || echo "Failed as expected"
+          # (we need to request 3.13 or we'll discover 3.12 on the system)
+
+      - name: "Install a package with system and free-threaded opt-in"
+        run: |
+          ./uv pip install anyio --system --python 3.13t
+
   integration-test-publish-changed:
     timeout-minutes: 10
     needs: build-binary-linux-libc
