@@ -23,7 +23,7 @@ pub enum RequirementsSource {
     SetupCfg(PathBuf),
     /// Dependencies were provided via a path to a source tree (e.g., `pip install .`).
     SourceTree(PathBuf),
-    /// Dependencies were provided via a unsupported `environment.yml` file (e.g., `pip install -r environment.yml`).
+    /// Dependencies were provided via an unsupported Conda `environment.yml` file (e.g., `pip install -r environment.yml`).
     EnvironmentYml(PathBuf),
 }
 
