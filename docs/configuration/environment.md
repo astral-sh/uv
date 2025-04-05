@@ -339,6 +339,15 @@ Equivalent to the
 [`python-downloads`](../reference/settings.md#python-downloads) setting and, when disabled, the
 `--no-python-downloads` option. Whether uv should allow Python downloads.
 
+### `UV_PYTHON_DOWNLOADS_JSON_URL`
+
+Managed Python installations information is hardcoded in the `uv` binary.
+
+This variable can be set to a URL pointing to JSON to use as a list for Python installations.
+This will allow for setting each property of the Python installation, mostly the url part for offline mirror.
+
+Note that currently, only local paths are supported.
+
 ### `UV_PYTHON_INSTALL_DIR`
 
 Specifies the directory for storing managed Python installations.

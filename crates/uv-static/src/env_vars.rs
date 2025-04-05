@@ -257,6 +257,14 @@ impl EnvVars {
     /// Specifies the directory for storing managed Python installations.
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
 
+    /// Managed Python installations information is hardcoded in the `uv` binary.
+    ///
+    /// This variable can be set to a URL pointing to JSON to use as a list for Python installations.
+    /// This will allow for setting each property of the Python installation, mostly the url part for offline mirror.
+    ///
+    /// Note that currently, only local paths are supported.
+    pub const UV_PYTHON_DOWNLOADS_JSON_URL: &'static str = "UV_PYTHON_DOWNLOADS_JSON_URL";
+
     /// Managed Python installations are downloaded from the Astral
     /// [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project.
     ///
