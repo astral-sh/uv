@@ -23,6 +23,8 @@ pub enum RequirementsSource {
     SetupCfg(PathBuf),
     /// Dependencies were provided via a path to a source tree (e.g., `pip install .`).
     SourceTree(PathBuf),
+    /// Dependencies were provided via an unsupported Conda `environment.yml` file (e.g., `pip install -r environment.yml`).
+    EnvironmentYml(PathBuf),
 }
 
 impl RequirementsSource {
@@ -35,6 +37,8 @@ impl RequirementsSource {
             Self::SetupPy(path)
         } else if path.ends_with("setup.cfg") {
             Self::SetupCfg(path)
+        } else if path.ends_with("environment.yml") {
+            Self::EnvironmentYml(path)
         } else {
             Self::RequirementsTxt(path)
         }
@@ -217,6 +221,7 @@ impl std::fmt::Display for RequirementsSource {
             | Self::PyprojectToml(path)
             | Self::SetupPy(path)
             | Self::SetupCfg(path)
+            | Self::EnvironmentYml(path)
             | Self::SourceTree(path) => {
                 write!(f, "{}", path.simplified_display())
             }
