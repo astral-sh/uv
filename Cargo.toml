@@ -317,6 +317,7 @@ targets = [
   "i686-unknown-linux-musl",
   "powerpc64-unknown-linux-gnu",
   "powerpc64le-unknown-linux-gnu",
+  "riscv64gc-unknown-linux-gnu",
   "s390x-unknown-linux-gnu",
   "x86_64-apple-darwin",
   "x86_64-pc-windows-msvc",
@@ -357,5 +358,6 @@ global = "depot-ubuntu-latest-4"
 [workspace.metadata.dist.min-glibc-version]
 # Override glibc version for specific target triplets.
 aarch64-unknown-linux-gnu = "2.28"
+riscv64gc-unknown-linux-gnu = "2.31"
 # Override all remaining glibc versions.
 "*" = "2.17"
