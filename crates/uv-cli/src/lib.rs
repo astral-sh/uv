@@ -624,7 +624,7 @@ pub enum PipCommand {
         after_long_help = ""
     )]
     Compile(PipCompileArgs),
-    /// Sync an environment with a `requirements.txt` file
+    /// Sync an environment with a `requirements.txt` file.
     ///
     /// When syncing an environment, any packages not listed in the `requirements.txt` file will
     /// be removed. To retain extraneous packages, use `uv pip install` instead.

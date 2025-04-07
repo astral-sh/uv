@@ -6111,7 +6111,7 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 
 ### uv pip sync
 
-Sync an environment with a `requirements.txt` file
+Sync an environment with a `requirements.txt` file.
 
 When syncing an environment, any packages not listed in the `requirements.txt` file will be removed. To retain extraneous packages, use `uv pip install` instead.
 
