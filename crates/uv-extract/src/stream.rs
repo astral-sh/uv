@@ -6,8 +6,9 @@ use rustc_hash::FxHashSet;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::warn;
 
+use uv_configuration::{CRCMode, CURRENT_CRC_MODE};
 use uv_distribution_filename::SourceDistExtension;
-use uv_distribution_filename::{CRCMode, CURRENT_CRC_MODE};
+use uv_warnings::warn_user;
 
 use crate::Error;
 
@@ -102,7 +103,7 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
                             expected,
                         });
                     }
-                    warn!(
+                    warn_user!(
                         "Bad CRC (got {computed:08x}, expected {expected:08x}) for file: {}",
                         relpath.display()
                     );

@@ -8932,8 +8932,6 @@ fn bad_crc32() {
     "###
     );
 
-    // When using --verbose, we should see
-    // WARN Bad CRC (got ca5f1131, expected d5c95dfa) for file: osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
     uv_snapshot!(context.filters(), context.pip_install()
         .env(EnvVars::UV_CRC_MODE, "lax")
         .arg("--python-platform").arg("linux")
@@ -8944,6 +8942,7 @@ fn bad_crc32() {
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
+    warning: Bad CRC (got ca5f1131, expected d5c95dfa) for file: osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
      + jinja2==3.1.3

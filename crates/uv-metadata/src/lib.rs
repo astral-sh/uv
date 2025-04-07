@@ -9,13 +9,13 @@ use std::path::Path;
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
-use tracing::warn;
 use zip::ZipArchive;
 
+use uv_configuration::{CRCMode, CURRENT_CRC_MODE};
 use uv_distribution_filename::WheelFilename;
-use uv_distribution_filename::{CRCMode, CURRENT_CRC_MODE};
 use uv_normalize::{DistInfoName, InvalidNameError};
 use uv_pypi_types::ResolutionMetadata;
+use uv_warnings::warn_user;
 
 /// The caller is responsible for attaching the path or url we failed to read.
 #[derive(Debug, Error)]
@@ -270,7 +270,9 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
                             expected,
                         });
                     }
-                    warn!("Bad CRC (got {computed:08x}, expected {expected:08x}) for file: {path}");
+                    warn_user!(
+                        "Bad CRC (got {computed:08x}, expected {expected:08x}) for file: {path}"
+                    );
                 }
             }
 

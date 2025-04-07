@@ -5118,7 +5118,6 @@ dependencies = [
  "uv-pep440",
  "uv-platform-tags",
  "uv-small-str",
- "uv-static",
 ]
 
 [[package]]
@@ -5178,6 +5177,7 @@ dependencies = [
  "uv-configuration",
  "uv-distribution-filename",
  "uv-pypi-types",
+ "uv-warnings",
  "xz2",
  "zip",
 ]
@@ -5348,10 +5348,11 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tokio-util",
- "tracing",
+ "uv-configuration",
  "uv-distribution-filename",
  "uv-normalize",
  "uv-pypi-types",
+ "uv-warnings",
  "zip",
 ]
 

@@ -19,6 +19,7 @@ workspace = true
 uv-configuration = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-warnings = { workspace = true }
 
 astral-tokio-tar = { workspace = true }
 async-compression = { workspace = true, features = ["bzip2", "gzip", "zstd", "xz"] }
