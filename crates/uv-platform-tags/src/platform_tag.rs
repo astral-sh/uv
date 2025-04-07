@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use uv_small_str::SmallString;
 
-use crate::{platform, Arch, BinaryFormat};
+use crate::{Arch, BinaryFormat};
 
 /// A tag to represent the platform compatibility of a Python distribution.
 ///
