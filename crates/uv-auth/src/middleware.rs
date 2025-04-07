@@ -148,7 +148,7 @@ impl Middleware for AuthMiddleware {
     /// We'll avoid making a request we expect to fail and look for a password.
     /// The discovered credentials must have the requested username to be used.
     ///
-    /// - Check the cache (realm key) for a password
+    /// - Check the cache (index URL or realm key) for a password
     /// - Check the netrc for a password
     /// - Check the keyring for a password
     /// - Perform the request
@@ -162,10 +162,10 @@ impl Middleware for AuthMiddleware {
     /// server tells us authorization is needed. This pattern avoids attaching credentials to
     /// requests that do not need them, which can cause some servers to deny the request.
     ///
-    /// - Check the cache (url key)
+    /// - Check the cache (URL key)
     /// - Perform the request
     /// - On 401, 403, or 404 check for authentication if there was a cache miss
-    ///     - Check the cache (realm key) for the username and password
+    ///     - Check the cache (index URL or realm key) for the username and password
     ///     - Check the netrc for a username and password
     ///     - Perform the request again if found
     ///     - Add the username and password to the cache if successful
@@ -181,6 +181,7 @@ impl Middleware for AuthMiddleware {
         // In the middleware, existing credentials are already moved from the URL
         // to the headers so for display purposes we restore some information
         let url = tracing_url(&request, request_credentials.as_ref());
+        let maybe_index_url = self.indexes.index_url_for(request.url());
         let auth_policy = self.indexes.policy_for(request.url());
         trace!("Handling request for {url} with authentication policy {auth_policy}");
 
@@ -195,6 +196,7 @@ impl Middleware for AuthMiddleware {
                         extensions,
                         next,
                         &url,
+                        maybe_index_url,
                         auth_policy,
                     )
                     .await;
@@ -272,17 +274,20 @@ impl Middleware for AuthMiddleware {
             (request, None)
         };
 
-        // Check if there are credentials in the realm-level cache
-        let credentials = self
-            .cache()
-            .get_realm(
-                Realm::from(retry_request.url()),
-                credentials
-                    .as_ref()
-                    .map(|credentials| credentials.to_username())
-                    .unwrap_or(Username::none()),
-            )
-            .or(credentials);
+        let username = credentials
+            .as_ref()
+            .map(|credentials| credentials.to_username())
+            .unwrap_or(Username::none());
+        let credentials = if let Some(index_url) = maybe_index_url {
+            self.cache().get_url(index_url, &username)
+        } else {
+            // Since there is no known index for this URL, check if there are credentials in
+            // the realm-level cache.
+            self.cache()
+                .get_realm(Realm::from(retry_request.url()), username)
+        }
+        .or(credentials);
+
         if let Some(credentials) = credentials.as_ref() {
             if credentials.password().is_some() {
                 trace!("Retrying request for {url} with credentials from cache {credentials:?}");
@@ -296,7 +301,12 @@ impl Middleware for AuthMiddleware {
         // Then, fetch from external services.
         // Here, we use the username from the cache if present.
         if let Some(credentials) = self
-            .fetch_credentials(credentials.as_deref(), retry_request.url(), auth_policy)
+            .fetch_credentials(
+                credentials.as_deref(),
+                retry_request.url(),
+                maybe_index_url,
+                auth_policy,
+            )
             .await
         {
             retry_request = credentials.authenticate(retry_request);
@@ -374,6 +384,7 @@ impl AuthMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
         url: &str,
+        maybe_index_url: Option<&Url>,
         auth_policy: AuthPolicy,
     ) -> reqwest_middleware::Result<Response> {
         let credentials = Arc::new(credentials);
@@ -387,15 +398,27 @@ impl AuthMiddleware {
         }
 
         trace!("Request for {url} is missing a password, looking for credentials");
-        // There's just a username, try to find a password
-        let credentials = if let Some(credentials) = self
-            .cache()
-            .get_realm(Realm::from(request.url()), credentials.to_username())
-        {
+
+        // There's just a username, try to find a password.
+        // If we have an index URL, check the cache for that URL. Otherwise,
+        // check for the realm.
+        let maybe_cached_credentials = if let Some(index_url) = maybe_index_url {
+            self.cache()
+                .get_url(index_url, credentials.as_username().as_ref())
+        } else {
+            self.cache()
+                .get_realm(Realm::from(request.url()), credentials.to_username())
+        };
+        if let Some(credentials) = maybe_cached_credentials {
             request = credentials.authenticate(request);
             // Do not insert already-cached credentials
-            None
-        } else if let Some(credentials) = self
+            let credentials = None;
+            return self
+                .complete_request(credentials, request, extensions, next, auth_policy)
+                .await;
+        }
+
+        let credentials = if let Some(credentials) = self
             .cache()
             .get_url(request.url(), credentials.as_username().as_ref())
         {
@@ -403,11 +426,21 @@ impl AuthMiddleware {
             // Do not insert already-cached credentials
             None
         } else if let Some(credentials) = self
-            .fetch_credentials(Some(&credentials), request.url(), auth_policy)
+            .fetch_credentials(
+                Some(&credentials),
+                request.url(),
+                maybe_index_url,
+                auth_policy,
+            )
             .await
         {
             request = credentials.authenticate(request);
             Some(credentials)
+        } else if maybe_index_url.is_some() {
+            // If this is a known index, we fall back to checking for the realm.
+            self.cache()
+                .get_realm(Realm::from(request.url()), credentials.to_username())
+                .or(Some(credentials))
         } else {
             // If we don't find a password, we'll still attempt the request with the existing credentials
             Some(credentials)
@@ -425,18 +458,20 @@ impl AuthMiddleware {
         &self,
         credentials: Option<&Credentials>,
         url: &Url,
+        maybe_index_url: Option<&Url>,
         auth_policy: AuthPolicy,
     ) -> Option<Arc<Credentials>> {
-        // Fetches can be expensive, so we will only run them _once_ per realm and username combination
-        // All other requests for the same realm will wait until the first one completes
-        let key = (
-            Realm::from(url),
-            Username::from(
-                credentials
-                    .map(|credentials| credentials.username().unwrap_or_default().to_string()),
-            ),
+        let username = Username::from(
+            credentials.map(|credentials| credentials.username().unwrap_or_default().to_string()),
         );
 
+        // Fetches can be expensive, so we will only run them _once_ per realm or index URL and username combination
+        // All other requests for the same realm or index URL will wait until the first one completes
+        let key = if let Some(index_url) = maybe_index_url {
+            (index_url.to_string(), username)
+        } else {
+            (Realm::from(url).to_string(), username)
+        };
         if !self.cache().fetches.register(key.clone()) {
             let credentials = self
                 .cache()
@@ -446,9 +481,12 @@ impl AuthMiddleware {
                 .expect("The key must exist after register is called");
 
             if credentials.is_some() {
-                trace!("Using credentials from previous fetch for {url}");
+                trace!("Using credentials from previous fetch for {}", key.0);
             } else {
-                trace!("Skipping fetch of credentials for {url}, previous attempt failed");
+                trace!(
+                    "Skipping fetch of credentials for {}, previous attempt failed",
+                    key.0
+                );
             }
 
             return credentials;
@@ -468,16 +506,17 @@ impl AuthMiddleware {
             debug!("Found credentials in netrc file for {url}");
             Some(credentials)
 
-        // N.B. The keyring provider performs lookups for the exact URL then falls back to the host,
-        //      but we cache the result per realm so if a keyring implementation returns different
-        //      credentials for different URLs in the same realm we will use the wrong credentials.
+        // N.B. The keyring provider performs lookups for the exact URL then falls back to the host.
+        //      But, in the absence of an index URL, we cache the result per realm. So in that case,
+        //      if a keyring implementation returns different credentials for different URLs in the
+        //      same realm we will use the wrong credentials.
         } else if let Some(credentials) = match self.keyring {
             Some(ref keyring) => {
                 // The subprocess keyring provider is _slow_ so we do not perform fetches for all
                 // URLs; instead, we fetch if there's a username or if the user has requested to
                 // always authenticate.
                 if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
-                    if let Some(index_url) = self.indexes.index_url_for(url) {
+                    if let Some(index_url) = maybe_index_url {
                         debug!("Checking keyring for credentials for index URL {}@{}", username, index_url);
                         keyring.fetch(index_url, Some(username)).await
                     } else {
@@ -485,7 +524,7 @@ impl AuthMiddleware {
                         keyring.fetch(url, Some(username)).await
                     }
                 } else if matches!(auth_policy, AuthPolicy::Always) {
-                    if let Some(index_url) = self.indexes.index_url_for(url) {
+                    if let Some(index_url) = maybe_index_url {
                         debug!(
                             "Checking keyring for credentials for index URL {index_url} without username due to `authenticate = always`"
                         );
@@ -511,7 +550,7 @@ impl AuthMiddleware {
         .map(Arc::new);
 
         // Register the fetch for this key
-        self.cache().fetches.done(key.clone(), credentials.clone());
+        self.cache().fetches.done(key, credentials.clone());
 
         credentials
     }
@@ -1664,6 +1703,201 @@ mod tests {
                 .status(),
             401, // INCORRECT BEHAVIOR
             "Requests to other paths in the failing prefix will also fail"
+        );
+
+        Ok(())
+    }
+
+    /// Demonstrates that when an index URL is provided, we avoid "incorrect" behavior
+    /// where multiple URLs with the same username and realm share the same realm-level
+    /// credentials cache entry.
+    #[test(tokio::test)]
+    async fn test_credentials_from_keyring_mixed_authentication_different_indexes_same_realm(
+    ) -> Result<(), Error> {
+        let username = "user";
+        let password_1 = "password1";
+        let password_2 = "password2";
+
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_1.*"))
+            .and(basic_auth(username, password_1))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_2.*"))
+            .and(basic_auth(username, password_2))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let base_url = Url::parse(&server.uri())?;
+        let base_url_1 = base_url.join("prefix_1")?;
+        let base_url_2 = base_url.join("prefix_2")?;
+        let indexes = Indexes::from_indexes(vec![
+            Index {
+                root_url: base_url_1.clone(),
+                auth_policy: AuthPolicy::Auto,
+            },
+            Index {
+                root_url: base_url_2.clone(),
+                auth_policy: AuthPolicy::Auto,
+            },
+        ]);
+
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_keyring(Some(KeyringProvider::dummy([
+                        (base_url_1.clone(), username, password_1),
+                        (base_url_2.clone(), username, password_2),
+                    ])))
+                    .with_indexes(indexes),
+            )
+            .build();
+
+        // Both servers do not work without a username
+        assert_eq!(
+            client.get(base_url_1.clone()).send().await?.status(),
+            401,
+            "Requests should require a username"
+        );
+        assert_eq!(
+            client.get(base_url_2.clone()).send().await?.status(),
+            401,
+            "Requests should require a username"
+        );
+
+        let mut url_1 = base_url_1.clone();
+        url_1.set_username(username).unwrap();
+        assert_eq!(
+            client.get(url_1.clone()).send().await?.status(),
+            200,
+            "The first request with a username will succeed"
+        );
+        assert_eq!(
+            client.get(base_url_2.clone()).send().await?.status(),
+            401,
+            "Credentials should not be re-used for the second prefix"
+        );
+        assert_eq!(
+            client
+                .get(base_url.join("prefix_1/foo")?)
+                .send()
+                .await?
+                .status(),
+            200,
+            "Subsequent requests can be to different paths in the same prefix"
+        );
+
+        let mut url_2 = base_url_2.clone();
+        url_2.set_username(username).unwrap();
+        assert_eq!(
+            client.get(url_2.clone()).send().await?.status(),
+            200,
+            "A request with the same username and realm for a URL will use index-specific password"
+        );
+        assert_eq!(
+            client
+                .get(base_url.join("prefix_2/foo")?)
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests to other paths with that prefix will also succeed"
+        );
+
+        Ok(())
+    }
+
+    /// Demonstrates that when an index' credentials are cached for its realm, we
+    /// find those credentials if they're not present in the keyring.
+    #[test(tokio::test)]
+    async fn test_credentials_from_keyring_shared_authentication_different_indexes_same_realm(
+    ) -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/prefix_1.*"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let base_url = Url::parse(&server.uri())?;
+        let index_url = base_url.join("prefix_1")?;
+        let indexes = Indexes::from_indexes(vec![Index {
+            root_url: index_url.clone(),
+            auth_policy: AuthPolicy::Auto,
+        }]);
+
+        let client = test_client_builder()
+            .with(
+                AuthMiddleware::new()
+                    .with_cache(CredentialsCache::new())
+                    .with_keyring(Some(KeyringProvider::dummy([(
+                        base_url.clone(),
+                        username,
+                        password,
+                    )])))
+                    .with_indexes(indexes),
+            )
+            .build();
+
+        // Index server does not work without a username
+        assert_eq!(
+            client.get(index_url.clone()).send().await?.status(),
+            401,
+            "Requests should require a username"
+        );
+
+        // Send a request that will cache realm credentials.
+        let mut realm_url = base_url.clone();
+        realm_url.set_username(username).unwrap();
+        assert_eq!(
+            client.get(realm_url.clone()).send().await?.status(),
+            200,
+            "The first realm request with a username will succeed"
+        );
+
+        let mut url = index_url.clone();
+        url.set_username(username).unwrap();
+        assert_eq!(
+            client.get(url.clone()).send().await?.status(),
+            200,
+            "A request with the same username and realm for a URL will use the realm if there is no index-specific password"
+        );
+        assert_eq!(
+            client
+                .get(base_url.join("prefix_1/foo")?)
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests to other paths with that prefix will also succeed"
         );
 
         Ok(())
