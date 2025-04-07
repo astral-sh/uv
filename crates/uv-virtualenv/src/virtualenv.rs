@@ -296,8 +296,7 @@ pub(crate) fn create(
 
         let virtual_env_dir = match (relocatable, name.to_owned()) {
             (true, "activate") => {
-                r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$_UV_VENV_ACTIVATOR")")")"'"#
-                    .to_string()
+                r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#.to_string()
             }
             (true, "activate.bat") => r"%~dp0..".to_string(),
             (true, "activate.fish") => {
