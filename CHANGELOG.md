@@ -3,6 +3,26 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.6.13
+
+### Enhancements
+
+- Add `--show-version` to `uv python find` ([#12376](https://github.com/astral-sh/uv/pull/12376))
+- Remove `--no-config` warning from `uv pip compile` and `uv pip sync` ([#12642](https://github.com/astral-sh/uv/pull/12642))
+- Skip repeated directories in `PATH` when searching for Python interpreters ([#12367](https://github.com/astral-sh/uv/pull/12367))
+- Unset `SCRIPT_PATH` in relocatable activation script ([#12672](https://github.com/astral-sh/uv/pull/12672))
+- Add `UV_PYTHON_DOWNLOADS_JSON_URL` to set custom managed python sources ([#10939](https://github.com/astral-sh/uv/pull/10939))
+- Reject `pyproject.toml` files in `uv pip compile -o` ([#12673](https://github.com/astral-sh/uv/pull/12673))
+- Respect the `--offline` flag for Git operations ([#12619](https://github.com/astral-sh/uv/pull/12619))
+
+### Bug fixes
+
+- Warn instead of error if CRC appears to be missing ([#12722](https://github.com/astral-sh/uv/pull/12722))
+
+### Rust API
+
+- Update MSRV to 1.84 ([#12670](https://github.com/astral-sh/uv/pull/12670))
+
 ## 0.6.12
 
 ### Enhancements
