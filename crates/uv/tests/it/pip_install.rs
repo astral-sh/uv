@@ -8913,27 +8913,61 @@ fn missing_subdirectory_url() -> Result<()> {
 // This wheel was uploaded with a bad crc32 and we weren't detecting that
 // (Could be replaced with a checked-in hand-crafted corrupt wheel?)
 #[test]
-fn bad_crc32() -> Result<()> {
-    let context = TestContext::new("3.11");
-    let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.touch()?;
+fn bad_crc32() {
+    let context = TestContext::new("3.11").with_filtered_counts();
 
-    uv_snapshot!(context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::UV_CRC_MODE, "enforce")
         .arg("--python-platform").arg("linux")
-        .arg("osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"), @r"
+        .arg("osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
+    Resolved [N] packages in [TIME]
       × Failed to download `osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl`
       ├─▶ Failed to extract archive: osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       ╰─▶ Bad CRC (got ca5f1131, expected d5c95dfa) for file: osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
-    "
+    "###
     );
 
-    Ok(())
+    // When using --verbose, we should see
+    // WARN Bad CRC (got ca5f1131, expected d5c95dfa) for file: osqp/ext_builtin.cpython-311-x86_64-linux-gnu.so
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::UV_CRC_MODE, "lax")
+        .arg("--python-platform").arg("linux")
+        .arg("osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + jinja2==3.1.3
+     + joblib==1.3.2
+     + markupsafe==2.1.5
+     + numpy==1.26.4
+     + osqp==1.0.2 (from https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl)
+     + scipy==1.12.0
+     + setuptools==69.2.0
+    "###
+    );
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::UV_CRC_MODE, "none")
+        .arg("--python-platform").arg("linux")
+        .arg("osqp @ https://files.pythonhosted.org/packages/00/04/5959347582ab970e9b922f27585d34f7c794ed01125dac26fb4e7dd80205/osqp-1.0.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited [N] packages in [TIME]
+    "###
+    );
 }
 
 #[test]

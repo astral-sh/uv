@@ -257,6 +257,11 @@ impl EnvVars {
     /// Specifies the directory for storing managed Python installations.
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
 
+    /// Specifies how CRC validation is performed during unzipping a download stream.
+    ///
+    /// Possible values are `enforce`, `lax`, and `none` (default).
+    pub const UV_CRC_MODE: &'static str = "UV_CRC_MODE";
+
     /// Managed Python installations are downloaded from the Astral
     /// [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project.
     ///

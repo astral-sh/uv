@@ -9,10 +9,13 @@ use std::path::Path;
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use tracing::warn;
+use zip::ZipArchive;
+
 use uv_distribution_filename::WheelFilename;
+use uv_distribution_filename::{CRCMode, CURRENT_CRC_MODE};
 use uv_normalize::{DistInfoName, InvalidNameError};
 use uv_pypi_types::ResolutionMetadata;
-use zip::ZipArchive;
 
 /// The caller is responsible for attaching the path or url we failed to read.
 #[derive(Debug, Error)]
@@ -252,17 +255,23 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
             let mut contents = Vec::new();
             reader.read_to_end(&mut contents).await.unwrap();
 
-            // Validate the CRC of any file we unpack
-            // (It would be nice if async_zip made it harder to Not do this...)
-            let reader = reader.into_inner();
-            let computed = reader.compute_hash();
-            let expected = reader.entry().crc32();
-            if computed != expected {
-                return Err(Error::BadCrc32 {
-                    path,
-                    computed,
-                    expected,
-                });
+            if matches!(*CURRENT_CRC_MODE, CRCMode::Enforce | CRCMode::Lax) {
+                // Validate the CRC of any file we unpack
+                // (It would be nice if async_zip made it harder to Not do this...)
+                let reader = reader.into_inner();
+                let computed = reader.compute_hash();
+                let expected = reader.entry().crc32();
+
+                if computed != expected {
+                    if let CRCMode::Enforce = *CURRENT_CRC_MODE {
+                        return Err(Error::BadCrc32 {
+                            path,
+                            computed,
+                            expected,
+                        });
+                    }
+                    warn!("Bad CRC (got {computed:08x}, expected {expected:08x}) for file: {path}");
+                }
             }
 
             let metadata = ResolutionMetadata::parse_metadata(&contents)

@@ -7,6 +7,7 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::warn;
 
 use uv_distribution_filename::SourceDistExtension;
+use uv_distribution_filename::{CRCMode, CURRENT_CRC_MODE};
 
 use crate::Error;
 
@@ -86,17 +87,26 @@ pub async fn unzip<R: tokio::io::AsyncRead + Unpin>(
             let mut reader = entry.reader_mut().compat();
             tokio::io::copy(&mut reader, &mut writer).await?;
 
-            // Validate the CRC of any file we unpack
-            // (It would be nice if async_zip made it harder to Not do this...)
-            let reader = reader.into_inner();
-            let computed = reader.compute_hash();
-            let expected = reader.entry().crc32();
-            if computed != expected {
-                return Err(Error::BadCrc32 {
-                    path: relpath,
-                    computed,
-                    expected,
-                });
+            if matches!(*CURRENT_CRC_MODE, CRCMode::Enforce | CRCMode::Lax) {
+                // Validate the CRC of any file we unpack
+                // (It would be nice if async_zip made it harder to Not do this...)
+                let reader = reader.into_inner();
+                let computed = reader.compute_hash();
+                let expected = reader.entry().crc32();
+
+                if computed != expected {
+                    if let CRCMode::Enforce = *CURRENT_CRC_MODE {
+                        return Err(Error::BadCrc32 {
+                            path: relpath,
+                            computed,
+                            expected,
+                        });
+                    }
+                    warn!(
+                        "Bad CRC (got {computed:08x}, expected {expected:08x}) for file: {}",
+                        relpath.display()
+                    );
+                }
             }
         }
 

@@ -51,6 +51,12 @@ local `uv.toml` file to use as the configuration file.
 Equivalent to the `--constraint` command-line argument. If set, uv will use this
 file as the constraints file. Uses space-separated list of files.
 
+### `UV_CRC_MODE`
+
+Specifies how CRC validation is performed during unzipping a download stream.
+
+Possible values are `enforce`, `lax`, and `none` (default).
+
 ### `UV_CUSTOM_COMPILE_COMMAND`
 
 Equivalent to the `--custom-compile-command` command-line argument.
