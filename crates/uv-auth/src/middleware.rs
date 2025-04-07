@@ -58,7 +58,7 @@ pub struct AuthMiddleware {
     keyring: Option<KeyringProvider>,
     cache: Option<CredentialsCache>,
     /// Auth policies for specific URLs.
-    auth_indexes: Indexes,
+    indexes: Indexes,
     /// Set all endpoints as needing authentication. We never try to send an
     /// unauthenticated request, avoiding cloning an uncloneable request.
     only_authenticated: bool,
@@ -70,7 +70,7 @@ impl AuthMiddleware {
             netrc: NetrcMode::default(),
             keyring: None,
             cache: None,
-            auth_indexes: Indexes::new(),
+            indexes: Indexes::new(),
             only_authenticated: false,
         }
     }
@@ -104,8 +104,8 @@ impl AuthMiddleware {
 
     /// Configure the [`AuthPolicy`]s to use for URLs.
     #[must_use]
-    pub fn with_auth_indexes(mut self, auth_indexes: Indexes) -> Self {
-        self.auth_indexes = auth_indexes;
+    pub fn with_indexes(mut self, indexes: Indexes) -> Self {
+        self.indexes = indexes;
         self
     }
 
@@ -181,7 +181,7 @@ impl Middleware for AuthMiddleware {
         // In the middleware, existing credentials are already moved from the URL
         // to the headers so for display purposes we restore some information
         let url = tracing_url(&request, request_credentials.as_ref());
-        let auth_policy = self.auth_indexes.policy_for(request.url());
+        let auth_policy = self.indexes.policy_for(request.url());
         trace!("Handling request for {url} with authentication policy {auth_policy}");
 
         let credentials: Option<Arc<Credentials>> = if matches!(auth_policy, AuthPolicy::Never) {
@@ -477,7 +477,7 @@ impl AuthMiddleware {
                 // URLs; instead, we fetch if there's a username or if the user has requested to
                 // always authenticate.
                 if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
-                    if let Some(index_url) = self.auth_indexes.index_url_for(url) {
+                    if let Some(index_url) = self.indexes.index_url_for(url) {
                         debug!("Checking keyring for credentials for index URL {}@{}", username, index_url);
                         keyring.fetch(index_url, Some(username)).await
                     } else {
@@ -485,7 +485,7 @@ impl AuthMiddleware {
                         keyring.fetch(url, Some(username)).await
                     }
                 } else if matches!(auth_policy, AuthPolicy::Always) {
-                    if let Some(index_url) = self.auth_indexes.index_url_for(url) {
+                    if let Some(index_url) = self.indexes.index_url_for(url) {
                         debug!(
                             "Checking keyring for credentials for index URL {index_url} without username due to `authenticate = always`"
                         );
@@ -1012,7 +1012,7 @@ mod tests {
         let server = start_test_server(username, password).await;
         let base_url = Url::parse(&server.uri())?;
 
-        let auth_indexes = auth_indexes_for(&base_url, AuthPolicy::Always);
+        let indexes = indexes_for(&base_url, AuthPolicy::Always);
         let client = test_client_builder()
             .with(
                 AuthMiddleware::new()
@@ -1026,7 +1026,7 @@ mod tests {
                         username,
                         password,
                     )])))
-                    .with_auth_indexes(auth_indexes),
+                    .with_indexes(indexes),
             )
             .build();
 
@@ -1669,7 +1669,7 @@ mod tests {
         Ok(())
     }
 
-    fn auth_indexes_for(url: &Url, policy: AuthPolicy) -> Indexes {
+    fn indexes_for(url: &Url, policy: AuthPolicy) -> Indexes {
         let mut url = url.clone();
         url.set_password(None).ok();
         url.set_username("").ok();
@@ -1691,12 +1691,12 @@ mod tests {
 
         let base_url = Url::parse(&server.uri())?;
 
-        let auth_indexes = auth_indexes_for(&base_url, AuthPolicy::Always);
+        let indexes = indexes_for(&base_url, AuthPolicy::Always);
         let client = test_client_builder()
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
-                    .with_auth_indexes(auth_indexes),
+                    .with_indexes(indexes),
             )
             .build();
 
@@ -1758,12 +1758,12 @@ mod tests {
 
         let base_url = Url::parse(&server.uri())?;
 
-        let auth_indexes = auth_indexes_for(&base_url, AuthPolicy::Always);
+        let indexes = indexes_for(&base_url, AuthPolicy::Always);
         let client = test_client_builder()
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
-                    .with_auth_indexes(auth_indexes),
+                    .with_indexes(indexes),
             )
             .build();
 
@@ -1798,12 +1798,12 @@ mod tests {
             .mount(&server)
             .await;
 
-        let auth_indexes = auth_indexes_for(&base_url, AuthPolicy::Never);
+        let indexes = indexes_for(&base_url, AuthPolicy::Never);
         let client = test_client_builder()
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
-                    .with_auth_indexes(auth_indexes),
+                    .with_indexes(indexes),
             )
             .build();
 
@@ -1843,12 +1843,12 @@ mod tests {
 
         let base_url = Url::parse(&server.uri())?;
 
-        let auth_indexes = auth_indexes_for(&base_url, AuthPolicy::Never);
+        let indexes = indexes_for(&base_url, AuthPolicy::Never);
         let client = test_client_builder()
             .with(
                 AuthMiddleware::new()
                     .with_cache(CredentialsCache::new())
-                    .with_auth_indexes(auth_indexes),
+                    .with_indexes(indexes),
             )
             .build();
 
