@@ -609,6 +609,9 @@ async fn init_project(
             )?;
             pyproject.add_workspace(path.strip_prefix(workspace.install_path())?)?;
 
+            // Add as workspace source
+            pyproject.add_workspace_source(name)?;
+
             // Save the modified `pyproject.toml`.
             fs_err::write(
                 workspace.install_path().join("pyproject.toml"),
