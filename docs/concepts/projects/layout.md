@@ -83,7 +83,7 @@ explicitly updated using `uv lock`.
 There is no Python standard for lockfiles at this time, so the format of this file is specific to uv
 and not usable by other tools.
 
-!!! tip
+!!! note
 
     Recently Python standardized the lockfile format with `pylock.toml`.
     For details on the new standard, see [PEP 751](https://peps.python.org/pep-0751/).
