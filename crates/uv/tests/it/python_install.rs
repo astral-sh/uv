@@ -666,8 +666,8 @@ fn python_install_freethreaded() {
     ----- stderr -----
     Searching for Python installations
     Uninstalled 2 versions in [TIME]
-     - cpython-3.13.2-[PLATFORM]
      - cpython-3.13.2+freethreaded-[PLATFORM] (python3.13t)
+     - cpython-3.13.2-[PLATFORM]
     "###);
 }
 
