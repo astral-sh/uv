@@ -18,6 +18,7 @@
 ### Bug fixes
 
 - Warn instead of error if CRC appears to be missing ([#12722](https://github.com/astral-sh/uv/pull/12722))
+- Avoid infinite loop in `uv export` with conflicts ([#12726](https://github.com/astral-sh/uv/pull/12726))
 
 ### Rust API
 

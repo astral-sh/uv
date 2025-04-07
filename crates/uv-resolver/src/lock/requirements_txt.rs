@@ -483,11 +483,12 @@ fn conflict_marker_reachability<'lock>(
 
             // Combine the inferred marker with the existing marker on the node.
             match reachability.entry(child_edge.target()) {
-                Entry::Occupied(existing) => {
+                Entry::Occupied(mut existing) => {
                     // If the marker is a subset of the existing marker (A ⊆ B exactly if
                     // A ∪ B = A), updating the child wouldn't change child's marker.
                     parent_marker.or(*existing.get());
                     if parent_marker != *existing.get() {
+                        existing.insert(parent_marker);
                         queue.push(child_edge.target());
                     }
                 }
@@ -496,8 +497,6 @@ fn conflict_marker_reachability<'lock>(
                     queue.push(child_edge.target());
                 }
             }
-
-            queue.push(child_edge.target());
         }
     }
 
