@@ -82,3 +82,15 @@ explicitly updated using `uv lock`.
 `uv.lock` is a human-readable TOML file but is managed by uv and should not be edited manually.
 There is no Python standard for lockfiles at this time, so the format of this file is specific to uv
 and not usable by other tools.
+
+!!! note
+
+    Recently Python standardized the lockfile format with `pylock.toml`.
+    For details on the new standard, see [PEP 751](https://peps.python.org/pep-0751/).
+
+    Some of uv's functionality cannot be expressed in the `pylock.toml` format,
+    so uv will continue to use the `uv.lock` format.
+    The `uv.lock` format is specific to uv and not usable by other tools.
+
+    However, support for `pylock.toml` is planned everywhere uv currently supports `requirements.txt` files.
+    For more details and updates on progress, see [12584](https://github.com/astral-sh/uv/issues/12641).
