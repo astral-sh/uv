@@ -1437,7 +1437,6 @@ jobs:
           # With this GitHub action, we can't do as rigid checks as with our custom Python script, so we publish more
           # leniently
           skip-existing: true
-          verbose: true
 
       - name: "Add password to keyring"
         run: |
