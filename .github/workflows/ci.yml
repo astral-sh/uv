@@ -1432,11 +1432,11 @@ jobs:
       - name: "Publish astral-test-pypa-gh-action"
         uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # release/v1
         with:
-          repository-url: "https://test.pypi.org/legacy/"
-          packages-dir: "astral-test-pypa-gh-action/dist"
           # With this GitHub action, we can't do as rigid checks as with our custom Python script, so we publish more
           # leniently
           skip-existing: true
+          repository-url: "https://test.pypi.org/legacy/"
+          packages-dir: "astral-test-pypa-gh-action/dist"
 
       - name: "Add password to keyring"
         run: |
