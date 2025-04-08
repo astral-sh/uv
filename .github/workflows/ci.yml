@@ -1437,6 +1437,7 @@ jobs:
           skip-existing: true
           repository-url: "https://test.pypi.org/legacy/"
           packages-dir: "astral-test-pypa-gh-action/dist"
+          verbose: 'true'
 
       - name: "Add password to keyring"
         run: |
