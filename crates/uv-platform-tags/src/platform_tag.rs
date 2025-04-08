@@ -934,6 +934,27 @@ mod tests {
     }
 
     #[test]
+    fn pyodide_platform() {
+        let tag = PlatformTag::Pyodide {
+            major: 2024,
+            minor: 0,
+        };
+        assert_eq!(
+            PlatformTag::from_str("pyodide_2024_0_wasm32").as_ref(),
+            Ok(&tag)
+        );
+        assert_eq!(tag.to_string(), "pyodide_2024_0_wasm32");
+
+        assert_eq!(
+            PlatformTag::from_str("pyodide_2024_0_wasm64"),
+            Err(ParsePlatformTagError::InvalidArch {
+                platform: "pyodide",
+                tag: "pyodide_2024_0_wasm64".to_string()
+            })
+        );
+    }
+
+    #[test]
     fn unknown_platform() {
         assert_eq!(
             PlatformTag::from_str("unknown"),
