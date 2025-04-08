@@ -3427,7 +3427,7 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>When used in a project, these dependencies will be layered on top of the uv tool&#8217;s environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified.</p>
 
-</dd><dt id="uv-tool-run--with-requirements"><a href="#uv-tool-run--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run with all packages listed in the given <code>requirements.txt</code> files</p>
+</dd><dt id="uv-tool-run--with-requirements"><a href="#uv-tool-run--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run with all packages listed in the given <code>requirements.txt</code> files or PEP 723 Python scripts</p>
 
 </dd></dl>
 
