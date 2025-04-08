@@ -285,7 +285,6 @@ impl DirectoryWriter for TarGzWriter {
         // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
         // unpacking.
         header.set_mode(0o644);
-        header.set_cksum();
         self.tar
             .append_data(&mut header, path, Cursor::new(bytes))
             .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
@@ -307,7 +306,6 @@ impl DirectoryWriter for TarGzWriter {
             header.set_mode(0o644);
         }
         header.set_size(metadata.len());
-        header.set_cksum();
         let reader = BufReader::new(File::open(file)?);
         self.tar
             .append_data(&mut header, path, reader)
@@ -320,13 +318,9 @@ impl DirectoryWriter for TarGzWriter {
         // Directories are always executable, which means they can be listed.
         header.set_mode(0o755);
         header.set_entry_type(EntryType::Directory);
-        header
-            .set_path(directory)
-            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         header.set_size(0);
-        header.set_cksum();
         self.tar
-            .append(&header, io::empty())
+            .append_data(&mut header, directory, io::empty())
             .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
