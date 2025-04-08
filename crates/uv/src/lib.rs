@@ -5,7 +5,7 @@ use std::fmt::Write;
 use std::io::stdout;
 #[cfg(feature = "self-update")]
 use std::ops::Bound;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
@@ -14,6 +14,7 @@ use anstream::eprintln;
 use anyhow::{Context, Result, bail};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
+use futures::future::join_all;
 use futures::FutureExt;
 use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
@@ -1160,6 +1161,43 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
+            let is_py_file = |file: &PathBuf| {
+                file.extension().map(|ext| ext == "py").unwrap_or(false)
+                    && file
+                        .file_name()
+                        .map(|name| name != "setup.py")
+                        .unwrap_or(true)
+            };
+
+            let pep723_results = join_all(
+                args.with_requirements
+                    .iter()
+                    .filter(|file| is_py_file(file))
+                    .map(|file| async move {
+                        let result = Pep723Script::read(&file).await;
+                        (file, result)
+                    }),
+            )
+            .await;
+
+            let mut scripts = Vec::new();
+            for (file, result) in pep723_results {
+                match result {
+                    Ok(Some(script)) => {
+                        scripts.push(script);
+                    }
+                    Ok(None) => {
+                        bail!("No script found in file: {}", file.user_display());
+                    }
+                    Err(Pep723Error::Io(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                        bail!("File not found {}", file.user_display());
+                    }
+                    Err(error) => {
+                        bail!("Failed to parse file {}: {:?}", file.user_display(), error);
+                    }
+                }
+            }
+
             let requirements = {
                 let mut requirements = Vec::with_capacity(
                     args.with.len() + args.with_editable.len() + args.with_requirements.len(),
@@ -1173,6 +1211,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 requirements.extend(
                     args.with_requirements
                         .into_iter()
+                        .filter(|file| !is_py_file(file))
                         .map(RequirementsSource::from_requirements_file)
                         .collect::<Result<Vec<_>, _>>()?,
                 );
@@ -1202,6 +1241,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &constraints,
                 &overrides,
                 &build_constraints,
+                &scripts,
                 args.show_resolution || globals.verbose > 0,
                 args.python,
                 args.install_mirrors,

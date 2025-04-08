@@ -35,6 +35,7 @@ use uv_python::{
     PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
+use uv_scripts::Pep723Script;
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
@@ -87,6 +88,7 @@ pub(crate) async fn run(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
+    scripts: &[Pep723Script],
     show_resolution: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -265,6 +267,7 @@ pub(crate) async fn run(
         constraints,
         overrides,
         build_constraints,
+        scripts,
         show_resolution,
         python.as_deref(),
         install_mirrors,
@@ -673,6 +676,7 @@ async fn get_or_create_environment(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
+    scripts: &[Pep723Script],
     show_resolution: bool,
     python: Option<&str>,
     install_mirrors: PythonInstallMirrors,
@@ -871,13 +875,22 @@ async fn get_or_create_environment(
     )
     .await?;
 
+    // Read script dependencies.
+    let script_dependencies = scripts
+        .iter()
+        .filter_map(|script| script.metadata.dependencies.as_ref())
+        .flatten()
+        .map(|requirement| requirement.to_owned().into());
+
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
-        let mut requirements = Vec::with_capacity(1 + with.len());
+        let mut requirements =
+            Vec::with_capacity(1 + with.len() + script_dependencies.try_len().unwrap_or_default());
         match &from {
             ToolRequirement::Python => {}
             ToolRequirement::Package { requirement, .. } => requirements.push(requirement.clone()),
         }
+        requirements.extend(script_dependencies);
         requirements.extend(
             resolve_names(
                 spec.requirements.clone(),
