@@ -512,21 +512,23 @@ def get_operating_system_and_architecture():
         }
     elif operating_system == "emscripten":
         pyodide_abi_version = sysconfig.get_config_var("PYODIDE_ABI_VERSION")
-        if pyodide_abi_version:
-            version = pyodide_abi_version.split("_")
-            operating_system = {
-                "name": "pyodide",
-                "major": int(version[0]),
-                "minor": int(version[1]),
-            }
-        else:
-            version = version.split(".")
-            operating_system = {
-                "name": operating_system,
-                "major": int(version[0]),
-                "minor": int(version[1]),
-                "patch": int(version[2]),
-            }
+        if not pyodide_abi_version:
+            print(
+                json.dumps(
+                    {
+                        "result": "error",
+                        "kind": "unknown_operating_system",
+                        "operating_system": operating_system,
+                    }
+                )
+            )
+            sys.exit(0)
+        version = pyodide_abi_version.split("_")
+        operating_system = {
+            "name": "pyodide",
+            "major": int(version[0]),
+            "minor": int(version[1]),
+        }
     elif operating_system in [
         "freebsd",
         "netbsd",
