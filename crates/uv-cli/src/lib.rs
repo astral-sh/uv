@@ -3222,7 +3222,7 @@ pub struct SyncArgs {
     ///
     /// In dry-run mode, uv will resolve the project's dependencies and report on the resulting
     /// changes to both the lockfile and the project environment, but will not modify either.
-    #[arg(long, conflicts_with = "locked", conflicts_with = "frozen")]
+    #[arg(long)]
     pub dry_run: bool,
 
     #[command(flatten)]
