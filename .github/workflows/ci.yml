@@ -1434,7 +1434,7 @@ jobs:
         with:
           # With this GitHub action, we can't do as rigid checks as with our custom Python script, so we publish more
           # leniently
-          skip-existing: true
+          skip-existing: 'true'
           repository-url: "https://test.pypi.org/legacy/"
           packages-dir: "astral-test-pypa-gh-action/dist"
           verbose: 'true'
