@@ -547,3 +547,47 @@ fn build_module_name_normalization() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn build_sdist_with_long_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let temp_dir = TempDir::new()?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["uv_build>=0.6,<0.7"]
+        build-backend = "uv_build"
+    "#})?;
+    context
+        .temp_dir
+        .child("src/foo/__init__.py")
+        .write_str(r#"print("Hi from foo")"#)?;
+
+    let long_path = format!("src/foo/l{}ng/__init__.py", "o".repeat(100));
+    context
+        .temp_dir
+        .child(long_path)
+        .write_str(r#"print("Hi from foo")"#)?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-sdist")
+        .arg(temp_dir.path())
+        .env("UV_PREVIEW", "1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    foo-1.0.0.tar.gz
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
