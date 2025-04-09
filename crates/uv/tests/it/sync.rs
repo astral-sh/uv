@@ -5392,18 +5392,15 @@ fn sync_no_editable() -> Result<()> {
      + root==0.1.0 (from file://[TEMP_DIR]/)
     "###);
 
-    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_NO_EDITABLE, "1"), @r###"
+    uv_snapshot!(context.filters(), context.sync().env(EnvVars::UV_NO_EDITABLE, "1"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + child==0.1.0 (from file://[TEMP_DIR]/child)
-     + root==0.1.0 (from file://[TEMP_DIR]/)
-    "###);
+    Audited 2 packages in [TIME]
+    ");
 
     // Remove the project.
     fs_err::remove_dir_all(&child)?;
