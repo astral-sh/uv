@@ -328,6 +328,8 @@ uv run [OPTIONS] [COMMAND]
 </dd><dt id="uv-run--no-cache"><a href="#uv-run--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
+</dd><dt id="uv-run--no-clear-screen"><a href="#uv-run--no-clear-screen"><code>--no-clear-screen</code></a></dt><dd><p>Do not clear the screen when restarting the script in watch mode</p>
+
 </dd><dt id="uv-run--no-config"><a href="#uv-run--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
@@ -482,6 +484,10 @@ uv run [OPTIONS] [COMMAND]
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
 </dd><dt id="uv-run--version"><a href="#uv-run--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
+
+</dd><dt id="uv-run--watch"><a href="#uv-run--watch"><code>--watch</code></a></dt><dd><p>Watch mode</p>
+
+<p>Run the provided script, restarting it when the script changes.</p>
 
 </dd><dt id="uv-run--with"><a href="#uv-run--with"><code>--with</code></a> <i>with</i></dt><dd><p>Run with the given packages installed.</p>
 

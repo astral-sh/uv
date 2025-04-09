@@ -102,6 +102,8 @@ version-ranges = { workspace = true }
 walkdir = { workspace = true }
 which = { workspace = true }
 zip = { workspace = true }
+notify-debouncer-mini = "0.6.0"
+clearscreen = "4.0.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 self-replace = { workspace = true }
