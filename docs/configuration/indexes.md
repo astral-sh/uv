@@ -122,7 +122,7 @@ malicious package to be installed instead of the internal package. See, for exam
 [the `torchtriton` attack](https://pytorch.org/blog/compromised-nightly-dependency/) from
 December 2022.
 
-Users can opt in to alternate index behaviors via the`--index-strategy` command-line option, or the
+To opt in to alternate index behaviors, use the`--index-strategy` command-line option, or the
 `UV_INDEX_STRATEGY` environment variable, which supports the following values:
 
 - `first-index` (default): Search for each package across all indexes, limiting the candidate
@@ -210,6 +210,26 @@ When `authenticate` is set to `always`, uv will eagerly search for credentials a
 credentials cannot be found. If the discovered credentials are not valid (i.e., the index returns a
 HTTP 401 or 403), then uv will treat packages as unavailable and query the next configured index as
 described in the [index strategy](#searching-across-multiple-indexes) section.
+
+### Ignoring error codes when searching across indexes
+
+When using the [first-index strategy](#searching-across-multiple-indexes), uv will stop searching if
+an HTTP 401 Unauthorized or HTTP 403 Forbidden status code is encountered. The one exception is that
+uv will ignore 403s when searching the `pytorch` index (since this index returns a 403 when a
+package is not present).
+
+To configure which error codes are ignored for an index, use the `ignored-error-codes` setting. For
+example, to ignore 403s (but not 401s) for a private index:
+
+```toml
+[[tool.uv.index]]
+name = "private-index"
+url = "https://private-index.com/simple"
+authenticate = "always"
+ignore-error-codes = [403]
+```
+
+uv will always continue searching when it encounters a `404 Not Found`. This cannot be overridden.
 
 ### Disabling authentication
 
