@@ -539,6 +539,8 @@ pub struct SelfNamespace {
 pub enum SelfCommand {
     /// Update uv.
     Update(SelfUpdateArgs),
+    /// Uninstall uv.
+    Uninstall(SelfUninstallArgs),
 }
 
 #[derive(Args, Debug)]
@@ -550,6 +552,14 @@ pub struct SelfUpdateArgs {
     /// A token is not required but can be used to reduce the chance of encountering rate limits.
     #[arg(long, env = EnvVars::UV_GITHUB_TOKEN)]
     pub token: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct SelfUninstallArgs {
+    /// true iff should run `uv cache clean` and remove directories pointed to by `uv python dir`
+    /// and `uv tool dir`
+    #[arg(long)]
+    pub remove_data: bool,
 }
 
 #[derive(Args)]
