@@ -117,7 +117,7 @@ fn write_wheel(
     // have files generated in the source dist -> wheel build step).
     for exclude in &settings.source_exclude {
         // Avoid duplicate entries.
-        if !excludes.contains(&exclude) {
+        if !excludes.contains(exclude) {
             excludes.push(exclude.clone());
         }
     }
