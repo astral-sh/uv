@@ -3,6 +3,46 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.6.14
+
+### Python versions
+
+The following Python versions have been added:
+
+- CPython 3.13.3
+- CPython 3.12.10
+- CPython 3.11.12
+- CPython 3.10.17
+- CPython 3.9.22
+
+See the [`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250409) for more details.
+
+### Enhancements
+
+- Add `uv-build` and `uv_build` aliases to `uv init --build-backend` ([#12776](https://github.com/astral-sh/uv/pull/12776))
+- Emit dedicated error message for Conda `environment.yml` files ([#12669](https://github.com/astral-sh/uv/pull/12669))
+
+
+### Preview features
+
+- Build backend: Check module dir exists for sdist build ([#12779](https://github.com/astral-sh/uv/pull/12779))
+- Build backend: Fix sdist with long directories ([#12764](https://github.com/astral-sh/uv/pull/12764))
+
+### Performance
+
+- Avoid querying GitHub on repeated install invocations ([#12767](https://github.com/astral-sh/uv/pull/12767))
+
+### Bug fixes
+
+- Error when `tool.uv.sources` is set in system-level configuration file ([#12757](https://github.com/astral-sh/uv/pull/12757))
+- Split workspace members onto their own lines in `uv init` ([#12756](https://github.com/astral-sh/uv/pull/12756))
+
+### Documentation
+
+- Add lockfile note about PEP 751 ([#12732](https://github.com/astral-sh/uv/pull/12732))
+- Extend the reference documentation for `uv pip sync` ([#12683](https://github.com/astral-sh/uv/pull/12683))
+- Fix mismatched pip interface header / nav titles ([#12640](https://github.com/astral-sh/uv/pull/12640))
+
 ## 0.6.13
 
 ### Enhancements
