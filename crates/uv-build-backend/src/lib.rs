@@ -198,13 +198,15 @@ fn check_metadata_directory(
 fn find_roots(
     source_tree: &Path,
     pyproject_toml: &PyProjectToml,
-    module_root: &Path,
+    relative_module_root: &Path,
     module_name: Option<&Identifier>,
 ) -> Result<(PathBuf, PathBuf), Error> {
-    if module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(module_root.to_path_buf()));
+    if relative_module_root.is_absolute() {
+        return Err(Error::AbsoluteModuleRoot(
+            relative_module_root.to_path_buf(),
+        ));
     }
-    let src_root = source_tree.join(module_root);
+    let src_root = source_tree.join(relative_module_root);
 
     let module_name = if let Some(module_name) = module_name {
         module_name.clone()
