@@ -75,6 +75,7 @@ pub use crate::requirement::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
+pub use crate::status_code_strategy::*;
 pub use crate::traits::*;
 
 mod annotation;
@@ -101,6 +102,7 @@ mod requirement;
 mod resolution;
 mod resolved;
 mod specified_requirement;
+mod status_code_strategy;
 mod traits;
 
 #[derive(Debug, Clone)]

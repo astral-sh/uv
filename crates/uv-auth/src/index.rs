@@ -60,6 +60,10 @@ pub struct Index {
     pub auth_policy: AuthPolicy,
 }
 
+// TODO(john): Multiple methods in this struct need to iterate over
+// all the indexes in the set. There are probably not many URLs to
+// iterate through, but we could use a trie instead of a HashSet here
+// for more efficient search.
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct Indexes(FxHashSet<Index>);
 
@@ -79,26 +83,20 @@ impl Indexes {
 
     /// Get the index URL prefix for a URL if one exists.
     pub fn index_url_for(&self, url: &Url) -> Option<&Url> {
-        // TODO(john): There are probably not many URLs to iterate through,
-        // but we could use a trie instead of a HashSet here for more
-        // efficient search.
-        self.0
-            .iter()
-            .find(|index| is_url_prefix(&index.root_url, url))
-            .map(|index| &index.url)
+        self.find_prefix_index(url).map(|index| &index.url)
     }
 
     /// Get the [`AuthPolicy`] for a URL.
-    pub fn policy_for(&self, url: &Url) -> AuthPolicy {
-        // TODO(john): There are probably not many URLs to iterate through,
-        // but we could use a trie instead of a HashMap here for more
-        // efficient search.
-        for index in &self.0 {
-            if is_url_prefix(&index.root_url, url) {
-                return index.auth_policy;
-            }
-        }
-        AuthPolicy::Auto
+    pub fn auth_policy_for(&self, url: &Url) -> AuthPolicy {
+        self.find_prefix_index(url)
+            .map(|index| index.auth_policy)
+            .unwrap_or(AuthPolicy::Auto)
+    }
+
+    fn find_prefix_index(&self, url: &Url) -> Option<&Index> {
+        self.0
+            .iter()
+            .find(|&index| is_url_prefix(&index.root_url, url))
     }
 }
 
