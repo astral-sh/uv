@@ -1,6 +1,6 @@
 use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
 use crate::wheel::build_exclude_matcher;
-use crate::{DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
+use crate::{find_roots, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use fs_err::File;
@@ -183,6 +183,15 @@ fn write_source_dist(
 
     let metadata = pyproject_toml.to_metadata(source_tree)?;
     let metadata_email = metadata.core_metadata_format();
+
+    debug!("Adding content files to wheel");
+    // Check that the source tree contains a module.
+    find_roots(
+        source_tree,
+        &pyproject_toml,
+        &settings.module_root,
+        settings.module_name.as_ref(),
+    )?;
 
     writer.write_bytes(
         &Path::new(&top_level)

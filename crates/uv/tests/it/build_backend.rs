@@ -591,3 +591,52 @@ fn build_sdist_with_long_path() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn sdist_error_without_module() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let temp_dir = TempDir::new()?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["uv_build>=0.6,<0.7"]
+        build-backend = "uv_build"
+    "#})?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-sdist")
+        .arg(temp_dir.path())
+        .env("UV_PREVIEW", "1"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Missing source directory at: `src`
+    ");
+
+    fs_err::create_dir(context.temp_dir.join("src"))?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-sdist")
+        .arg(temp_dir.path())
+        .env("UV_PREVIEW", "1"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Expected a Python module directory at: `src/foo`
+    ");
+
+    Ok(())
+}
