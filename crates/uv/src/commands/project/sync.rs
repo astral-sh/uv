@@ -103,7 +103,6 @@ struct Environment {
     // Python full version
     python_version: String,
 }
-
 impl SyncEntry {
     /// Creates a new `SyncEntry` with the given project directory.
     fn new(project_dir: &Path) -> Self {
@@ -135,7 +134,7 @@ impl SyncEntry {
         self.lockfile = Some(LockfileEntry {
             lockfile_path,
             action,
-        })
+        });
     }
 
     /// Serializes the `SyncEntry` into a JSON string.
@@ -257,10 +256,12 @@ pub(crate) async fn sync(
 
     let mut sync_json = SyncEntry::new(project_dir);
     // set python version and executable path
-    sync_json.set_python(
-        environment.python_executable().to_owned(),
-        environment.interpreter().python_full_version().to_string(),
-    );
+    if format.is_json() {
+        sync_json.set_python(
+            environment.python_executable().to_owned(),
+            environment.interpreter().python_full_version().to_string(),
+        );
+    }
 
     // Notify the user of any environment changes.
     match &environment {
@@ -487,44 +488,47 @@ pub(crate) async fn sync(
                         if format.is_json() {
                             sync_json
                                 .set_lockfile(lock_target.lock_path(), DryRunAction::AlreadyExist);
+                        } else {
+                            writeln!(
+                                printer.stderr(),
+                                "{}",
+                                format!(
+                                    "Found up-to-date lockfile at: {}",
+                                    lock_target.lock_path().user_display().bold()
+                                )
+                                .dimmed()
+                            )?;
                         }
-                        writeln!(
-                            printer.stderr(),
-                            "{}",
-                            format!(
-                                "Found up-to-date lockfile at: {}",
-                                lock_target.lock_path().user_display().bold()
-                            )
-                            .dimmed()
-                        )?;
                     }
                     LockResult::Changed(None, ..) => {
                         if format.is_json() {
                             sync_json.set_lockfile(lock_target.lock_path(), DryRunAction::Create);
+                        } else {
+                            writeln!(
+                                printer.stderr(),
+                                "{}",
+                                format!(
+                                    "Would create lockfile at: {}",
+                                    lock_target.lock_path().user_display().bold()
+                                )
+                                .dimmed()
+                            )?;
                         }
-                        writeln!(
-                            printer.stderr(),
-                            "{}",
-                            format!(
-                                "Would create lockfile at: {}",
-                                lock_target.lock_path().user_display().bold()
-                            )
-                            .dimmed()
-                        )?;
                     }
                     LockResult::Changed(Some(..), ..) => {
                         if format.is_json() {
                             sync_json.set_lockfile(lock_target.lock_path(), DryRunAction::Update);
+                        } else {
+                            writeln!(
+                                printer.stderr(),
+                                "{}",
+                                format!(
+                                    "Would update lockfile at: {}",
+                                    lock_target.lock_path().user_display().bold()
+                                )
+                                .dimmed()
+                            )?;
                         }
-                        writeln!(
-                            printer.stderr(),
-                            "{}",
-                            format!(
-                                "Would update lockfile at: {}",
-                                lock_target.lock_path().user_display().bold()
-                            )
-                            .dimmed()
-                        )?;
                     }
                 }
             }
