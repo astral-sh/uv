@@ -1210,15 +1210,12 @@ fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
         (Some(VersionControlSystem::None), _) => VersionControlSystem::None,
         // If a version control system was specified, use it.
         (Some(vcs), None) => vcs,
-        // If a version control system was specified, but a VCS was detected...
+        // If a version control system was specified, but a VCS was detected, then the user is
+        // asking for a specific vcs, so we use it
         (Some(vcs), Some(existing)) => {
-            // If they differ, raise an error.
-            if vcs != existing {
-                anyhow::bail!("The project is already in a version control system (`{existing}`); cannot initialize with `--vcs {vcs}`");
-            }
-
-            // Otherwise, ignore the specified VCS, since it's already in use.
-            VersionControlSystem::None
+            debug!("Requested version control system ({vcs}) conflicts with existing version system ({existing})");
+            debug!("Initializing requested version control system: {vcs}");
+            vcs
         }
     };
 
