@@ -23,6 +23,7 @@ uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
+uv-workspace = { workspace = true }
 
 csv = { workspace = true }
 flate2 = { workspace = true, default-features = false }

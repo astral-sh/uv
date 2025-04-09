@@ -140,6 +140,7 @@ nav:
       - Authentication: configuration/authentication.md
       - Package indexes: configuration/indexes.md
       - Installer: configuration/installer.md
+      - uv build backend: configuration/build_backend.md
   - The pip interface:
       - pip/index.md
       - Using environments: pip/environments.md

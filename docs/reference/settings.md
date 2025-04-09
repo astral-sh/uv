@@ -367,6 +367,178 @@ pydantic = { path = "/path/to/pydantic", editable = true }
 
 ---
 
+### `build-backend`
+
+Settings for the uv build backend (`uv_build`).
+
+!!! note
+
+    The uv build backend is currently in preview and may change in any future release.
+
+Note that those settings only apply when using the `uv_build` backend, other build backends
+(such as hatchling) have their own configuration.
+
+#### [`data`](#build-backend_data) {: #build-backend_data }
+<span id="data"></span>
+
+Data includes for wheels.
+
+Each entry is a directory, whose contents are copied to the matching directory in the wheel
+in `<name>-<version>.data/(purelib|platlib|headers|scripts|data)`. Upon installation, this
+data is moved to its target location, as defined by
+<https://docs.python.org/3.12/library/sysconfig.html#installation-paths>. Usually, small
+data files are included by placing them in the Python module instead of using data includes.
+
+- `scripts`: Installed to the directory for executables, `<venv>/bin` on Unix or
+  `<venv>\Scripts` on Windows. This directory is added to `PATH` when the virtual
+  environment  is activated or when using `uv run`, so this data type can be used to install
+  additional binaries. Consider using `project.scripts` instead for Python entrypoints.
+- `data`: Installed over the virtualenv environment root.
+
+    Warning: This may override existing files!
+
+- `headers`: Installed to the include directory. Compilers building Python packages
+  with this package as build requirement use the include directory to find additional header
+  files.
+- `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended
+  to uses these two options.
+
+**Default value**: `{}`
+
+**Type**: `dict[str, str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+data = { "headers": "include/headers", "scipts": "bin" }
+```
+
+---
+
+#### [`default-excludes`](#build-backend_default-excludes) {: #build-backend_default-excludes }
+<span id="default-excludes"></span>
+
+If set to `false`, the default excludes aren't applied.
+
+Default excludes: `__pycache__`, `*.pyc`, and `*.pyo`.
+
+**Default value**: `true`
+
+**Type**: `bool`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+default-exclude = false
+```
+
+---
+
+#### [`module-name`](#build-backend_module-name) {: #build-backend_module-name }
+<span id="module-name"></span>
+
+The name of the module directory inside `module-root`.
+
+The default module name is the package name with dots and dashes replaced by underscores.
+
+Note that using this option runs the risk of creating two packages with different names but
+the same module names. Installing such packages together leads to unspecified behavior,
+often with corrupted files or directory trees.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+module-name = "sklearn"
+```
+
+---
+
+#### [`module-root`](#build-backend_module-root) {: #build-backend_module-root }
+<span id="module-root"></span>
+
+The directory that contains the module directory, usually `src`, or an empty path when
+using the flat layout over the src layout.
+
+**Default value**: `"src"`
+
+**Type**: `str`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+module-root = ""
+```
+
+---
+
+#### [`source-exclude`](#build-backend_source-exclude) {: #build-backend_source-exclude }
+<span id="source-exclude"></span>
+
+Glob expressions for files and directories to exclude from the source distribution.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+source-exclude = ["*.bin"]
+```
+
+---
+
+#### [`source-include`](#build-backend_source-include) {: #build-backend_source-include }
+<span id="source-include"></span>
+
+Glob expressions which files and directories to additionally include in the source
+distribution.
+
+`pyproject.toml` and the contents of the module directory are always included.
+
+The glob syntax is the reduced portable glob from
+[PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+source-include = ["tests/**"]
+```
+
+---
+
+#### [`wheel-exclude`](#build-backend_wheel-exclude) {: #build-backend_wheel-exclude }
+<span id="wheel-exclude"></span>
+
+Glob expressions for files and directories to exclude from the wheel.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+wheel-exclude = ["*.bin"]
+```
+
+---
+
 ### `workspace`
 
 #### [`exclude`](#workspace_exclude) {: #workspace_exclude }

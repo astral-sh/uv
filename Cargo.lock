@@ -4759,6 +4759,7 @@ dependencies = [
  "uv-pypi-types",
  "uv-version",
  "uv-warnings",
+ "uv-workspace",
  "version-ranges",
  "walkdir",
  "zip",
