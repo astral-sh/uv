@@ -18808,8 +18808,8 @@ fn lock_keyring_credentials() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Request for public@https://pypi-proxy.fly.dev/basic-auth/simple
-    Request for public@pypi-proxy.fly.dev
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth
+    Keyring request for public@pypi-proxy.fly.dev
     Resolved 2 packages in [TIME]
     ");
 
@@ -18913,8 +18913,8 @@ fn lock_keyring_explicit_always() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Request for https://pypi-proxy.fly.dev/basic-auth/simple
-    Request for pypi-proxy.fly.dev
+    Keyring request for https://pypi-proxy.fly.dev/basic-auth
+    Keyring request for pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
@@ -18930,8 +18930,8 @@ fn lock_keyring_explicit_always() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Request for https://pypi-proxy.fly.dev/basic-auth/simple
-    Request for pypi-proxy.fly.dev
+    Keyring request for https://pypi-proxy.fly.dev/basic-auth
+    Keyring request for pypi-proxy.fly.dev
     Resolved 2 packages in [TIME]
     ");
 
@@ -18996,8 +18996,8 @@ fn lock_keyring_credentials_always_authenticate_fetches_username() -> Result<()>
     ----- stdout -----
 
     ----- stderr -----
-    Request for https://pypi-proxy.fly.dev/basic-auth/simple
-    Request for pypi-proxy.fly.dev
+    Keyring request for https://pypi-proxy.fly.dev/basic-auth
+    Keyring request for pypi-proxy.fly.dev
     Resolved 2 packages in [TIME]
     ");
 
