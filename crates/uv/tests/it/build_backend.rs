@@ -567,14 +567,14 @@ fn build_sdist_with_long_path() -> Result<()> {
     "#})?;
     context
         .temp_dir
-        .child("src/bar//__init__.py")
-        .write_str(r#"print("Hi from bar")"#)?;
+        .child("src/foo/__init__.py")
+        .write_str(r#"print("Hi from foo")"#)?;
 
-    let long_path = format!("src/bar/l{}ng/__init__.py", "o".repeat(100));
+    let long_path = format!("src/foo/l{}ng/__init__.py", "o".repeat(100));
     context
         .temp_dir
         .child(long_path)
-        .write_str(r#"print("Hi from bar")"#)?;
+        .write_str(r#"print("Hi from foo")"#)?;
 
     uv_snapshot!(context
         .build_backend()
