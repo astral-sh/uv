@@ -18,7 +18,7 @@ use uv_pypi_types::Identifier;
 use uv_warnings::warn_user_once;
 
 use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
-use crate::{DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
+use crate::{find_roots, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
 
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_wheel(
@@ -115,31 +115,22 @@ fn write_wheel(
     }
     // The wheel must not include any files excluded by the source distribution (at least until we
     // have files generated in the source dist -> wheel build step).
-    for exclude in settings.source_exclude {
+    for exclude in &settings.source_exclude {
         // Avoid duplicate entries.
         if !excludes.contains(&exclude) {
-            excludes.push(exclude);
+            excludes.push(exclude.clone());
         }
     }
     debug!("Wheel excludes: {:?}", excludes);
     let exclude_matcher = build_exclude_matcher(excludes)?;
 
     debug!("Adding content files to wheel");
-    if settings.module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
-    }
-    let src_root = source_tree.join(settings.module_root);
-
-    let module_name = if let Some(module_name) = settings.module_name {
-        module_name
-    } else {
-        // Should never error, the rules for package names (in dist-info formatting) are stricter
-        // than those for identifiers
-        Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
-    };
-    debug!("Module name: `{:?}`", module_name);
-
-    let module_root = find_module_root(&src_root, module_name)?;
+    let (src_root, module_root) = find_roots(
+        source_tree,
+        pyproject_toml,
+        &settings.module_root,
+        settings.module_name.as_ref(),
+    )?;
 
     let mut files_visited = 0;
     for entry in WalkDir::new(module_root)
@@ -241,46 +232,6 @@ fn write_wheel(
     Ok(())
 }
 
-/// Match the module name to its module directory with potentially different casing.
-///
-/// For example, a package may have the dist-info-normalized package name `pil_util`, but the
-/// importable module is named `PIL_util`.
-///
-/// We get the module either as dist-info-normalized package name, or explicitly from the user.
-/// For dist-info-normalizing a package name, the rules are lowercasing, replacing `.` with `_` and
-/// replace `-` with `_`. Since `.` and `-` are not allowed in module names, we can check whether a
-/// directory name matches our expected module name by lowercasing it.
-fn find_module_root(src_root: &Path, module_name: Identifier) -> Result<PathBuf, Error> {
-    let normalized = module_name.to_string();
-    let modules = fs_err::read_dir(src_root)?
-        .filter_ok(|entry| {
-            entry
-                .file_name()
-                .to_str()
-                .is_some_and(|file_name| file_name.to_lowercase() == normalized)
-        })
-        .map_ok(|entry| entry.path())
-        .collect::<Result<Vec<_>, _>>()?;
-    match modules.as_slice() {
-        [] => {
-            // Show the normalized path in the error message, as representative example.
-            Err(Error::MissingModule(src_root.join(module_name.as_ref())))
-        }
-        [module_root] => {
-            if module_root.join("__init__.py").is_file() {
-                Ok(module_root.clone())
-            } else {
-                Err(Error::MissingInitPy(module_root.join("__init__.py")))
-            }
-        }
-        multiple => {
-            let mut paths = multiple.to_vec();
-            paths.sort();
-            Err(Error::MultipleModules { module_name, paths })
-        }
-    }
-}
-
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_editable(
     source_tree: &Path,
@@ -331,7 +282,7 @@ pub fn build_editable(
     debug!("Module name: `{:?}`", module_name);
 
     // Check that a module root exists in the directory we're linking from the `.pth` file
-    find_module_root(&src_root, module_name)?;
+    crate::find_module_root(&src_root, module_name)?;
 
     wheel_writer.write_bytes(
         &format!("{}.pth", pyproject_toml.name().as_dist_info_name()),
