@@ -158,6 +158,11 @@ impl EnvVars {
     /// will compile Python source files to bytecode after installation.
     pub const UV_COMPILE_BYTECODE: &'static str = "UV_COMPILE_BYTECODE";
 
+    /// Equivalent to the `--non-editable` command-line argument. If set, uv
+    /// install any editable dependencies, including the project and any workspace members, as
+    /// non-editable
+    pub const UV_NO_EDITABLE: &'static str = "UV_NO_EDITABLE";
+
     /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
     /// all packages from source. The resolver will still use pre-built wheels to
     /// extract package metadata, if available.
