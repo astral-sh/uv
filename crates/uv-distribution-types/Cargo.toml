@@ -30,8 +30,10 @@ uv-pypi-types = { workspace = true }
 uv-small-str = { workspace = true }
 
 arcstr = { workspace = true }
+anyhow = { workspace = true }
 bitflags = { workspace = true }
 fs-err = { workspace = true }
+http = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
 owo-colors = { workspace = true }

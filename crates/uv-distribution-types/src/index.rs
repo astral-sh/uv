@@ -1,6 +1,9 @@
 use std::path::Path;
 use std::str::FromStr;
 
+use http::status::InvalidStatusCode;
+use http::StatusCode;
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use url::Url;
 
@@ -8,11 +11,9 @@ use uv_auth::{AuthPolicy, Credentials};
 
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
-use crate::{IndexUrl, IndexUrlError};
+use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError};
 
-#[derive(
-    Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub struct Index {
@@ -94,6 +95,17 @@ pub struct Index {
     /// ```
     #[serde(default)]
     pub authenticate: AuthPolicy,
+    /// Status codes that uv should ignore when deciding whether
+    /// to continue searching in the next index after a failure.
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "my-index"
+    /// url = "https://<omitted>/simple"
+    /// ignore-error-codes = [401, 403]
+    /// ```
+    #[serde(deserialize_with = "validate_error_codes", default)]
+    pub ignore_error_codes: Option<Vec<u16>>,
 }
 
 #[derive(
@@ -131,6 +143,7 @@ impl Index {
             format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
         }
     }
 
@@ -145,6 +158,7 @@ impl Index {
             format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
         }
     }
 
@@ -159,6 +173,7 @@ impl Index {
             format: IndexFormat::Flat,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
         }
     }
 
@@ -214,6 +229,15 @@ impl Index {
         }
         Ok(self)
     }
+
+    /// Return the [`IndexStatusCodeStrategy`] for this index.
+    pub fn status_code_strategy(&self) -> Result<IndexStatusCodeStrategy, IndexSourceError> {
+        Ok(if let Some(ignore_error_codes) = &self.ignore_error_codes {
+            IndexStatusCodeStrategy::from_ignored_error_codes(ignore_error_codes)?
+        } else {
+            IndexStatusCodeStrategy::from_index_url(self.url.url())
+        })
+    }
 }
 
 impl From<IndexUrl> for Index {
@@ -227,6 +251,7 @@ impl From<IndexUrl> for Index {
             format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
         }
     }
 }
@@ -249,6 +274,7 @@ impl FromStr for Index {
                     format: IndexFormat::Simple,
                     publish_url: None,
                     authenticate: AuthPolicy::default(),
+                    ignore_error_codes: None,
                 });
             }
         }
@@ -264,6 +290,7 @@ impl FromStr for Index {
             format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
         })
     }
 }
@@ -349,6 +376,25 @@ impl<'a> From<&'a IndexUrl> for IndexMetadataRef<'a> {
     }
 }
 
+/// Validate the provided error codes.
+fn validate_error_codes<'de, D>(deserializer: D) -> Result<Option<Vec<u16>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let status_codes = Option::<Vec<u16>>::deserialize(deserializer)?;
+    if let Some(codes) = status_codes {
+        for code in &codes {
+            if StatusCode::from_u16(*code).is_err() {
+                return Err(serde::de::Error::custom(format!(
+                    "{code} is not a valid HTTP status code"
+                )));
+            }
+        }
+        return Ok(Some(codes));
+    }
+    Ok(Some(Vec::new()))
+}
+
 /// An error that can occur when parsing an [`Index`].
 #[derive(Error, Debug)]
 pub enum IndexSourceError {
@@ -358,4 +404,6 @@ pub enum IndexSourceError {
     IndexName(#[from] IndexNameError),
     #[error("Index included a name, but the name was empty")]
     EmptyName,
+    #[error(transparent)]
+    StatusCode(#[from] InvalidStatusCode),
 }

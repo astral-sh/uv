@@ -5124,9 +5124,11 @@ dependencies = [
 name = "uv-distribution-types"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "arcstr",
  "bitflags 2.9.0",
  "fs-err 3.1.0",
+ "http",
  "itertools 0.14.0",
  "jiff",
  "owo-colors",

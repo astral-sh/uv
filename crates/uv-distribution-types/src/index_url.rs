@@ -5,6 +5,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock, RwLock};
 
+use http::StatusCode;
 use itertools::Either;
 use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
@@ -12,7 +13,7 @@ use url::{ParseError, Url};
 
 use uv_pep508::{split_scheme, Scheme, VerbatimUrl, VerbatimUrlError};
 
-use crate::{Index, Verbatim};
+use crate::{Index, IndexSourceError, IndexStatusCodeStrategy, Verbatim};
 
 static PYPI_URL: LazyLock<Url> = LazyLock::new(|| Url::parse("https://pypi.org/simple").unwrap());
 
@@ -536,6 +537,19 @@ impl<'a> IndexUrls {
     pub fn no_index(&self) -> bool {
         self.no_index
     }
+
+    /// Return the [`IndexStatusCodeStrategy`] for an [`IndexUrl`].
+    pub fn status_code_strategy_for(
+        &self,
+        url: &IndexUrl,
+    ) -> Result<IndexStatusCodeStrategy, IndexSourceError> {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.status_code_strategy();
+            }
+        }
+        Ok(IndexStatusCodeStrategy::Default)
+    }
 }
 
 bitflags::bitflags! {
@@ -577,6 +591,20 @@ impl IndexCapabilities {
             .entry(index_url)
             .or_insert(Flags::empty())
             .insert(Flags::NO_RANGE_REQUESTS);
+    }
+
+    /// Mark an [`IndexUrl`] as returning a status code if it is either a
+    /// `401 Unauthorized` or a `403 Forbidden`.
+    pub fn set_by_status_code(&self, status_code: StatusCode, index_url: &IndexUrl) {
+        match status_code {
+            StatusCode::UNAUTHORIZED => {
+                self.set_unauthorized(index_url.clone());
+            }
+            StatusCode::FORBIDDEN => {
+                self.set_forbidden(index_url.clone());
+            }
+            _ => {}
+        }
     }
 
     /// Returns `true` if the given [`IndexUrl`] returns a `401 Unauthorized` status code.
