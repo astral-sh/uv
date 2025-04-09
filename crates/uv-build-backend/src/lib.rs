@@ -546,7 +546,7 @@ mod tests {
     }
 }
 
-/// Determine the source root and the module root.
+/// Resolve the source root and module root paths.
 fn find_roots(
     source_tree: &Path,
     pyproject_toml: &PyProjectToml,
