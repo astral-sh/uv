@@ -46,28 +46,50 @@ use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings};
 
-/// Represents an entry for synchronization, formatted as JSON.
+/// Represents an single synchronization entry.
+///
+/// This structure captures the state of a project directory
+/// or a script during a dry run.
 #[derive(Debug, Serialize)]
 struct SyncEntry {
     /// The project directory path.
     project_dir: PathBuf,
     /// The environment details, including path and action.
     environment: Environment,
+    // Lockfile details, including path and actions taken
+    lockfile: Option<LockfileEntry>,
+}
+
+/// Represents the lockfile details during a dru run.
+///
+/// this struct captures the path to the lockfile and action
+/// that would be taken on it.
+#[derive(Debug, Serialize)]
+struct LockfileEntry {
+    lockfile_path: PathBuf,
+    action: DryRunAction,
 }
 
 /// Represents the action taken during a dry run.
+///
+/// this struct describe the simulated action applied to a
+/// resource (environment, lockfile, package)
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
 enum DryRunAction {
-    DiscoveredExisting,
-    ReplacingExistingVenv,
-    CreatingVenv,
-    ReplacingExistingScriptVenv,
-    CreatingScriptEnv,
-    /// No action is being taken(should this ever happen?).
+    /// No changes are needed.
+    AlreadyExist,
+    /// The resource would be replaced, Equivalent to `Update` but more expressive.
+    Replace,
+    /// The resource would be updated.
+    Update,
+    /// Create a new resource
+    Create,
+    // No action is being taken(should this ever happen?).
     None,
 }
 
+/// The dry run environment details, including path, action, and Python configuration.
 #[derive(Serialize, Debug)]
 struct Environment {
     /// The path to the environment.
@@ -91,6 +113,7 @@ impl SyncEntry {
                 python_executable: PathBuf::new(),
                 python_version: String::new(),
             },
+            lockfile: None,
         }
     }
     /// Sets the environment path and action.
@@ -105,9 +128,17 @@ impl SyncEntry {
         self.environment.python_version = version;
     }
 
+    /// Sets lockfile path and action.
+    fn set_lockfile(&mut self, lockfile_path: PathBuf, action: DryRunAction) {
+        self.lockfile = Some(LockfileEntry {
+            lockfile_path,
+            action,
+        })
+    }
+
     /// Serializes the `SyncEntry` into a JSON string.
     fn as_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string(self)
+        serde_json::to_string_pretty(self)
     }
 }
 
@@ -246,10 +277,7 @@ pub(crate) async fn sync(
         {
             // formatting
             if format.is_json() {
-                sync_json.set_env_path(
-                    environment.root().to_owned(),
-                    DryRunAction::DiscoveredExisting,
-                );
+                sync_json.set_env_path(environment.root().to_owned(), DryRunAction::AlreadyExist);
             } else {
                 writeln!(
                     printer.stderr(),
@@ -266,7 +294,7 @@ pub(crate) async fn sync(
             if dry_run.enabled() =>
         {
             if format.is_json() {
-                sync_json.set_env_path(root.to_owned(), DryRunAction::ReplacingExistingVenv);
+                sync_json.set_env_path(root.to_owned(), DryRunAction::Replace);
             } else {
                 writeln!(
                     printer.stderr(),
@@ -283,7 +311,7 @@ pub(crate) async fn sync(
             if dry_run.enabled() =>
         {
             if format.is_json() {
-                sync_json.set_env_path(root.to_owned(), DryRunAction::CreatingVenv);
+                sync_json.set_env_path(root.to_owned(), DryRunAction::Create);
             } else {
                 writeln!(
                     printer.stderr(),
@@ -299,10 +327,8 @@ pub(crate) async fn sync(
         SyncEnvironment::Script(ScriptEnvironment::Existing(environment)) => {
             if dry_run.enabled() {
                 if format.is_json() {
-                    sync_json.set_env_path(
-                        environment.root().to_owned(),
-                        DryRunAction::DiscoveredExisting,
-                    );
+                    sync_json
+                        .set_env_path(environment.root().to_owned(), DryRunAction::AlreadyExist);
                 } else {
                     writeln!(
                         printer.stderr(),
@@ -338,10 +364,7 @@ pub(crate) async fn sync(
         }
         SyncEnvironment::Script(ScriptEnvironment::WouldReplace(root, ..)) if dry_run.enabled() => {
             if format.is_json() {
-                sync_json.set_env_path(
-                    environment.root().to_owned(),
-                    DryRunAction::ReplacingExistingScriptVenv,
-                );
+                sync_json.set_env_path(environment.root().to_owned(), DryRunAction::Replace);
             } else {
                 writeln!(
                     printer.stderr(),
@@ -356,10 +379,7 @@ pub(crate) async fn sync(
         }
         SyncEnvironment::Script(ScriptEnvironment::WouldCreate(root, ..)) if dry_run.enabled() => {
             if format.is_json() {
-                sync_json.set_env_path(
-                    environment.root().to_owned(),
-                    DryRunAction::CreatingScriptEnv,
-                );
+                sync_json.set_env_path(environment.root().to_owned(), DryRunAction::Create);
             } else {
                 writeln!(
                     printer.stderr(),
@@ -375,10 +395,6 @@ pub(crate) async fn sync(
         _ => {}
     }
 
-    // Print JSON for better readability and write it to stdout
-    if format.is_json() {
-        writeln!(printer.stdout(), "{}", sync_json.as_json()?)?;
-    }
     // Notify the user of any environment changes.
 
     // Special-case: we're syncing a script that doesn't have an associated lockfile. In that case,
@@ -442,7 +458,12 @@ pub(crate) async fn sync(
             )
             .await
             {
-                Ok(..) => return Ok(ExitStatus::Success),
+                Ok(..) => {
+                    if format.is_json() {
+                        writeln!(printer.stdout(), "{}", sync_json.as_json()?)?;
+                    }
+                    return Ok(ExitStatus::Success);
+                }
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
                         network_settings.native_tls,
@@ -492,6 +513,10 @@ pub(crate) async fn sync(
             if dry_run.enabled() {
                 match result {
                     LockResult::Unchanged(..) => {
+                        if format.is_json() {
+                            sync_json
+                                .set_lockfile(lock_target.lock_path(), DryRunAction::AlreadyExist);
+                        }
                         writeln!(
                             printer.stderr(),
                             "{}",
@@ -503,6 +528,9 @@ pub(crate) async fn sync(
                         )?;
                     }
                     LockResult::Changed(None, ..) => {
+                        if format.is_json() {
+                            sync_json.set_lockfile(lock_target.lock_path(), DryRunAction::Create);
+                        }
                         writeln!(
                             printer.stderr(),
                             "{}",
@@ -514,6 +542,9 @@ pub(crate) async fn sync(
                         )?;
                     }
                     LockResult::Changed(Some(..), ..) => {
+                        if format.is_json() {
+                            sync_json.set_lockfile(lock_target.lock_path(), DryRunAction::Update);
+                        }
                         writeln!(
                             printer.stderr(),
                             "{}",
@@ -540,6 +571,10 @@ pub(crate) async fn sync(
         }
         Err(err) => return Err(err.into()),
     };
+
+    if format.is_json() {
+        writeln!(printer.stdout(), "{}", sync_json.as_json()?)?;
+    }
 
     // Identify the installation target.
     let sync_target =
