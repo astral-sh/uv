@@ -1674,8 +1674,7 @@ mod tests {
         url.set_password(None).ok();
         url.set_username("").ok();
         Indexes::from_indexes(vec![Index {
-            url: url.clone(),
-            policy_url: url,
+            root_url: url.clone(),
             auth_policy: policy,
         }])
     }
