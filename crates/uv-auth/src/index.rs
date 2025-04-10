@@ -53,6 +53,7 @@ impl Display for AuthPolicy {
 // could potentially make sense for a future refactor.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Index {
+    pub url: Url,
     /// The root endpoint where authentication is applied.
     /// For PEP 503 endpoints, this excludes `/simple`.
     pub root_url: Url,
@@ -83,8 +84,8 @@ impl Indexes {
         // efficient search.
         self.0
             .iter()
-            .find(|index| url.as_str().starts_with(index.root_url.as_str()))
-            .map(|index| &index.root_url)
+            .find(|index| is_url_prefix(&index.root_url, url))
+            .map(|index| &index.url)
     }
 
     /// Get the [`AuthPolicy`] for a URL.
@@ -93,10 +94,21 @@ impl Indexes {
         // but we could use a trie instead of a HashMap here for more
         // efficient search.
         for index in &self.0 {
-            if url.as_str().starts_with(index.root_url.as_str()) {
+            if is_url_prefix(&index.root_url, url) {
                 return index.auth_policy;
             }
         }
         AuthPolicy::Auto
     }
+}
+
+fn is_url_prefix(base: &Url, url: &Url) -> bool {
+    if base.scheme() != url.scheme()
+        || base.host_str() != url.host_str()
+        || base.port_or_known_default() != url.port_or_known_default()
+    {
+        return false;
+    }
+
+    url.path().starts_with(base.path())
 }

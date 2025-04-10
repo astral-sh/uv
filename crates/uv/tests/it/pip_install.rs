@@ -5341,7 +5341,7 @@ fn install_package_basic_auth_from_keyring() {
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
     Keyring request for public@pypi-proxy.fly.dev
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
@@ -5388,7 +5388,7 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
     Keyring request for public@pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
@@ -5431,7 +5431,7 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
     Keyring request for public@pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.

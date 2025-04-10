@@ -413,14 +413,15 @@ impl<'a> IndexLocations {
 impl From<&IndexLocations> for uv_auth::Indexes {
     fn from(index_locations: &IndexLocations) -> uv_auth::Indexes {
         uv_auth::Indexes::from_indexes(index_locations.allowed_indexes().into_iter().map(|index| {
-            let mut url = index
-                .url()
-                .root()
-                .unwrap_or_else(|| index.url().url().clone());
+            let mut url = index.url().url().clone();
             url.set_username("").ok();
             url.set_password(None).ok();
+            let mut root_url = index.url().root().unwrap_or_else(|| url.clone());
+            root_url.set_username("").ok();
+            root_url.set_password(None).ok();
             uv_auth::Index {
-                root_url: url,
+                url,
+                root_url,
                 auth_policy: index.authenticate,
             }
         }))
