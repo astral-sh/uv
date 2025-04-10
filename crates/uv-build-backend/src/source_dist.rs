@@ -1,6 +1,8 @@
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
-use crate::{find_roots, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
+use crate::{
+    find_roots, BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use fs_err::File;
@@ -16,7 +18,6 @@ use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter};
 use uv_pypi_types::Identifier;
 use uv_warnings::warn_user_once;
-use uv_workspace::BuildBackendSettings;
 use walkdir::WalkDir;
 
 /// Build a source distribution from the source tree and place it in the output directory.

@@ -19,10 +19,9 @@ use uv_pep508::{
     ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement, VersionOrUrl,
 };
 use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
-use uv_workspace::BuildBackendSettings;
 
 use crate::serde_verbatim::SerdeVerbatim;
-use crate::Error;
+use crate::{BuildBackendSettings, Error};
 
 /// By default, we ignore generated python files.
 pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
