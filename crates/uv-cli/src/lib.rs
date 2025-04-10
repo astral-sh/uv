@@ -925,7 +925,7 @@ fn parse_indices(input: &str) -> Result<Vec<Maybe<Index>>, String> {
     Ok(indices)
 }
 
-/// Parse a `--index` argument into an [`Index`], mapping the empty string to `None`.
+/// Parse a `--default-index` argument into an [`Index`], mapping the empty string to `None`.
 fn parse_default_index(input: &str) -> Result<Maybe<Index>, String> {
     if input.is_empty() {
         Ok(Maybe::None)
