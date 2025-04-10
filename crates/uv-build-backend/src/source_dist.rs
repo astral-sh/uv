@@ -1,6 +1,8 @@
-use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
+use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
-use crate::{find_roots, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
+use crate::{
+    find_roots, BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use fs_err::File;

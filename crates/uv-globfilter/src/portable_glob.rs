@@ -1,4 +1,4 @@
-//! Cross-language glob syntax from [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
+//! Cross-language glob syntax from [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).
 
 use globset::{Glob, GlobBuilder};
 use thiserror::Error;
@@ -28,7 +28,7 @@ pub enum PortableGlobError {
     TooManyStars { glob: String, pos: usize },
 }
 
-/// Parse cross-language glob syntax from [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key):
+/// Parse cross-language glob syntax from [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/):
 ///
 /// - Alphanumeric characters, underscores (`_`), hyphens (`-`) and dots (`.`) are matched verbatim.
 /// - The special glob characters are:
