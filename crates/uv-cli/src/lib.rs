@@ -907,6 +907,10 @@ fn parse_find_links(input: &str) -> Result<Maybe<PipFindLinks>, String> {
 }
 
 /// Parse an `--index` argument into a [`Vec<Index>`], mapping the empty string to an empty Vec.
+/// 
+/// This function splits the input on all whitespace characters rather than a single delimiter,
+/// which is necessary to parse environment variables like `PIP_EXTRA_INDEX_URL`.
+/// The standard `clap::Args` value_delimiter only supports single-character delimiters.
 fn parse_indices(input: &str) -> Result<Vec<Maybe<Index>>, String> {
     if input.trim().is_empty() {
         return Ok(Vec::new());
@@ -4900,6 +4904,10 @@ pub struct IndexArgs {
     /// All indexes provided via this flag take priority over the index specified by
     /// `--default-index` (which defaults to PyPI). When multiple `--index` flags are provided,
     /// earlier values take priority.
+    /// 
+    /// The nested Vec structure (`Vec<Vec<Maybe<Index>>>`) is required for clap's
+    /// value parsing mechanism, which processes one value at a time, in order to handle 
+    /// `UV_INDEX` the same way pip handles `PIP_EXTRA_INDEX_URL`.
     #[arg(long, env = EnvVars::UV_INDEX, value_parser = parse_indices, help_heading = "Index options")]
     pub index: Option<Vec<Vec<Maybe<Index>>>>,
 
