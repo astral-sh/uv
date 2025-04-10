@@ -345,6 +345,7 @@ uv run [OPTIONS] [COMMAND]
 
 </dd><dt id="uv-run--no-editable"><a href="#uv-run--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
+<p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p>
 </dd><dt id="uv-run--no-env-file"><a href="#uv-run--no-env-file"><code>--no-env-file</code></a></dt><dd><p>Avoid reading environment variables from a <code>.env</code> file</p>
 
 <p>May also be set with the <code>UV_NO_ENV_FILE</code> environment variable.</p>
@@ -1749,6 +1750,7 @@ uv sync [OPTIONS]
 
 </dd><dt id="uv-sync--no-editable"><a href="#uv-sync--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
+<p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p>
 </dd><dt id="uv-sync--no-extra"><a href="#uv-sync--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
 
 <p>May be provided multiple times.</p>
