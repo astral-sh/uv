@@ -149,6 +149,7 @@ pub(crate) async fn init(
                 no_config,
                 cache,
                 printer,
+                preview,
             )
             .await?;
 
@@ -289,6 +290,7 @@ async fn init_project(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<()> {
     // Discover the current workspace, if it exists.
     let workspace_cache = WorkspaceCache::default();
@@ -575,6 +577,7 @@ async fn init_project(
         author_from,
         no_readme,
         package,
+        preview,
     )?;
 
     if let Some(workspace) = workspace {
@@ -702,6 +705,7 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
+        preview: PreviewMode,
     ) -> Result<()> {
         match self {
             InitProjectKind::Application => InitProjectKind::init_application(
@@ -716,6 +720,7 @@ impl InitProjectKind {
                 author_from,
                 no_readme,
                 package,
+                preview,
             ),
             InitProjectKind::Library => InitProjectKind::init_library(
                 name,
@@ -729,6 +734,7 @@ impl InitProjectKind {
                 author_from,
                 no_readme,
                 package,
+                preview,
             ),
         }
     }
@@ -747,6 +753,7 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
+        preview: PreviewMode,
     ) -> Result<()> {
         fs_err::create_dir_all(path)?;
 
@@ -779,7 +786,11 @@ impl InitProjectKind {
             }
 
             // Add a build system
-            let build_backend = build_backend.unwrap_or_default();
+            let build_backend = match build_backend {
+                Some(build_backend) => build_backend,
+                None if preview.is_enabled() => ProjectBuildBackend::Uv,
+                None => ProjectBuildBackend::Hatch,
+            };
             pyproject.push('\n');
             pyproject.push_str(&pyproject_build_system(name, build_backend));
             pyproject_build_backend_prerequisites(name, path, build_backend)?;
@@ -829,6 +840,7 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
+        preview: PreviewMode,
     ) -> Result<()> {
         if !package {
             return Err(anyhow!("Library projects must be packaged"));
@@ -849,7 +861,11 @@ impl InitProjectKind {
         );
 
         // Always include a build system if the project is packaged.
-        let build_backend = build_backend.unwrap_or_default();
+        let build_backend = match build_backend {
+            Some(build_backend) => build_backend,
+            None if preview.is_enabled() => ProjectBuildBackend::Uv,
+            None => ProjectBuildBackend::Hatch,
+        };
         pyproject.push('\n');
         pyproject.push_str(&pyproject_build_system(name, build_backend));
         pyproject_build_backend_prerequisites(name, path, build_backend)?;
