@@ -908,7 +908,6 @@ fn parse_find_links(input: &str) -> Result<Maybe<PipFindLinks>, String> {
 
 /// Parse an `--index` argument into an [`Index`], mapping the empty string to `None`.
 fn parse_indices(input: &str) -> Result<Vec<Maybe<Index>>, String> {
-    println!("raw: {}", input);
     if input.trim().is_empty() {
         return Ok(Vec::new());
     }
@@ -923,7 +922,6 @@ fn parse_indices(input: &str) -> Result<Vec<Maybe<Index>>, String> {
             Err(e) => return Err(e.to_string()),
         }
     }
-    println!("parsed: {:?}", indices);
     Ok(indices)
 }
 
