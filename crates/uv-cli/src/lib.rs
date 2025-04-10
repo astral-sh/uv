@@ -910,7 +910,7 @@ fn parse_find_links(input: &str) -> Result<Maybe<PipFindLinks>, String> {
 /// 
 /// This function splits the input on all whitespace characters rather than a single delimiter,
 /// which is necessary to parse environment variables like `PIP_EXTRA_INDEX_URL`.
-/// The standard `clap::Args` value_delimiter only supports single-character delimiters.
+/// The standard `clap::Args` `value_delimiter` only supports single-character delimiters.
 fn parse_indices(input: &str) -> Result<Vec<Maybe<Index>>, String> {
     if input.trim().is_empty() {
         return Ok(Vec::new());
