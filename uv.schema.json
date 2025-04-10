@@ -1947,6 +1947,12 @@
       "description": "The supported target triples. Each triple consists of an architecture, vendor, and operating system.\n\nSee: <https://doc.rust-lang.org/nightly/rustc/platform-support.html>",
       "oneOf": [
         {
+          "type": "string",
+          "enum": [
+            "wasm32-pyodide2024"
+          ]
+        },
+        {
           "description": "An alias for `x86_64-pc-windows-msvc`, the default target for Windows.",
           "type": "string",
           "enum": [

@@ -216,7 +216,8 @@ impl TorchStrategy {
                     | Os::Dragonfly { .. }
                     | Os::Illumos { .. }
                     | Os::Haiku { .. }
-                    | Os::Android { .. } => {
+                    | Os::Android { .. }
+                    | Os::Pyodide { .. } => {
                         Either::Right(std::iter::once(TorchBackend::Cpu.index_url()))
                     }
                 }
