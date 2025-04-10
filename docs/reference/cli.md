@@ -219,8 +219,6 @@ uv run [OPTIONS] [COMMAND]
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
-
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-run--index-strategy"><a href="#uv-run--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
@@ -897,8 +895,6 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
-
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-add--index-strategy"><a href="#uv-add--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
@@ -1262,8 +1258,6 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
-
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-remove--index-strategy"><a href="#uv-remove--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -1638,8 +1632,6 @@ uv sync [OPTIONS]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
-
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-sync--index-strategy"><a href="#uv-sync--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -2020,8 +2012,6 @@ uv lock [OPTIONS]
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
-
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-lock--index-strategy"><a href="#uv-lock--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
@@ -2362,8 +2352,6 @@ uv export [OPTIONS]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
-
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-export--index-strategy"><a href="#uv-export--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -2743,8 +2731,6 @@ uv tree [OPTIONS]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
-
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-tree--index-strategy"><a href="#uv-tree--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -3239,8 +3225,6 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
-
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-tool-run--index-strategy"><a href="#uv-tool-run--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
@@ -3583,8 +3567,6 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
-
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-tool-install--index-strategy"><a href="#uv-tool-install--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
@@ -3908,8 +3890,6 @@ uv tool upgrade [OPTIONS] <NAME>...
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
-
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-tool-upgrade--index-strategy"><a href="#uv-tool-upgrade--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -5744,8 +5724,6 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
-
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-pip-compile--index-strategy"><a href="#uv-pip-compile--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
@@ -6261,8 +6239,6 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
-
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-pip-sync--index-strategy"><a href="#uv-pip-sync--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
@@ -6753,8 +6729,6 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
-
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-pip-install--index-strategy"><a href="#uv-pip-install--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -7550,8 +7524,6 @@ uv pip list [OPTIONS]
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
-
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-pip-list--index-strategy"><a href="#uv-pip-list--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
@@ -7896,8 +7868,6 @@ uv pip tree [OPTIONS]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
-
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-pip-tree--index-strategy"><a href="#uv-pip-tree--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
@@ -8263,8 +8233,6 @@ uv venv [OPTIONS] [PATH]
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
 
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
-
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-venv--index-strategy"><a href="#uv-venv--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
 
@@ -8551,8 +8519,6 @@ uv build [OPTIONS] [SRC]
 <p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
 
 <p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
-
-<p>The nested Vec structure (<code>Vec&lt;Vec&lt;Maybe&lt;Index&gt;&gt;&gt;</code>) is required for clap&#8217;s value parsing mechanism, which processes one value at a time, in order to handle <code>UV_INDEX</code> the same way pip handles <code>PIP_EXTRA_INDEX_URL</code>.</p>
 
 <p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
 </dd><dt id="uv-build--index-strategy"><a href="#uv-build--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>

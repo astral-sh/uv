@@ -4904,10 +4904,10 @@ pub struct IndexArgs {
     /// All indexes provided via this flag take priority over the index specified by
     /// `--default-index` (which defaults to PyPI). When multiple `--index` flags are provided,
     /// earlier values take priority.
-    ///
-    /// The nested Vec structure (`Vec<Vec<Maybe<Index>>>`) is required for clap's
-    /// value parsing mechanism, which processes one value at a time, in order to handle
-    /// `UV_INDEX` the same way pip handles `PIP_EXTRA_INDEX_URL`.
+    //
+    // The nested Vec structure (`Vec<Vec<Maybe<Index>>>`) is required for clap's
+    // value parsing mechanism, which processes one value at a time, in order to handle
+    // `UV_INDEX` the same way pip handles `PIP_EXTRA_INDEX_URL`.
     #[arg(long, env = EnvVars::UV_INDEX, value_parser = parse_indices, help_heading = "Index options")]
     pub index: Option<Vec<Vec<Maybe<Index>>>>,
 
