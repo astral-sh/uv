@@ -9945,7 +9945,7 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
     Ok(())
 }
 
-/// If an index is repeated on the CLI, the last-provided index should take precedence. 
+/// If an index is repeated on the CLI, the last-provided index should take precedence.
 /// Newlines in `UV_INDEX` should be treated as separators.
 ///
 /// The index that appears in the `pyproject.toml` should also be consistent with the index that
