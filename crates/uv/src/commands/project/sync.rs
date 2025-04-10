@@ -24,7 +24,7 @@ use uv_normalize::{DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_resolver::{FlatIndex, Installable};
+use uv_resolver::{FlatIndex, Installable, Lock};
 use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
@@ -386,61 +386,41 @@ pub(crate) async fn sync(
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
+        Err(ProjectError::LockMismatch(lock)) if dry_run.enabled() => {
+            let sync_target =
+                identify_installation_target(&target, &lock, all_packages, package.as_ref());
+
+            let state = state.fork();
+
+            // Perform a dry-run sync to output
+            do_sync(
+                sync_target,
+                &environment,
+                &extras,
+                &dev.with_defaults(defaults),
+                editable,
+                install_options,
+                modifications,
+                (&settings).into(),
+                &network_settings,
+                &state,
+                Box::new(DefaultInstallLogger),
+                installer_metadata,
+                concurrency,
+                cache,
+                dry_run,
+                printer,
+                preview,
+            )
+            .await?;
+
+            return Err(ProjectError::LockMismatch(lock).into());
+        }
         Err(err) => return Err(err.into()),
     };
 
     // Identify the installation target.
-    let sync_target = match &target {
-        SyncTarget::Project(project) => {
-            match &project {
-                VirtualProject::Project(project) => {
-                    if all_packages {
-                        InstallTarget::Workspace {
-                            workspace: project.workspace(),
-                            lock: &lock,
-                        }
-                    } else if let Some(package) = package.as_ref() {
-                        InstallTarget::Project {
-                            workspace: project.workspace(),
-                            name: package,
-                            lock: &lock,
-                        }
-                    } else {
-                        // By default, install the root package.
-                        InstallTarget::Project {
-                            workspace: project.workspace(),
-                            name: project.project_name(),
-                            lock: &lock,
-                        }
-                    }
-                }
-                VirtualProject::NonProject(workspace) => {
-                    if all_packages {
-                        InstallTarget::NonProjectWorkspace {
-                            workspace,
-                            lock: &lock,
-                        }
-                    } else if let Some(package) = package.as_ref() {
-                        InstallTarget::Project {
-                            workspace,
-                            name: package,
-                            lock: &lock,
-                        }
-                    } else {
-                        // By default, install the entire workspace.
-                        InstallTarget::NonProjectWorkspace {
-                            workspace,
-                            lock: &lock,
-                        }
-                    }
-                }
-            }
-        }
-        SyncTarget::Script(script) => InstallTarget::Script {
-            script,
-            lock: &lock,
-        },
-    };
+    let sync_target = identify_installation_target(&target, &lock, all_packages, package.as_ref());
 
     let state = state.fork();
 
@@ -476,6 +456,56 @@ pub(crate) async fn sync(
     }
 
     Ok(ExitStatus::Success)
+}
+
+fn identify_installation_target<'a>(
+    target: &'a SyncTarget,
+    lock: &'a Lock,
+    all_packages: bool,
+    package: Option<&'a PackageName>,
+) -> InstallTarget<'a> {
+    match &target {
+        SyncTarget::Project(project) => {
+            match &project {
+                VirtualProject::Project(project) => {
+                    if all_packages {
+                        InstallTarget::Workspace {
+                            workspace: project.workspace(),
+                            lock,
+                        }
+                    } else if let Some(package) = package {
+                        InstallTarget::Project {
+                            workspace: project.workspace(),
+                            name: package,
+                            lock,
+                        }
+                    } else {
+                        // By default, install the root package.
+                        InstallTarget::Project {
+                            workspace: project.workspace(),
+                            name: project.project_name(),
+                            lock,
+                        }
+                    }
+                }
+                VirtualProject::NonProject(workspace) => {
+                    if all_packages {
+                        InstallTarget::NonProjectWorkspace { workspace, lock }
+                    } else if let Some(package) = package {
+                        InstallTarget::Project {
+                            workspace,
+                            name: package,
+                            lock,
+                        }
+                    } else {
+                        // By default, install the entire workspace.
+                        InstallTarget::NonProjectWorkspace { workspace, lock }
+                    }
+                }
+            }
+        }
+        SyncTarget::Script(script) => InstallTarget::Script { script, lock },
+    }
 }
 
 #[derive(Debug, Clone)]

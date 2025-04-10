@@ -7886,7 +7886,6 @@ fn sync_dry_run() -> Result<()> {
     Ok(())
 }
 
-
 #[test]
 fn sync_dry_run_and_locked() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -7927,6 +7926,9 @@ fn sync_dry_run_and_locked() -> Result<()> {
     ----- stderr -----
     Discovered existing environment at: .venv
     Resolved 2 packages in [TIME]
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
