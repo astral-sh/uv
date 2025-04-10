@@ -1744,10 +1744,12 @@ mod tests {
         let base_url_2 = base_url.join("prefix_2")?;
         let indexes = Indexes::from_indexes(vec![
             Index {
+                url: base_url_1.clone(),
                 root_url: base_url_1.clone(),
                 auth_policy: AuthPolicy::Auto,
             },
             Index {
+                url: base_url_2.clone(),
                 root_url: base_url_2.clone(),
                 auth_policy: AuthPolicy::Auto,
             },
@@ -1850,6 +1852,7 @@ mod tests {
         let base_url = Url::parse(&server.uri())?;
         let index_url = base_url.join("prefix_1")?;
         let indexes = Indexes::from_indexes(vec![Index {
+            url: index_url.clone(),
             root_url: index_url.clone(),
             auth_policy: AuthPolicy::Auto,
         }]);
@@ -1908,6 +1911,7 @@ mod tests {
         url.set_password(None).ok();
         url.set_username("").ok();
         Indexes::from_indexes(vec![Index {
+            url: url.clone(),
             root_url: url.clone(),
             auth_policy: policy,
         }])
