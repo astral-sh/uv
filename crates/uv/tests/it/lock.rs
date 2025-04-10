@@ -20832,14 +20832,15 @@ fn lock_group_invalid_entry_table() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    "###);
+      × Failed to build `project @ file://[TEMP_DIR]/`
+      ╰─▶ Group `foo` contains a Dependency Object Specifier, which is not supported by uv
+    ");
 
     Ok(())
 }
