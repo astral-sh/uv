@@ -8821,9 +8821,17 @@ uv publish [OPTIONS] [FILES]...
 
 <p>The index must have a <code>publish-url</code> setting, for example:</p>
 
-<pre><code class="language-toml [[tool.uv.index]] name = &quot;pypi&quot; url = &quot;https://pypi.org/simple&quot; publish-url = &quot;https://upload.pypi.org/legacy/&quot; ```">The index `url` will be used to check for existing files to skip duplicate uploads.
+<pre><code class="language-toml">[[tool.uv.index]]
+name = &quot;pypi&quot;
+url = &quot;https://pypi.org/simple&quot;
+publish-url = &quot;https://upload.pypi.org/legacy/&quot;</code></pre>
 
-With these settings, the following two calls are equivalent:</code></pre>
+<p>The index <code>url</code> will be used to check for existing files to skip duplicate uploads.</p>
+
+<p>With these settings, the following two calls are equivalent:</p>
+
+<pre><code class="language-shell">uv publish --index pypi
+uv publish --publish-url https://upload.pypi.org/legacy/ --check-url https://pypi.org/simple</code></pre>
 
 <p>May also be set with the <code>UV_PUBLISH_INDEX</code> environment variable.</p>
 </dd><dt id="uv-publish--keyring-provider"><a href="#uv-publish--keyring-provider"><code>--keyring-provider</code></a> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for remote requirements files.</p>
