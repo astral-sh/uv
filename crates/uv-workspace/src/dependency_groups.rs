@@ -73,9 +73,10 @@ impl FlatDependencyGroups {
                         requirements
                             .extend(resolved.get(include_group).into_iter().flatten().cloned());
                     }
-                    DependencyGroupSpecifier::Object(_map) => {
+                    DependencyGroupSpecifier::Object(map) => {
                         return Err(DependencyGroupError::DependencyObjectSpecifierNotSupported(
                             name.clone(),
+                            map.clone(),
                         ));
                     }
                 }
@@ -154,8 +155,8 @@ pub enum DependencyGroupError {
     DevGroupInclude(GroupName),
     #[error("Detected a cycle in `dependency-groups`: {0}")]
     DependencyGroupCycle(Cycle),
-    #[error("Group `{0}` contains a Dependency Object Specifier, which is not supported by uv")]
-    DependencyObjectSpecifierNotSupported(GroupName),
+    #[error("Group `{0}` contains an unknown dependency object specifier: {1:?}")]
+    DependencyObjectSpecifierNotSupported(GroupName, BTreeMap<String, String>),
 }
 
 impl DependencyGroupError {
