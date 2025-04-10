@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 /// A comma-separated string of requirements, e.g., `"flask,anyio"`, that takes extras into account
 /// (i.e., treats `"psycopg[binary,pool]"` as a single requirement).
+/// Supports both package@version and package==version syntaxes.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CommaSeparatedRequirements(Vec<String>);
 
@@ -37,7 +38,7 @@ impl FromStr for CommaSeparatedRequirements {
                         .get(i + ','.len_utf8()..)
                         .and_then(|s| s.chars().find(|c| !c.is_whitespace()))
                     {
-                        if matches!(c, '!' | '=' | '<' | '>' | '~') {
+                        if matches!(c, '!' | '=' | '<' | '>' | '~' | '@') {
                             continue;
                         }
                     }
@@ -120,6 +121,33 @@ mod tests {
         assert_eq!(
             CommaSeparatedRequirements::from_str("requests>=2.1,<3, flask").unwrap(),
             CommaSeparatedRequirements(vec!["requests>=2.1,<3".to_string(), "flask".to_string()])
+        );
+    }
+
+    #[test]
+    fn package_at_version() {
+        assert_eq!(
+            CommaSeparatedRequirements::from_str("flask@2.0.0").unwrap(),
+            CommaSeparatedRequirements(vec!["flask@2.0.0".to_string()])
+        );
+    }
+
+    #[test]
+    fn package_at_version_with_extras() {
+        assert_eq!(
+            CommaSeparatedRequirements::from_str("flask[dotenv]@2.0.0").unwrap(),
+            CommaSeparatedRequirements(vec!["flask[dotenv]@2.0.0".to_string()])
+        );
+    }
+
+    #[test]
+    fn mixed_syntaxes() {
+        assert_eq!(
+            CommaSeparatedRequirements::from_str("flask@2.0.0,requests==2.1.0").unwrap(),
+            CommaSeparatedRequirements(vec![
+                "flask@2.0.0".to_string(),
+                "requests==2.1.0".to_string()
+            ])
         );
     }
 }
