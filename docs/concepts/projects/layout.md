@@ -91,4 +91,4 @@ explicitly updated using `uv lock`.
     so uv will continue to use the `uv.lock` format.
 
     However, support for `pylock.toml` is planned everywhere uv currently supports `requirements.txt` files.
-    For more details and updates on progress, see [12584](https://github.com/astral-sh/uv/issues/12641).
+    For more details and updates on progress, see [12584](https://github.com/astral-sh/uv/issues/12584).
