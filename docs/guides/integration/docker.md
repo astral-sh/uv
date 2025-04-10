@@ -139,9 +139,9 @@ If you're using uv to manage your project, you can copy it into the image and in
 # Copy the project into the image
 ADD . /app
 
-# Sync the project into a new environment, using the frozen lockfile
+# Sync the project into a new environment, asserting the lockfile is up to date
 WORKDIR /app
-RUN uv sync --frozen
+RUN uv sync --locked
 ```
 
 !!! important
@@ -373,14 +373,14 @@ WORKDIR /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project
+    uv sync --locked --no-install-project
 
 # Copy the project into the image
 ADD . /app
 
 # Sync the project
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen
+    uv sync --locked
 ```
 
 Note that the `pyproject.toml` is required to identify the project root and name, but the project
@@ -419,14 +419,14 @@ WORKDIR /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project --no-editable
+    uv sync --locked --no-install-project --no-editable
 
 # Copy the project into the intermediate image
 ADD . /app
 
 # Sync the project
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-editable
+    uv sync --locked --no-editable
 
 FROM python:3.12-slim
 
