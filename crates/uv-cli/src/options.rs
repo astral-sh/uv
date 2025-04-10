@@ -202,8 +202,7 @@ impl From<IndexArgs> for PipOptions {
                 .combine(index.map(|index| {
                     index
                         .iter()
-                        .flat_map(|v| v.clone())
-                        .into_iter()
+                        .flat_map(std::clone::Clone::clone)
                         .filter_map(Maybe::into_option)
                         .collect()
                 })),
