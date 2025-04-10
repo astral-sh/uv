@@ -596,7 +596,7 @@
       ]
     },
     "BuildBackendSettings": {
-      "description": "Settings for the uv build backend (`uv_build`).\n\n!!! note\n\nThe uv build backend is currently in preview and may change in any future release.\n\nNote that those settings only apply when using the `uv_build` backend, other build backends (such as hatchling) have their own configuration.",
+      "description": "Settings for the uv build backend (`uv_build`).\n\n!!! note\n\nThe uv build backend is currently in preview and may change in any future release.\n\nNote that those settings only apply when using the `uv_build` backend, other build backends (such as hatchling) have their own configuration.\n\nAll options that accept globs use the portable glob patterns from [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).",
       "type": "object",
       "properties": {
         "data": {
@@ -632,12 +632,12 @@
           ]
         },
         "module-root": {
-          "description": "The directory that contains the module directory, usually `src`, or an empty path when using the flat layout over the src layout.",
+          "description": "The directory that contains the module directory.\n\nCommon values are `src` (src layout, the default) or an empty path (flat layout).",
           "default": "src",
           "type": "string"
         },
         "source-exclude": {
-          "description": "Glob expressions for files and directories to exclude from the source distribution.",
+          "description": "Glob expressions which files and directories to exclude from the source distribution.",
           "default": [],
           "type": "array",
           "items": {
@@ -645,7 +645,7 @@
           }
         },
         "source-include": {
-          "description": "Glob expressions which files and directories to additionally include in the source distribution.\n\n`pyproject.toml` and the contents of the module directory are always included.\n\nThe glob syntax is the reduced portable glob from [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).",
+          "description": "Glob expressions which files and directories to additionally include in the source distribution.\n\n`pyproject.toml` and the contents of the module directory are always included.",
           "default": [],
           "type": "array",
           "items": {
@@ -653,7 +653,7 @@
           }
         },
         "wheel-exclude": {
-          "description": "Glob expressions for files and directories to exclude from the wheel.",
+          "description": "Glob expressions which files and directories to exclude from the wheel.",
           "default": [],
           "type": "array",
           "items": {

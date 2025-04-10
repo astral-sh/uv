@@ -378,6 +378,9 @@ Settings for the uv build backend (`uv_build`).
 Note that those settings only apply when using the `uv_build` backend, other build backends
 (such as hatchling) have their own configuration.
 
+All options that accept globs use the portable glob patterns from
+[PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).
+
 #### [`data`](#build-backend_data) {: #build-backend_data }
 <span id="data"></span>
 
@@ -411,7 +414,7 @@ data files are included by placing them in the Python module instead of using da
 
 ```toml title="pyproject.toml"
 [tool.uv.build-backend]
-data = { "headers": "include/headers", "scipts": "bin" }
+data = { "headers": "include/headers", "scripts": "bin" }
 ```
 
 ---
@@ -431,7 +434,7 @@ Default excludes: `__pycache__`, `*.pyc`, and `*.pyo`.
 
 ```toml title="pyproject.toml"
 [tool.uv.build-backend]
-default-exclude = false
+default-excludes = false
 ```
 
 ---
@@ -463,8 +466,9 @@ module-name = "sklearn"
 #### [`module-root`](#build-backend_module-root) {: #build-backend_module-root }
 <span id="module-root"></span>
 
-The directory that contains the module directory, usually `src`, or an empty path when
-using the flat layout over the src layout.
+The directory that contains the module directory.
+
+Common values are `src` (src layout, the default) or an empty path (flat layout).
 
 **Default value**: `"src"`
 
@@ -482,7 +486,7 @@ module-root = ""
 #### [`source-exclude`](#build-backend_source-exclude) {: #build-backend_source-exclude }
 <span id="source-exclude"></span>
 
-Glob expressions for files and directories to exclude from the source distribution.
+Glob expressions which files and directories to exclude from the source distribution.
 
 **Default value**: `[]`
 
@@ -505,9 +509,6 @@ distribution.
 
 `pyproject.toml` and the contents of the module directory are always included.
 
-The glob syntax is the reduced portable glob from
-[PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
-
 **Default value**: `[]`
 
 **Type**: `list[str]`
@@ -524,7 +525,7 @@ source-include = ["tests/**"]
 #### [`wheel-exclude`](#build-backend_wheel-exclude) {: #build-backend_wheel-exclude }
 <span id="wheel-exclude"></span>
 
-Glob expressions for files and directories to exclude from the wheel.
+Glob expressions which files and directories to exclude from the wheel.
 
 **Default value**: `[]`
 

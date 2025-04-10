@@ -11,12 +11,16 @@ use uv_pypi_types::Identifier;
 ///
 /// Note that those settings only apply when using the `uv_build` backend, other build backends
 /// (such as hatchling) have their own configuration.
+///
+/// All options that accept globs use the portable glob patterns from
+/// [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).
 #[derive(Deserialize, Serialize, OptionsMetadata, Debug, Clone, PartialEq, Eq)]
 #[serde(default, rename_all = "kebab-case")]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct BuildBackendSettings {
-    /// The directory that contains the module directory, usually `src`, or an empty path when
-    /// using the flat layout over the src layout.
+    /// The directory that contains the module directory.
+    ///
+    /// Common values are `src` (src layout, the default) or an empty path (flat layout).
     #[option(
         default = r#""src""#,
         value_type = "str",
@@ -42,15 +46,10 @@ pub struct BuildBackendSettings {
     /// distribution.
     ///
     /// `pyproject.toml` and the contents of the module directory are always included.
-    ///
-    /// The glob syntax is the reduced portable glob from
-    /// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
     #[option(
         default = r#"[]"#,
         value_type = "list[str]",
-        example = r#"
-            source-include = ["tests/**"]
-        "#
+        example = r#"source-include = ["tests/**"]"#
     )]
     pub source_include: Vec<String>,
 
@@ -60,29 +59,23 @@ pub struct BuildBackendSettings {
     #[option(
         default = r#"true"#,
         value_type = "bool",
-        example = r#"
-            default-exclude = false
-        "#
+        example = r#"default-excludes = false"#
     )]
     pub default_excludes: bool,
 
-    /// Glob expressions for files and directories to exclude from the source distribution.
+    /// Glob expressions which files and directories to exclude from the source distribution.
     #[option(
         default = r#"[]"#,
         value_type = "list[str]",
-        example = r#"
-            source-exclude = ["*.bin"]
-        "#
+        example = r#"source-exclude = ["*.bin"]"#
     )]
     pub source_exclude: Vec<String>,
 
-    /// Glob expressions for files and directories to exclude from the wheel.
+    /// Glob expressions which files and directories to exclude from the wheel.
     #[option(
         default = r#"[]"#,
         value_type = "list[str]",
-        example = r#"
-            wheel-exclude = ["*.bin"]
-        "#
+        example = r#"wheel-exclude = ["*.bin"]"#
     )]
     pub wheel_exclude: Vec<String>,
 
@@ -116,9 +109,7 @@ pub struct BuildBackendSettings {
     #[option(
         default = r#"{}"#,
         value_type = "dict[str, str]",
-        example = r#"
-            data = { "headers": "include/headers", "scipts": "bin" }
-        "#
+        example = r#"data = { "headers": "include/headers", "scripts": "bin" }"#
     )]
     pub data: WheelDataIncludes,
 }
