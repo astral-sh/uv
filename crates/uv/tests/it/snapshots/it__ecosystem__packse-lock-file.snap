@@ -1,6 +1,5 @@
 ---
 source: crates/uv/tests/it/ecosystem.rs
-assertion_line: 118
 expression: lock
 ---
 version = 1
