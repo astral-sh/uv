@@ -5667,12 +5667,13 @@ pub struct PublishArgs {
     ///
     /// With these settings, the following two calls are equivalent:
     ///
-    /// ```
+    /// ```shell
     /// uv publish --index pypi
     /// uv publish --publish-url https://upload.pypi.org/legacy/ --check-url https://pypi.org/simple
     /// ```
     #[arg(
         long,
+        verbatim_doc_comment,
         env = EnvVars::UV_PUBLISH_INDEX,
         conflicts_with = "publish_url",
         conflicts_with = "check_url"
