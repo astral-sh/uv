@@ -7897,6 +7897,108 @@ fn sync_dry_run() -> Result<()> {
 }
 
 #[test]
+fn sync_dry_run_and_locked() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    // Lock the initial requirements.
+    context.lock().assert().success();
+
+    let existing = context.read("uv.lock");
+
+    // Update the requirements.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running with `--locked` and `--dry-run` should error.
+    uv_snapshot!(context.filters(), context.sync().arg("--locked").arg("--dry-run"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Discovered existing environment at: .venv
+    Resolved 2 packages in [TIME]
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
+    ");
+
+    let updated = context.read("uv.lock");
+
+    // And the lockfile should be unchanged.
+    assert_eq!(existing, updated);
+
+    Ok(())
+}
+
+#[test]
+fn sync_dry_run_and_frozen() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    // Lock the initial requirements.
+    context.lock().assert().success();
+
+    // Update the requirements.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running with `--frozen` with `--dry-run` should preview dependencies to be installed.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--dry-run"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Discovered existing environment at: .venv
+    Found up-to-date lockfile at: uv.lock
+    Would download 3 packages
+    Would install 3 packages
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn sync_script() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.8", "3.12"]);
 
