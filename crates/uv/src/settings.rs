@@ -1279,6 +1279,7 @@ impl AddSettings {
                     .index
                     .clone()
                     .into_iter()
+                    .flat_map(|v| v.clone())
                     .flatten()
                     .filter_map(Maybe::into_option),
             )
