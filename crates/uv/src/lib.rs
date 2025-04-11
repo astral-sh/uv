@@ -1104,12 +1104,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
 
+            let build_constraints = args
+                .build_constraints
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
+
             Box::pin(commands::tool_run(
                 args.command,
                 args.from,
                 &requirements,
                 &constraints,
                 &overrides,
+                &build_constraints,
                 args.show_resolution || globals.verbose > 0,
                 args.python,
                 args.install_mirrors,
@@ -1169,6 +1176,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
+            let build_constraints = args
+                .build_constraints
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
 
             Box::pin(commands::tool_install(
                 args.package,
@@ -1177,6 +1189,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                &build_constraints,
                 args.python,
                 args.install_mirrors,
                 args.force,
