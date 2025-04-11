@@ -60,6 +60,19 @@ pub struct Index {
     pub auth_policy: AuthPolicy,
 }
 
+impl Index {
+    pub fn is_prefix_for(&self, url: &Url) -> bool {
+        if self.root_url.scheme() != url.scheme()
+            || self.root_url.host_str() != url.host_str()
+            || self.root_url.port_or_known_default() != url.port_or_known_default()
+        {
+            return false;
+        }
+
+        url.path().starts_with(self.root_url.path())
+    }
+}
+
 // TODO(john): Multiple methods in this struct need to iterate over
 // all the indexes in the set. There are probably not many URLs to
 // iterate through, but we could use a trie instead of a HashSet here
@@ -94,19 +107,6 @@ impl Indexes {
     }
 
     fn find_prefix_index(&self, url: &Url) -> Option<&Index> {
-        self.0
-            .iter()
-            .find(|&index| is_url_prefix(&index.root_url, url))
+        self.0.iter().find(|&index| index.is_prefix_for(url))
     }
-}
-
-fn is_url_prefix(base: &Url, url: &Url) -> bool {
-    if base.scheme() != url.scheme()
-        || base.host_str() != url.host_str()
-        || base.port_or_known_default() != url.port_or_known_default()
-    {
-        return false;
-    }
-
-    url.path().starts_with(base.path())
 }
