@@ -247,7 +247,7 @@ pub(crate) async fn run(
     };
 
     // Get or create a compatible environment in which to execute the tool.
-    let result = get_or_create_environment(
+    let result = Box::pin(get_or_create_environment(
         &request,
         with,
         constraints,
@@ -267,7 +267,7 @@ pub(crate) async fn run(
         &cache,
         printer,
         preview,
-    )
+    ))
     .await;
 
     let (from, environment) = match result {

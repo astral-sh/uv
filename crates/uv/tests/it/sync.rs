@@ -8387,8 +8387,6 @@ fn sync_script_with_incompatible_build_constraints() -> Result<()> {
     Ok(())
 }
 
-
-
 #[test]
 fn unsupported_git_scheme() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.12"]);
