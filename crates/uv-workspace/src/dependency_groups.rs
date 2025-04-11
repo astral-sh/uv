@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use thiserror::Error;
-use tracing::error;
+use tracing::warn;
 
 use uv_normalize::{GroupName, DEV_DEPENDENCIES};
 use uv_pep508::Pep508Error;
@@ -74,10 +74,9 @@ impl FlatDependencyGroups {
                             .extend(resolved.get(include_group).into_iter().flatten().cloned());
                     }
                     DependencyGroupSpecifier::Object(map) => {
-                        return Err(DependencyGroupError::DependencyObjectSpecifierNotSupported(
-                            name.clone(),
-                            map.clone(),
-                        ));
+                        warn!(
+                            "Ignoring Dependency Object Specifier referenced by `{name}`: {map:?}"
+                        );
                     }
                 }
             }
@@ -155,8 +154,6 @@ pub enum DependencyGroupError {
     DevGroupInclude(GroupName),
     #[error("Detected a cycle in `dependency-groups`: {0}")]
     DependencyGroupCycle(Cycle),
-    #[error("Group `{0}` contains an unknown dependency object specifier: {1:?}")]
-    DependencyObjectSpecifierNotSupported(GroupName, BTreeMap<String, String>),
 }
 
 impl DependencyGroupError {
