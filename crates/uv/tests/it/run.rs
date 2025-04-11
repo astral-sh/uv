@@ -143,6 +143,10 @@ fn run_with_python_version() -> Result<()> {
 fn run_args() -> Result<()> {
     let context = TestContext::new("3.12");
 
+    let mut filters = context.filters();
+    filters.push((r"Usage: (uv|\.exe) run \[OPTIONS\] (?s).*", "[UV RUN HELP]"));
+    filters.push((r"usage: (\[VENV\]|\[PYTHON-3.12\])(?s).*", "[PYTHON HELP]"));
+
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
@@ -158,31 +162,25 @@ fn run_args() -> Result<()> {
     })?;
 
     // We treat arguments before the command as uv arguments
-    uv_snapshot!(context.filters(), context.run().arg("--version").arg("python"), @r###"
+    uv_snapshot!(filters, context.run().arg("--help").arg("python"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    uv [VERSION] ([COMMIT] DATE)
+    Run a command or script
 
-    ----- stderr -----
-    "###);
+    [UV RUN HELP]
+    ");
 
     // We don't treat arguments after the command as uv arguments
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r###"
+    uv_snapshot!(filters, context.run().arg("python").arg("--help"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.12.[X]
-
-    ----- stderr -----
-    Resolved 1 package in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + foo==1.0.0 (from file://[TEMP_DIR]/)
-    "###);
+    [PYTHON HELP]
+    ");
 
     // Can use `--` to separate uv arguments from the command arguments.
-    uv_snapshot!(context.filters(), context.run().arg("--").arg("python").arg("--version"), @r###"
+    uv_snapshot!(filters, context.run().arg("--").arg("python").arg("--version"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
