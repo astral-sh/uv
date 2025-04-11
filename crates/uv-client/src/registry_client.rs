@@ -9,7 +9,7 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::HeaderMap;
 use itertools::Either;
-use reqwest::{Proxy, Response, StatusCode};
+use reqwest::{Proxy, Response};
 use reqwest_middleware::ClientWithMiddleware;
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
@@ -23,7 +23,7 @@ use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
-    IndexMetadataRef, IndexUrl, IndexUrls, Name,
+    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -331,8 +331,15 @@ impl RegistryClient {
                     let _permit = download_concurrency.acquire().await;
                     match index.format {
                         IndexFormat::Simple => {
+                            let status_code_strategy =
+                                self.index_urls.status_code_strategy_for(index.url);
                             if let Some(metadata) = self
-                                .simple_single_index(package_name, index.url, capabilities)
+                                .simple_single_index(
+                                    package_name,
+                                    index.url,
+                                    capabilities,
+                                    &status_code_strategy,
+                                )
                                 .await?
                             {
                                 results.push((index.url, MetadataFormat::Simple(metadata)));
@@ -357,8 +364,15 @@ impl RegistryClient {
                         let _permit = download_concurrency.acquire().await;
                         match index.format {
                             IndexFormat::Simple => {
+                                let status_code_strategy =
+                                    self.index_urls.status_code_strategy_for(index.url);
                                 let metadata = self
-                                    .simple_single_index(package_name, index.url, capabilities)
+                                    .simple_single_index(
+                                        package_name,
+                                        index.url,
+                                        capabilities,
+                                        &status_code_strategy,
+                                    )
                                     .await?;
                                 Ok((index.url, metadata.map(MetadataFormat::Simple)))
                             }
@@ -445,6 +459,7 @@ impl RegistryClient {
         package_name: &PackageName,
         index: &IndexUrl,
         capabilities: &IndexCapabilities,
+        status_code_strategy: &IndexStatusCodeStrategy,
     ) -> Result<Option<OwnedArchive<SimpleMetadata>>, Error> {
         // Format the URL for PyPI.
         let mut url = index.url().clone();
@@ -490,18 +505,19 @@ impl RegistryClient {
             Ok(metadata) => Ok(Some(metadata)),
             Err(err) => match err.into_kind() {
                 // The package could not be found in the remote index.
-                ErrorKind::WrappedReqwestError(url, err) => match err.status() {
-                    Some(StatusCode::NOT_FOUND) => Ok(None),
-                    Some(StatusCode::UNAUTHORIZED) => {
-                        capabilities.set_unauthorized(index.clone());
-                        Ok(None)
+                ErrorKind::WrappedReqwestError(url, err) => {
+                    let decision = if let Some(status) = err.status() {
+                        status_code_strategy.handle_status_code(status, index, capabilities)
+                    } else {
+                        IndexStatusCodeDecision::Stop
+                    };
+                    match decision {
+                        IndexStatusCodeDecision::Continue => Ok(None),
+                        IndexStatusCodeDecision::Stop => {
+                            Err(ErrorKind::WrappedReqwestError(url, err).into())
+                        }
                     }
-                    Some(StatusCode::FORBIDDEN) => {
-                        capabilities.set_forbidden(index.clone());
-                        Ok(None)
-                    }
-                    _ => Err(ErrorKind::WrappedReqwestError(url, err).into()),
-                },
+                }
 
                 // The package is unavailable due to a lack of connectivity.
                 ErrorKind::Offline(_) => Ok(None),
