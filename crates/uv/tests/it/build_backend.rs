@@ -216,7 +216,7 @@ fn built_by_uv_editable() -> Result<()> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "git"))]
 #[test]
 fn preserve_executable_bit() -> Result<()> {
     use std::io::Write;
