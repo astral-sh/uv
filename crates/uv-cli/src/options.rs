@@ -199,9 +199,13 @@ impl From<IndexArgs> for PipOptions {
             index: default_index
                 .and_then(Maybe::into_option)
                 .map(|default_index| vec![default_index])
-                .combine(
-                    index.map(|index| index.into_iter().filter_map(Maybe::into_option).collect()),
-                ),
+                .combine(index.map(|index| {
+                    index
+                        .iter()
+                        .flat_map(std::clone::Clone::clone)
+                        .filter_map(Maybe::into_option)
+                        .collect()
+                })),
             index_url: index_url.and_then(Maybe::into_option),
             extra_index_url: extra_index_url.map(|extra_index_urls| {
                 extra_index_urls
@@ -260,11 +264,13 @@ pub fn resolver_options(
             .default_index
             .and_then(Maybe::into_option)
             .map(|default_index| vec![default_index])
-            .combine(
-                index_args
-                    .index
-                    .map(|index| index.into_iter().filter_map(Maybe::into_option).collect()),
-            ),
+            .combine(index_args.index.map(|index| {
+                index
+                    .into_iter()
+                    .flat_map(|v| v.clone())
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            })),
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
@@ -352,9 +358,13 @@ pub fn resolver_installer_options(
         .default_index
         .and_then(Maybe::into_option)
         .map(|default_index| vec![default_index]);
-    let index = index_args
-        .index
-        .map(|index| index.into_iter().filter_map(Maybe::into_option).collect());
+    let index = index_args.index.map(|index| {
+        index
+            .into_iter()
+            .flat_map(|v| v.clone())
+            .filter_map(Maybe::into_option)
+            .collect()
+    });
 
     ResolverInstallerOptions {
         index: default_index.combine(index),

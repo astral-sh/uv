@@ -225,6 +225,12 @@ Equivalent to the `--no-config` command-line argument. If set, uv will not read
 any configuration files from the current directory, parent directories, or user configuration
 directories.
 
+### `UV_NO_EDITABLE`
+
+Equivalent to the `--no-editable` command-line argument. If set, uv
+installs any editable dependencies, including the project and any workspace members, as
+non-editable
+
 ### `UV_NO_ENV_FILE`
 
 Ignore `.env` files when executing `uv run` commands.

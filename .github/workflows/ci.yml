@@ -187,7 +187,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@2db346588ecc179293df26b2f8dcc61d3b3ecc40 # v2
+        uses: taiki-e/install-action@be7c31b6745feec79dec5eb79178466c0670bb2d # v2
         with:
           tool: cargo-shear
       - run: cargo shear
@@ -217,7 +217,7 @@ jobs:
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@2db346588ecc179293df26b2f8dcc61d3b3ecc40 # v2
+        uses: taiki-e/install-action@be7c31b6745feec79dec5eb79178466c0670bb2d # v2
         with:
           tool: cargo-nextest
 
@@ -249,7 +249,7 @@ jobs:
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@2db346588ecc179293df26b2f8dcc61d3b3ecc40 # v2
+        uses: taiki-e/install-action@be7c31b6745feec79dec5eb79178466c0670bb2d # v2
         with:
           tool: cargo-nextest
 
@@ -291,7 +291,7 @@ jobs:
         run: rustup show
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@2db346588ecc179293df26b2f8dcc61d3b3ecc40 # v2
+        uses: taiki-e/install-action@be7c31b6745feec79dec5eb79178466c0670bb2d # v2
         with:
           tool: cargo-nextest
 
@@ -342,7 +342,7 @@ jobs:
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
 
       - name: "Install cargo-bloat"
-        uses: taiki-e/install-action@2db346588ecc179293df26b2f8dcc61d3b3ecc40 # v2
+        uses: taiki-e/install-action@be7c31b6745feec79dec5eb79178466c0670bb2d # v2
         with:
           tool: cargo-bloat
 
@@ -1349,6 +1349,37 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: "/home/runner/example"
 
+  integration-test-github-actions-freethreaded:
+    timeout-minutes: 10
+    needs: build-binary-linux-libc
+    name: "integration test | free-threaded python on github actions"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5
+        with:
+          python-version: "3.13t"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          name: uv-linux-libc-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Install a package without system opt-in"
+        run: |
+          ./uv pip install anyio && exit 1 || echo "Failed as expected"
+
+      - name: "Install a package with system opt-in but without free-threaded opt-in"
+        run: |
+          ./uv pip install anyio --system --python 3.13 || echo "Failed as expected"
+          # (we need to request 3.13 or we'll discover 3.12 on the system)
+
+      - name: "Install a package with system and free-threaded opt-in"
+        run: |
+          ./uv pip install anyio --system --python 3.13t
+
   integration-test-publish-changed:
     timeout-minutes: 10
     needs: build-binary-linux-libc
@@ -2179,7 +2210,7 @@ jobs:
         run: rustup show
 
       - name: "Install codspeed"
-        uses: taiki-e/install-action@2db346588ecc179293df26b2f8dcc61d3b3ecc40 # v2
+        uses: taiki-e/install-action@be7c31b6745feec79dec5eb79178466c0670bb2d # v2
         with:
           tool: cargo-codspeed
 

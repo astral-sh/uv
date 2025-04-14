@@ -174,7 +174,7 @@ tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.3.0", features = ["plot"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "registry"] }
 tracing-tree = { version = "0.4.0" }
-unicode-width = { version = "0.1.13" }
+unicode-width = { version = "0.2.0" }
 unscanny = { version = "0.1.0" }
 url = { version = "2.5.2", features = ["serde"] }
 version-ranges = { git = "https://github.com/astral-sh/pubgrub", rev = "b70cf707aa43f21b32f3a61b8a0889b15032d5c4" }
@@ -294,7 +294,7 @@ inherits = "release"
 # Config for 'dist'
 [workspace.metadata.dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.28.3"
+cargo-dist-version = "0.28.4-prerelease.1"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
@@ -347,9 +347,6 @@ github-custom-job-permissions = { "build-docker" = { packages = "write", content
 install-updater = false
 # Path that installers should place binaries in
 install-path = ["$XDG_BIN_HOME/", "$XDG_DATA_HOME/../bin", "~/.local/bin"]
-# Temporarily allow changes to the `release` workflow, in which we pin actions
-# to a SHA instead of a tag
-allow-dirty = ["ci"]
 
 [workspace.metadata.dist.github-custom-runners]
 global = "depot-ubuntu-latest-4"
@@ -359,3 +356,9 @@ global = "depot-ubuntu-latest-4"
 aarch64-unknown-linux-gnu = "2.28"
 # Override all remaining glibc versions.
 "*" = "2.17"
+
+[workspace.metadata.dist.github-action-commits]
+"actions/checkout" = "11bd71901bbe5b1630ceea73d27597364c9af683" # v4
+"actions/upload-artifact" = "ea165f8d65b6e75b540449e92b4886f43607fa02" # v4.6.2
+"actions/download-artifact" = "95815c38cf2ff2164869cbab79da8d1f422bc89e" # v4.2.1
+"actions/attest-build-provenance" = "c074443f1aee8d4aeeae555aebba3282517141b2" #v2.2.3

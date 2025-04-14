@@ -10,6 +10,7 @@ pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 use std::fs::FileType;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use itertools::Itertools;
 use thiserror::Error;
@@ -58,6 +59,11 @@ pub enum Error {
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to write RECORD file")]
     Csv(#[from] csv::Error),
+    #[error(
+        "Missing source directory at: `{}`",
+        _0.user_display()
+    )]
+    MissingSrc(PathBuf),
     #[error(
         "Expected a Python module directory at: `{}`",
         _0.user_display()
@@ -186,6 +192,80 @@ fn check_metadata_directory(
     }
 
     Ok(())
+}
+
+/// Resolve the source root and module root paths.
+fn find_roots(
+    source_tree: &Path,
+    pyproject_toml: &PyProjectToml,
+    relative_module_root: &Path,
+    module_name: Option<&Identifier>,
+) -> Result<(PathBuf, PathBuf), Error> {
+    if relative_module_root.is_absolute() {
+        return Err(Error::AbsoluteModuleRoot(
+            relative_module_root.to_path_buf(),
+        ));
+    }
+    let src_root = source_tree.join(relative_module_root);
+
+    let module_name = if let Some(module_name) = module_name {
+        module_name.clone()
+    } else {
+        // Should never error, the rules for package names (in dist-info formatting) are stricter
+        // than those for identifiers
+        Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
+    };
+    debug!("Module name: `{:?}`", module_name);
+
+    let module_root = find_module_root(&src_root, module_name)?;
+    Ok((src_root, module_root))
+}
+
+/// Match the module name to its module directory with potentially different casing.
+///
+/// For example, a package may have the dist-info-normalized package name `pil_util`, but the
+/// importable module is named `PIL_util`.
+///
+/// We get the module either as dist-info-normalized package name, or explicitly from the user.
+/// For dist-info-normalizing a package name, the rules are lowercasing, replacing `.` with `_` and
+/// replace `-` with `_`. Since `.` and `-` are not allowed in module names, we can check whether a
+/// directory name matches our expected module name by lowercasing it.
+fn find_module_root(src_root: &Path, module_name: Identifier) -> Result<PathBuf, Error> {
+    let normalized = module_name.to_string();
+    let dir_iterator = match fs_err::read_dir(src_root) {
+        Ok(dir_iterator) => dir_iterator,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            return Err(Error::MissingSrc(src_root.to_path_buf()))
+        }
+        Err(err) => return Err(Error::Io(err)),
+    };
+    let modules = dir_iterator
+        .filter_ok(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|file_name| file_name.to_lowercase() == normalized)
+        })
+        .map_ok(|entry| entry.path())
+        .collect::<Result<Vec<_>, _>>()?;
+    match modules.as_slice() {
+        [] => {
+            // Show the normalized path in the error message, as representative example.
+            Err(Error::MissingModule(src_root.join(module_name.as_ref())))
+        }
+        [module_root] => {
+            if module_root.join("__init__.py").is_file() {
+                Ok(module_root.clone())
+            } else {
+                Err(Error::MissingInitPy(module_root.join("__init__.py")))
+            }
+        }
+        multiple => {
+            let mut paths = multiple.to_vec();
+            paths.sort();
+            Err(Error::MultipleModules { module_name, paths })
+        }
+    }
 }
 
 #[cfg(test)]

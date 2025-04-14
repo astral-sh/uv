@@ -7,7 +7,8 @@ use crate::common::{uv_snapshot, TestContext};
 fn python_list() {
     let mut context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_python_symlinks()
-        .with_filtered_python_keys();
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace();
 
     uv_snapshot!(context.filters(), context.python_list().env(EnvVars::UV_TEST_PYTHON_PATH, ""), @r"
     success: true
@@ -22,8 +23,8 @@ fn python_list() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]
-    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
 
     ----- stderr -----
     ");
@@ -33,7 +34,7 @@ fn python_list() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.12.[X]-[PLATFORM]    [PYTHON-3.12]
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
 
     ----- stderr -----
     ");
@@ -43,7 +44,7 @@ fn python_list() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
 
     ----- stderr -----
     ");
@@ -53,8 +54,8 @@ fn python_list() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]
-    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
 
     ----- stderr -----
     ");
@@ -64,7 +65,7 @@ fn python_list() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.12.[X]-[PLATFORM]    [PYTHON-3.12]
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
 
     ----- stderr -----
     ");
@@ -74,7 +75,7 @@ fn python_list() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.12.[X]-[PLATFORM]    [PYTHON-3.12]
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
 
     ----- stderr -----
     ");
@@ -87,7 +88,7 @@ fn python_list() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.12.[X]-[PLATFORM]    [PYTHON-3.12]
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
 
     ----- stderr -----
     ");
@@ -108,8 +109,8 @@ fn python_list() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]
-    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
 
     ----- stderr -----
     ");
@@ -119,7 +120,7 @@ fn python_list() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
 
     ----- stderr -----
     ");
@@ -129,7 +130,8 @@ fn python_list() {
 fn python_list_pin() {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_python_symlinks()
-        .with_filtered_python_keys();
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace();
 
     // Pin to a version
     uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"
@@ -146,8 +148,8 @@ fn python_list_pin() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]
-    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
 
     ----- stderr -----
     ");
@@ -157,8 +159,8 @@ fn python_list_pin() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]
-    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
 
     ----- stderr -----
     ");
@@ -171,7 +173,8 @@ fn python_list_venv() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_filtered_python_names()
-        .with_filtered_virtualenv_bin();
+        .with_filtered_virtualenv_bin()
+        .with_collapsed_whitespace();
 
     // Create a virtual environment
     uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.12").arg("-q"), @r###"
@@ -187,8 +190,8 @@ fn python_list_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]
-    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
 
     ----- stderr -----
     ");
@@ -198,8 +201,8 @@ fn python_list_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]
-    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
 
     ----- stderr -----
     ");
@@ -285,7 +288,8 @@ fn python_list_unsupported_version() {
 fn python_list_duplicate_path_entries() {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
         .with_filtered_python_symlinks()
-        .with_filtered_python_keys();
+        .with_filtered_python_keys()
+        .with_collapsed_whitespace();
 
     // Construct a `PATH` with all entries duplicated
     let path = std::env::join_paths(
@@ -298,8 +302,8 @@ fn python_list_duplicate_path_entries() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]
-    cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
 
     ----- stderr -----
     ");
@@ -320,8 +324,8 @@ fn python_list_duplicate_path_entries() {
             success: true
             exit_code: 0
             ----- stdout -----
-            cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]
-            cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]
+            cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+            cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
 
             ----- stderr -----
             ");
@@ -341,8 +345,8 @@ fn python_list_duplicate_path_entries() {
         success: true
         exit_code: 0
         ----- stdout -----
-        cpython-3.12.[X]-[PLATFORM]     [PYTHON-3.12]-link/python3
-        cpython-3.11.[X]-[PLATFORM]    [PYTHON-3.11]-link/python3
+        cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]-link/python3
+        cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]-link/python3
 
         ----- stderr -----
         ");

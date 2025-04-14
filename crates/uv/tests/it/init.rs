@@ -1202,7 +1202,7 @@ fn init_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            workspace, @r###"
+            workspace, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1210,8 +1210,10 @@ fn init_workspace() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [tool.uv.workspace]
-        members = ["foo"]
-        "###
+        members = [
+            "foo",
+        ]
+        "#
         );
     });
 
@@ -1224,6 +1226,95 @@ fn init_workspace() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     "###);
+
+    // Add another member (`bar`).
+    let child = context.temp_dir.join("bar");
+    fs_err::create_dir(&child)?;
+
+    uv_snapshot!(context.filters(), context.init().arg("--lib").current_dir(&child), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Adding `bar` as member of workspace `[TEMP_DIR]/`
+    Initialized project `bar`
+    ");
+
+    let workspace = context.read("pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.workspace]
+        members = [
+            "foo",
+            "bar",
+        ]
+        "#
+        );
+    });
+
+    // Put the members on their own lines.
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.workspace]
+        members = [
+            "foo",
+            "bar",
+        ]
+        "#,
+    })?;
+
+    // Add another member (`baz`).
+    let child = context.temp_dir.join("baz");
+    fs_err::create_dir(&child)?;
+
+    uv_snapshot!(context.filters(), context.init().arg("--lib").current_dir(&child), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Adding `baz` as member of workspace `[TEMP_DIR]/`
+    Initialized project `baz`
+    ");
+
+    let workspace = context.read("pyproject.toml");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            workspace, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [tool.uv.workspace]
+        members = [
+            "foo",
+            "bar",
+            "baz",
+        ]
+        "#
+        );
+    });
 
     Ok(())
 }
@@ -1296,7 +1387,7 @@ fn init_workspace_relative_sub_package() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            workspace, @r###"
+            workspace, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1304,8 +1395,10 @@ fn init_workspace_relative_sub_package() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [tool.uv.workspace]
-        members = ["foo"]
-        "###
+        members = [
+            "foo",
+        ]
+        "#
         );
     });
 
@@ -1391,7 +1484,7 @@ fn init_workspace_outside() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            workspace, @r###"
+            workspace, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -1399,8 +1492,10 @@ fn init_workspace_outside() -> Result<()> {
         dependencies = ["anyio==3.7.0"]
 
         [tool.uv.workspace]
-        members = ["foo"]
-        "###
+        members = [
+            "foo",
+        ]
+        "#
         );
     });
 
@@ -1550,15 +1645,17 @@ fn init_isolated() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            workspace, @r###"
+            workspace, @r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
 
         [tool.uv.workspace]
-        members = ["foo"]
-        "###
+        members = [
+            "foo",
+        ]
+        "#
         );
     });
 
@@ -1714,15 +1811,18 @@ fn init_project_inside_project() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            workspace, @r###"
+            workspace, @r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
 
         [tool.uv.workspace]
-        members = ["foo", "foo/bar"]
-        "###
+        members = [
+            "foo",
+            "foo/bar",
+        ]
+        "#
         );
     });
 
@@ -1780,15 +1880,17 @@ fn init_explicit_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            workspace, @r###"
+            workspace, @r#"
         [project]
         name = "project"
         version = "0.1.0"
         requires-python = ">=3.12"
 
         [tool.uv.workspace]
-        members = ["foo"]
-        "###
+        members = [
+            "foo",
+        ]
+        "#
         );
     });
 
@@ -1856,7 +1958,9 @@ fn init_virtual_project() -> Result<()> {
         dependencies = []
 
         [tool.uv.workspace]
-        members = ["bar"]
+        members = [
+            "bar",
+        ]
         "#
         );
     });
@@ -1896,10 +2000,12 @@ fn init_virtual_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject, @r###"
+            pyproject, @r#"
         [tool.uv.workspace]
-        members = ["bar"]
-        "###
+        members = [
+            "bar",
+        ]
+        "#
         );
     });
 
@@ -1951,10 +2057,12 @@ fn init_nested_virtual_workspace() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            workspace, @r###"
+            workspace, @r#"
         [tool.uv.workspace]
-        members = ["foo"]
-        "###
+        members = [
+            "foo",
+        ]
+        "#
         );
     });
 

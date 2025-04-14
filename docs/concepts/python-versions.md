@@ -363,11 +363,10 @@ The uv Python distributions are self-contained, highly-portable, and performant.
 built from source, as in tools like `pyenv`, doing so requires preinstalled system dependencies, and
 creating optimized, performant builds (e.g., with PGO and LTO enabled) is very slow.
 
-These distributions have some behavior quirks, generally as a consequence of portability; and, at
-present, uv does not support installing them on musl-based Linux distributions, like Alpine Linux.
-See the
+These distributions have some behavior quirks, generally as a consequence of portability; see the
 [`python-build-standalone` quirks](https://gregoryszorc.com/docs/python-build-standalone/main/quirks.html)
-documentation for details.
+documentation for details. Additionally, some platforms may not be supported (e.g., distributions
+are not yet available for musl Linux on ARM).
 
 ### PyPy distributions
 

@@ -319,6 +319,13 @@ impl TestContext {
         self
     }
 
+    /// Add a filter that collapses duplicate whitespace.
+    #[must_use]
+    pub fn with_collapsed_whitespace(mut self) -> Self {
+        self.filters.push((r"[ \t]+".to_string(), " ".to_string()));
+        self
+    }
+
     /// Add extra directories and configuration for managed Python installations.
     #[must_use]
     pub fn with_managed_python_dirs(mut self) -> Self {
