@@ -162,3 +162,6 @@ slow-tests = []
 test-ecosystem = []
 # Adds self-update functionality.
 self-update = ["axoupdater", "uv-cli/self-update"]
+
+[package.metadata.dist]
+dist = true
