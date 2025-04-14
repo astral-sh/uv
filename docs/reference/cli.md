@@ -3123,7 +3123,7 @@ uv tool run [OPTIONS] [COMMAND]
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
-</dd><dt id="uv-tool-run--build-constraints"><a href="#uv-tool-run--build-constraints"><code>--build-constraints</code></a>, <code>-b</code> <i>build-constraints</i></dt><dd><p>Constrain build dependencies using the given requirements files when building source distributions.</p>
+</dd><dt id="uv-tool-run--build-constraints"><a href="#uv-tool-run--build-constraints"><code>--build-constraints</code></a>, <code>--build-constraint</code>, <code>-b</code> <i>build-constraints</i></dt><dd><p>Constrain build dependencies using the given requirements files when building source distributions.</p>
 
 <p>Constraints files are <code>requirements.txt</code>-like files that only control the <em>version</em> of a requirement that&#8217;s installed. However, including a package in a constraints file will <em>not</em> trigger the installation of that package.</p>
 
@@ -3473,7 +3473,7 @@ uv tool install [OPTIONS] <PACKAGE>
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
-</dd><dt id="uv-tool-install--build-constraints"><a href="#uv-tool-install--build-constraints"><code>--build-constraints</code></a>, <code>-b</code> <i>build-constraints</i></dt><dd><p>Constrain build dependencies using the given requirements files when building source distributions.</p>
+</dd><dt id="uv-tool-install--build-constraints"><a href="#uv-tool-install--build-constraints"><code>--build-constraints</code></a>, <code>--build-constraint</code>, <code>-b</code> <i>build-constraints</i></dt><dd><p>Constrain build dependencies using the given requirements files when building source distributions.</p>
 
 <p>Constraints files are <code>requirements.txt</code>-like files that only control the <em>version</em> of a requirement that&#8217;s installed. However, including a package in a constraints file will <em>not</em> trigger the installation of that package.</p>
 
