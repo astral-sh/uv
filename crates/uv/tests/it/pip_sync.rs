@@ -230,6 +230,7 @@ fn install_hardlink() -> Result<()> {
 
 /// Install a package into a virtual environment using symlink semantics.
 #[test]
+#[cfg(unix)] // Windows does not allow symlinks by default
 fn install_symlink() -> Result<()> {
     let context = TestContext::new("3.12");
 

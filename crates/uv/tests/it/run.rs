@@ -2376,7 +2376,8 @@ fn run_editable() -> Result<()> {
 #[test]
 fn run_from_directory() -> Result<()> {
     // Default to 3.11 so that the `.python-version` is meaningful.
-    let context = TestContext::new_with_versions(&["3.10", "3.11", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.10", "3.11", "3.12"])
+        .with_filtered_missing_file_error();
 
     let project_dir = context.temp_dir.child("project");
     project_dir
@@ -2413,7 +2414,6 @@ fn run_from_directory() -> Result<()> {
         .into_iter()
         .map(|pattern| (pattern, "[PROJECT_VENV]/".to_string()))
         .collect::<Vec<_>>();
-    let error = regex::escape("The system cannot find the path specified. (os error 3)");
     let filters = context
         .filters()
         .into_iter()
@@ -2422,10 +2422,6 @@ fn run_from_directory() -> Result<()> {
                 .iter()
                 .map(|(pattern, replacement)| (pattern.as_str(), replacement.as_str())),
         )
-        .chain(std::iter::once((
-            error.as_str(),
-            "No such file or directory (os error 2)",
-        )))
         .collect::<Vec<_>>();
 
     // Use `--project`, which resolves configuration relative to the provided directory, but paths
@@ -2507,7 +2503,7 @@ fn run_from_directory() -> Result<()> {
     Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/project)
     error: Failed to spawn: `./project/main.py`
-      Caused by: No such file or directory (os error 2)
+      Caused by: [OS ERROR 2]
     "###);
 
     // Even if we write a `.python-version` file in the current directory, we should prefer the
