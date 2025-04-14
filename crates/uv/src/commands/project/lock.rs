@@ -333,7 +333,7 @@ impl<'env> LockOperation<'env> {
 
                 // If the lockfile changed, return an error.
                 if matches!(result, LockResult::Changed(_, _)) {
-                    return Err(ProjectError::LockMismatch(result.into_lock()));
+                    return Err(ProjectError::LockMismatch(Box::new(result.into_lock())));
                 }
 
                 Ok(result)

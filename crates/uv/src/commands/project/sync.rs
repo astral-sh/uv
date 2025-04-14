@@ -387,13 +387,14 @@ pub(crate) async fn sync(
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(ProjectError::LockMismatch(lock)) if dry_run.enabled() => {
+            // Identify the installation target.
             let sync_target =
                 identify_installation_target(&target, &lock, all_packages, package.as_ref());
 
             let state = state.fork();
 
-            // Perform a dry-run sync to output
-            do_sync(
+            // Perform the sync operation.
+            match do_sync(
                 sync_target,
                 &environment,
                 &extras,
@@ -412,7 +413,18 @@ pub(crate) async fn sync(
                 printer,
                 preview,
             )
-            .await?;
+            .await
+            {
+                Ok(()) => {}
+                Err(ProjectError::Operation(err)) => {
+                    return diagnostics::OperationDiagnostic::native_tls(
+                        network_settings.native_tls,
+                    )
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                }
+                Err(err) => return Err(err.into()),
+            }
 
             return Err(ProjectError::LockMismatch(lock).into());
         }
