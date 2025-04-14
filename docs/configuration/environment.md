@@ -386,6 +386,18 @@ uv will require that all dependencies have a hash specified in the requirements 
 Equivalent to the `--resolution` command-line argument. For example, if set to
 `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
 
+### `UV_STACK_SIZE`
+
+Use to set the stack size used by uv.
+
+The value is in bytes, and if both `UV_STACK_SIZE` are `RUST_MIN_STACK` unset, uv uses a 4MB
+(4194304) stack. `UV_STACK_SIZE` takes precedence over `RUST_MIN_STACK`.
+
+Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
+stack size, because we actually spawn our own main2 thread to work around
+the fact that Windows' real main thread is only 1MB. That thread has size
+`max(UV_STACK_SIZE, 1MB)`.
+
 ### `UV_SYSTEM_PYTHON`
 
 Equivalent to the `--system` command-line argument. If set to `true`, uv will
@@ -570,15 +582,20 @@ For example:
 See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
 for more.
 
-### `UV_STACK_SIZE`
+### `RUST_MIN_STACK`
 
 Use to set the stack size used by uv.
 
-The value is in bytes, and the default is typically 2MB (2097152).
-Unlike the normal `UV_STACK_SIZE` semantics, this can affect main thread
+The value is in bytes, and if both `UV_STACK_SIZE` are `RUST_MIN_STACK` unset, uv uses a 4MB
+(4194304) stack. `UV_STACK_SIZE` takes precedence over `RUST_MIN_STACK`.
+
+Prefer setting `UV_STACK_SIZE`, since `RUST_MIN_STACK` also affects subprocesses, such as
+build backends that use Rust code.
+
+Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
 stack size, because we actually spawn our own main2 thread to work around
 the fact that Windows' real main thread is only 1MB. That thread has size
-`max(UV_STACK_SIZE, 4MB)`.
+`max(RUST_MIN_STACK, 1MB)`.
 
 ### `SHELL`
 
