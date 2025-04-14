@@ -125,6 +125,8 @@ impl PyProjectTomlMut {
         // Add the path to the workspace.
         members.push(PortablePath::from(path.as_ref()).to_string());
 
+        reformat_array_multiline(members);
+
         Ok(())
     }
 

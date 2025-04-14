@@ -8049,6 +8049,32 @@ fn install_incompatible_python_version_interpreter_broken_in_path() -> Result<()
     Ok(())
 }
 
+/// Emit dedicated error message when installing Conda `environment.yml`
+#[test]
+fn install_unsupported_environment_yml() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let environment_yml = context.temp_dir.child("environment.yml");
+    environment_yml.write_str(indoc! {r"
+        name: test-env
+        channels:
+          - conda-forge
+        dependencies:
+          - python>=3.12
+    "})?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("-r").arg("environment.yml"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Conda environment files (i.e. `environment.yml`) are not supported
+    ");
+
+    Ok(())
+}
+
 /// Include a `build_constraints.txt` file with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint() -> Result<()> {

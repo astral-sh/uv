@@ -3662,6 +3662,41 @@ fn add_error() -> Result<()> {
     Ok(())
 }
 
+/// Emit dedicated error message when adding Conda `environment.yml`
+#[test]
+fn add_environment_yml_error() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let environment_yml = context.temp_dir.child("environment.yml");
+    environment_yml.write_str(indoc! {r"
+        name: test-env
+        channels:
+          - conda-forge
+        dependencies:
+          - python>=3.12
+    "})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("-r").arg("environment.yml"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Conda environment files (i.e. `environment.yml`) are not supported
+    ");
+
+    Ok(())
+}
+
 /// Set a lower bound when adding unconstrained dependencies.
 #[test]
 fn add_lower_bound() -> Result<()> {
@@ -9856,6 +9891,112 @@ fn repeated_index_cli_environment_variable() -> Result<()> {
         [[tool.uv.index]]
         url = "https://test.pypi.org/simple"
         default = true
+        "###
+        );
+    });
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 1
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "iniconfig"
+        version = "2.0.0"
+        source = { registry = "https://test.pypi.org/simple" }
+        sdist = { url = "https://test-files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        wheels = [
+            { url = "https://test-files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "iniconfig" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "iniconfig", specifier = ">=2.0.0" }]
+        "#
+        );
+    });
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// If an index is repeated on the CLI, the last-provided index should take precedence.
+/// Newlines in `UV_INDEX` should be treated as separators.
+///
+/// The index that appears in the `pyproject.toml` should also be consistent with the index that
+/// appears in the `uv.lock`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/11312>
+#[test]
+fn repeated_index_cli_environment_variable_newline() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .env(EnvVars::UV_INDEX, "https://test.pypi.org/simple\nhttps://test.pypi.org/simple/")
+        .arg("iniconfig"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "iniconfig>=2.0.0",
+        ]
+
+        [[tool.uv.index]]
+        url = "https://test.pypi.org/simple"
         "###
         );
     });

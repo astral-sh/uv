@@ -258,11 +258,21 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
             let computed = reader.compute_hash();
             let expected = reader.entry().crc32();
             if computed != expected {
-                return Err(Error::BadCrc32 {
+                let error = Error::BadCrc32 {
                     path,
                     computed,
                     expected,
-                });
+                };
+                // There are some cases where we fail to get a proper CRC.
+                // This is probably connected to out-of-line data descriptors
+                // which are problematic to access in a streaming context.
+                // In those cases the CRC seems to reliably be stubbed inline as 0,
+                // so we downgrade this to a (hidden-by-default) warning.
+                if expected == 0 {
+                    tracing::warn!("presumed missing CRC: {error}");
+                } else {
+                    return Err(error);
+                }
             }
 
             let metadata = ResolutionMetadata::parse_metadata(&contents)

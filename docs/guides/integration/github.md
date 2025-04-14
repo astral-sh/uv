@@ -47,7 +47,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           # Install a specific version of uv.
-          version: "0.6.12"
+          version: "0.6.14"
 ```
 
 ## Setting up Python
@@ -190,7 +190,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Install the project
-        run: uv sync --all-extras --dev
+        run: uv sync --locked --all-extras --dev
 
       - name: Run tests
         # For example, using `pytest`

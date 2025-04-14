@@ -3,6 +3,67 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.6.14
+
+### Python versions
+
+The following Python versions have been added:
+
+- CPython 3.13.3
+- CPython 3.12.10
+- CPython 3.11.12
+- CPython 3.10.17
+- CPython 3.9.22
+
+See the [`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250409) for more details.
+
+### Enhancements
+
+- Add `uv-build` and `uv_build` aliases to `uv init --build-backend` ([#12776](https://github.com/astral-sh/uv/pull/12776))
+- Emit dedicated error message for Conda `environment.yml` files ([#12669](https://github.com/astral-sh/uv/pull/12669))
+
+
+### Preview features
+
+- Build backend: Check module dir exists for sdist build ([#12779](https://github.com/astral-sh/uv/pull/12779))
+- Build backend: Fix sdist with long directories ([#12764](https://github.com/astral-sh/uv/pull/12764))
+
+### Performance
+
+- Avoid querying GitHub on repeated install invocations ([#12767](https://github.com/astral-sh/uv/pull/12767))
+
+### Bug fixes
+
+- Error when `tool.uv.sources` is set in system-level configuration file ([#12757](https://github.com/astral-sh/uv/pull/12757))
+- Split workspace members onto their own lines in `uv init` ([#12756](https://github.com/astral-sh/uv/pull/12756))
+
+### Documentation
+
+- Add lockfile note about PEP 751 ([#12732](https://github.com/astral-sh/uv/pull/12732))
+- Extend the reference documentation for `uv pip sync` ([#12683](https://github.com/astral-sh/uv/pull/12683))
+- Fix mismatched pip interface header / nav titles ([#12640](https://github.com/astral-sh/uv/pull/12640))
+
+## 0.6.13
+
+### Enhancements
+
+- Add `--show-version` to `uv python find` ([#12376](https://github.com/astral-sh/uv/pull/12376))
+- Remove `--no-config` warning from `uv pip compile` and `uv pip sync` ([#12642](https://github.com/astral-sh/uv/pull/12642))
+- Skip repeated directories in `PATH` when searching for Python interpreters ([#12367](https://github.com/astral-sh/uv/pull/12367))
+- Unset `SCRIPT_PATH` in relocatable activation script ([#12672](https://github.com/astral-sh/uv/pull/12672))
+- Add `UV_PYTHON_DOWNLOADS_JSON_URL` to set custom managed python sources ([#10939](https://github.com/astral-sh/uv/pull/10939))
+- Reject `pyproject.toml` files in `uv pip compile -o` ([#12673](https://github.com/astral-sh/uv/pull/12673))
+- Respect the `--offline` flag for Git operations ([#12619](https://github.com/astral-sh/uv/pull/12619))
+
+### Bug fixes
+
+- Warn instead of error if CRC appears to be missing ([#12722](https://github.com/astral-sh/uv/pull/12722))
+- Avoid infinite loop in `uv export` with conflicts ([#12726](https://github.com/astral-sh/uv/pull/12726))
+
+### Rust API
+
+- Update MSRV to 1.84 ([#12670](https://github.com/astral-sh/uv/pull/12670))
+
 ## 0.6.12
 
 ### Enhancements
