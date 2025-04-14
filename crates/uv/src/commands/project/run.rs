@@ -894,13 +894,17 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         Some(spec) => {
             debug!("Syncing ephemeral requirements");
 
+            // Read the build constraints from the lock file.
+            let build_constraints = lock
+                .as_ref()
+                .map(|(lock, path)| lock.build_constraints(path));
+
             let result = CachedEnvironment::from_spec(
                 EnvironmentSpecification::from(spec).with_lock(
                     lock.as_ref()
                         .map(|(lock, install_path)| (lock, install_path.as_ref())),
                 ),
-                // TODO(bluefact): Respect build constraints for `uv run --with` dependencies.
-                Constraints::default(),
+                build_constraints.unwrap_or_default(),
                 &base_interpreter,
                 &settings,
                 &network_settings,
