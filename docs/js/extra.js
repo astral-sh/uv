@@ -73,7 +73,7 @@ document$.subscribe(function () {
     "concepts/projects/#project-lockfile":
       "concepts/projects/layout/#the-lockfile",
     "concepts/projects/#platform-specific-dependencies":
-      "concepts/projects/dependenices/#platform-specific-dependencies",
+      "concepts/projects/dependencies/#platform-specific-dependencies",
     "concepts/projects/#running-commands": "concepts/projects/run/",
     "concepts/projects/#building-projects": "concepts/projects/build/",
     "concepts/projects/#build-isolation":
