@@ -327,7 +327,7 @@ pub(crate) async fn sync(
         SyncTarget::Script(script) => LockTarget::from(script),
     };
 
-    let lock = match LockOperation::new(
+    let outcome = match LockOperation::new(
         mode,
         &settings.resolver,
         &network_settings,
@@ -379,7 +379,7 @@ pub(crate) async fn sync(
                     }
                 }
             }
-            result.into_lock()
+            Outcome::Success(result.into_lock())
         }
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
@@ -387,52 +387,16 @@ pub(crate) async fn sync(
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(ProjectError::LockMismatch(lock)) if dry_run.enabled() => {
-            // Identify the installation target.
-            let sync_target =
-                identify_installation_target(&target, &lock, all_packages, package.as_ref());
-
-            let state = state.fork();
-
-            // Perform the sync operation.
-            match do_sync(
-                sync_target,
-                &environment,
-                &extras,
-                &dev.with_defaults(defaults),
-                editable,
-                install_options,
-                modifications,
-                (&settings).into(),
-                &network_settings,
-                &state,
-                Box::new(DefaultInstallLogger),
-                installer_metadata,
-                concurrency,
-                cache,
-                dry_run,
-                printer,
-                preview,
-            )
-            .await
-            {
-                Ok(()) => {}
-                Err(ProjectError::Operation(err)) => {
-                    return diagnostics::OperationDiagnostic::native_tls(
-                        network_settings.native_tls,
-                    )
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-                }
-                Err(err) => return Err(err.into()),
-            }
-
-            return Err(ProjectError::LockMismatch(lock).into());
+            // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
+            // sync operation, but exit with a non-zero status.
+            Outcome::LockMismatch(lock)
         }
         Err(err) => return Err(err.into()),
     };
 
     // Identify the installation target.
-    let sync_target = identify_installation_target(&target, &lock, all_packages, package.as_ref());
+    let sync_target =
+        identify_installation_target(&target, outcome.lock(), all_packages, package.as_ref());
 
     let state = state.fork();
 
@@ -467,7 +431,29 @@ pub(crate) async fn sync(
         Err(err) => return Err(err.into()),
     }
 
-    Ok(ExitStatus::Success)
+    match outcome {
+        Outcome::Success(..) => Ok(ExitStatus::Success),
+        Outcome::LockMismatch(lock) => Err(ProjectError::LockMismatch(lock).into()),
+    }
+}
+
+/// The outcome of a `lock` operation within a `sync` operation.
+#[derive(Debug)]
+enum Outcome {
+    /// The `lock` operation was successful.
+    Success(Lock),
+    /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
+    LockMismatch(Box<Lock>),
+}
+
+impl Outcome {
+    /// Return the [`Lock`] associated with this outcome.
+    fn lock(&self) -> &Lock {
+        match self {
+            Self::Success(lock) => lock,
+            Self::LockMismatch(lock) => lock,
+        }
+    }
 }
 
 fn identify_installation_target<'a>(
