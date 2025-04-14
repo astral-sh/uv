@@ -459,6 +459,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) with_editable: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
     pub(crate) python: Option<String>,
@@ -486,6 +487,7 @@ impl ToolRunSettings {
             with_requirements,
             constraints,
             overrides,
+            build_constraints,
             isolated,
             env_file,
             no_env_file,
@@ -553,6 +555,10 @@ impl ToolRunSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_constraints: build_constraints
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             isolated,
             show_resolution,
             python: python.and_then(Maybe::into_option),
@@ -577,6 +583,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) with_editable: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
@@ -599,6 +606,7 @@ impl ToolInstallSettings {
             with_requirements,
             constraints,
             overrides,
+            build_constraints,
             installer,
             force,
             build,
@@ -641,6 +649,10 @@ impl ToolInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             overrides: overrides
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),

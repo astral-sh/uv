@@ -17,9 +17,10 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
-    PreviewMode,
+    Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, ExtrasSpecification,
+    InstallOptions, PreviewMode,
 };
+use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -351,10 +352,28 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .await?
                 .into_environment()?;
 
+                let build_constraints = script
+                    .metadata()
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| {
+                        tool.uv
+                            .as_ref()
+                            .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+                    })
+                    .map(|constraints| {
+                        Constraints::from_requirements(
+                            constraints
+                                .iter()
+                                .map(|constraint| Requirement::from(constraint.clone())),
+                        )
+                    });
+
                 match update_environment(
                     environment,
                     spec,
                     modifications,
+                    build_constraints.unwrap_or_default(),
                     &settings,
                     &network_settings,
                     &sync_state,
@@ -880,6 +899,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     lock.as_ref()
                         .map(|(lock, install_path)| (lock, install_path.as_ref())),
                 ),
+                // TODO(bluefact): Respect build constraints for `uv run --with` dependencies.
+                Constraints::default(),
                 &base_interpreter,
                 &settings,
                 &network_settings,

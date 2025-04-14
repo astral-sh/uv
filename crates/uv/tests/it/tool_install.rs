@@ -321,6 +321,117 @@ fn tool_install_with_editable() -> Result<()> {
 }
 
 #[test]
+fn tool_install_with_compatible_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.8")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools>=40")?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--with")
+        .arg("requests==1.2")
+        .arg("--build-constraints")
+        .arg("build_constraints.txt")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + black==24.4.2
+     + click==8.1.7
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.1
+     + requests==1.2.0
+     + tomli==2.0.1
+     + typing-extensions==4.11.0
+    Installed 2 executables: black, blackd
+    "###);
+
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::exists());
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        // We should have a tool receipt
+        assert_snapshot!(fs_err::read_to_string(tool_dir.join("black").join("uv-receipt.toml")).unwrap(), @r###"
+        [tool]
+        requirements = [
+            { name = "black" },
+            { name = "requests", specifier = "==1.2" },
+        ]
+        build-constraint-dependencies = [{ name = "setuptools", specifier = ">=40" }]
+        entrypoints = [
+            { name = "black", install-path = "[TEMP_DIR]/bin/black" },
+            { name = "blackd", install-path = "[TEMP_DIR]/bin/blackd" },
+        ]
+
+        [tool.options]
+        exclude-newer = "2024-05-04T00:00:00Z"
+        "###);
+    });
+
+    Ok(())
+}
+
+#[test]
+fn tool_install_with_incompatible_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.8")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools==2")?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("black")
+        .arg("--with")
+        .arg("requests==1.2")
+        .arg("--build-constraints")
+        .arg("build_constraints.txt")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
+    "###);
+
+    tool_dir
+        .child("black")
+        .child("uv-receipt.toml")
+        .assert(predicate::path::missing());
+
+    Ok(())
+}
+
+#[test]
 fn tool_install_suggest_other_packages_with_executable() {
     // FastAPI 0.111 is only available from this date onwards.
     let context = TestContext::new("3.12")

@@ -1,4 +1,5 @@
 use crate::common::{uv_snapshot, TestContext};
+use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
@@ -2352,6 +2353,80 @@ fn tool_run_with_script_and_from_script() {
 
     hint: If you meant to run a command from the `script-py` package, use the normalized package name instead to disambiguate, e.g., `uv tool run --from script-py other-script.py`
     ");
+}
+
+#[test]
+fn tool_run_with_compatible_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.8")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools>=40")?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with")
+        .arg("requests==1.2")
+        .arg("--build-constraints")
+        .arg("build_constraints.txt")
+        .arg("pytest")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    pytest 8.2.0
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + exceptiongroup==1.2.1
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.5.0
+     + pytest==8.2.0
+     + requests==1.2.0
+     + tomli==2.0.1
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn tool_run_with_incompatible_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.8")
+        .with_exclude_newer("2024-05-04T00:00:00Z")
+        .with_filtered_counts()
+        .with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    let constraints_txt = context.temp_dir.child("build_constraints.txt");
+    constraints_txt.write_str("setuptools==2")?;
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with")
+        .arg("requests==1.2")
+        .arg("--build-constraints")
+        .arg("build_constraints.txt")
+        .arg("pytest")
+        .arg("--version")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
+    "###);
+
+    Ok(())
 }
 
 /// Test windows runnable types, namely console scripts and legacy setuptools scripts.

@@ -11,12 +11,12 @@ use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
+    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecification, HashCheckingMode, InstallOptions, PreviewMode,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, Resolution, ResolvedDist, SourceDist,
+    DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
@@ -274,12 +274,33 @@ pub(crate) async fn sync(
                 ));
             }
 
+            // Parse the requirements from the script.
             let spec = script_specification(Pep723ItemRef::Script(script), &settings.resolver)?
                 .unwrap_or_default();
+
+            // Parse the build constraints from the script.
+            let build_constraints = script
+                .metadata
+                .tool
+                .as_ref()
+                .and_then(|tool| {
+                    tool.uv
+                        .as_ref()
+                        .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+                })
+                .map(|constraints| {
+                    Constraints::from_requirements(
+                        constraints
+                            .iter()
+                            .map(|constraint| Requirement::from(constraint.clone())),
+                    )
+                });
+
             match update_environment(
                 Deref::deref(&environment).clone(),
                 spec,
                 modifications,
+                build_constraints.unwrap_or_default(),
                 &settings,
                 &network_settings,
                 &PlatformState::default(),

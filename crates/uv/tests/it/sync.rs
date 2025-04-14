@@ -8400,6 +8400,106 @@ fn sync_locked_script() -> Result<()> {
 }
 
 #[test]
+fn sync_script_with_compatible_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let test_script = context.temp_dir.child("script.py");
+
+    // Compatible build constraints.
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.8"
+        # dependencies = [
+        #   "anyio>=3",
+        #   "requests==1.2"
+        # ]
+        #
+        # [tool.uv]
+        # build-constraint-dependencies = ["setuptools>=40"]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(
+            r"environments-v2/script-\w+",
+            "environments-v2/script-[HASH]",
+        )])
+        .collect::<Vec<_>>();
+
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Resolved 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + anyio==4.3.0
+     + exceptiongroup==1.2.0
+     + idna==3.6
+     + requests==1.2.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_script_with_incompatible_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let test_script = context.temp_dir.child("script.py");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(
+            r"environments-v2/script-\w+",
+            "environments-v2/script-[HASH]",
+        )])
+        .collect::<Vec<_>>();
+
+    // Incompatible build constraints.
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.8"
+        # dependencies = [
+        #   "anyio>=3",
+        #   "requests==1.2"
+        # ]
+        #
+        # [tool.uv]
+        # build-constraint-dependencies = ["setuptools==1"]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn unsupported_git_scheme() -> Result<()> {
     let context = TestContext::new_with_versions(&["3.12"]);
 

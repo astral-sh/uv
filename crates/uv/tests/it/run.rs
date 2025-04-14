@@ -764,6 +764,79 @@ fn run_pep723_script_overrides() -> Result<()> {
     Ok(())
 }
 
+/// Run a PEP 723-compatible script with `tool.uv` build constraints.
+#[test]
+fn run_pep723_script_build_constraints() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    let test_script = context.temp_dir.child("main.py");
+
+    // Incompatible build constraints.
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.8"
+        # dependencies = [
+        #   "anyio>=3",
+        #   "requests==1.2"
+        # ]
+        #
+        # [tool.uv]
+        # build-constraint-dependencies = ["setuptools==1"]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × Failed to download and build `requests==1.2.0`
+      ├─▶ Failed to resolve requirements from `setup.py` build
+      ├─▶ No solution found when resolving: `setuptools>=40.8.0`
+      ╰─▶ Because you require setuptools>=40.8.0 and setuptools==1, we can conclude that your requirements are unsatisfiable.
+    "###);
+
+    // Compatible build constraints.
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.8"
+        # dependencies = [
+        #   "anyio>=3",
+        #   "requests==1.2"
+        # ]
+        #
+        # [tool.uv]
+        # build-constraint-dependencies = ["setuptools>=40"]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 6 packages in [TIME]
+    Installed 6 packages in [TIME]
+     + anyio==4.3.0
+     + exceptiongroup==1.2.0
+     + idna==3.6
+     + requests==1.2.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    "###);
+
+    Ok(())
+}
+
 /// Run a PEP 723-compatible script with a lockfile.
 #[test]
 fn run_pep723_script_lock() -> Result<()> {

@@ -17,6 +17,7 @@ use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
+use uv_configuration::Constraints;
 use uv_configuration::{Concurrency, PreviewMode};
 use uv_distribution_types::{
     IndexUrl, Name, NameRequirementSpecification, Requirement, RequirementSource,
@@ -43,6 +44,7 @@ use uv_workspace::WorkspaceCache;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
+use crate::commands::pip::operations;
 use crate::commands::project::{
     resolve_names, EnvironmentSpecification, PlatformState, ProjectError,
 };
@@ -82,6 +84,7 @@ pub(crate) async fn run(
     with: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
     show_resolution: bool,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -244,11 +247,12 @@ pub(crate) async fn run(
     };
 
     // Get or create a compatible environment in which to execute the tool.
-    let result = get_or_create_environment(
+    let result = Box::pin(get_or_create_environment(
         &request,
         with,
         constraints,
         overrides,
+        build_constraints,
         show_resolution,
         python.as_deref(),
         install_mirrors,
@@ -263,7 +267,7 @@ pub(crate) async fn run(
         &cache,
         printer,
         preview,
-    )
+    ))
     .await;
 
     let (from, environment) = match result {
@@ -602,6 +606,7 @@ async fn get_or_create_environment(
     with: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
     show_resolution: bool,
     python: Option<&str>,
     install_mirrors: PythonInstallMirrors,
@@ -905,11 +910,20 @@ async fn get_or_create_environment(
         ..spec
     });
 
+    // Read the `--build-constraints` requirements.
+    let build_constraints = Constraints::from_requirements(
+        operations::read_constraints(build_constraints, &client_builder)
+            .await?
+            .into_iter()
+            .map(|constraint| constraint.requirement),
+    );
+
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.
     // TODO(zanieb): Determine if we should layer on top of the project environment if it is present.
 
     let result = CachedEnvironment::from_spec(
         spec.clone(),
+        build_constraints.clone(),
         &interpreter,
         settings,
         network_settings,
@@ -967,6 +981,7 @@ async fn get_or_create_environment(
 
                 CachedEnvironment::from_spec(
                     spec,
+                    build_constraints,
                     &interpreter,
                     settings,
                     network_settings,
