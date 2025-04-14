@@ -553,53 +553,49 @@ impl VersionSpecifier {
                 // pypa/packaging disagrees: https://github.com/pypa/packaging/issues/617
                 other.as_ref() >= this
             }
-            Operator::GreaterThan => Self::greater_than(this, &other),
+            Operator::GreaterThan => {
+                if other.epoch() > this.epoch() {
+                    return true;
+                }
+
+                if version::compare_release(&this.release(), &other.release()) == Ordering::Equal {
+                    // This special case is here so that, unless the specifier itself
+                    // includes is a post-release version, that we do not accept
+                    // post-release versions for the version mentioned in the specifier
+                    // (e.g. >3.1 should not match 3.0.post0, but should match 3.2.post0).
+                    if !this.is_post() && other.is_post() {
+                        return false;
+                    }
+
+                    // We already checked that self doesn't have a local version
+                    if other.is_local() {
+                        return false;
+                    }
+                }
+
+                other.as_ref() > this
+            }
             Operator::GreaterThanEqual => other.as_ref() >= this,
-            Operator::LessThan => Self::less_than(this, &other),
+            Operator::LessThan => {
+                if other.epoch() < this.epoch() {
+                    return true;
+                }
+
+                // The exclusive ordered comparison <V MUST NOT allow a pre-release of the specified
+                // version unless the specified version is itself a pre-release. E.g., <3.1 should
+                // not match 3.1.dev0, but should match both 3.0.dev0 and 3.0, while <3.1.dev1 does
+                // match 3.1.dev0, 3.0.dev0 and 3.0.
+                if version::compare_release(&this.release(), &other.release()) == Ordering::Equal
+                    && !this.any_prerelease()
+                    && other.any_prerelease()
+                {
+                    return false;
+                }
+
+                other.as_ref() < this
+            }
             Operator::LessThanEqual => other.as_ref() <= this,
         }
-    }
-
-    fn less_than(this: &Version, other: &Version) -> bool {
-        if other.epoch() < this.epoch() {
-            return true;
-        }
-
-        // The exclusive ordered comparison <V MUST NOT allow a pre-release of the specified
-        // version unless the specified version is itself a pre-release. E.g., <3.1 should
-        // not match 3.1.dev0, but should match both 3.0.dev0 and 3.0, while <3.1.dev1 does match
-        // 3.1.dev0, 3.0.dev0 and 3.0.
-        if version::compare_release(&this.release(), &other.release()) == Ordering::Equal
-            && !this.any_prerelease()
-            && other.any_prerelease()
-        {
-            return false;
-        }
-
-        other < this
-    }
-
-    fn greater_than(this: &Version, other: &Version) -> bool {
-        if other.epoch() > this.epoch() {
-            return true;
-        }
-
-        if version::compare_release(&this.release(), &other.release()) == Ordering::Equal {
-            // This special case is here so that, unless the specifier itself
-            // includes is a post-release version, that we do not accept
-            // post-release versions for the version mentioned in the specifier
-            // (e.g. >3.1 should not match 3.0.post0, but should match 3.2.post0).
-            if !this.is_post() && other.is_post() {
-                return false;
-            }
-
-            // We already checked that self doesn't have a local version
-            if other.is_local() {
-                return false;
-            }
-        }
-
-        other > this
     }
 
     /// Whether this version specifier rejects versions below a lower cutoff.
