@@ -5,7 +5,10 @@ use std::sync::LazyLock;
 use uv_static::EnvVars;
 
 /// The default minimum stack size for uv threads.
-pub const UV_MIN_STACK_DEFAULT: usize = 4 * 1024 * 1024;
+pub const UV_DEFAULT_STACK_SIZE: usize = 4 * 1024 * 1024;
+/// We don't allow setting a smaller stack size than 1MB.
+#[allow(clippy::identity_op)]
+pub const UV_MIN_STACK_SIZE: usize = 1 * 1024 * 1024;
 
 /// Running out of stack has been an issue for us. We box types and futures in various places
 /// to mitigate this.
@@ -17,19 +20,34 @@ pub const UV_MIN_STACK_DEFAULT: usize = 4 * 1024 * 1024;
 ///
 /// To normalize this we just spawn a new thread called main2 with a size we can set
 /// ourselves. 2MB is typically too small (especially for our debug builds), while 4MB
-/// seems fine. Also we still try to respect `RUST_MIN_STACK` if it's set, in case useful,
-/// but don't let it ask for a smaller stack to avoid messy misconfiguration since we
-/// know we use quite a bit of main stack space.
+/// seems fine. This value can be changed with `UV_STACK_SIZE`, with a fallback to reading
+/// `RUST_MIN_STACK`, to allow checking a larger or smaller stack size. There is a hardcoded stack
+/// size minimum of 1MB, which is the lowest platform default we observed.
 ///
 /// Non-main threads should all have 2MB, as Rust forces platform consistency there,
 /// but even then stack overflows can occur in release mode
-/// (<https://github.com/astral-sh/uv/issues/12769>), so also configure a 4MB stack for tokio and
-/// rayon threads.
+/// (<https://github.com/astral-sh/uv/issues/12769>), so rayon and tokio get the same stack size,
+/// with the 4MB default.
 pub fn min_stack_size() -> usize {
-    std::env::var(EnvVars::RUST_MIN_STACK)
+    let stack_size = if let Some(uv_stack_size) = std::env::var(EnvVars::UV_STACK_SIZE)
         .ok()
         .and_then(|var| var.parse::<usize>().ok())
-        .unwrap_or(UV_MIN_STACK_DEFAULT)
+    {
+        uv_stack_size
+    } else if let Some(uv_stack_size) = std::env::var(EnvVars::RUST_MIN_STACK)
+        .ok()
+        .and_then(|var| var.parse::<usize>().ok())
+    {
+        uv_stack_size
+    } else {
+        UV_DEFAULT_STACK_SIZE
+    };
+
+    if stack_size < UV_MIN_STACK_SIZE {
+        return UV_DEFAULT_STACK_SIZE;
+    }
+
+    stack_size
 }
 
 /// The number of threads for the rayon threadpool.

@@ -570,15 +570,15 @@ For example:
 See the [tracing documentation](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#example-syntax)
 for more.
 
-### `RUST_MIN_STACK`
+### `UV_STACK_SIZE`
 
 Use to set the stack size used by uv.
 
 The value is in bytes, and the default is typically 2MB (2097152).
-Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
+Unlike the normal `UV_STACK_SIZE` semantics, this can affect main thread
 stack size, because we actually spawn our own main2 thread to work around
 the fact that Windows' real main thread is only 1MB. That thread has size
-`max(RUST_MIN_STACK, 4MB)`.
+`max(UV_STACK_SIZE, 4MB)`.
 
 ### `SHELL`
 
