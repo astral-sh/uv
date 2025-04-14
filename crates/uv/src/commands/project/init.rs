@@ -432,7 +432,7 @@ async fn init_project(
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
                         interpreter.python_major(),
                         interpreter.python_minor(),
-                        variant.clone(),
+                        variant,
                     )))
                 } else {
                     None
