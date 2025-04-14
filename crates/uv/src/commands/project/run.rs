@@ -899,7 +899,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     lock.as_ref()
                         .map(|(lock, install_path)| (lock, install_path.as_ref())),
                 ),
-                // TODO: Respect build constraints for `uv run --with` dependencies
+                // TODO(bluefact): Respect build constraints for `uv run --with` dependencies.
                 Constraints::default(),
                 &base_interpreter,
                 &settings,

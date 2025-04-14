@@ -910,13 +910,12 @@ async fn get_or_create_environment(
         ..spec
     });
 
-    let build_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
-
+    // Read the `--build-constraints` requirements.
     let build_constraints = Constraints::from_requirements(
-        build_constraints
-            .iter()
-            .map(|constraint| constraint.requirement.clone()),
+        operations::read_constraints(build_constraints, &client_builder)
+            .await?
+            .into_iter()
+            .map(|constraint| constraint.requirement),
     );
 
     // TODO(zanieb): When implementing project-level tools, discover the project and check if it has the tool.

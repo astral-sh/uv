@@ -97,15 +97,6 @@ pub(crate) async fn install(
         .native_tls(network_settings.native_tls)
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
-    // Parse build constraints.
-    let build_constraints =
-        operations::read_constraints(build_constraints, &client_builder).await?;
-
-    let build_constraints: Vec<Requirement> = build_constraints
-        .iter()
-        .map(|constraint| constraint.requirement.clone())
-        .collect();
-
     // Parse the input requirement.
     let request = ToolRequest::parse(&package, from.as_deref());
 
@@ -299,6 +290,14 @@ pub(crate) async fn install(
         preview,
     )
     .await?;
+
+    // Resolve the build constraints.
+    let build_constraints: Vec<Requirement> =
+        operations::read_constraints(build_constraints, &client_builder)
+            .await?
+            .into_iter()
+            .map(|constraint| constraint.requirement)
+            .collect();
 
     // Convert to tool options.
     let options = ToolOptions::from(options);

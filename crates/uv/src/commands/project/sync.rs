@@ -274,9 +274,11 @@ pub(crate) async fn sync(
                 ));
             }
 
+            // Parse the requirements from the script.
             let spec = script_specification(Pep723ItemRef::Script(script), &settings.resolver)?
                 .unwrap_or_default();
 
+            // Parse the build constraints from the script.
             let build_constraints = script
                 .metadata
                 .tool

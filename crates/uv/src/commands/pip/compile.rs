@@ -213,8 +213,7 @@ pub(crate) async fn pip_compile(
     let build_constraints: Vec<NameRequirementSpecification> =
         operations::read_constraints(build_constraints, &client_builder)
             .await?
-            .iter()
-            .cloned()
+            .into_iter()
             .chain(
                 build_constraints_from_workspace
                     .into_iter()
