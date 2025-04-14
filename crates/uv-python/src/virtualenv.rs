@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::str::FromStr;
 use std::{
     env, io,
     path::{Path, PathBuf},
@@ -9,6 +10,8 @@ use thiserror::Error;
 
 use uv_pypi_types::Scheme;
 use uv_static::EnvVars;
+
+use crate::{Interpreter, PythonVersion};
 
 /// The layout of a virtual environment.
 #[derive(Debug)]
@@ -41,6 +44,8 @@ pub struct PyVenvConfiguration {
     pub(crate) seed: bool,
     /// Should the virtual environment include system site packages?
     pub(crate) include_system_site_packages: bool,
+    /// The Python version the virtual environment was created with
+    pub(crate) version: Option<PythonVersion>,
 }
 
 #[derive(Debug, Error)]
@@ -193,6 +198,7 @@ impl PyVenvConfiguration {
         let mut relocatable = false;
         let mut seed = false;
         let mut include_system_site_packages = true;
+        let mut version = None;
 
         // Per https://snarky.ca/how-virtual-environments-work/, the `pyvenv.cfg` file is not a
         // valid INI file, and is instead expected to be parsed by partitioning each line on the
@@ -219,6 +225,12 @@ impl PyVenvConfiguration {
                 "include-system-site-packages" => {
                     include_system_site_packages = value.trim().to_lowercase() == "true";
                 }
+                "version" | "version_info" => {
+                    version = Some(
+                        PythonVersion::from_str(value.trim())
+                            .map_err(|e| io::Error::new(std::io::ErrorKind::InvalidData, e))?,
+                    );
+                }
                 _ => {}
             }
         }
@@ -229,6 +241,7 @@ impl PyVenvConfiguration {
             relocatable,
             seed,
             include_system_site_packages,
+            version,
         })
     }
 
@@ -255,6 +268,18 @@ impl PyVenvConfiguration {
     /// Returns true if the virtual environment should include system site packages.
     pub fn include_system_site_packages(&self) -> bool {
         self.include_system_site_packages
+    }
+
+    /// Returns true if the virtual environment has the same `pyvenv.cfg` version
+    /// as the interpreter Python version. Also returns true if there is no version.
+    pub fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
+        self.version.as_ref().is_none_or(|version| {
+            interpreter.python_major() == version.major()
+                && interpreter.python_minor() == version.minor()
+                && version
+                    .patch()
+                    .is_none_or(|patch| patch == interpreter.python_patch())
+        })
     }
 
     /// Set the key-value pair in the `pyvenv.cfg` file.
