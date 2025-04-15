@@ -803,7 +803,11 @@ impl ProjectInterpreter {
         let venv = workspace.venv(active);
         match PythonEnvironment::from_root(&venv, cache) {
             Ok(venv) => {
-                if venv.matches_interpreter(venv.interpreter())
+                let venv_matches_interpreter = venv.matches_interpreter(venv.interpreter());
+                if !venv_matches_interpreter {
+                    debug!("The virtual environment's interpreter version does not match the version it was created from.");
+                }
+                if venv_matches_interpreter
                     && python_request.as_ref().is_none_or(|request| {
                         if request.satisfied(venv.interpreter(), cache) {
                             debug!(
