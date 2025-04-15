@@ -3,6 +3,7 @@ use std::cmp::max;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use glob::GlobError;
 use serde::Deserialize;
 use tracing::{debug, warn};
 
@@ -214,35 +215,8 @@ impl CacheInfo {
             }
         }
 
-        // The tool globwalker is convenient for batch resolution of glob patterns,
-        // but it cannot resolve for relative paths (known, long-time issue) which
-        // are needed for glob-walking across a workspace of dependent packages.
-        // Plain old glob can however, but it can only work off paths relative to
-        // 'cwd', not the 'directory' of the toml file in which the keys are located.
-        //  --> Redirect relative paths to work off 'cwd' here.
-        let cwd = std::env::current_dir()?;
-        let rel = pathdiff::diff_paths(directory, &cwd)
-            .map(
-                |p| {
-                    p.into_os_string().into_string()
-                }
-            ).ok_or(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput, format!("Could not get the path diff [{:?}][{:?}]", &cwd, &directory)
-            ))?.map_err(|e| std::io::Error::new(
-                std::io::ErrorKind::InvalidInput, format!("Could not convert from OsString, [{:?}]", e)
-            ))?;
         if !globs.is_empty() {
-            let mut walker = vec![];
-            for glob in &mut globs {
-                if Path::new(glob.to_mut()).is_relative() {
-                    if let Some(p) = Path::new(&rel.clone()).join(Path::new(glob.as_ref())).to_str() {
-                        let resolved_glob = Cow::from(format!("{}", p));
-                        walker.extend(glob::glob(&resolved_glob)?);
-                    }
-                } else {
-                    walker.extend(glob::glob(&glob)?);
-                };
-            };
+            let walker = glob_walker(directory, &mut globs)?;
             for entry in walker {
                 let entry = match entry {
                     Ok(entry) => entry,
@@ -365,4 +339,70 @@ pub enum FilePattern {
 enum DirectoryTimestamp {
     Timestamp(Timestamp),
     Inode(u64),
+}
+
+/// Batch resolve glob patterns.
+fn glob_walker(
+    directory: &Path,
+    globs: &mut Vec<Cow<'static, str>>,
+) -> Result<Vec<Result<PathBuf, GlobError>>, CacheInfoError> {
+    // Note: globwalk is more convenient for batch resolution of glob patterns,
+    // but it cannot resolve for relative paths (known, long-time issue) which
+    // are needed for glob-walking across a workspace of dependent packages.
+    // Plain old glob can however, but it can only work off paths relative to
+    // 'cwd', not the 'directory' of the toml file in which the keys are located.
+    //  --> Redirect relative paths to work off 'cwd' here.
+    let cwd = std::env::current_dir()?;
+    let rel = pathdiff::diff_paths(directory, &cwd)
+        .map(|p| p.into_os_string().into_string())
+        .ok_or(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Could not get the path diff [{:?}][{:?}]", &cwd, &directory),
+        ))?
+        .map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Could not convert from OsString, [{:?}]", e),
+            )
+        })?;
+    let mut walker = vec![];
+    for glob in globs {
+        if Path::new(glob.to_mut()).is_relative() {
+            if let Some(p) = Path::new(&rel.clone())
+                .join(Path::new(glob.as_ref()))
+                .to_str()
+            {
+                let resolved_glob = Cow::from(format!("{}", p));
+                walker.extend(glob::glob(&resolved_glob)?);
+            }
+        } else {
+            walker.extend(glob::glob(&glob)?);
+        };
+    }
+    Ok(walker)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+    use std::path::{Path, PathBuf};
+
+    use super::glob_walker;
+
+    #[test]
+    fn relative_path_walker() {
+        let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut globs = vec![Cow::from("../*.toml")];
+        let result = glob_walker(&directory, &mut globs);
+        assert!(result.is_ok());
+        if let Ok(walker) = result {
+            assert_eq!(walker.len(), 1);
+            for result in walker {
+                assert!(result.is_ok());
+                if let Ok(p) = result {
+                    assert_eq!(Path::new("src/../Cargo.toml"), p.as_path());
+                }
+            }
+        }
+    }
 }
