@@ -356,9 +356,10 @@ impl PythonEnvironment {
         }
     }
 
-    /// Returns true if the virtual environment has the same `pyvenv.cfg`
-    /// version as the interpreter Python version. Also returns true if
-    /// there is no `pyvenv.cfg` file.
+    /// If this is a virtual environment (indicated by the presence of
+    /// a `pyvenv.cfg` file), this returns true if the `pyvenv.cfg` version
+    /// is the same as the interpreter Python version. Also returns true
+    /// if this is not a virtual environment.
     pub fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
         let Ok(cfg) = self.cfg() else { return true };
         cfg.matches_interpreter(interpreter)
