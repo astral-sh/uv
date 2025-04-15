@@ -962,14 +962,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
         // If `--system-site-packages` is enabled, add the system site packages to the ephemeral
         // environment.
-        if if base_interpreter.is_virtualenv() {
-            {
-                PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
-                    .is_ok_and(|cfg| cfg.include_system_site_packages())
-            }
-        } else {
-            false
-        } {
+        if base_interpreter.is_virtualenv()
+            && PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
+                .is_ok_and(|cfg| cfg.include_system_site_packages())
+        {
             ephemeral_env.set_system_site_packages()?;
         } else {
             ephemeral_env.clear_system_site_packages()?;
