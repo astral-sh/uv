@@ -9172,6 +9172,7 @@ fn sync_build_constraints() -> Result<()> {
 // Test that we recreate a virtual environment when `pyvenv.cfg` version
 // is incompatible with the interpreter version.
 #[test]
+#[cfg(feature = "git")]
 fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     let context = TestContext::new("3.12");
 
