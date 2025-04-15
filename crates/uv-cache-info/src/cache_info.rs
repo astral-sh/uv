@@ -362,7 +362,7 @@ fn glob_walker(
         .map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Could not convert from OsString, [{:?}]", e),
+                format!("Could not convert from OsString, [{e:?}]"),
             )
         })?;
     let mut walker = vec![];
@@ -372,12 +372,12 @@ fn glob_walker(
                 .join(Path::new(glob.as_ref()))
                 .to_str()
             {
-                let resolved_glob = Cow::from(format!("{}", p));
+                let resolved_glob = Cow::from(p.to_string());
                 walker.extend(glob::glob(&resolved_glob)?);
             }
         } else {
-            walker.extend(glob::glob(&glob)?);
-        };
+            walker.extend(glob::glob(glob)?);
+        }
     }
     Ok(walker)
 }
