@@ -25,7 +25,7 @@ use uv_cli::{
 };
 use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLevelArgs};
 #[cfg(feature = "self-update")]
-use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
+use uv_cli::{SelfCommand, SelfNamespace, SelfUninstallArgs, SelfUpdateArgs};
 use uv_fs::{Simplified, CWD};
 use uv_pep508::VersionOrUrl;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
@@ -1016,10 +1016,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     token,
                 }),
         }) => commands::self_update(target_version, token, printer).await,
+        #[cfg(feature = "self-update")]
+        Commands::Self_(SelfNamespace {
+            command: SelfCommand::Uninstall(SelfUninstallArgs { remove_data }),
+        }) => commands::self_uninstall(&cache, printer, remove_data),
         #[cfg(not(feature = "self-update"))]
         Commands::Self_(_) => {
             anyhow::bail!(
-                "uv was installed through an external package manager, and self-update \
+                "uv was installed through an external package manager, and self {{update,uninstall}} \
                 is not available. Please use your package manager to update uv."
             );
         }

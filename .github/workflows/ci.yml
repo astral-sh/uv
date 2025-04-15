@@ -454,7 +454,7 @@ jobs:
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
 
       - name: "Build"
-        run: cargo build
+        run: cargo build --features self-update
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -532,7 +532,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
       - name: "Build"
-        run: cargo build --bin uv --bin uvx
+        run: cargo build --features self-update --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -566,7 +566,7 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --bin uv --bin uvx
+        run: cargo build --features self-update --bin uv --bin uvx
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -604,7 +604,7 @@ jobs:
 
       - name: "Build"
         working-directory: ${{ env.UV_WORKSPACE }}
-        run: cargo build --target aarch64-pc-windows-msvc
+        run: cargo build --features self-update --target aarch64-pc-windows-msvc
 
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -760,6 +760,7 @@ jobs:
         run: |
           eval "$(./uv generate-shell-completion bash)"
           eval "$(./uvx --generate-shell-completion bash)"
+          ./uv self uninstall --remove-data
 
   smoke-test-linux-musl:
     timeout-minutes: 10
@@ -810,6 +811,7 @@ jobs:
         run: |
           eval "$(./uv generate-shell-completion bash)"
           eval "$(./uvx --generate-shell-completion bash)"
+          ./uv self uninstall --remove-data
 
   smoke-test-windows-x86_64:
     timeout-minutes: 10
@@ -838,6 +840,7 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
+          ./uv self uninstall --remove-data
 
   smoke-test-windows-aarch64:
     timeout-minutes: 10
@@ -866,6 +869,7 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: |
           (& ./uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression
+          ./uv self uninstall --remove-data
 
   integration-test-conda:
     timeout-minutes: 10
