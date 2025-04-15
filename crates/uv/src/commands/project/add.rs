@@ -40,7 +40,7 @@ use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject::{DependencyType, Source, SourceError};
+use uv_workspace::pyproject::{DependencyType, Source, SourceError, ToolUvSources};
 use uv_workspace::pyproject_mut::{ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
 
@@ -463,9 +463,16 @@ pub(crate) async fn add(
                     tag.clone(),
                     branch.clone(),
                     script_dir,
+                    None,
                 )?
             }
             AddTarget::Project(ref project, _) => {
+                let existing_sources = project
+                    .pyproject_toml()
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| tool.uv.as_ref())
+                    .and_then(|uv| uv.sources.as_ref());
                 let workspace = project
                     .workspace()
                     .packages()
@@ -479,6 +486,7 @@ pub(crate) async fn add(
                     tag.clone(),
                     branch.clone(),
                     project.root(),
+                    existing_sources,
                 )?
             }
         };
@@ -1010,6 +1018,7 @@ fn resolve_requirement(
     tag: Option<String>,
     branch: Option<String>,
     root: &Path,
+    existing_sources: Option<&ToolUvSources>,
 ) -> Result<(uv_pep508::Requirement, Option<Source>), anyhow::Error> {
     let result = Source::from_requirement(
         &requirement.name,
@@ -1021,6 +1030,7 @@ fn resolve_requirement(
         tag,
         branch,
         root,
+        existing_sources,
     );
 
     let source = match result {

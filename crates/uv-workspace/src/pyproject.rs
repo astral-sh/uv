@@ -1378,9 +1378,38 @@ impl Source {
         tag: Option<String>,
         branch: Option<String>,
         root: &Path,
+        existing_sources: Option<&ToolUvSources>,
     ) -> Result<Option<Source>, SourceError> {
-        // If we resolved to a non-Git source, and the user specified a Git reference, error.
-        if !matches!(source, RequirementSource::Git { .. }) {
+        // If the user specified a Git reference for a non-Git source, try existing Git sources before erroring.
+        if !matches!(source, RequirementSource::Git { .. })
+            && (branch.is_some() || tag.is_some() || rev.is_some())
+        {
+            if let Some(sources) = existing_sources {
+                if let Some(package_sources) = sources.inner().get(name) {
+                    for existing_source in package_sources.iter() {
+                        if let Source::Git {
+                            git,
+                            subdirectory,
+                            marker,
+                            extra,
+                            group,
+                            ..
+                        } = existing_source
+                        {
+                            return Ok(Some(Source::Git {
+                                git: git.clone(),
+                                subdirectory: subdirectory.clone(),
+                                rev,
+                                tag,
+                                branch,
+                                marker: *marker,
+                                extra: extra.clone(),
+                                group: group.clone(),
+                            }));
+                        }
+                    }
+                }
+            }
             if let Some(rev) = rev {
                 return Err(SourceError::UnusedRev(name.to_string(), rev));
             }
