@@ -4835,6 +4835,7 @@ dependencies = [
  "thiserror 2.0.12",
  "toml",
  "tracing",
+ "uv-fs",
  "walkdir",
 ]
 

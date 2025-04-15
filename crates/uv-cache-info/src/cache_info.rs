@@ -3,11 +3,11 @@ use std::cmp::max;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
-use tracing::{debug, warn};
-
 use crate::git_info::{Commit, Tags};
 use crate::timestamp::Timestamp;
+use serde::Deserialize;
+use tracing::{debug, trace, warn};
+use uv_fs::Simplified;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CacheInfoError {
@@ -243,8 +243,9 @@ impl CacheInfo {
             }
         }
 
-        debug!(
-            "Computed cache info: {timestamp:?}, {commit:?}, {tags:?}, {env:?}, {directories:?}"
+        trace!(
+            "Computed cache info for {}: {timestamp:?}, {commit:?}, {tags:?}, {env:?}, {directories:?}",
+            directory.simplified_display()
         );
 
         Ok(Self {
