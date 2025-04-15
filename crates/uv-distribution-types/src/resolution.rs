@@ -14,7 +14,7 @@ use crate::{
 /// for a given package.
 #[derive(Debug, Default, Clone)]
 pub struct Resolution {
-    graph: petgraph::graph::DiGraph<Node, Edge>,
+    pub graph: petgraph::graph::DiGraph<Node, Edge>,
     diagnostics: Vec<ResolutionDiagnostic>,
 }
 

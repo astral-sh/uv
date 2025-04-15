@@ -6,6 +6,9 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use petgraph::visit::EdgeRef;
+use petgraph::Direction;
+use tracing::trace;
 
 use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
@@ -16,7 +19,7 @@ use uv_configuration::{
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
+    DirectorySourceDist, Dist, Index, Name, Node, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
@@ -767,22 +770,59 @@ pub(super) async fn do_sync(
 }
 
 /// Filter out any virtual workspace members.
-fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
-    resolution.filter(|dist| {
+fn apply_no_virtual_project(mut resolution: Resolution) -> Resolution {
+    for node in resolution.graph.node_indices() {
+        if let Some(first) = resolution
+            .graph
+            .edges_directed(node, Direction::Incoming)
+            .filter(|edge| match &resolution.graph[edge.source()] {
+                Node::Root => false,
+                Node::Dist { dist: source, .. } => match &resolution.graph[node] {
+                    // Root does not have incoming edges
+                    Node::Root => {
+                        if cfg!(debug_assertions) {
+                            unreachable!()
+                        } else {
+                            false
+                        }
+                    }
+                    // Ignore recursive self-inclusions that are used for dependency groups and
+                    // extras that include other extras.
+                    Node::Dist { dist: target, .. } => source.name() != target.name(),
+                },
+            })
+            .next()
+        {
+            tracing::debug!("Has incoming: {:?} {:?}", resolution.graph[node], first);
+            continue;
+        }
+
+        let Node::Dist { dist, install, .. } = &mut resolution.graph[node] else {
+            continue;
+        };
+
         let ResolvedDist::Installable { dist, .. } = dist else {
-            return true;
+            continue;
         };
 
         let Dist::Source(dist) = dist.as_ref() else {
-            return true;
+            continue;
         };
 
         let SourceDist::Directory(dist) = dist else {
-            return true;
+            continue;
         };
 
-        !dist.r#virtual
-    })
+        if dist.r#virtual {
+            trace!(
+                "Virtual package {} is not a dependency of any other package, not building",
+                dist.name()
+            );
+            *install = false;
+        }
+    }
+
+    resolution
 }
 
 /// If necessary, convert any editable requirements to non-editable.
