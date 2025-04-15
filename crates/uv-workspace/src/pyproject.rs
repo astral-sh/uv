@@ -1378,14 +1378,14 @@ impl Source {
         tag: Option<String>,
         branch: Option<String>,
         root: &Path,
-        existing_sources: Option<&ToolUvSources>,
+        existing_sources: Option<&BTreeMap<PackageName, Sources>>,
     ) -> Result<Option<Source>, SourceError> {
         // If the user specified a Git reference for a non-Git source, try existing Git sources before erroring.
         if !matches!(source, RequirementSource::Git { .. })
             && (branch.is_some() || tag.is_some() || rev.is_some())
         {
             if let Some(sources) = existing_sources {
-                if let Some(package_sources) = sources.inner().get(name) {
+                if let Some(package_sources) = sources.get(name) {
                     for existing_source in package_sources.iter() {
                         if let Source::Git {
                             git,

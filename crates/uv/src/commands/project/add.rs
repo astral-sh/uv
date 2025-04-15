@@ -40,7 +40,7 @@ use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
-use uv_workspace::pyproject::{DependencyType, Source, SourceError, ToolUvSources};
+use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, ToolUvSources};
 use uv_workspace::pyproject_mut::{ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
 
@@ -454,6 +454,8 @@ pub(crate) async fn add(
             AddTarget::Script(ref script, _) => {
                 let script_path = std::path::absolute(&script.path)?;
                 let script_dir = script_path.parent().expect("script path has no parent");
+
+                let existing_sources = Some(script.sources());
                 resolve_requirement(
                     requirement,
                     false,
@@ -463,7 +465,7 @@ pub(crate) async fn add(
                     tag.clone(),
                     branch.clone(),
                     script_dir,
-                    None,
+                    existing_sources,
                 )?
             }
             AddTarget::Project(ref project, _) => {
@@ -472,7 +474,8 @@ pub(crate) async fn add(
                     .tool
                     .as_ref()
                     .and_then(|tool| tool.uv.as_ref())
-                    .and_then(|uv| uv.sources.as_ref());
+                    .and_then(|uv| uv.sources.as_ref())
+                    .map(ToolUvSources::inner);
                 let workspace = project
                     .workspace()
                     .packages()
@@ -1018,7 +1021,7 @@ fn resolve_requirement(
     tag: Option<String>,
     branch: Option<String>,
     root: &Path,
-    existing_sources: Option<&ToolUvSources>,
+    existing_sources: Option<&BTreeMap<PackageName, Sources>>,
 ) -> Result<(uv_pep508::Requirement, Option<Source>), anyhow::Error> {
     let result = Source::from_requirement(
         &requirement.name,
