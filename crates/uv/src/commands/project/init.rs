@@ -1184,35 +1184,80 @@ fn generate_package_scripts(
     Ok(())
 }
 
+enum GitDiscoveryResult {
+    /// Git is initialized at the path.
+    WorkTree,
+    /// Git is not initialized at the path.
+    NoWorkTree,
+    /// There is no `git[.exe]` binary in PATH.
+    NoGit,
+    /// There is a `git[.exe]` binary in PATH, but it returned an unexpected output.
+    BrokenGit,
+}
+
+/// Checks if there is a Git work tree at the given path.
+fn detect_git_work_tree(path: &Path) -> GitDiscoveryResult {
+    // Determine whether the path is inside a Git work tree.
+    let Ok(git) = GIT.as_ref() else {
+        return GitDiscoveryResult::NoGit;
+    };
+    let Ok(output) = Command::new(git)
+        .arg("rev-parse")
+        .arg("--is-inside-work-tree")
+        .current_dir(path)
+        .output()
+    else {
+        debug!(
+            "`git rev-parse --is-inside-work-tree` failed to launch for `{}`",
+            path.display()
+        );
+        return GitDiscoveryResult::BrokenGit;
+    };
+    if output.status.success() {
+        if std::str::from_utf8(&output.stdout) == Ok("true") {
+            debug!("Found a worktree for `{}`", path.display());
+            GitDiscoveryResult::WorkTree
+        } else {
+            debug!(
+                "`git rev-parse --is-inside-work-tree` succeeded but didn't return `true` for `{}`",
+                path.display()
+            );
+            GitDiscoveryResult::BrokenGit
+        }
+    } else {
+        if std::str::from_utf8(&output.stderr).is_ok_and(|err| err.contains("not a git repository"))
+        {
+            debug!("Not a git repository `{}`", path.display());
+            GitDiscoveryResult::NoWorkTree
+        } else {
+            debug!(
+                "`git rev-parse --is-inside-work-tree` failed but didn't contain `not a git repository` in stderr for `{}`",
+                path.display()
+            );
+            GitDiscoveryResult::BrokenGit
+        }
+    }
+}
+
 /// Initialize the version control system at the given path.
 fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
-    // Detect any existing version control system.
-    let existing = VersionControlSystem::detect(path);
-
-    let implicit = vcs.is_none();
-
-    let vcs = match (vcs, existing) {
-        // If no version control system was specified, and none was detected, default to Git.
-        (None, None) => VersionControlSystem::default(),
-        // If no version control system was specified, but a VCS was detected, leave it as-is.
-        (None, Some(existing)) => {
-            debug!("Detected existing version control system: {existing}");
-            VersionControlSystem::None
-        }
-        // If the user provides an explicit `--vcs none`,
-        (Some(VersionControlSystem::None), _) => VersionControlSystem::None,
-        // If a version control system was specified, use it.
-        (Some(vcs), None) => vcs,
-        // If a version control system was specified, but a VCS was detected...
-        (Some(vcs), Some(existing)) => {
-            // If they differ, raise an error.
-            if vcs != existing {
-                anyhow::bail!("The project is already in a version control system (`{existing}`); cannot initialize with `--vcs {vcs}`");
+    // vcs is None for an existing repository because we don't want to initialize again.
+    let (vcs, implicit) = match vcs {
+        None => match detect_git_work_tree(path) {
+            GitDiscoveryResult::NoWorkTree => (VersionControlSystem::Git, true),
+            GitDiscoveryResult::WorkTree
+            | GitDiscoveryResult::NoGit
+            | GitDiscoveryResult::BrokenGit => (VersionControlSystem::None, false),
+        },
+        Some(VersionControlSystem::None) => (VersionControlSystem::None, false),
+        Some(VersionControlSystem::Git) => match detect_git_work_tree(path) {
+            GitDiscoveryResult::NoWorkTree | GitDiscoveryResult::BrokenGit => {
+                (VersionControlSystem::Git, true)
             }
-
-            // Otherwise, ignore the specified VCS, since it's already in use.
-            VersionControlSystem::None
-        }
+            GitDiscoveryResult::WorkTree | GitDiscoveryResult::NoGit => {
+                (VersionControlSystem::None, false)
+            }
+        },
     };
 
     // Attempt to initialize the VCS.
