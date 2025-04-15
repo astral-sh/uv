@@ -4955,12 +4955,12 @@ dependencies = [
  "uv-cache-info",
  "uv-cache-key",
  "uv-distribution-types",
+ "uv-git",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
  "uv-static",
- "which",
 ]
 
 [[package]]

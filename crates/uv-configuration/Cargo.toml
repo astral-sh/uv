@@ -21,6 +21,7 @@ uv-cache = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-distribution-types = { workspace = true }
+uv-git = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true, features = ["schemars"] }
@@ -40,7 +41,6 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-which = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
