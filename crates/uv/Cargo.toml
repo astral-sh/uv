@@ -123,6 +123,7 @@ reqwest = { workspace = true, features = ["blocking"], default-features = false 
 similar = { version = "2.6.0" }
 tar = { workspace = true }
 tempfile = { workspace = true }
+wiremock = { workspace = true }
 zip = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]

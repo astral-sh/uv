@@ -34,7 +34,7 @@ use uv_pypi_types::{ResolutionMetadata, SimpleJson};
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
-use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
+use crate::base_client::{BaseClientBuilder, ExtraMiddleware, RedirectPolicy};
 use crate::cached_client::CacheControl;
 use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleHtml;
@@ -158,7 +158,9 @@ impl<'a> RegistryClientBuilder<'a> {
 
     pub fn build(self) -> RegistryClient {
         // Build a base client
-        let builder = self.base_client_builder;
+        let builder = self
+            .base_client_builder
+            .redirect(RedirectPolicy::RetriggerMiddleware);
 
         let client = builder.build();
 
@@ -1174,6 +1176,89 @@ mod tests {
     use uv_pypi_types::{JoinRelativeError, SimpleJson};
 
     use crate::{html::SimpleHtml, SimpleMetadata, SimpleMetadatum};
+
+    use uv_cache::Cache;
+    use wiremock::matchers::{basic_auth, method};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use crate::RegistryClientBuilder;
+
+    type Error = Box<dyn std::error::Error>;
+
+    async fn start_test_server(username: &'static str, password: &'static str) -> MockServer {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        server
+    }
+
+    #[tokio::test]
+    async fn test_redirect_to_server_with_credentials() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+
+        let auth_server = start_test_server(username, password).await;
+        let auth_base_url = Url::parse(&auth_server.uri())?;
+
+        let redirect_server = MockServer::start().await;
+
+        // Configure the redirect server to respond with a 302 to the auth server
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(302).insert_header("Location", format!("{}", &auth_base_url)),
+            )
+            .mount(&redirect_server)
+            .await;
+
+        let redirect_url = Url::parse(&redirect_server.uri())?;
+
+        let cache = Cache::temp()?;
+        let registry_client = RegistryClientBuilder::new(cache).build();
+        let client = registry_client.cached_client().uncached();
+
+        let request = client
+            .for_host(&redirect_url)
+            .get(redirect_server.uri())
+            .build()?;
+
+        assert_eq!(
+            client
+                .execute_with_redirect_handling(request)
+                .await?
+                .status(),
+            401,
+            "Requests should fail if credentials are missing"
+        );
+
+        let mut url = redirect_url.clone();
+        url.set_username(username).unwrap();
+        url.set_password(Some(password)).unwrap();
+        let request = client
+            .for_host(&redirect_url)
+            .get(format!("{url}"))
+            .build()?;
+
+        assert_eq!(
+            client
+                .execute_with_redirect_handling(request)
+                .await?
+                .status(),
+            200,
+            "Requests should succeed if credentials are present"
+        );
+
+        Ok(())
+    }
 
     #[test]
     fn ignore_failing_files() {

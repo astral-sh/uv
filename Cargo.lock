@@ -4661,6 +4661,7 @@ dependencies = [
  "version-ranges",
  "walkdir",
  "which",
+ "wiremock",
  "zip",
 ]
 
@@ -4930,6 +4931,7 @@ dependencies = [
  "uv-torch",
  "uv-version",
  "uv-warnings",
+ "wiremock",
 ]
 
 [[package]]
