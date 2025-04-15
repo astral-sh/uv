@@ -9268,3 +9268,114 @@ fn sync_build_constraints() -> Result<()> {
 
     Ok(())
 }
+
+// Test that we recreate a virtual environment when `pyvenv.cfg` version
+// is incompatible with the interpreter version.
+#[test]
+fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = []
+        "#,
+    )?;
+
+    // Create a virtual environment at `.venv`.
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    // Simulate an incompatible `pyvenv.cfg:version` value created
+    // by the venv module.
+    let pyvenv_cfg = context.venv.child("pyvenv.cfg");
+    let contents = fs_err::read_to_string(&pyvenv_cfg)
+        .unwrap()
+        .lines()
+        .map(|line| {
+            if line.trim_start().starts_with("version") {
+                "version = 3.11.0".to_string()
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs_err::write(&pyvenv_cfg, contents)?;
+
+    // We should also be able to read from the lockfile.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
+        let lines: Vec<&str> = contents.split('\n').collect();
+        assert_snapshot!(lines[3], @r###"
+        version_info = 3.12.[X]
+        "###);
+    });
+
+    // Simulate an incompatible `pyvenv.cfg:version_info` value created
+    // by uv or virtualenv.
+    let pyvenv_cfg = context.venv.child("pyvenv.cfg");
+    let contents = fs_err::read_to_string(&pyvenv_cfg)
+        .unwrap()
+        .lines()
+        .map(|line| {
+            if line.trim_start().starts_with("version") {
+                "version_info = 3.11.0".to_string()
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs_err::write(&pyvenv_cfg, contents)?;
+
+    // We should also be able to read from the lockfile.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Removed virtual environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
+        let lines: Vec<&str> = contents.split('\n').collect();
+        assert_snapshot!(lines[3], @r###"
+        version_info = 3.12.[X]
+        "###);
+    });
+
+    Ok(())
+}
