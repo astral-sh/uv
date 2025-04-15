@@ -4,6 +4,7 @@ use std::process::{Command, Stdio};
 
 use serde::Deserialize;
 use tracing::debug;
+use uv_git::GIT;
 
 #[derive(Debug, thiserror::Error)]
 pub enum VersionControlError {
@@ -35,7 +36,7 @@ impl VersionControlSystem {
     pub fn init(&self, path: &Path) -> Result<(), VersionControlError> {
         match self {
             Self::Git => {
-                let Ok(git) = which::which("git") else {
+                let Ok(git) = GIT.as_ref() else {
                     return Err(VersionControlError::GitNotInstalled);
                 };
 
@@ -80,17 +81,16 @@ impl VersionControlSystem {
     /// Detects the VCS system based on the provided path.
     pub fn detect(path: &Path) -> Option<Self> {
         // Determine whether the path is inside a Git work tree.
-        if which::which("git").is_ok_and(|git| {
-            Command::new(git)
-                .arg("rev-parse")
-                .arg("--is-inside-work-tree")
-                .current_dir(path)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()
-                .map(|status| status.success())
-                .unwrap_or(false)
-        }) {
+        let git = GIT.as_ref().ok()?;
+        let exit_status = Command::new(git)
+            .arg("rev-parse")
+            .arg("--is-inside-work-tree")
+            .current_dir(path)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .ok()?;
+        if exit_status.success() {
             return Some(Self::Git);
         }
 
