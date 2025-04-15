@@ -370,11 +370,7 @@ async fn init_project(
         // This can be arbitrary, i.e., not a version — in which case we may need to resolve the
         // interpreter
         match python_request {
-            PythonRequest::Version(VersionRequest::MajorMinor(
-                major,
-                minor,
-                PythonVariant::Default,
-            )) => {
+            PythonRequest::Version(VersionRequest::MajorMinor(major, minor, variant)) => {
                 let requires_python = RequiresPython::greater_than_equal_version(&Version::new([
                     u64::from(major),
                     u64::from(minor),
@@ -382,9 +378,7 @@ async fn init_project(
 
                 let python_request = if pin_python {
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
-                        major,
-                        minor,
-                        PythonVariant::Default,
+                        major, minor, variant,
                     )))
                 } else {
                     None
@@ -396,7 +390,7 @@ async fn init_project(
                 major,
                 minor,
                 patch,
-                PythonVariant::Default,
+                variant,
             )) => {
                 let requires_python = RequiresPython::greater_than_equal_version(&Version::new([
                     u64::from(major),
@@ -406,10 +400,7 @@ async fn init_project(
 
                 let python_request = if pin_python {
                     Some(PythonRequest::Version(VersionRequest::MajorMinorPatch(
-                        major,
-                        minor,
-                        patch,
-                        PythonVariant::Default,
+                        major, minor, patch, variant,
                     )))
                 } else {
                     None
@@ -417,8 +408,10 @@ async fn init_project(
 
                 (requires_python, python_request)
             }
-            ref
-            python_request @ PythonRequest::Version(VersionRequest::Range(ref specifiers, _)) => {
+            ref python_request @ PythonRequest::Version(VersionRequest::Range(
+                ref specifiers,
+                variant,
+            )) => {
                 let requires_python = RequiresPython::from_specifiers(specifiers);
 
                 let python_request = if pin_python {
@@ -439,7 +432,7 @@ async fn init_project(
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
                         interpreter.python_major(),
                         interpreter.python_minor(),
-                        PythonVariant::Default,
+                        variant,
                     )))
                 } else {
                     None

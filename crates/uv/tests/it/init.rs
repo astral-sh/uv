@@ -3713,3 +3713,22 @@ fn init_without_description() -> Result<()> {
 
     Ok(())
 }
+
+/// Run `uv init --python 3.13t` to create a pin to a freethreaded Python.
+#[test]
+fn init_python_variant() -> Result<()> {
+    let context = TestContext::new("3.13");
+    uv_snapshot!(context.filters(), context.init().arg("foo").arg("--python").arg("3.13t"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let python_version = fs_err::read_to_string(context.temp_dir.join("foo/.python-version"))?;
+    assert_eq!(python_version, "3.13t\n");
+
+    Ok(())
+}
