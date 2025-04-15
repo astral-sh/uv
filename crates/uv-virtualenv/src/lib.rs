@@ -38,6 +38,29 @@ impl Prompt {
     }
 }
 
+// TODO(zanieb): Consider folding `allow_existing` into this?
+#[derive(Debug, Clone, Copy)]
+pub enum VenvForceMode {
+    /// Do not replace an existing directory.
+    Disabled,
+    /// Replace an existing directory, if it is a virtual environment.
+    ReplaceEnvironment,
+    /// Replace an existing directory, regardless of contents.
+    ReplaceAny,
+}
+
+impl VenvForceMode {
+    pub fn from_args(force: u8) -> Self {
+        if force == 0 {
+            VenvForceMode::Disabled
+        } else if force == 1 {
+            VenvForceMode::ReplaceEnvironment
+        } else {
+            VenvForceMode::ReplaceAny
+        }
+    }
+}
+
 /// Create a virtualenv.
 #[allow(clippy::fn_params_excessive_bools)]
 pub fn create_venv(
@@ -46,6 +69,7 @@ pub fn create_venv(
     prompt: Prompt,
     system_site_packages: bool,
     allow_existing: bool,
+    force: VenvForceMode,
     relocatable: bool,
     seed: bool,
 ) -> Result<PythonEnvironment, Error> {
@@ -56,6 +80,7 @@ pub fn create_venv(
         prompt,
         system_site_packages,
         allow_existing,
+        force,
         relocatable,
         seed,
     )?;

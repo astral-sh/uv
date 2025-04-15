@@ -982,6 +982,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 uv_virtualenv::Prompt::from_args(prompt),
                 args.system_site_packages,
                 args.seed,
+                args.force,
                 args.allow_existing,
                 args.settings.exclude_newer,
                 globals.concurrency,

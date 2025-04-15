@@ -1239,6 +1239,7 @@ impl ProjectEnvironment {
                         prompt,
                         false,
                         false,
+                        uv_virtualenv::VenvForceMode::ReplaceAny,
                         false,
                         false,
                     )?;
@@ -1276,6 +1277,7 @@ impl ProjectEnvironment {
                     prompt,
                     false,
                     false,
+                    uv_virtualenv::VenvForceMode::ReplaceAny,
                     false,
                     false,
                 )?;
@@ -1405,6 +1407,7 @@ impl ScriptEnvironment {
                         prompt,
                         false,
                         false,
+                        uv_virtualenv::VenvForceMode::ReplaceAny,
                         false,
                         false,
                     )?;
@@ -1439,6 +1442,7 @@ impl ScriptEnvironment {
                     prompt,
                     false,
                     false,
+                    uv_virtualenv::VenvForceMode::ReplaceAny,
                     false,
                     false,
                 )?;

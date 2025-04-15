@@ -16,7 +16,7 @@ use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
 
-use crate::{Error, Prompt};
+use crate::{Error, Prompt, VenvForceMode};
 
 /// Activation scripts for the environment, with dependent paths templated out.
 const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
@@ -51,6 +51,7 @@ pub(crate) fn create(
     prompt: Prompt,
     system_site_packages: bool,
     allow_existing: bool,
+    force: VenvForceMode,
     relocatable: bool,
     seed: bool,
 ) -> Result<VirtualEnvironment, Error> {
@@ -79,11 +80,35 @@ pub(crate) fn create(
                     format!("File exists at `{}`", location.user_display()),
                 )));
             } else if metadata.is_dir() {
-                if allow_existing {
-                    debug!("Allowing existing directory");
-                } else if location.join("pyvenv.cfg").is_file() {
-                    debug!("Removing existing directory");
+                let is_virtualenv = location.join("pyvenv.cfg").is_file();
+                let is_empty = !is_virtualenv
+                    && location
+                        .read_dir()
+                        .is_ok_and(|mut dir| dir.next().is_none());
+                let should_remove = if !is_empty {
+                    if allow_existing {
+                        debug!("Allowing existing directory due to `--allow-existing`");
+                        false
+                    } else {
+                        match force {
+                            VenvForceMode::Disabled => false,
+                            VenvForceMode::ReplaceEnvironment => {
+                                if is_virtualenv {
+                                    debug!("Replacing existing virtual environment due to `-f`");
+                                }
+                                is_virtualenv
+                            }
+                            VenvForceMode::ReplaceAny => {
+                                debug!("Replacing existing directory due to `-ff`");
+                                true
+                            }
+                        }
+                    }
+                } else {
+                    false
+                };
 
+                if should_remove {
                     // On Windows, if the current executable is in the directory, guard against
                     // self-deletion.
                     #[cfg(windows)]
@@ -97,18 +122,20 @@ pub(crate) fn create(
 
                     fs::remove_dir_all(location)?;
                     fs::create_dir_all(location)?;
-                } else if location
-                    .read_dir()
-                    .is_ok_and(|mut dir| dir.next().is_none())
-                {
-                    debug!("Ignoring empty directory");
-                } else {
+                } else if !is_empty && !allow_existing {
                     return Err(Error::Io(io::Error::new(
                         io::ErrorKind::AlreadyExists,
-                        format!(
-                            "The directory `{}` exists, but it's not a virtual environment",
-                            location.user_display()
-                        ),
+                        if is_virtualenv {
+                            format!(
+                                "The virtual environment `{}` already exists, use `-f` to replace it",
+                                location.user_display()
+                            )
+                        } else {
+                            format!(
+                                "The directory `{}` already exists, use `-ff` to replace it",
+                                location.user_display()
+                            )
+                        },
                     )));
                 }
             }
