@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 use uv_cache::Cache;
 use uv_cli::AuthorFrom;
 use uv_client::BaseClientBuilder;
@@ -1184,11 +1184,12 @@ fn generate_package_scripts(
     Ok(())
 }
 
+#[derive(Debug, Clone)]
 enum GitDiscoveryResult {
     /// Git is initialized at the path.
-    WorkTree,
+    Repository,
     /// Git is not initialized at the path.
-    NoWorkTree,
+    NoRepository,
     /// There is no `git[.exe]` binary in PATH.
     NoGit,
     /// There is a `git[.exe]` binary in PATH, but it returned an unexpected output.
@@ -1196,7 +1197,7 @@ enum GitDiscoveryResult {
 }
 
 /// Checks if there is a Git work tree at the given path.
-fn detect_git_work_tree(path: &Path) -> GitDiscoveryResult {
+fn detect_git_repository(path: &Path) -> GitDiscoveryResult {
     // Determine whether the path is inside a Git work tree.
     let Ok(git) = GIT.as_ref() else {
         return GitDiscoveryResult::NoGit;
@@ -1214,21 +1215,25 @@ fn detect_git_work_tree(path: &Path) -> GitDiscoveryResult {
         return GitDiscoveryResult::BrokenGit;
     };
     if output.status.success() {
-        if std::str::from_utf8(&output.stdout) == Ok("true") {
-            debug!("Found a worktree for `{}`", path.display());
-            GitDiscoveryResult::WorkTree
+        if std::str::from_utf8(&output.stdout).map(|stdout| stdout.trim()) == Ok("true") {
+            debug!("Found a Git repository for `{}`", path.display());
+            GitDiscoveryResult::Repository
         } else {
             debug!(
                 "`git rev-parse --is-inside-work-tree` succeeded but didn't return `true` for `{}`",
                 path.display()
+            );
+            trace!(
+                "`git rev-parse --is-inside-work-tree` stdout: {:?}",
+                String::from_utf8_lossy(&output.stdout)
             );
             GitDiscoveryResult::BrokenGit
         }
     } else {
         if std::str::from_utf8(&output.stderr).is_ok_and(|err| err.contains("not a git repository"))
         {
-            debug!("Not a git repository `{}`", path.display());
-            GitDiscoveryResult::NoWorkTree
+            debug!("Not a Git repository `{}`", path.display());
+            GitDiscoveryResult::NoRepository
         } else {
             debug!(
                 "`git rev-parse --is-inside-work-tree` failed but didn't contain `not a git repository` in stderr for `{}`",
@@ -1239,42 +1244,38 @@ fn detect_git_work_tree(path: &Path) -> GitDiscoveryResult {
     }
 }
 
-/// Initialize the version control system at the given path.
+/// Initialize the version control system at the given path, if applicable.
 fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
     // vcs is None for an existing repository because we don't want to initialize again.
     let (vcs, implicit) = match vcs {
-        None => match detect_git_work_tree(path) {
-            GitDiscoveryResult::NoWorkTree => (VersionControlSystem::Git, true),
-            GitDiscoveryResult::WorkTree
+        None => match detect_git_repository(path) {
+            GitDiscoveryResult::NoRepository => (VersionControlSystem::Git, true),
+            GitDiscoveryResult::Repository
             | GitDiscoveryResult::NoGit
             | GitDiscoveryResult::BrokenGit => (VersionControlSystem::None, false),
         },
         Some(VersionControlSystem::None) => (VersionControlSystem::None, false),
-        Some(VersionControlSystem::Git) => match detect_git_work_tree(path) {
-            GitDiscoveryResult::NoWorkTree | GitDiscoveryResult::BrokenGit => {
-                (VersionControlSystem::Git, true)
-            }
-            GitDiscoveryResult::WorkTree | GitDiscoveryResult::NoGit => {
-                (VersionControlSystem::None, false)
-            }
+        // The user requested Git explicitly, so the only reason not to invoke it is that Git is
+        // already initialized. In case of an error (broken git), we will raise the real error
+        // when trying to initialize, which should give us a better error message.
+        Some(VersionControlSystem::Git) => match detect_git_repository(path) {
+            GitDiscoveryResult::NoRepository
+            | GitDiscoveryResult::BrokenGit
+            | GitDiscoveryResult::NoGit => (VersionControlSystem::Git, false),
+            GitDiscoveryResult::Repository => (VersionControlSystem::None, false),
         },
     };
 
     // Attempt to initialize the VCS.
     match vcs.init(path) {
-        Ok(()) => (),
+        Ok(()) => Ok(()),
         // If the VCS isn't installed, only raise an error if a VCS was explicitly specified.
-        Err(err @ VersionControlError::GitNotInstalled) => {
-            if implicit {
-                debug!("Failed to initialize version control: {err}");
-            } else {
-                return Err(err.into());
-            }
+        Err(err @ VersionControlError::GitNotInstalled) if implicit => {
+            debug!("Failed to initialize version control: {err}");
+            Ok(())
         }
-        Err(err) => return Err(err.into()),
+        Err(err) => Err(err.into()),
     }
-
-    Ok(())
 }
 
 /// Try to get the author information.
