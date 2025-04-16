@@ -23,50 +23,53 @@ fn exec_spawn(cmd: &mut Command) -> std::io::Result<Infallible> {
     }
 }
 
-fn get_uvx_suffix(current_exe: &Path) -> std::io::Result<&str> {
-    let Some(os_file_name) = current_exe.file_name() else {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "Could not determine the file name of the `uvx` binary",
-        ));
-    };
-    let Some(file_name_str) = os_file_name.to_str() else {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "Unable to convert executable name of `uvx` binary into a valid UTF-8 string",
-        ));
-    };
-    let file_name_no_ext = file_name_str
-        .strip_suffix(std::env::consts::EXE_SUFFIX)
-        .unwrap_or(file_name_str);
-    let Some(uvx_suffix) = file_name_no_ext.strip_prefix("uvx") else {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "Current executable name does not contain `uvx`",
-        ));
-    };
-    Ok(uvx_suffix)
+/// Assuming the binary is called something like `uvx@1.2.3(.exe)`, compute the `@1.2.3(.exe)` part
+/// so that we can preferentially find `uv@1.2.3(.exe)`, for folks who like managing multiple
+/// installs in this way.
+fn get_uvx_suffix(current_exe: &Path) -> Option<&str> {
+    let os_file_name = current_exe.file_name()?;
+    let file_name_str = os_file_name.to_str()?;
+    file_name_str.strip_prefix("uvx")
 }
 
-fn get_uv_path(current_exe_parent: &Path, uvx_suffix: &str) -> std::io::Result<PathBuf> {
-    let uv_with_suffix =
-        current_exe_parent.join(format!("uv{}{}", uvx_suffix, std::env::consts::EXE_SUFFIX));
-    let uv = current_exe_parent.join(format!("uv{}", std::env::consts::EXE_SUFFIX));
+/// Gets the path to `uv`, given info about `uvx`
+fn get_uv_path(current_exe_parent: &Path, uvx_suffix: Option<&str>) -> std::io::Result<PathBuf> {
+    // First try to find a matching suffixed `uv`, e.g. `uv@1.2.3(.exe)`
+    let uv_with_suffix = uvx_suffix.map(|suffix| current_exe_parent.join(format!("uv{suffix}")));
+    if let Some(uv_with_suffix) = &uv_with_suffix {
+        match uv_with_suffix.try_exists() {
+            Ok(true) => return Ok(uv_with_suffix.to_owned()),
+            Ok(false) => { /* definitely not there, proceed to fallback */ }
+            Err(err) => {
+                // We don't know if `uv@1.2.3` exists, something errored when checking.
+                // We *could* blindly use `uv@1.2.3` in this case, as the code below does, however
+                // in this extremely narrow corner case it's *probably* better to default to `uv`,
+                // since we don't want to mess up existing users who weren't using suffixes?
+                eprintln!(
+                    "warning: failed to determine if `{}` exists, trying `uv` instead: {err}",
+                    uv_with_suffix.display()
+                );
+            }
+        }
+    }
 
-    // fall back to plain `uv` if the suffixed version doesn't exist
-    if uv_with_suffix.exists() {
-        Ok(uv_with_suffix)
-    } else if uv.exists() {
-        Ok(uv)
-    } else {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
+    // Then just look for good ol' `uv`
+    let uv = current_exe_parent.join(format!("uv{}", std::env::consts::EXE_SUFFIX));
+    // If we are sure the `uv`` binary does not exist, display a clearer error message.
+    // If we're not certain if uv exists (try_exists == Err), keep marching forward and hope it works.
+    if matches!(uv.try_exists(), Ok(false)) {
+        let message = if let Some(uv_with_suffix) = uv_with_suffix {
             format!(
-                "Could not find uv binary at {} or {}",
-                uv_with_suffix.to_str().unwrap_or("[invalid path]"),
-                uv.to_str().unwrap_or("[invalid path]"),
-            ),
-        ))
+                "Could not find the `uv` binary at either of:\n  {}\n  {}",
+                uv_with_suffix.display(),
+                uv.display(),
+            )
+        } else {
+            format!("Could not find the `uv` binary at: {}", uv.display())
+        };
+        Err(std::io::Error::new(std::io::ErrorKind::NotFound, message))
+    } else {
+        Ok(uv)
     }
 }
 
@@ -78,7 +81,7 @@ fn run() -> std::io::Result<ExitStatus> {
             "Could not determine the location of the `uvx` binary",
         ));
     };
-    let uvx_suffix = get_uvx_suffix(&current_exe)?;
+    let uvx_suffix = get_uvx_suffix(&current_exe);
     let uv = get_uv_path(bin, uvx_suffix)?;
     let args = ["tool", "uvx"]
         .iter()
@@ -86,14 +89,6 @@ fn run() -> std::io::Result<ExitStatus> {
         // Skip the `uvx` name
         .chain(std::env::args_os().skip(1))
         .collect::<Vec<_>>();
-
-    // If we are sure the uv binary does not exist, display a clearer error message
-    if matches!(uv.try_exists(), Ok(false)) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("Could not find the `uv` binary at: {}", uv.display()),
-        ));
-    }
 
     let mut cmd = Command::new(uv);
     cmd.args(&args);
