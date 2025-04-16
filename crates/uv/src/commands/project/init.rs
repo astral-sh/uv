@@ -1215,7 +1215,7 @@ fn detect_git_repository(path: &Path) -> GitDiscoveryResult {
         return GitDiscoveryResult::BrokenGit;
     };
     if output.status.success() {
-        if std::str::from_utf8(&output.stdout).map(|stdout| stdout.trim()) == Ok("true") {
+        if std::str::from_utf8(&output.stdout).map(str::trim) == Ok("true") {
             debug!("Found a Git repository for `{}`", path.display());
             GitDiscoveryResult::Repository
         } else {
