@@ -82,6 +82,16 @@ fn python_find() {
     ----- stderr -----
     "###);
 
+    // Request Python 3.12 via partial key syntax with placeholders
+    uv_snapshot!(context.filters(), context.python_find().arg("any-3.12-any"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+
     // Request CPython 3.12 for the current platform
     let os = Os::from_env();
     let arch = Arch::from_env();

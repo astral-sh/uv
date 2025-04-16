@@ -2705,12 +2705,15 @@ mod tests {
     use std::{path::PathBuf, str::FromStr};
 
     use assert_fs::{prelude::*, TempDir};
+    use target_lexicon::{Aarch64Architecture, Architecture};
     use test_log::test;
     use uv_pep440::{Prerelease, PrereleaseKind, VersionSpecifiers};
 
     use crate::{
         discovery::{PythonRequest, VersionRequest},
+        downloads::PythonDownloadRequest,
         implementation::ImplementationName,
+        platform::{Arch, Libc, Os},
     };
 
     use super::{Error, PythonVariant};
@@ -2763,6 +2766,7 @@ mod tests {
             PythonRequest::parse("cpython"),
             PythonRequest::Implementation(ImplementationName::CPython)
         );
+
         assert_eq!(
             PythonRequest::parse("cpython3.12.2"),
             PythonRequest::ImplementationVersion(
@@ -2770,6 +2774,78 @@ mod tests {
                 VersionRequest::from_str("3.12.2").unwrap(),
             )
         );
+
+        assert_eq!(
+            PythonRequest::parse("cpython-3.13.2"),
+            PythonRequest::Key(PythonDownloadRequest {
+                version: Some(VersionRequest::MajorMinorPatch(
+                    3,
+                    13,
+                    2,
+                    PythonVariant::Default
+                )),
+                implementation: Some(ImplementationName::CPython),
+                arch: None,
+                os: None,
+                libc: None,
+                prereleases: None
+            })
+        );
+        assert_eq!(
+            PythonRequest::parse("cpython-3.13.2-macos-aarch64-none"),
+            PythonRequest::Key(PythonDownloadRequest {
+                version: Some(VersionRequest::MajorMinorPatch(
+                    3,
+                    13,
+                    2,
+                    PythonVariant::Default
+                )),
+                implementation: Some(ImplementationName::CPython),
+                arch: Some(Arch {
+                    family: Architecture::Aarch64(Aarch64Architecture::Aarch64),
+                    variant: None
+                }),
+                os: Some(Os(target_lexicon::OperatingSystem::Darwin(None))),
+                libc: Some(Libc::None),
+                prereleases: None
+            })
+        );
+        assert_eq!(
+            PythonRequest::parse("any-3.13.2"),
+            PythonRequest::Key(PythonDownloadRequest {
+                version: Some(VersionRequest::MajorMinorPatch(
+                    3,
+                    13,
+                    2,
+                    PythonVariant::Default
+                )),
+                implementation: None,
+                arch: None,
+                os: None,
+                libc: None,
+                prereleases: None
+            })
+        );
+        assert_eq!(
+            PythonRequest::parse("any-3.13.2-any-aarch64"),
+            PythonRequest::Key(PythonDownloadRequest {
+                version: Some(VersionRequest::MajorMinorPatch(
+                    3,
+                    13,
+                    2,
+                    PythonVariant::Default
+                )),
+                implementation: None,
+                arch: Some(Arch {
+                    family: Architecture::Aarch64(Aarch64Architecture::Aarch64),
+                    variant: None
+                }),
+                os: None,
+                libc: None,
+                prereleases: None
+            })
+        );
+
         assert_eq!(
             PythonRequest::parse("pypy"),
             PythonRequest::Implementation(ImplementationName::PyPy)
