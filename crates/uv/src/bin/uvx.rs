@@ -55,8 +55,8 @@ fn get_uv_path(current_exe_parent: &Path, uvx_suffix: Option<&str>) -> std::io::
 
     // Then just look for good ol' `uv`
     let uv = current_exe_parent.join(format!("uv{}", std::env::consts::EXE_SUFFIX));
-    // If we are sure the `uv`` binary does not exist, display a clearer error message.
-    // If we're not certain if uv exists (try_exists == Err), keep marching forward and hope it works.
+    // If we are sure the `uv` binary does not exist, display a clearer error message.
+    // If we're not certain if uv exists (try_exists == Err), keep going and hope it works.
     if matches!(uv.try_exists(), Ok(false)) {
         let message = if let Some(uv_with_suffix) = uv_with_suffix {
             format!(
