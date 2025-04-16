@@ -217,10 +217,10 @@ print(Point)
 is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
 more details.
 
-## Using a shebang line
+## Using a shebang to create an executable file
 
-With a shebang line, you can run scripts that are on your `PATH` or in the current folder without
-specifying `uv run` before the filename.
+A shebang can be added to make the script executable without using `uv run`. This is helpful for
+scripts that are on your `PATH` or in the current folder.
 
 For example, create a file called `greet` with the following contents
 
@@ -230,11 +230,24 @@ For example, create a file called `greet` with the following contents
 print("Hello, world!")
 ```
 
-Ensure that your script is executable, typically with `chmod +x greet`, and run the script
+Ensure that your script is executable, e.g., with `chmod +x greet`, then run the script:
 
-```
+```console
 $ ./greet
 Hello, world!
+```
+
+Declaration of dependencies is also supported in this context, for example:
+
+```python title="example"
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["httpx"]
+# ///
+import httpx
+
+print(httpx.get("https://example.com"))
 ```
 
 ## Using alternative package indexes
