@@ -351,6 +351,25 @@ PS> uv run --with PyQt5 example_pyqt.pyw
 
 ![Run Result](../assets/uv_gui_script_hello_world_pyqt.png){: style="height:50px;width:150px"}
 
+## Setting a shebang
+
+You can use the following shebang (`#!`) line at the top of your script to have your system pick
+`uv` for running it:
+
+```python title="example.py"
+#!/usr/bin/env -S uv run --script
+# /// script
+# dependencies = []
+# ///
+```
+
+You can then make the script executable and launch it without explicitly calling `uv`:
+
+```bash
+chmod +x example.py
+./example.py
+```
+
 ## Next steps
 
 To learn more about `uv run`, see the [command reference](../reference/cli.md#uv-run).
