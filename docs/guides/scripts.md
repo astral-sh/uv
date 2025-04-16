@@ -219,8 +219,8 @@ more details.
 
 ## Using a shebang to create an executable file
 
-A shebang can be added to make the script executable without using `uv run`. This is helpful for
-scripts that are on your `PATH` or in the current folder.
+A shebang can be added to make a script executable without using `uv run` — this makes it easy to
+run scripts that are on your `PATH` or in the current folder.
 
 For example, create a file called `greet` with the following contents
 
