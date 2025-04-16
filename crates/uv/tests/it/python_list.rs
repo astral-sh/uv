@@ -1,4 +1,8 @@
-use uv_python::platform::{Arch, Os};
+#![allow(dead_code, unused_imports)]
+
+use anyhow::Result;
+use assert_fs::prelude::{FileWriteBin, PathChild};
+use uv_python::platform::{Arch, Libc, Os};
 use uv_static::EnvVars;
 
 use crate::common::{uv_snapshot, TestContext};
@@ -28,6 +32,17 @@ fn python_list() {
 
     ----- stderr -----
     ");
+
+    // Show only the installed interpreters
+    uv_snapshot!(context.filters(), context.python_list().arg("--only-installed"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.12.[X]-[PLATFORM] [PYTHON-3.12]
+    cpython-3.11.[X]-[PLATFORM] [PYTHON-3.11]
+
+    ----- stderr -----
+    "#);
 
     // Request Python 3.12
     uv_snapshot!(context.filters(), context.python_list().arg("3.12"), @r"
@@ -124,6 +139,327 @@ fn python_list() {
 
     ----- stderr -----
     ");
+}
+
+/// A subset versions of the `uv-python/download-metadata.json` file for `uv python list` tests.
+const PYTHON_DOWNLOADS_JSON: &[u8] = include_bytes!("python-downloads-metadata.json");
+
+#[test]
+#[cfg(unix)] // Windows does not have aarch64 yet, its output is different
+fn python_list_downloads() -> Result<()> {
+    let context: TestContext = TestContext::new("3.11").with_collapsed_whitespace();
+
+    let downloads_json = context.temp_dir.child("python-downloads.json");
+    downloads_json.write_binary(PYTHON_DOWNLOADS_JSON)?;
+
+    let python_list = || {
+        let mut cmd = context.python_list();
+        cmd.arg("--only-downloads")
+            .env(EnvVars::UV_PYTHON_DOWNLOADS, "true")
+            .env(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL, &*downloads_json);
+        cmd
+    };
+
+    // Regex to match the current os, arch and libc
+    let platform = format!(
+        "((?:cpython|pypy)-(?:[^-]+))-{}-{}-{}",
+        Os::from_env(),
+        Arch::from_env(),
+        Libc::from_env()?
+    );
+    let platform_filters = [(platform.as_ref(), "$1-[OS]-[ARCH]-[LIBC]")]
+        .into_iter()
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+
+    // Regex to match current os and libc, but any arch
+    let platform_any_arch = format!(
+        "((?:cpython|pypy)-(?:[^-]+))-{}-([^-]+)-{}",
+        Os::from_env(),
+        Libc::from_env()?
+    );
+    let platform_any_arch_filters = [(platform_any_arch.as_ref(), "$1-[OS]-$2-[LIBC]")]
+        .into_iter()
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+
+    // `--only-downloads` only shows available downloads for the current platform.
+    // FIXME: PyPy versions should be included, see https://github.com/astral-sh/uv/pull/12915
+    uv_snapshot!(platform_filters, python_list(), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.14.0a6-[OS]-[ARCH]-[LIBC] <download available>
+    cpython-3.13.3-[OS]-[ARCH]-[LIBC] <download available>
+    cpython-3.13.3+freethreaded-[OS]-[ARCH]-[LIBC] <download available>
+    cpython-3.12.10-[OS]-[ARCH]-[LIBC] <download available>
+
+    ----- stderr -----
+    "#);
+
+    // `--all-versions` shows all versions for current platform, including old patch versions.
+    uv_snapshot!(platform_filters, python_list().arg("--all-versions"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.14.0a6-[OS]-[ARCH]-[LIBC] <download available>
+    cpython-3.13.3-[OS]-[ARCH]-[LIBC] <download available>
+    cpython-3.13.3+freethreaded-[OS]-[ARCH]-[LIBC] <download available>
+    cpython-3.13.2-[OS]-[ARCH]-[LIBC] <download available>
+    cpython-3.12.10-[OS]-[ARCH]-[LIBC] <download available>
+
+    ----- stderr -----
+    "#);
+
+    // `--all-arches` show all architectures for the current platform, with non-latest patch versions hidden.
+    uv_snapshot!(platform_any_arch_filters, python_list().arg("--all-arches"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.14.0a6-[OS]-x86_64-[LIBC] <download available>
+    cpython-3.14.0a6-[OS]-aarch64-[LIBC] <download available>
+    cpython-3.13.3-[OS]-x86_64-[LIBC] <download available>
+    cpython-3.13.3+freethreaded-[OS]-x86_64-[LIBC] <download available>
+    cpython-3.13.3-[OS]-aarch64-[LIBC] <download available>
+    cpython-3.13.3+freethreaded-[OS]-aarch64-[LIBC] <download available>
+    cpython-3.12.10-[OS]-x86_64-[LIBC] <download available>
+    cpython-3.12.10-[OS]-aarch64-[LIBC] <download available>
+
+    ----- stderr -----
+    "#);
+
+    // --all-versions && --all-arches
+    uv_snapshot!(platform_any_arch_filters, python_list().arg("--all-versions").arg("--all-arches"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.14.0a6-[OS]-x86_64-[LIBC] <download available>
+    cpython-3.14.0a6-[OS]-aarch64-[LIBC] <download available>
+    cpython-3.13.3-[OS]-x86_64-[LIBC] <download available>
+    cpython-3.13.3+freethreaded-[OS]-x86_64-[LIBC] <download available>
+    cpython-3.13.3-[OS]-aarch64-[LIBC] <download available>
+    cpython-3.13.3+freethreaded-[OS]-aarch64-[LIBC] <download available>
+    cpython-3.13.2-[OS]-x86_64-[LIBC] <download available>
+    cpython-3.13.2-[OS]-aarch64-[LIBC] <download available>
+    cpython-3.12.10-[OS]-x86_64-[LIBC] <download available>
+    cpython-3.12.10-[OS]-aarch64-[LIBC] <download available>
+
+    ----- stderr -----
+    "#);
+
+    // `--all-platforms` shows all platforms, its output is independent of the current platform.
+    uv_snapshot!(context.filters(), python_list().arg("--all-platforms"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.14.0a6-windows-x86_64-none <download available>
+    cpython-3.14.0a6-windows-x86-none <download available>
+    cpython-3.14.0a6-macos-x86_64-none <download available>
+    cpython-3.14.0a6-macos-aarch64-none <download available>
+    cpython-3.14.0a6-linux-x86_64-gnu <download available>
+    cpython-3.14.0a6-linux-aarch64-gnu <download available>
+    cpython-3.13.3-windows-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-windows-x86_64-none <download available>
+    cpython-3.13.3-windows-x86-none <download available>
+    cpython-3.13.3+freethreaded-windows-x86-none <download available>
+    cpython-3.13.3-macos-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-macos-x86_64-none <download available>
+    cpython-3.13.3-macos-aarch64-none <download available>
+    cpython-3.13.3+freethreaded-macos-aarch64-none <download available>
+    cpython-3.13.3-linux-x86_64-gnu <download available>
+    cpython-3.13.3+freethreaded-linux-x86_64-gnu <download available>
+    cpython-3.13.3-linux-aarch64-gnu <download available>
+    cpython-3.13.3+freethreaded-linux-aarch64-gnu <download available>
+    cpython-3.12.10-windows-x86_64-none <download available>
+    cpython-3.12.10-windows-x86-none <download available>
+    cpython-3.12.10-macos-x86_64-none <download available>
+    cpython-3.12.10-macos-aarch64-none <download available>
+    cpython-3.12.10-linux-x86_64-gnu <download available>
+    cpython-3.12.10-linux-aarch64-gnu <download available>
+    pypy-3.11.[X]-windows-x86_64-none <download available>
+    pypy-3.11.[X]-macos-x86_64-none <download available>
+    pypy-3.11.[X]-macos-aarch64-none <download available>
+    pypy-3.11.[X]-linux-x86_64-gnu <download available>
+    pypy-3.11.[X]-linux-x86-gnu <download available>
+    pypy-3.11.[X]-linux-aarch64-gnu <download available>
+    pypy-3.10.16-windows-x86_64-none <download available>
+    pypy-3.10.16-macos-x86_64-none <download available>
+    pypy-3.10.16-macos-aarch64-none <download available>
+    pypy-3.10.16-linux-x86_64-gnu <download available>
+    pypy-3.10.16-linux-x86-gnu <download available>
+    pypy-3.10.16-linux-aarch64-gnu <download available>
+
+    ----- stderr -----
+    "#);
+
+    // --all-platforms && --all-versions
+    uv_snapshot!(context.filters(), python_list().arg("--all-platforms").arg("--all-versions"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.14.0a6-windows-x86_64-none <download available>
+    cpython-3.14.0a6-windows-x86-none <download available>
+    cpython-3.14.0a6-macos-x86_64-none <download available>
+    cpython-3.14.0a6-macos-aarch64-none <download available>
+    cpython-3.14.0a6-linux-x86_64-gnu <download available>
+    cpython-3.14.0a6-linux-aarch64-gnu <download available>
+    cpython-3.13.3-windows-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-windows-x86_64-none <download available>
+    cpython-3.13.3-windows-x86-none <download available>
+    cpython-3.13.3+freethreaded-windows-x86-none <download available>
+    cpython-3.13.3-macos-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-macos-x86_64-none <download available>
+    cpython-3.13.3-macos-aarch64-none <download available>
+    cpython-3.13.3+freethreaded-macos-aarch64-none <download available>
+    cpython-3.13.3-linux-x86_64-gnu <download available>
+    cpython-3.13.3+freethreaded-linux-x86_64-gnu <download available>
+    cpython-3.13.3-linux-aarch64-gnu <download available>
+    cpython-3.13.3+freethreaded-linux-aarch64-gnu <download available>
+    cpython-3.13.2-windows-x86_64-none <download available>
+    cpython-3.13.2-windows-x86-none <download available>
+    cpython-3.13.2-macos-x86_64-none <download available>
+    cpython-3.13.2-macos-aarch64-none <download available>
+    cpython-3.13.2-linux-x86_64-gnu <download available>
+    cpython-3.13.2-linux-aarch64-gnu <download available>
+    cpython-3.12.10-windows-x86_64-none <download available>
+    cpython-3.12.10-windows-x86-none <download available>
+    cpython-3.12.10-macos-x86_64-none <download available>
+    cpython-3.12.10-macos-aarch64-none <download available>
+    cpython-3.12.10-linux-x86_64-gnu <download available>
+    cpython-3.12.10-linux-aarch64-gnu <download available>
+    pypy-3.11.[X]-windows-x86_64-none <download available>
+    pypy-3.11.[X]-macos-x86_64-none <download available>
+    pypy-3.11.[X]-macos-aarch64-none <download available>
+    pypy-3.11.[X]-linux-x86_64-gnu <download available>
+    pypy-3.11.[X]-linux-x86-gnu <download available>
+    pypy-3.11.[X]-linux-aarch64-gnu <download available>
+    pypy-3.10.16-windows-x86_64-none <download available>
+    pypy-3.10.16-macos-x86_64-none <download available>
+    pypy-3.10.16-macos-aarch64-none <download available>
+    pypy-3.10.16-linux-x86_64-gnu <download available>
+    pypy-3.10.16-linux-x86-gnu <download available>
+    pypy-3.10.16-linux-aarch64-gnu <download available>
+
+    ----- stderr -----
+    "#);
+
+    // --all-platforms && --all-arches
+    uv_snapshot!(context.filters(), python_list().arg("--all-platforms").arg("--all-arches"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.14.0a6-windows-x86_64-none <download available>
+    cpython-3.14.0a6-windows-x86-none <download available>
+    cpython-3.14.0a6-macos-x86_64-none <download available>
+    cpython-3.14.0a6-macos-aarch64-none <download available>
+    cpython-3.14.0a6-linux-x86_64-gnu <download available>
+    cpython-3.14.0a6-linux-aarch64-gnu <download available>
+    cpython-3.13.3-windows-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-windows-x86_64-none <download available>
+    cpython-3.13.3-windows-x86-none <download available>
+    cpython-3.13.3+freethreaded-windows-x86-none <download available>
+    cpython-3.13.3-macos-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-macos-x86_64-none <download available>
+    cpython-3.13.3-macos-aarch64-none <download available>
+    cpython-3.13.3+freethreaded-macos-aarch64-none <download available>
+    cpython-3.13.3-linux-x86_64-gnu <download available>
+    cpython-3.13.3+freethreaded-linux-x86_64-gnu <download available>
+    cpython-3.13.3-linux-aarch64-gnu <download available>
+    cpython-3.13.3+freethreaded-linux-aarch64-gnu <download available>
+    cpython-3.12.10-windows-x86_64-none <download available>
+    cpython-3.12.10-windows-x86-none <download available>
+    cpython-3.12.10-macos-x86_64-none <download available>
+    cpython-3.12.10-macos-aarch64-none <download available>
+    cpython-3.12.10-linux-x86_64-gnu <download available>
+    cpython-3.12.10-linux-aarch64-gnu <download available>
+    pypy-3.11.[X]-windows-x86_64-none <download available>
+    pypy-3.11.[X]-macos-x86_64-none <download available>
+    pypy-3.11.[X]-macos-aarch64-none <download available>
+    pypy-3.11.[X]-linux-x86_64-gnu <download available>
+    pypy-3.11.[X]-linux-x86-gnu <download available>
+    pypy-3.11.[X]-linux-aarch64-gnu <download available>
+    pypy-3.10.16-windows-x86_64-none <download available>
+    pypy-3.10.16-macos-x86_64-none <download available>
+    pypy-3.10.16-macos-aarch64-none <download available>
+    pypy-3.10.16-linux-x86_64-gnu <download available>
+    pypy-3.10.16-linux-x86-gnu <download available>
+    pypy-3.10.16-linux-aarch64-gnu <download available>
+
+    ----- stderr -----
+    "#);
+
+    // --all-platforms && --all-versions  && --all-arches
+    uv_snapshot!(context.filters(), python_list().arg("--all-platforms").arg("--all-versions").arg("--all-arches"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.14.0a6-windows-x86_64-none <download available>
+    cpython-3.14.0a6-windows-x86-none <download available>
+    cpython-3.14.0a6-macos-x86_64-none <download available>
+    cpython-3.14.0a6-macos-aarch64-none <download available>
+    cpython-3.14.0a6-linux-x86_64-gnu <download available>
+    cpython-3.14.0a6-linux-aarch64-gnu <download available>
+    cpython-3.13.3-windows-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-windows-x86_64-none <download available>
+    cpython-3.13.3-windows-x86-none <download available>
+    cpython-3.13.3+freethreaded-windows-x86-none <download available>
+    cpython-3.13.3-macos-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-macos-x86_64-none <download available>
+    cpython-3.13.3-macos-aarch64-none <download available>
+    cpython-3.13.3+freethreaded-macos-aarch64-none <download available>
+    cpython-3.13.3-linux-x86_64-gnu <download available>
+    cpython-3.13.3+freethreaded-linux-x86_64-gnu <download available>
+    cpython-3.13.3-linux-aarch64-gnu <download available>
+    cpython-3.13.3+freethreaded-linux-aarch64-gnu <download available>
+    cpython-3.13.2-windows-x86_64-none <download available>
+    cpython-3.13.2-windows-x86-none <download available>
+    cpython-3.13.2-macos-x86_64-none <download available>
+    cpython-3.13.2-macos-aarch64-none <download available>
+    cpython-3.13.2-linux-x86_64-gnu <download available>
+    cpython-3.13.2-linux-aarch64-gnu <download available>
+    cpython-3.12.10-windows-x86_64-none <download available>
+    cpython-3.12.10-windows-x86-none <download available>
+    cpython-3.12.10-macos-x86_64-none <download available>
+    cpython-3.12.10-macos-aarch64-none <download available>
+    cpython-3.12.10-linux-x86_64-gnu <download available>
+    cpython-3.12.10-linux-aarch64-gnu <download available>
+    pypy-3.11.[X]-windows-x86_64-none <download available>
+    pypy-3.11.[X]-macos-x86_64-none <download available>
+    pypy-3.11.[X]-macos-aarch64-none <download available>
+    pypy-3.11.[X]-linux-x86_64-gnu <download available>
+    pypy-3.11.[X]-linux-x86-gnu <download available>
+    pypy-3.11.[X]-linux-aarch64-gnu <download available>
+    pypy-3.10.16-windows-x86_64-none <download available>
+    pypy-3.10.16-macos-x86_64-none <download available>
+    pypy-3.10.16-macos-aarch64-none <download available>
+    pypy-3.10.16-linux-x86_64-gnu <download available>
+    pypy-3.10.16-linux-x86-gnu <download available>
+    pypy-3.10.16-linux-aarch64-gnu <download available>
+
+    ----- stderr -----
+    "#);
+
+    // `--show-urls` also shows the download URLs
+    uv_snapshot!(context.filters(), python_list().arg("cpython-3.13.3-linux-aarch64-gnu").arg("--show-urls"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.13.3-linux-aarch64-gnu https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.13.3%2B20250409-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz
+
+    ----- stderr -----
+    "#);
+
+    // `--output-format=json` outputs in JSON format
+    uv_snapshot!(context.filters(), python_list().arg("cpython-3.13.3-linux-aarch64-gnu").arg("--output-format=json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [{"key":"cpython-3.13.3-linux-aarch64-gnu","version":"3.13.3","version_parts":{"major":3,"minor":13,"patch":3},"path":null,"symlink":null,"url":"https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.13.3%2B20250409-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz","os":"linux","variant":"default","implementation":"cpython","arch":"aarch64","libc":"gnu"}]
+
+    ----- stderr -----
+    "#);
+
+    Ok(())
 }
 
 #[test]
