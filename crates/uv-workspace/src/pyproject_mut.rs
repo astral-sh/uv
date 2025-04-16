@@ -518,7 +518,7 @@ impl PyProjectTomlMut {
         Ok(added)
     }
 
-    /// Set the minimum version for an existing dependency in `project.dependencies`.
+    /// Set the minimum version for an existing dependency.
     pub fn set_dependency_minimum_version(
         &mut self,
         dependency_type: &DependencyType,
