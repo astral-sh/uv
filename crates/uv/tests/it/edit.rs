@@ -3063,9 +3063,10 @@ fn add_non_normalized_source() -> Result<()> {
 }
 
 /// Test updating an existing Git reference with branch/tag/rev options without respecifying URL
+/// in project
 #[test]
 #[cfg(feature = "git")]
-fn add_update_git_reference() -> Result<()> {
+fn add_update_git_reference_project() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -3129,6 +3130,94 @@ fn add_update_git_reference() -> Result<()> {
      - uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@2005223fcad0e2c06daf2e14b93b790604868e1e)
     ");
+
+    Ok(())
+}
+
+/// Test updating an existing Git reference with branch/tag/rev options without respecifying URL
+/// in script
+#[test]
+#[cfg(feature = "git")]
+fn add_update_git_reference_script() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {
+        r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [ ]
+        # ///
+
+        import time
+        time.sleep(5)
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.add().arg("--script=script.py").arg("https://github.com/astral-test/uv-public-pypackage.git"),
+        @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Updated `script.py`
+        "###
+    );
+
+    let script_content = context.read("script.py");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r###"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #  "uv-public-pypackage",
+        # ]
+        #
+        # [tool.uv.sources]
+        # uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage.git" }
+        # ///
+
+        import time
+        time.sleep(5)
+        "###
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.add().arg("--script=script.py").arg("uv-public-pypackage").arg("--branch=test-branch"),
+        @r###"
+        success: true
+        exit_code: 0
+        ----- stdout -----
+
+        ----- stderr -----
+        Updated `script.py`
+        "###
+    );
+
+    let script_content = context.read("script.py");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r###"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #  "uv-public-pypackage",
+        # ]
+        #
+        # [tool.uv.sources]
+        # uv-public-pypackage = { git = "https://github.com/astral-test/uv-public-pypackage.git", branch = "test-branch" }
+        # ///
+
+        import time
+        time.sleep(5)
+        "###
+        );
+    });
 
     Ok(())
 }
