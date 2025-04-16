@@ -124,6 +124,12 @@ pub enum ResolveError {
         #[source]
         name_error: InvalidNameError,
     },
+    #[error("Expected {request} for {expected}, got {request} for {actual}")]
+    MismatchedPackageName {
+        request: &'static str,
+        expected: PackageName,
+        actual: PackageName,
+    },
 }
 
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
