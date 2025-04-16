@@ -4643,15 +4643,15 @@ pub struct PythonListArgs {
     #[arg(long, alias = "all_architectures")]
     pub all_arches: bool,
 
-    /// Only show installed Python versions, exclude available downloads.
+    /// Only show installed Python versions.
     ///
-    /// By default, available downloads for the current platform are shown.
+    /// By default, installed distributions and available downloads for the current platform are shown.
     #[arg(long, conflicts_with("only_downloads"))]
     pub only_installed: bool,
 
-    /// Only show Python downloads, exclude installed distributions.
+    /// Only show available Python downloads.
     ///
-    /// By default, available downloads for the current platform are shown.
+    /// By default, installed distributions and available downloads for the current platform are shown.
     #[arg(long, conflicts_with("only_installed"))]
     pub only_downloads: bool,
 

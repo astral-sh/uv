@@ -4766,13 +4766,13 @@ uv python list [OPTIONS] [REQUEST]
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
-</dd><dt id="uv-python-list--only-downloads"><a href="#uv-python-list--only-downloads"><code>--only-downloads</code></a></dt><dd><p>Only show Python downloads, exclude installed distributions.</p>
+</dd><dt id="uv-python-list--only-downloads"><a href="#uv-python-list--only-downloads"><code>--only-downloads</code></a></dt><dd><p>Only show available Python downloads.</p>
 
-<p>By default, available downloads for the current platform are shown.</p>
+<p>By default, installed distributions and available downloads for the current platform are shown.</p>
 
-</dd><dt id="uv-python-list--only-installed"><a href="#uv-python-list--only-installed"><code>--only-installed</code></a></dt><dd><p>Only show installed Python versions, exclude available downloads.</p>
+</dd><dt id="uv-python-list--only-installed"><a href="#uv-python-list--only-installed"><code>--only-installed</code></a></dt><dd><p>Only show installed Python versions.</p>
 
-<p>By default, available downloads for the current platform are shown.</p>
+<p>By default, installed distributions and available downloads for the current platform are shown.</p>
 
 </dd><dt id="uv-python-list--output-format"><a href="#uv-python-list--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>Select the output format</p>
 
