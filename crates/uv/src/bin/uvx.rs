@@ -4,6 +4,7 @@ use std::{
     ffi::OsString,
     process::{Command, ExitCode, ExitStatus},
 };
+use uv_warnings::warn_user;
 
 /// Spawns a command exec style.
 fn exec_spawn(cmd: &mut Command) -> std::io::Result<Infallible> {
@@ -57,6 +58,11 @@ fn get_uv_path(current_exe_parent: &Path, uvx_suffix: &str) -> std::io::Result<P
     if uv_with_suffix.exists() {
         Ok(uv_with_suffix)
     } else if uv.exists() {
+        warn_user!(
+            "Unable to find {}, defaulting to {}",
+            uv_with_suffix.to_str().unwrap_or("[invalid path]"),
+            uv.to_str().unwrap_or("[invalid path]")
+        );
         Ok(uv)
     } else {
         Err(std::io::Error::new(
@@ -71,6 +77,8 @@ fn get_uv_path(current_exe_parent: &Path, uvx_suffix: &str) -> std::io::Result<P
 }
 
 fn run() -> std::io::Result<ExitStatus> {
+    uv_warnings::enable();
+
     let current_exe = std::env::current_exe()?;
     let Some(bin) = current_exe.parent() else {
         return Err(std::io::Error::new(
@@ -78,8 +86,13 @@ fn run() -> std::io::Result<ExitStatus> {
             "Could not determine the location of the `uvx` binary",
         ));
     };
-    let uvx_suffix = get_uvx_suffix(&current_exe)?;
-    let uv = get_uv_path(bin, uvx_suffix)?;
+    let uv = match get_uvx_suffix(&current_exe) {
+        Ok(uvx_suffix) => get_uv_path(bin, uvx_suffix)?,
+        Err(err) => {
+            warn_user!("{}", err);
+            get_uv_path(bin, "")?
+        }
+    };
     let args = ["tool", "uvx"]
         .iter()
         .map(OsString::from)
