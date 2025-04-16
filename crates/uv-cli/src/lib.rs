@@ -5769,6 +5769,10 @@ pub struct PublishArgs {
 
     #[arg(long, hide = true)]
     pub skip_existing: bool,
+
+    /// Force the publication for existing files if they exists but have different hashes.
+    #[arg(long)]
+    pub force: bool,
 }
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and
