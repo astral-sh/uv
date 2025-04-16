@@ -11139,7 +11139,7 @@ async fn bogus_redirect() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected distribution for sniffio, got distribution for anyio
+    error: The index returned metadata for the wrong package: Expected distribution for sniffio, got distribution for anyio
     "
     );
 
