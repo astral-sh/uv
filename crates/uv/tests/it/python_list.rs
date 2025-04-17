@@ -184,7 +184,6 @@ fn python_list_downloads() -> Result<()> {
         .collect::<Vec<_>>();
 
     // `--only-downloads` only shows available downloads for the current platform.
-    // FIXME: PyPy versions should be included, see https://github.com/astral-sh/uv/pull/12915
     uv_snapshot!(platform_filters, python_list(), @r#"
     success: true
     exit_code: 0
@@ -193,6 +192,8 @@ fn python_list_downloads() -> Result<()> {
     cpython-3.13.3-[OS]-[ARCH]-[LIBC] <download available>
     cpython-3.13.3+freethreaded-[OS]-[ARCH]-[LIBC] <download available>
     cpython-3.12.10-[OS]-[ARCH]-[LIBC] <download available>
+    pypy-3.11.[X]-[OS]-[ARCH]-[LIBC] <download available>
+    pypy-3.10.16-[OS]-[ARCH]-[LIBC] <download available>
 
     ----- stderr -----
     "#);
@@ -207,6 +208,8 @@ fn python_list_downloads() -> Result<()> {
     cpython-3.13.3+freethreaded-[OS]-[ARCH]-[LIBC] <download available>
     cpython-3.13.2-[OS]-[ARCH]-[LIBC] <download available>
     cpython-3.12.10-[OS]-[ARCH]-[LIBC] <download available>
+    pypy-3.11.[X]-[OS]-[ARCH]-[LIBC] <download available>
+    pypy-3.10.16-[OS]-[ARCH]-[LIBC] <download available>
 
     ----- stderr -----
     "#);
@@ -224,6 +227,10 @@ fn python_list_downloads() -> Result<()> {
     cpython-3.13.3+freethreaded-[OS]-aarch64-[LIBC] <download available>
     cpython-3.12.10-[OS]-x86_64-[LIBC] <download available>
     cpython-3.12.10-[OS]-aarch64-[LIBC] <download available>
+    pypy-3.11.[X]-[OS]-x86_64-[LIBC] <download available>
+    pypy-3.11.[X]-[OS]-aarch64-[LIBC] <download available>
+    pypy-3.10.16-[OS]-x86_64-[LIBC] <download available>
+    pypy-3.10.16-[OS]-aarch64-[LIBC] <download available>
 
     ----- stderr -----
     "#);
@@ -243,6 +250,10 @@ fn python_list_downloads() -> Result<()> {
     cpython-3.13.2-[OS]-aarch64-[LIBC] <download available>
     cpython-3.12.10-[OS]-x86_64-[LIBC] <download available>
     cpython-3.12.10-[OS]-aarch64-[LIBC] <download available>
+    pypy-3.11.[X]-[OS]-x86_64-[LIBC] <download available>
+    pypy-3.11.[X]-[OS]-aarch64-[LIBC] <download available>
+    pypy-3.10.16-[OS]-x86_64-[LIBC] <download available>
+    pypy-3.10.16-[OS]-aarch64-[LIBC] <download available>
 
     ----- stderr -----
     "#);
@@ -280,13 +291,11 @@ fn python_list_downloads() -> Result<()> {
     pypy-3.11.[X]-macos-x86_64-none <download available>
     pypy-3.11.[X]-macos-aarch64-none <download available>
     pypy-3.11.[X]-linux-x86_64-gnu <download available>
-    pypy-3.11.[X]-linux-x86-gnu <download available>
     pypy-3.11.[X]-linux-aarch64-gnu <download available>
     pypy-3.10.16-windows-x86_64-none <download available>
     pypy-3.10.16-macos-x86_64-none <download available>
     pypy-3.10.16-macos-aarch64-none <download available>
     pypy-3.10.16-linux-x86_64-gnu <download available>
-    pypy-3.10.16-linux-x86-gnu <download available>
     pypy-3.10.16-linux-aarch64-gnu <download available>
 
     ----- stderr -----
@@ -331,13 +340,11 @@ fn python_list_downloads() -> Result<()> {
     pypy-3.11.[X]-macos-x86_64-none <download available>
     pypy-3.11.[X]-macos-aarch64-none <download available>
     pypy-3.11.[X]-linux-x86_64-gnu <download available>
-    pypy-3.11.[X]-linux-x86-gnu <download available>
     pypy-3.11.[X]-linux-aarch64-gnu <download available>
     pypy-3.10.16-windows-x86_64-none <download available>
     pypy-3.10.16-macos-x86_64-none <download available>
     pypy-3.10.16-macos-aarch64-none <download available>
     pypy-3.10.16-linux-x86_64-gnu <download available>
-    pypy-3.10.16-linux-x86-gnu <download available>
     pypy-3.10.16-linux-aarch64-gnu <download available>
 
     ----- stderr -----
@@ -376,13 +383,11 @@ fn python_list_downloads() -> Result<()> {
     pypy-3.11.[X]-macos-x86_64-none <download available>
     pypy-3.11.[X]-macos-aarch64-none <download available>
     pypy-3.11.[X]-linux-x86_64-gnu <download available>
-    pypy-3.11.[X]-linux-x86-gnu <download available>
     pypy-3.11.[X]-linux-aarch64-gnu <download available>
     pypy-3.10.16-windows-x86_64-none <download available>
     pypy-3.10.16-macos-x86_64-none <download available>
     pypy-3.10.16-macos-aarch64-none <download available>
     pypy-3.10.16-linux-x86_64-gnu <download available>
-    pypy-3.10.16-linux-x86-gnu <download available>
     pypy-3.10.16-linux-aarch64-gnu <download available>
 
     ----- stderr -----
@@ -427,13 +432,11 @@ fn python_list_downloads() -> Result<()> {
     pypy-3.11.[X]-macos-x86_64-none <download available>
     pypy-3.11.[X]-macos-aarch64-none <download available>
     pypy-3.11.[X]-linux-x86_64-gnu <download available>
-    pypy-3.11.[X]-linux-x86-gnu <download available>
     pypy-3.11.[X]-linux-aarch64-gnu <download available>
     pypy-3.10.16-windows-x86_64-none <download available>
     pypy-3.10.16-macos-x86_64-none <download available>
     pypy-3.10.16-macos-aarch64-none <download available>
     pypy-3.10.16-linux-x86_64-gnu <download available>
-    pypy-3.10.16-linux-x86-gnu <download available>
     pypy-3.10.16-linux-aarch64-gnu <download available>
 
     ----- stderr -----

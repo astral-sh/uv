@@ -527,22 +527,6 @@
     "sha256": "13207dbf81ce24e96da760b1b863627b77bb20b1fb4c95191e02a0b72383df74",
     "variant": null
   },
-  "pypy-3.11.11-linux-i686-gnu": {
-    "name": "pypy",
-    "arch": {
-      "family": "i686",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 11,
-    "patch": 11,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.11-v7.3.19-linux32.tar.bz2",
-    "sha256": "5c6cdafd0a0abd14ca59926ed1b6aeb13b228c18b4b46de655aae48734c731ad",
-    "variant": null
-  },
   "pypy-3.11.11-linux-x86_64-gnu": {
     "name": "pypy",
     "arch": {
@@ -621,22 +605,6 @@
     "prerelease": "",
     "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-aarch64.tar.bz2",
     "sha256": "af27a589178f11198e2244ab65ca510630ba97c131d7ccc4021eb5bc58de7f57",
-    "variant": null
-  },
-  "pypy-3.10.16-linux-i686-gnu": {
-    "name": "pypy",
-    "arch": {
-      "family": "i686",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 10,
-    "patch": 16,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.10-v7.3.19-linux32.tar.bz2",
-    "sha256": "e63a4fcad2641ee541e852918befb513abf04ce7070f743a50778cae9f9da80e",
     "variant": null
   },
   "pypy-3.10.16-linux-x86_64-gnu": {
