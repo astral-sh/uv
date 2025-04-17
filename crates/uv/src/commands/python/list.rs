@@ -78,8 +78,6 @@ pub(crate) async fn list(
             PythonListKinds::Installed => None,
             PythonListKinds::Downloads => Some(if all_platforms {
                 base_download_request
-            } else if all_arches {
-                base_download_request.fill_platform()?.with_any_arch()
             } else {
                 base_download_request.fill_platform()?
             }),
