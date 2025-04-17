@@ -219,11 +219,17 @@ fn python_list_downloads() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+    cpython-3.14.0a6-[OS]-x86_64-[LIBC] <download available>
     cpython-3.14.0a6-[OS]-aarch64-[LIBC] <download available>
+    cpython-3.13.3-[OS]-x86_64-[LIBC] <download available>
+    cpython-3.13.3+freethreaded-[OS]-x86_64-[LIBC] <download available>
     cpython-3.13.3-[OS]-aarch64-[LIBC] <download available>
     cpython-3.13.3+freethreaded-[OS]-aarch64-[LIBC] <download available>
+    cpython-3.12.10-[OS]-x86_64-[LIBC] <download available>
     cpython-3.12.10-[OS]-aarch64-[LIBC] <download available>
+    pypy-3.11.[X]-[OS]-x86_64-[LIBC] <download available>
     pypy-3.11.[X]-[OS]-aarch64-[LIBC] <download available>
+    pypy-3.10.16-[OS]-x86_64-[LIBC] <download available>
     pypy-3.10.16-[OS]-aarch64-[LIBC] <download available>
 
     ----- stderr -----
@@ -234,12 +240,19 @@ fn python_list_downloads() -> Result<()> {
     success: true
     exit_code: 0
     ----- stdout -----
+    cpython-3.14.0a6-[OS]-x86_64-[LIBC] <download available>
     cpython-3.14.0a6-[OS]-aarch64-[LIBC] <download available>
+    cpython-3.13.3-[OS]-x86_64-[LIBC] <download available>
+    cpython-3.13.3+freethreaded-[OS]-x86_64-[LIBC] <download available>
     cpython-3.13.3-[OS]-aarch64-[LIBC] <download available>
     cpython-3.13.3+freethreaded-[OS]-aarch64-[LIBC] <download available>
+    cpython-3.13.2-[OS]-x86_64-[LIBC] <download available>
     cpython-3.13.2-[OS]-aarch64-[LIBC] <download available>
+    cpython-3.12.10-[OS]-x86_64-[LIBC] <download available>
     cpython-3.12.10-[OS]-aarch64-[LIBC] <download available>
+    pypy-3.11.[X]-[OS]-x86_64-[LIBC] <download available>
     pypy-3.11.[X]-[OS]-aarch64-[LIBC] <download available>
+    pypy-3.10.16-[OS]-x86_64-[LIBC] <download available>
     pypy-3.10.16-[OS]-aarch64-[LIBC] <download available>
 
     ----- stderr -----
