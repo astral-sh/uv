@@ -495,17 +495,20 @@ impl RedirectClientWithMiddleware<'_> {
     /// redirect request through the entire middleware pipeline again.
     pub async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
         let mut request = req;
+        let mut redirects = 0;
         let max_redirects = 10;
 
-        for redirects in 0..=max_redirects {
+        loop {
             let result = self
                 .0
                 .execute(request.try_clone().expect("HTTP request must be cloneable"))
                 .await;
-            if result.is_err() || redirects == max_redirects {
+            if redirects == max_redirects {
                 return result;
             }
-            let response = result.unwrap();
+            let Ok(response) = result else {
+                return result;
+            };
 
             // Handle redirect if we receive a 302
             if response.status() == StatusCode::FOUND {
@@ -526,12 +529,12 @@ impl RedirectClientWithMiddleware<'_> {
                 })?;
                 debug!("Received 302 redirect to {redirect_url}");
                 *request.url_mut() = redirect_url;
+                redirects += 1;
                 continue;
             }
 
             return Ok(response);
         }
-        unreachable!("Loop exits when max redirects is reached");
     }
 }
 
