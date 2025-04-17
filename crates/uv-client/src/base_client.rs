@@ -7,10 +7,9 @@ use std::time::Duration;
 use std::{env, iter};
 
 use anyhow::anyhow;
-use http::StatusCode;
+use http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use itertools::Itertools;
-use reqwest::Request;
-use reqwest::{Client, ClientBuilder, Proxy, Response};
+use reqwest::{multipart, Client, ClientBuilder, IntoUrl, Proxy, Request, Response};
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
@@ -269,8 +268,14 @@ impl<'a> BaseClientBuilder<'a> {
         );
 
         // Wrap in any relevant middleware and handle connectivity.
-        let client = self.apply_middleware(raw_client.clone());
-        let dangerous_client = self.apply_middleware(raw_dangerous_client.clone());
+        let client = RedirectClientWithMiddleware {
+            client: self.apply_middleware(raw_client.clone()),
+            redirect_policy: self.redirect_policy,
+        };
+        let dangerous_client = RedirectClientWithMiddleware {
+            client: self.apply_middleware(raw_dangerous_client.clone()),
+            redirect_policy: self.redirect_policy,
+        };
 
         BaseClient {
             connectivity: self.connectivity,
@@ -287,8 +292,14 @@ impl<'a> BaseClientBuilder<'a> {
     /// Share the underlying client between two different middleware configurations.
     pub fn wrap_existing(&self, existing: &BaseClient) -> BaseClient {
         // Wrap in any relevant middleware and handle connectivity.
-        let client = self.apply_middleware(existing.raw_client.clone());
-        let dangerous_client = self.apply_middleware(existing.raw_dangerous_client.clone());
+        let client = RedirectClientWithMiddleware {
+            client: self.apply_middleware(existing.raw_client.clone()),
+            redirect_policy: self.redirect_policy,
+        };
+        let dangerous_client = RedirectClientWithMiddleware {
+            client: self.apply_middleware(existing.raw_dangerous_client.clone()),
+            redirect_policy: self.redirect_policy,
+        };
 
         BaseClient {
             connectivity: self.connectivity,
@@ -414,9 +425,9 @@ impl<'a> BaseClientBuilder<'a> {
 #[derive(Debug, Clone)]
 pub struct BaseClient {
     /// The underlying HTTP client that enforces valid certificates.
-    client: ClientWithMiddleware,
+    client: RedirectClientWithMiddleware,
     /// The underlying HTTP client that accepts invalid certificates.
-    dangerous_client: ClientWithMiddleware,
+    dangerous_client: RedirectClientWithMiddleware,
     /// The HTTP client without middleware.
     raw_client: Client,
     /// The HTTP client that accepts invalid certificates without middleware.
@@ -441,7 +452,7 @@ enum Security {
 
 impl BaseClient {
     /// Selects the appropriate client based on the host's trustworthiness.
-    pub fn for_host(&self, url: &Url) -> &ClientWithMiddleware {
+    pub fn for_host(&self, url: &Url) -> &RedirectClientWithMiddleware {
         if self.disable_ssl(url) {
             &self.dangerous_client
         } else {
@@ -449,13 +460,9 @@ impl BaseClient {
         }
     }
 
-    /// Executes a request. If a 302 response is encountered, tries the request again through
-    /// the entire middleware pipeline with the redirect URL from the 302.
-    pub async fn execute_with_redirect_handling(
-        &self,
-        req: Request,
-    ) -> reqwest_middleware::Result<Response> {
-        let client = RedirectClientWithMiddleware(self.for_host(req.url()));
+    /// Executes a request, applying redirect policy.
+    pub async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
+        let client = self.for_host(req.url());
         client.execute(req).await
     }
 
@@ -484,23 +491,53 @@ impl BaseClient {
 
 /// Wrapper around [`ClientWithMiddleware`] that manages redirects.
 #[derive(Debug, Clone)]
-pub struct RedirectClientWithMiddleware<'a>(&'a ClientWithMiddleware);
+pub struct RedirectClientWithMiddleware {
+    client: ClientWithMiddleware,
+    redirect_policy: RedirectPolicy,
+}
 
-impl RedirectClientWithMiddleware<'_> {
+impl RedirectClientWithMiddleware {
+    /// Convenience method to make a `GET` request to a URL.
+    pub fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        RequestBuilder::new(self.client.get(url), self)
+    }
+
+    /// Convenience method to make a `POST` request to a URL.
+    pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        RequestBuilder::new(self.client.post(url), self)
+    }
+
+    /// Convenience method to make a `HEAD` request to a URL.
+    pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder {
+        RequestBuilder::new(self.client.head(url), self)
+    }
+
+    /// Executes a request, applying the redirect policy.
+    pub async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
+        match self.redirect_policy {
+            RedirectPolicy::BypassMiddleware => self.client.execute(req).await,
+            RedirectPolicy::RetriggerMiddleware => self.execute_with_redirect_handling(req).await,
+        }
+    }
+
     /// Executes a request. If the response is a 302 redirect, executes the
     /// request again with the redirect location URL (up to a maximum number
     /// of redirects).
     ///
     /// Unlike the built-in reqwest redirect policies, this sends the
     /// redirect request through the entire middleware pipeline again.
-    pub async fn execute(&self, req: Request) -> reqwest_middleware::Result<Response> {
+    async fn execute_with_redirect_handling(
+        &self,
+        req: Request,
+    ) -> reqwest_middleware::Result<Response> {
         let mut request = req;
         let mut redirects = 0;
+        // This is the default used by reqwest.
         let max_redirects = 10;
 
         loop {
             let result = self
-                .0
+                .client
                 .execute(request.try_clone().expect("HTTP request must be cloneable"))
                 .await;
             if redirects == max_redirects {
@@ -510,8 +547,14 @@ impl RedirectClientWithMiddleware<'_> {
                 return result;
             };
 
-            // Handle redirect if we receive a 302
-            if response.status() == StatusCode::FOUND {
+            // Handle redirect if we receive a 301, 302, 307, or 308.
+            if matches!(
+                response.status(),
+                StatusCode::MOVED_PERMANENTLY
+                    | StatusCode::FOUND
+                    | StatusCode::TEMPORARY_REDIRECT
+                    | StatusCode::PERMANENT_REDIRECT
+            ) {
                 let location_str = response
                     .headers()
                     .get("location")
@@ -535,6 +578,79 @@ impl RedirectClientWithMiddleware<'_> {
 
             return Ok(response);
         }
+    }
+
+    pub fn raw_client(&self) -> &ClientWithMiddleware {
+        &self.client
+    }
+}
+
+impl From<RedirectClientWithMiddleware> for ClientWithMiddleware {
+    fn from(item: RedirectClientWithMiddleware) -> ClientWithMiddleware {
+        item.client
+    }
+}
+
+/// A builder to construct the properties of a `Request`.
+///
+/// This wraps [`reqwest_middleware::RequestBuilder`] to ensure that the [`BaseClient`]
+/// redirect policy is respected if `send()` is called.
+#[derive(Debug)]
+#[must_use]
+pub struct RequestBuilder<'a> {
+    builder: reqwest_middleware::RequestBuilder,
+    client: &'a RedirectClientWithMiddleware,
+}
+
+impl<'a> RequestBuilder<'a> {
+    pub fn new(
+        builder: reqwest_middleware::RequestBuilder,
+        client: &'a RedirectClientWithMiddleware,
+    ) -> Self {
+        Self { builder, client }
+    }
+
+    /// Add a `Header` to this Request.
+    pub fn header<K, V>(mut self, key: K, value: V) -> Self
+    where
+        HeaderName: TryFrom<K>,
+        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
+        HeaderValue: TryFrom<V>,
+        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
+    {
+        self.builder = self.builder.header(key, value);
+        self
+    }
+
+    /// Add a set of Headers to the existing ones on this Request.
+    ///
+    /// The headers will be merged in to any already set.
+    pub fn headers(mut self, headers: HeaderMap) -> Self {
+        self.builder = self.builder.headers(headers);
+        self
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn version(mut self, version: reqwest::Version) -> Self {
+        self.builder = self.builder.version(version);
+        self
+    }
+
+    #[cfg_attr(docsrs, doc(cfg(feature = "multipart")))]
+    pub fn multipart(mut self, multipart: multipart::Form) -> Self {
+        self.builder = self.builder.multipart(multipart);
+        self
+    }
+
+    /// Build a `Request`.
+    pub fn build(self) -> reqwest::Result<Request> {
+        self.builder.build()
+    }
+
+    /// Constructs the Request and sends it to the target URL, returning a
+    /// future Response.
+    pub async fn send(self) -> reqwest_middleware::Result<Response> {
+        self.client.execute(self.build()?).await
     }
 }
 

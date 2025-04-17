@@ -10,7 +10,6 @@ use futures::{FutureExt, StreamExt, TryStreamExt};
 use http::HeaderMap;
 use itertools::Either;
 use reqwest::{Proxy, Response, StatusCode};
-use reqwest_middleware::ClientWithMiddleware;
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
 use tracing::{info_span, instrument, trace, warn, Instrument};
@@ -42,7 +41,7 @@ use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
 use crate::{
     BaseClient, CachedClient, CachedClientError, Error, ErrorKind, FlatIndexClient,
-    FlatIndexEntries,
+    FlatIndexEntries, RedirectClientWithMiddleware,
 };
 
 /// A builder for an [`RegistryClient`].
@@ -257,7 +256,7 @@ impl RegistryClient {
     }
 
     /// Return the [`BaseClient`] used by this client.
-    pub fn uncached_client(&self, url: &Url) -> &ClientWithMiddleware {
+    pub fn uncached_client(&self, url: &Url) -> &RedirectClientWithMiddleware {
         self.client.uncached().for_host(url)
     }
 
@@ -1226,14 +1225,11 @@ mod tests {
         let registry_client = RegistryClientBuilder::new(cache).build();
         let client = registry_client.cached_client().uncached();
 
-        let request = client
-            .for_host(&redirect_url)
-            .get(redirect_server.uri())
-            .build()?;
-
         assert_eq!(
             client
-                .execute_with_redirect_handling(request)
+                .for_host(&redirect_url)
+                .get(redirect_server.uri())
+                .send()
                 .await?
                 .status(),
             401,
@@ -1241,16 +1237,14 @@ mod tests {
         );
 
         let mut url = redirect_url.clone();
-        url.set_username(username).unwrap();
-        url.set_password(Some(password)).unwrap();
-        let request = client
-            .for_host(&redirect_url)
-            .get(format!("{url}"))
-            .build()?;
+        let _ = url.set_username(username);
+        let _ = url.set_password(Some(password));
 
         assert_eq!(
             client
-                .execute_with_redirect_handling(request)
+                .for_host(&redirect_url)
+                .get(format!("{url}"))
+                .send()
                 .await?
                 .status(),
             200,

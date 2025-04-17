@@ -1582,7 +1582,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     client
                         .unmanaged
                         .uncached_client(resource.git.repository())
-                        .clone(),
+                        .raw_client(),
                 )
                 .await
             {
@@ -1863,7 +1863,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .github_fast_path(
                 git,
-                client.unmanaged.uncached_client(git.repository()).clone(),
+                client
+                    .unmanaged
+                    .uncached_client(git.repository())
+                    .raw_client(),
             )
             .await?
             .is_some()

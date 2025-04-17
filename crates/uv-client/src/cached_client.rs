@@ -510,7 +510,7 @@ impl CachedClient {
         debug!("Sending revalidation request for: {url}");
         let response = self
             .0
-            .execute_with_redirect_handling(req)
+            .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
             .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?
@@ -550,7 +550,7 @@ impl CachedClient {
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let response = self
             .0
-            .execute_with_redirect_handling(req)
+            .execute(req)
             .await
             .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?
             .error_for_status()
