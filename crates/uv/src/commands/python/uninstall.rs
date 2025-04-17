@@ -14,7 +14,8 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::{python_executable_dir, ManagedPythonInstallations};
-use uv_python::{PythonInstallationKey, PythonRequest};
+use uv_python::{PyVenvConfiguration, PythonInstallationKey, PythonRequest};
+use uv_tool::InstalledTools;
 
 use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
@@ -26,6 +27,7 @@ pub(crate) async fn uninstall(
     install_dir: Option<PathBuf>,
     targets: Vec<String>,
     all: bool,
+    force: bool,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
@@ -34,7 +36,7 @@ pub(crate) async fn uninstall(
     let _lock = installations.lock().await?;
 
     // Perform the uninstallation.
-    do_uninstall(&installations, targets, all, printer, preview).await?;
+    do_uninstall(&installations, targets, all, force, printer, preview).await?;
 
     // Clean up any empty directories.
     if uv_fs::directories(installations.root())?.all(|path| uv_fs::is_temporary(&path)) {
@@ -62,6 +64,7 @@ async fn do_uninstall(
     installations: &ManagedPythonInstallations,
     targets: Vec<String>,
     all: bool,
+    force: bool,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
@@ -138,6 +141,55 @@ async fn do_uninstall(
             "No Python installations found matching the requests"
         )?;
         return Ok(ExitStatus::Failure);
+    }
+
+    // Check if the user is trying to uninstall a version that is in use by a tool.
+    if !force {
+        let installed_tools = InstalledTools::from_settings()?;
+        let in_use_tools = installed_tools
+            .tools()?
+            .into_iter()
+            .filter_map(|(tool, _)| {
+                let pyvenv_cfg = installed_tools.tool_dir(&tool).join("pyvenv.cfg");
+                let cfg = PyVenvConfiguration::parse(pyvenv_cfg).ok()?;
+                for installed in &matching_installations {
+                    if cfg.home().starts_with(installed.path()) {
+                        return Some((installed, tool));
+                    }
+                }
+                None
+            })
+            .fold(
+                FxHashMap::<_, Vec<_>>::default(),
+                |mut map, (installation, tool)| {
+                    map.entry(installation).or_default().push(tool);
+                    map
+                },
+            );
+
+        if !in_use_tools.is_empty() {
+            writeln!(
+                printer.stderr(),
+                "Following Python installations are in use by tools:"
+            )?;
+            for (installation, tools) in &in_use_tools {
+                writeln!(printer.stderr(), " {}", installation.key().bold())?;
+                for tool in tools {
+                    writeln!(printer.stderr(), "   - {tool}")?;
+                }
+            }
+            writeln!(
+                printer.stderr(),
+                "Use `{}` to force uninstall {}",
+                "uv python uninstall --force".green(),
+                if in_use_tools.len() == 1 {
+                    "it"
+                } else {
+                    "them"
+                }
+            )?;
+            return Ok(ExitStatus::Failure);
+        }
     }
 
     // Find and remove all relevant Python executables
