@@ -8,6 +8,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use url::Url;
+use uv_auth::obfuscate_url_credentials;
 
 use crate::commands::human_readable_bytes;
 use crate::printer::Printer;
@@ -289,6 +290,7 @@ impl ProgressReporter {
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+        let url = obfuscate_url_credentials(url.clone());
         let ProgressMode::Multi {
             multi_progress,
             state,
