@@ -22,7 +22,7 @@ requires = ["uv_build>=0.6.13,<0.7"]
 build-backend = "uv_build"
 ```
 
-You can also use `uv init` to generate a new project that uses the uv build backend:
+You can also create a new project that uses the uv build backend with `uv init`:
 
 ```shell
 uv init --build-backend uv
