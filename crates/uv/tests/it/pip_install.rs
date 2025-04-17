@@ -549,8 +549,8 @@ async fn install_remote_requirements_txt() -> Result<()> {
 
     context.assert_command("import flask").success();
 
-    // Update the mock server to serve a new requirements.txt
     let requirements_txt = "iniconfig";
+    // Update the mock server to serve a new requirements.txt
     let server_url = start_requirements_server(username, password, requirements_txt).await;
     let mut requirements_url = Url::parse(&format!("{}/requirements.txt", &server_url))?;
     let _ = requirements_url.set_username(username);
