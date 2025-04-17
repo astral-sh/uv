@@ -521,18 +521,22 @@ impl PyProjectTomlMut {
     /// Set the minimum version for an existing dependency in `project.dependencies`.
     pub fn set_dependency_minimum_version(
         &mut self,
+        dependency_type: &DependencyType,
         index: usize,
         version: Version,
     ) -> Result<(), Error> {
-        // Get or create `project.dependencies`.
-        let dependencies = self
-            .project()?
-            .entry("dependencies")
-            .or_insert(Item::Value(Value::Array(Array::new())))
-            .as_array_mut()
-            .ok_or(Error::MalformedDependencies)?;
+        let group = match dependency_type {
+            DependencyType::Production => self.set_project_dependency_minimum_version()?,
+            DependencyType::Dev => self.set_dev_dependency_minimum_version()?,
+            DependencyType::Optional(ref extra) => {
+                self.set_optional_dependency_minimum_version(extra)?
+            }
+            DependencyType::Group(ref group) => {
+                self.set_dependency_group_requirement_minimum_version(group)?
+            }
+        };
 
-        let Some(req) = dependencies.get(index) else {
+        let Some(req) = group.get(index) else {
             return Err(Error::MissingDependency(index));
         };
 
@@ -543,17 +547,26 @@ impl PyProjectTomlMut {
         req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
             VersionSpecifier::greater_than_equal_version(version),
         )));
-        dependencies.replace(index, req.to_string());
+        group.replace(index, req.to_string());
 
         Ok(())
     }
 
+    /// Set the minimum version for an existing dependency in `project.dependencies`.
+    fn set_project_dependency_minimum_version(&mut self) -> Result<&mut Array, Error> {
+        // Get or create `project.dependencies`.
+        let dependencies = self
+            .project()?
+            .entry("dependencies")
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        Ok(dependencies)
+    }
+
     /// Set the minimum version for an existing dependency in `tool.uv.dev-dependencies`.
-    pub fn set_dev_dependency_minimum_version(
-        &mut self,
-        index: usize,
-        version: Version,
-    ) -> Result<(), Error> {
+    fn set_dev_dependency_minimum_version(&mut self) -> Result<&mut Array, Error> {
         // Get or create `tool.uv.dev-dependencies`.
         let dev_dependencies = self
             .doc
@@ -570,29 +583,14 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let Some(req) = dev_dependencies.get(index) else {
-            return Err(Error::MissingDependency(index));
-        };
-
-        let mut req = req
-            .as_str()
-            .and_then(try_parse_requirement)
-            .ok_or(Error::MalformedDependencies)?;
-        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-            VersionSpecifier::greater_than_equal_version(version),
-        )));
-        dev_dependencies.replace(index, req.to_string());
-
-        Ok(())
+        Ok(dev_dependencies)
     }
 
     /// Set the minimum version for an existing dependency in `project.optional-dependencies`.
-    pub fn set_optional_dependency_minimum_version(
+    fn set_optional_dependency_minimum_version(
         &mut self,
         group: &ExtraName,
-        index: usize,
-        version: Version,
-    ) -> Result<(), Error> {
+    ) -> Result<&mut Array, Error> {
         // Get or create `project.optional-dependencies`.
         let optional_dependencies = self
             .project()?
@@ -601,48 +599,30 @@ impl PyProjectTomlMut {
             .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        // Try to find the existing group.
-        let existing_group = optional_dependencies.iter_mut().find_map(|(key, value)| {
-            if ExtraName::from_str(key.get()).is_ok_and(|g| g == *group) {
-                Some(value)
+        // Try to find the existing extra.
+        let existing_key = optional_dependencies.iter().find_map(|(key, _value)| {
+            if ExtraName::from_str(key).is_ok_and(|g| g == *group) {
+                Some(key.to_string())
             } else {
                 None
             }
         });
 
         // If the group doesn't exist, create it.
-        let group = match existing_group {
-            Some(value) => value,
-            None => optional_dependencies
-                .entry(group.as_ref())
-                .or_insert(Item::Value(Value::Array(Array::new()))),
-        }
-        .as_array_mut()
-        .ok_or(Error::MalformedDependencies)?;
-
-        let Some(req) = group.get(index) else {
-            return Err(Error::MissingDependency(index));
-        };
-
-        let mut req = req
-            .as_str()
-            .and_then(try_parse_requirement)
+        let group = optional_dependencies
+            .entry(existing_key.as_deref().unwrap_or(group.as_ref()))
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
-        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-            VersionSpecifier::greater_than_equal_version(version),
-        )));
-        group.replace(index, req.to_string());
 
-        Ok(())
+        Ok(group)
     }
 
     /// Set the minimum version for an existing dependency in `dependency-groups`.
-    pub fn set_dependency_group_requirement_minimum_version(
+    fn set_dependency_group_requirement_minimum_version(
         &mut self,
         group: &GroupName,
-        index: usize,
-        version: Version,
-    ) -> Result<(), Error> {
+    ) -> Result<&mut Array, Error> {
         // Get or create `dependency-groups`.
         let dependency_groups = self
             .doc
@@ -652,38 +632,22 @@ impl PyProjectTomlMut {
             .ok_or(Error::MalformedDependencies)?;
 
         // Try to find the existing group.
-        let existing_group = dependency_groups.iter_mut().find_map(|(key, value)| {
-            if GroupName::from_str(key.get()).is_ok_and(|g| g == *group) {
-                Some(value)
+        let existing_key = dependency_groups.iter().find_map(|(key, _value)| {
+            if GroupName::from_str(key).is_ok_and(|g| g == *group) {
+                Some(key.to_string())
             } else {
                 None
             }
         });
 
         // If the group doesn't exist, create it.
-        let group = match existing_group {
-            Some(value) => value,
-            None => dependency_groups
-                .entry(group.as_ref())
-                .or_insert(Item::Value(Value::Array(Array::new()))),
-        }
-        .as_array_mut()
-        .ok_or(Error::MalformedDependencies)?;
-
-        let Some(req) = group.get(index) else {
-            return Err(Error::MissingDependency(index));
-        };
-
-        let mut req = req
-            .as_str()
-            .and_then(try_parse_requirement)
+        let group = dependency_groups
+            .entry(existing_key.as_deref().unwrap_or(group.as_ref()))
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
-        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-            VersionSpecifier::greater_than_equal_version(version),
-        )));
-        group.replace(index, req.to_string());
 
-        Ok(())
+        Ok(group)
     }
 
     /// Adds a source to `tool.uv.sources`.
