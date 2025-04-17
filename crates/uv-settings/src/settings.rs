@@ -20,6 +20,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
+use uv_workspace::pyproject_mut::DependencyBoundDefault;
 
 /// A `pyproject.toml` with an (optional) `[tool.uv]` section.
 #[allow(dead_code)]
@@ -52,6 +53,9 @@ pub struct Options {
 
     #[serde(flatten)]
     pub publish: PublishOptions,
+
+    #[serde(flatten)]
+    pub edit: EditOptions,
 
     #[option_group]
     pub pip: Option<PipOptions>,
@@ -1818,6 +1822,10 @@ pub struct OptionsWire {
     trusted_publishing: Option<TrustedPublishing>,
     check_url: Option<IndexUrl>,
 
+    // #[serde(flatten)]
+    // edit: EditOptions
+    bounds: Option<DependencyBoundDefault>,
+
     pip: Option<PipOptions>,
     cache_keys: Option<Vec<CacheKey>>,
 
@@ -1906,6 +1914,7 @@ impl From<OptionsWire> for Options {
             dev_dependencies,
             managed,
             package,
+            bounds,
             // Used by the build backend
             build_backend: _,
         } = value;
@@ -1971,6 +1980,7 @@ impl From<OptionsWire> for Options {
                 trusted_publishing,
                 check_url,
             },
+            edit: EditOptions { bounds },
             workspace,
             sources,
             dev_dependencies,
@@ -2031,4 +2041,24 @@ pub struct PublishOptions {
         "#
     )]
     pub check_url: Option<IndexUrl>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct EditOptions {
+    /// The default version specifier when adding a dependency.
+    ///
+    /// If no constraint or URL is provided for a dependency, a bound is added based on the
+    /// latest compatible version of the package, e.g., `>=1.2.3`, unless `--frozen` is provided, in
+    /// which case no resolution is performed.
+    #[option(
+        default = "\"lower\"",
+        value_type = "str",
+        example = r#"
+            bounds = "major"
+        "#,
+        possible_values = true
+    )]
+    pub bounds: Option<DependencyBoundDefault>,
 }

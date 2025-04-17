@@ -22,6 +22,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
+use uv_workspace::pyproject_mut::DependencyBoundDefault;
 
 pub mod comma;
 pub mod compat;
@@ -731,10 +732,6 @@ pub enum ProjectCommand {
     /// If a given dependency exists already, it will be updated to the new version specifier unless
     /// it includes markers that differ from the existing specifier in which case another entry for
     /// the dependency will be added.
-    ///
-    /// If no constraint or URL is provided for a dependency, a lower bound is added equal to the
-    /// latest compatible version of the package, e.g., `>=1.2.3`, unless `--frozen` is provided, in
-    /// which case no resolution is performed.
     ///
     /// The lockfile and project environment will be updated to reflect the added dependencies. To
     /// skip updating the lockfile, use `--frozen`. To skip updating the environment, use
@@ -3441,6 +3438,14 @@ pub struct AddArgs {
         conflicts_with = "branch"
     )]
     pub raw_sources: bool,
+
+    /// The kind of version specifier for newly added dependencies.
+    ///
+    /// If no constraint or URL is provided for a dependency, a bound is added based on the
+    /// latest compatible version of the package, e.g., `>=1.2.3`, unless `--frozen` is provided, in
+    /// which case no resolution is performed.
+    #[arg(long, value_enum)]
+    pub bounds: Option<DependencyBoundDefault>,
 
     /// Commit to use when adding a dependency from Git.
     #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
