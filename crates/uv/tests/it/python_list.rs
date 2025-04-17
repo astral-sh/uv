@@ -222,8 +222,8 @@ fn python_list_downloads() -> Result<()> {
     cpython-3.14.0a6-[OS]-x86_64-[LIBC] <download available>
     cpython-3.14.0a6-[OS]-aarch64-[LIBC] <download available>
     cpython-3.13.3-[OS]-x86_64-[LIBC] <download available>
-    cpython-3.13.3+freethreaded-[OS]-x86_64-[LIBC] <download available>
     cpython-3.13.3-[OS]-aarch64-[LIBC] <download available>
+    cpython-3.13.3+freethreaded-[OS]-x86_64-[LIBC] <download available>
     cpython-3.13.3+freethreaded-[OS]-aarch64-[LIBC] <download available>
     cpython-3.12.10-[OS]-x86_64-[LIBC] <download available>
     cpython-3.12.10-[OS]-aarch64-[LIBC] <download available>
@@ -243,8 +243,8 @@ fn python_list_downloads() -> Result<()> {
     cpython-3.14.0a6-[OS]-x86_64-[LIBC] <download available>
     cpython-3.14.0a6-[OS]-aarch64-[LIBC] <download available>
     cpython-3.13.3-[OS]-x86_64-[LIBC] <download available>
-    cpython-3.13.3+freethreaded-[OS]-x86_64-[LIBC] <download available>
     cpython-3.13.3-[OS]-aarch64-[LIBC] <download available>
+    cpython-3.13.3+freethreaded-[OS]-x86_64-[LIBC] <download available>
     cpython-3.13.3+freethreaded-[OS]-aarch64-[LIBC] <download available>
     cpython-3.13.2-[OS]-x86_64-[LIBC] <download available>
     cpython-3.13.2-[OS]-aarch64-[LIBC] <download available>
@@ -270,16 +270,16 @@ fn python_list_downloads() -> Result<()> {
     cpython-3.14.0a6-linux-x86_64-gnu <download available>
     cpython-3.14.0a6-linux-aarch64-gnu <download available>
     cpython-3.13.3-windows-x86_64-none <download available>
-    cpython-3.13.3+freethreaded-windows-x86_64-none <download available>
     cpython-3.13.3-windows-x86-none <download available>
-    cpython-3.13.3+freethreaded-windows-x86-none <download available>
     cpython-3.13.3-macos-x86_64-none <download available>
-    cpython-3.13.3+freethreaded-macos-x86_64-none <download available>
     cpython-3.13.3-macos-aarch64-none <download available>
-    cpython-3.13.3+freethreaded-macos-aarch64-none <download available>
     cpython-3.13.3-linux-x86_64-gnu <download available>
-    cpython-3.13.3+freethreaded-linux-x86_64-gnu <download available>
     cpython-3.13.3-linux-aarch64-gnu <download available>
+    cpython-3.13.3+freethreaded-windows-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-windows-x86-none <download available>
+    cpython-3.13.3+freethreaded-macos-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-macos-aarch64-none <download available>
+    cpython-3.13.3+freethreaded-linux-x86_64-gnu <download available>
     cpython-3.13.3+freethreaded-linux-aarch64-gnu <download available>
     cpython-3.12.10-windows-x86_64-none <download available>
     cpython-3.12.10-windows-x86-none <download available>
@@ -313,16 +313,16 @@ fn python_list_downloads() -> Result<()> {
     cpython-3.14.0a6-linux-x86_64-gnu <download available>
     cpython-3.14.0a6-linux-aarch64-gnu <download available>
     cpython-3.13.3-windows-x86_64-none <download available>
-    cpython-3.13.3+freethreaded-windows-x86_64-none <download available>
     cpython-3.13.3-windows-x86-none <download available>
-    cpython-3.13.3+freethreaded-windows-x86-none <download available>
     cpython-3.13.3-macos-x86_64-none <download available>
-    cpython-3.13.3+freethreaded-macos-x86_64-none <download available>
     cpython-3.13.3-macos-aarch64-none <download available>
-    cpython-3.13.3+freethreaded-macos-aarch64-none <download available>
     cpython-3.13.3-linux-x86_64-gnu <download available>
-    cpython-3.13.3+freethreaded-linux-x86_64-gnu <download available>
     cpython-3.13.3-linux-aarch64-gnu <download available>
+    cpython-3.13.3+freethreaded-windows-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-windows-x86-none <download available>
+    cpython-3.13.3+freethreaded-macos-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-macos-aarch64-none <download available>
+    cpython-3.13.3+freethreaded-linux-x86_64-gnu <download available>
     cpython-3.13.3+freethreaded-linux-aarch64-gnu <download available>
     cpython-3.13.2-windows-x86_64-none <download available>
     cpython-3.13.2-windows-x86-none <download available>
@@ -362,16 +362,16 @@ fn python_list_downloads() -> Result<()> {
     cpython-3.14.0a6-linux-x86_64-gnu <download available>
     cpython-3.14.0a6-linux-aarch64-gnu <download available>
     cpython-3.13.3-windows-x86_64-none <download available>
-    cpython-3.13.3+freethreaded-windows-x86_64-none <download available>
     cpython-3.13.3-windows-x86-none <download available>
-    cpython-3.13.3+freethreaded-windows-x86-none <download available>
     cpython-3.13.3-macos-x86_64-none <download available>
-    cpython-3.13.3+freethreaded-macos-x86_64-none <download available>
     cpython-3.13.3-macos-aarch64-none <download available>
-    cpython-3.13.3+freethreaded-macos-aarch64-none <download available>
     cpython-3.13.3-linux-x86_64-gnu <download available>
-    cpython-3.13.3+freethreaded-linux-x86_64-gnu <download available>
     cpython-3.13.3-linux-aarch64-gnu <download available>
+    cpython-3.13.3+freethreaded-windows-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-windows-x86-none <download available>
+    cpython-3.13.3+freethreaded-macos-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-macos-aarch64-none <download available>
+    cpython-3.13.3+freethreaded-linux-x86_64-gnu <download available>
     cpython-3.13.3+freethreaded-linux-aarch64-gnu <download available>
     cpython-3.12.10-windows-x86_64-none <download available>
     cpython-3.12.10-windows-x86-none <download available>
@@ -405,16 +405,16 @@ fn python_list_downloads() -> Result<()> {
     cpython-3.14.0a6-linux-x86_64-gnu <download available>
     cpython-3.14.0a6-linux-aarch64-gnu <download available>
     cpython-3.13.3-windows-x86_64-none <download available>
-    cpython-3.13.3+freethreaded-windows-x86_64-none <download available>
     cpython-3.13.3-windows-x86-none <download available>
-    cpython-3.13.3+freethreaded-windows-x86-none <download available>
     cpython-3.13.3-macos-x86_64-none <download available>
-    cpython-3.13.3+freethreaded-macos-x86_64-none <download available>
     cpython-3.13.3-macos-aarch64-none <download available>
-    cpython-3.13.3+freethreaded-macos-aarch64-none <download available>
     cpython-3.13.3-linux-x86_64-gnu <download available>
-    cpython-3.13.3+freethreaded-linux-x86_64-gnu <download available>
     cpython-3.13.3-linux-aarch64-gnu <download available>
+    cpython-3.13.3+freethreaded-windows-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-windows-x86-none <download available>
+    cpython-3.13.3+freethreaded-macos-x86_64-none <download available>
+    cpython-3.13.3+freethreaded-macos-aarch64-none <download available>
+    cpython-3.13.3+freethreaded-linux-x86_64-gnu <download available>
     cpython-3.13.3+freethreaded-linux-aarch64-gnu <download available>
     cpython-3.13.2-windows-x86_64-none <download available>
     cpython-3.13.2-windows-x86-none <download available>
