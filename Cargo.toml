@@ -294,7 +294,7 @@ inherits = "release"
 # Config for 'dist'
 [workspace.metadata.dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.28.4-prerelease.1"
+cargo-dist-version = "0.28.4"
 # make a package being included in our releases opt-in instead of opt-out
 dist = false
 # CI backends to support
@@ -330,7 +330,7 @@ auto-includes = false
 # Whether dist should create a Github Release or use an existing draft
 create-release = true
 # Which actions to run on pull requests
-pr-run-mode = "skip"
+pr-run-mode = "plan"
 # Whether CI should trigger releases with dispatches instead of tag pushes
 dispatch-releases = true
 # Which phase dist should use to create the GitHub release

@@ -40,6 +40,7 @@ permissions:
 # If there's a prerelease-style suffix to the version, then the release(s)
 # will be marked as a prerelease.
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       tag:
@@ -68,7 +69,7 @@ jobs:
         # we specify bash to get pipefail; it guards against the `curl` command
         # failing. otherwise `sh` won't catch that `curl` returned non-0
         shell: bash
-        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/astral-sh/cargo-dist/releases/download/v0.28.4-prerelease.1/cargo-dist-installer.sh | sh"
+        run: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/astral-sh/cargo-dist/releases/download/v0.28.4/cargo-dist-installer.sh | sh"
       - name: Cache dist
         uses: actions/upload-artifact@6027e3dd177782cd8ab9af838c04fd81a07f1d47
         with:
