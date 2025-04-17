@@ -430,7 +430,7 @@ mod tests {
     fn test_password_obfuscation() {
         let credentials =
             Credentials::basic(Some(String::from("user")), Some(String::from("password")));
-        let debugged = format!("{:?}", credentials);
+        let debugged = format!("{credentials:?}");
         assert_eq!(
             debugged,
             "Basic { username: Username(Some(\"user\")), password: Some(****) }"
