@@ -206,10 +206,7 @@ impl PythonDownloadRequest {
     /// Fill empty entries with default values.
     ///
     /// Platform information is pulled from the environment.
-    pub fn fill(mut self) -> Result<Self, Error> {
-        if self.implementation.is_none() {
-            self.implementation = Some(ImplementationName::CPython);
-        }
+    pub fn fill_platform(mut self) -> Result<Self, Error> {
         if self.arch.is_none() {
             self.arch = Some(Arch::from_env());
         }
@@ -219,6 +216,14 @@ impl PythonDownloadRequest {
         if self.libc.is_none() {
             self.libc = Some(Libc::from_env()?);
         }
+        Ok(self)
+    }
+
+    pub fn fill(mut self) -> Result<Self, Error> {
+        if self.implementation.is_none() {
+            self.implementation = Some(ImplementationName::CPython);
+        }
+        self = self.fill_platform()?;
         Ok(self)
     }
 

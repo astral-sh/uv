@@ -79,16 +79,16 @@ pub(crate) async fn list(
             PythonListKinds::Downloads => Some(if all_platforms {
                 base_download_request
             } else {
-                base_download_request.fill()?
+                base_download_request.fill_platform()?
             }),
             PythonListKinds::Default => {
                 if python_downloads.is_automatic() {
                     Some(if all_platforms {
                         base_download_request
                     } else if all_arches {
-                        base_download_request.fill()?.with_any_arch()
+                        base_download_request.fill_platform()?.with_any_arch()
                     } else {
-                        base_download_request.fill()?
+                        base_download_request.fill_platform()?
                     })
                 } else {
                     // If fetching is not automatic, then don't show downloads as available by default
