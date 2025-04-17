@@ -17,6 +17,8 @@
 name: Release
 permissions:
   "contents": "write"
+  "attestations": "write" # needed to push artifact attestations to the Github attestation store
+  "id-token": "write" # needed for signing the artifacts with GitHub OIDC Token
 
 # This task will run whenever you workflow_dispatch with a tag that looks like a version
 # like "1.0.0", "v0.1.0-prerelease.1", "my-app/0.1.0", "releases/v1.0.0", etc.
@@ -193,6 +195,10 @@ jobs:
           pattern: artifacts-*
           path: target/distrib/
           merge-multiple: true
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2
+        with:
+          subject-path: target/distrib/*
       # This is a harmless no-op for GitHub Releases, hosting for that happens in "announce"
       - id: host
         shell: bash
