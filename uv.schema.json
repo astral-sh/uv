@@ -645,35 +645,17 @@
       ]
     },
     "ConfigSettingValue": {
-      "oneOf": [
+      "anyOf": [
         {
           "description": "The value consists of a single string.",
-          "type": "object",
-          "required": [
-            "String"
-          ],
-          "properties": {
-            "String": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
+          "type": "string"
         },
         {
           "description": "The value consists of a list of strings.",
-          "type": "object",
-          "required": [
-            "List"
-          ],
-          "properties": {
-            "List": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          "additionalProperties": false
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       ]
     },
