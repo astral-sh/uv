@@ -35,7 +35,7 @@ choose the latest compatible `uv_build` version.
 
 ## Include and exclude configuration
 
-To select which files to include in the source distribution, we first add the included files and
+To select which files to include in the source distribution, uv first adds the included files and
 directories, then remove the excluded files and directories.
 
 When building the source distribution, the following files and directories are included:
