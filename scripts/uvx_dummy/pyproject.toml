@@ -1,0 +1,12 @@
+[project]
+name = "uvx"
+version = "3.0.0"
+description = "A placeholder package to prevent dependency confusion with `uvx`."
+authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
+requires-python = ">=3.8"
+readme = "README.md"
+
+[build-system]
+backend-path = ["."]
+requires = ["hatchling"]
+build-backend = "build_backend"
