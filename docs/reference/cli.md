@@ -389,8 +389,6 @@ Dependencies are added to the project's `pyproject.toml` file.
 
 If a given dependency exists already, it will be updated to the new version specifier unless it includes markers that differ from the existing specifier in which case another entry for the dependency will be added.
 
-If no constraint or URL is provided for a dependency, a lower bound is added equal to the latest compatible version of the package, e.g., `>=1.2.3`, unless `--frozen` is provided, in which case no resolution is performed.
-
 The lockfile and project environment will be updated to reflect the added dependencies. To skip updating the lockfile, use `--frozen`. To skip updating the environment, use `--no-sync`.
 
 If any of the requested dependencies cannot be found, uv will exit with an error, unless the `--frozen` flag is provided, in which case uv will add the dependencies verbatim without checking that they exist or are compatible with the project.
@@ -416,7 +414,16 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>Can be provided multiple times.</p>
 <p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
 <p>WARNING: Hosts included in this list will not be verified against the system's certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
-<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-add--branch"><a href="#uv-add--branch"><code>--branch</code></a> <i>branch</i></dt><dd><p>Branch to use when adding a dependency from Git</p>
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-add--bounds"><a href="#uv-add--bounds"><code>--bounds</code></a> <i>bounds</i></dt><dd><p>The kind of version specifier to use when adding dependencies.</p>
+<p>When adding a dependency to the project, if no constraint or URL is provided, a constraint is added based on the latest compatible version of the package. By default, a lower bound constraint is used, e.g., <code>&gt;=1.2.3</code>.</p>
+<p>When <code>--frozen</code> is provided, no resolution is performed, and dependencies are always added without constraints.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>lower</code>:  Only a lower bound, e.g., <code>&gt;=1.2.3</code></li>
+<li><code>major</code>:  Allow the same major version, similar to the semver caret, e.g., <code>&gt;=1.2.3, &lt;2.0.0</code></li>
+<li><code>minor</code>:  Allow the same minor version, similar to the semver tilde, e.g., <code>&gt;=1.2.3, &lt;1.3.0</code></li>
+<li><code>exact</code>:  Pin the exact version, e.g., <code>==1.2.3</code></li>
+</ul></dd><dt id="uv-add--branch"><a href="#uv-add--branch"><code>--branch</code></a> <i>branch</i></dt><dd><p>Branch to use when adding a dependency from Git</p>
 </dd><dt id="uv-add--cache-dir"><a href="#uv-add--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>

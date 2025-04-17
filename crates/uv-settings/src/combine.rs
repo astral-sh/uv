@@ -14,6 +14,7 @@ use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_torch::TorchMode;
+use uv_workspace::pyproject_mut::AddBoundsKind;
 
 use crate::{FilesystemOptions, Options, PipOptions};
 
@@ -74,6 +75,7 @@ macro_rules! impl_combine_or {
     };
 }
 
+impl_combine_or!(AddBoundsKind);
 impl_combine_or!(AnnotationStyle);
 impl_combine_or!(ExcludeNewer);
 impl_combine_or!(ExportFormat);

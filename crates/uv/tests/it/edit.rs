@@ -11841,3 +11841,182 @@ fn add_optional_normalize() -> Result<()> {
 
     Ok(())
 }
+
+/// Add a PyPI requirement with the given bounds.
+#[test]
+fn add_bounds() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Set bounds in `uv.toml`
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r#"
+        add-bounds = "exact"
+    "#})?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("idna"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The bounds option is in preview and its configuration may change in any future release.
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "idna==3.6",
+    ]
+    "#
+    );
+
+    fs_err::remove_file(uv_toml)?;
+
+    // Set bounds in `pyproject.toml`
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        add-bounds = "major"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The bounds option is in preview and its configuration may change in any future release.
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==4.3.0
+     + sniffio==1.3.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio>=4.3.0,<5.0.0",
+    ]
+
+    [tool.uv]
+    add-bounds = "major"
+    "#
+    );
+
+    // Existing constraints take precedence over the bounds option
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--bounds").arg("minor").arg("--preview"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Audited 3 packages in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio>=4.3.0,<5.0.0",
+    ]
+
+    [tool.uv]
+    add-bounds = "major"
+    "#
+    );
+
+    // Explicit constraints take precedence over the bounds option
+    uv_snapshot!(context.filters(), context.add().arg("anyio==4.2").arg("idna").arg("--bounds").arg("minor").arg("--preview"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.3.0
+     + anyio==4.2.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio==4.2",
+        "idna>=3.6,<3.7",
+    ]
+
+    [tool.uv]
+    add-bounds = "major"
+    "#
+    );
+
+    // Set bounds on the CLI and use `--preview` to silence the warning.
+    uv_snapshot!(context.filters(), context.add().arg("sniffio").arg("--bounds").arg("minor").arg("--preview"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Audited 3 packages in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio==4.2",
+        "idna>=3.6,<3.7",
+        "sniffio>=1.3.1,<1.4.0",
+    ]
+
+    [tool.uv]
+    add-bounds = "major"
+    "#
+    );
+
+    Ok(())
+}

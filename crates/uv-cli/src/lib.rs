@@ -22,6 +22,7 @@ use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
+use uv_workspace::pyproject_mut::AddBoundsKind;
 
 pub mod comma;
 pub mod compat;
@@ -835,10 +836,6 @@ pub enum ProjectCommand {
     /// If a given dependency exists already, it will be updated to the new version specifier unless
     /// it includes markers that differ from the existing specifier in which case another entry for
     /// the dependency will be added.
-    ///
-    /// If no constraint or URL is provided for a dependency, a lower bound is added equal to the
-    /// latest compatible version of the package, e.g., `>=1.2.3`, unless `--frozen` is provided, in
-    /// which case no resolution is performed.
     ///
     /// The lockfile and project environment will be updated to reflect the added dependencies. To
     /// skip updating the lockfile, use `--frozen`. To skip updating the environment, use
@@ -3561,6 +3558,17 @@ pub struct AddArgs {
         alias = "raw-sources"
     )]
     pub raw: bool,
+
+    /// The kind of version specifier to use when adding dependencies.
+    ///
+    /// When adding a dependency to the project, if no constraint or URL is provided, a constraint
+    /// is added based on the latest compatible version of the package. By default, a lower bound
+    /// constraint is used, e.g., `>=1.2.3`.
+    ///
+    /// When `--frozen` is provided, no resolution is performed, and dependencies are always added
+    /// without constraints.
+    #[arg(long, value_enum)]
+    pub bounds: Option<AddBoundsKind>,
 
     /// Commit to use when adding a dependency from Git.
     #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
