@@ -40,8 +40,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, detect_conflicts, script_specification, update_environment,
-    PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment, UniversalState,
+    default_dependency_groups, default_extras, detect_conflicts, script_specification,
+    update_environment, PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment,
+    UniversalState,
 };
 use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
@@ -123,7 +124,7 @@ pub(crate) async fn sync(
 
     // Determine the default extras to include.
     let default_extras = match &target {
-        SyncTarget::Project(_project) => DefaultExtras::default(),
+        SyncTarget::Project(project) => default_extras(project.pyproject_toml())?,
         SyncTarget::Script(..) => DefaultExtras::default(),
     };
 

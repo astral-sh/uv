@@ -30,7 +30,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
-use uv_normalize::{DefaultExtras, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{ExtraName, MarkerTree, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -52,8 +52,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, init_script_python_requirement, PlatformState, ProjectEnvironment,
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    default_dependency_groups, default_extras, init_script_python_requirement, PlatformState,
+    ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, project, ExitStatus, ScriptPath};
@@ -917,7 +917,7 @@ async fn lock_and_sync(
     let default_groups = default_dependency_groups(project.pyproject_toml())?;
 
     // Determine the default extras to include.
-    let default_extras = DefaultExtras::default();
+    let default_extras = default_extras(project.pyproject_toml())?;
 
     // Identify the installation target.
     let target = match &project {

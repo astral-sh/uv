@@ -108,6 +108,25 @@ constraint-dependencies = ["grpcio<1.65"]
 
 ---
 
+### [`default-extras`](#default-extras) {: #default-extras }
+
+The list of `optional-dependencies` extras to install by default.
+
+Can also be the literal "all" to default enable all extras.
+
+**Default value**: `[""]`
+
+**Type**: `str | list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+default-extras = ["docs", "dev"]
+```
+
+---
+
 ### [`default-groups`](#default-groups) {: #default-groups }
 
 The list of `dependency-groups` to install by default.
