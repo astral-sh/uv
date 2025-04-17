@@ -619,7 +619,7 @@ impl TestContext {
         command
     }
 
-    fn disallow_git_cli(bin_dir: &Path) -> std::io::Result<()> {
+    pub fn disallow_git_cli(bin_dir: &Path) -> std::io::Result<()> {
         let contents = r"#!/bin/sh
     echo 'error: `git` operations are not allowed — are you missing a cfg for the `git` feature?' >&2
     exit 127";
