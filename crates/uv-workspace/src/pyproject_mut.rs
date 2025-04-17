@@ -1,9 +1,10 @@
 use std::cmp::Ordering;
 use std::path::Path;
 use std::str::FromStr;
-use std::{fmt, mem};
+use std::{fmt, iter, mem};
 
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use toml_edit::{
     Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
@@ -49,6 +50,8 @@ pub enum Error {
         package_name: PackageName,
         requirements: Vec<Requirement>,
     },
+    #[error("Unknown bound king {0}")]
+    UnknownBoundKind(String),
 }
 
 /// The result of editing an array in a TOML document.
@@ -78,6 +81,76 @@ impl ArrayEdit {
     pub fn index(&self) -> usize {
         match self {
             Self::Update(i) | Self::Add(i) => *i,
+        }
+    }
+}
+
+/// The default version specifier when adding a dependency.
+// There is an implicit assumption that version numbers have three digits. While PEP 440
+// allows an arbitrary number of version digits, most projects stick to two or three digits, which
+// we can treat like a SemVer major.minor.patch.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum DependencyBoundDefault {
+    /// Only a lower bound, e.g., `>=1.2.3`.
+    #[default]
+    Lower,
+    /// Allow the same major version, similar to the semver caret, e.g., `>=1.2.3,<2.0.0`.
+    Major,
+    /// Allow the same minor version, similar to the semver tilde does, `>=1.2.3,<1.3.0`.
+    Minor,
+    /// Pin the exact version, e.g., `==1.2.3`.
+    ///
+    /// This option is not recommended, as uv provides a lockfiles that pins versions.
+    Exact,
+}
+
+impl DependencyBoundDefault {
+    fn specifiers(self, version: Version) -> VersionSpecifiers {
+        match self {
+            DependencyBoundDefault::Lower => {
+                VersionSpecifiers::from(VersionSpecifier::greater_than_equal_version(version))
+            }
+            DependencyBoundDefault::Major => {
+                // Compute the new major version and pad it to the same length:
+                // 1.2.3 -> 2.0.0
+                // 1.2 -> 2.0
+                // 1 -> 2
+                let next_major = version.release()[0] + 1;
+                let upper_bound = Version::new(
+                    iter::once(next_major)
+                        .chain(iter::repeat_n(0, version.release().iter().skip(1).len())),
+                );
+
+                VersionSpecifiers::from_iter([
+                    VersionSpecifier::greater_than_equal_version(version),
+                    VersionSpecifier::less_than_version(upper_bound),
+                ])
+            }
+            DependencyBoundDefault::Minor => {
+                // Compute the new minor version and pad it to the same length where possible:
+                // 1.2.3 -> 1.3.0
+                // 1.2 -> 1.3
+                // 1 -> 1.1
+
+                // If the version has only one digit, say `1`, pad with zeroes.
+                let next_minor = version.release().get(1).copied().unwrap_or(0) + 1;
+                let upper_bound = Version::new(
+                    iter::once(version.release()[0])
+                        .chain(iter::once(next_minor))
+                        .chain(iter::repeat_n(0, version.release().iter().skip(2).len())),
+                );
+
+                VersionSpecifiers::from_iter([
+                    VersionSpecifier::greater_than_equal_version(version),
+                    VersionSpecifier::less_than_version(upper_bound),
+                ])
+            }
+            DependencyBoundDefault::Exact => {
+                VersionSpecifiers::from_iter([VersionSpecifier::equals_version(version)])
+            }
         }
     }
 }
@@ -519,20 +592,19 @@ impl PyProjectTomlMut {
     }
 
     /// Set the minimum version for an existing dependency.
-    pub fn set_dependency_minimum_version(
+    pub fn set_dependency_bound(
         &mut self,
         dependency_type: &DependencyType,
         index: usize,
         version: Version,
+        bound_kind: &DependencyBoundDefault,
     ) -> Result<(), Error> {
         let group = match dependency_type {
-            DependencyType::Production => self.set_project_dependency_minimum_version()?,
-            DependencyType::Dev => self.set_dev_dependency_minimum_version()?,
-            DependencyType::Optional(ref extra) => {
-                self.set_optional_dependency_minimum_version(extra)?
-            }
+            DependencyType::Production => self.set_project_dependency_bound()?,
+            DependencyType::Dev => self.set_dev_dependency_bound()?,
+            DependencyType::Optional(ref extra) => self.set_optional_dependency_bound(extra)?,
             DependencyType::Group(ref group) => {
-                self.set_dependency_group_requirement_minimum_version(group)?
+                self.set_dependency_group_requirement_bound(group)?
             }
         };
 
@@ -544,16 +616,16 @@ impl PyProjectTomlMut {
             .as_str()
             .and_then(try_parse_requirement)
             .ok_or(Error::MalformedDependencies)?;
-        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-            VersionSpecifier::greater_than_equal_version(version),
-        )));
+        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(
+            bound_kind.specifiers(version),
+        ));
         group.replace(index, req.to_string());
 
         Ok(())
     }
 
     /// Set the minimum version for an existing dependency in `project.dependencies`.
-    fn set_project_dependency_minimum_version(&mut self) -> Result<&mut Array, Error> {
+    fn set_project_dependency_bound(&mut self) -> Result<&mut Array, Error> {
         // Get or create `project.dependencies`.
         let dependencies = self
             .project()?
@@ -566,7 +638,7 @@ impl PyProjectTomlMut {
     }
 
     /// Set the minimum version for an existing dependency in `tool.uv.dev-dependencies`.
-    fn set_dev_dependency_minimum_version(&mut self) -> Result<&mut Array, Error> {
+    fn set_dev_dependency_bound(&mut self) -> Result<&mut Array, Error> {
         // Get or create `tool.uv.dev-dependencies`.
         let dev_dependencies = self
             .doc
@@ -587,10 +659,7 @@ impl PyProjectTomlMut {
     }
 
     /// Set the minimum version for an existing dependency in `project.optional-dependencies`.
-    fn set_optional_dependency_minimum_version(
-        &mut self,
-        group: &ExtraName,
-    ) -> Result<&mut Array, Error> {
+    fn set_optional_dependency_bound(&mut self, group: &ExtraName) -> Result<&mut Array, Error> {
         // Get or create `project.optional-dependencies`.
         let optional_dependencies = self
             .project()?
@@ -619,7 +688,7 @@ impl PyProjectTomlMut {
     }
 
     /// Set the minimum version for an existing dependency in `dependency-groups`.
-    fn set_dependency_group_requirement_minimum_version(
+    fn set_dependency_group_requirement_bound(
         &mut self,
         group: &GroupName,
     ) -> Result<&mut Array, Error> {
@@ -1421,7 +1490,9 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
-    use super::split_specifiers;
+    use super::{split_specifiers, DependencyBoundDefault};
+    use std::str::FromStr;
+    use uv_pep440::Version;
 
     #[test]
     fn split() {
@@ -1433,5 +1504,66 @@ mod test {
         );
         assert_eq!(split_specifiers("flask[dotenv]"), ("flask[dotenv]", ""));
         assert_eq!(split_specifiers("flask @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"), ("flask", "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"));
+    }
+
+    #[test]
+    fn bound_kind_to_specifiers() {
+        let tests = [
+            (DependencyBoundDefault::Exact, "1", "==1"),
+            (DependencyBoundDefault::Exact, "1.0.0", "==1.0.0"),
+            (DependencyBoundDefault::Exact, "1.2", "==1.2"),
+            (DependencyBoundDefault::Exact, "1.2.3", "==1.2.3"),
+            (DependencyBoundDefault::Exact, "1.2.3.4", "==1.2.3.4"),
+            (
+                DependencyBoundDefault::Exact,
+                "1.2.3.4a1.post1",
+                "==1.2.3.4a1.post1",
+            ),
+            (DependencyBoundDefault::Lower, "1", ">=1"),
+            (DependencyBoundDefault::Lower, "1.0.0", ">=1.0.0"),
+            (DependencyBoundDefault::Lower, "1.2", ">=1.2"),
+            (DependencyBoundDefault::Lower, "1.2.3", ">=1.2.3"),
+            (DependencyBoundDefault::Lower, "1.2.3.4", ">=1.2.3.4"),
+            (
+                DependencyBoundDefault::Lower,
+                "1.2.3.4a1.post1",
+                ">=1.2.3.4a1.post1",
+            ),
+            (DependencyBoundDefault::Major, "1", ">=1, <2"),
+            (DependencyBoundDefault::Major, "1.0.0", ">=1.0.0, <2.0.0"),
+            (DependencyBoundDefault::Major, "1.2", ">=1.2, <2.0"),
+            (DependencyBoundDefault::Major, "1.2.3", ">=1.2.3, <2.0.0"),
+            (
+                DependencyBoundDefault::Major,
+                "1.2.3.4",
+                ">=1.2.3.4, <2.0.0.0",
+            ),
+            (
+                DependencyBoundDefault::Major,
+                "1.2.3.4a1.post1",
+                ">=1.2.3.4a1.post1, <2.0.0.0",
+            ),
+            (DependencyBoundDefault::Minor, "1", ">=1, <1.1"),
+            (DependencyBoundDefault::Minor, "1.0.0", ">=1.0.0, <1.1.0"),
+            (DependencyBoundDefault::Minor, "1.2", ">=1.2, <1.3"),
+            (DependencyBoundDefault::Minor, "1.2.3", ">=1.2.3, <1.3.0"),
+            (
+                DependencyBoundDefault::Minor,
+                "1.2.3.4",
+                ">=1.2.3.4, <1.3.0.0",
+            ),
+            (
+                DependencyBoundDefault::Minor,
+                "1.2.3.4a1.post1",
+                ">=1.2.3.4a1.post1, <1.3.0.0",
+            ),
+        ];
+
+        for (kind, version, expected) in tests {
+            let actual = kind
+                .specifiers(Version::from_str(version).unwrap())
+                .to_string();
+            assert_eq!(actual, expected);
+        }
     }
 }

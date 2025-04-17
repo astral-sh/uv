@@ -446,6 +446,39 @@ bypasses SSL verification and could expose you to MITM attacks.
 
 ---
 
+### [`bounds`](#bounds) {: #bounds }
+
+The default version specifier when adding a dependency.
+
+If no constraint or URL is provided for a dependency, a bound is added based on the
+latest compatible version of the package, e.g., `>=1.2.3`, unless `--frozen` is provided, in
+which case no resolution is performed.
+
+**Default value**: `"lower"`
+
+**Possible values**:
+
+- `"lower"`: Only a lower bound, e.g., `>=1.2.3`
+- `"major"`: Allow the same major version, similar to the semver caret, e.g., `>=1.2.3,<2.0.0`
+- `"minor"`: Allow the same minor version, similar to the semver tilde does, `>=1.2.3,<1.3.0`
+- `"exact"`: Pin the exact version, e.g., `==1.2.3`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    bounds = "major"
+    ```
+=== "uv.toml"
+
+    ```toml
+    bounds = "major"
+    ```
+
+---
+
 ### [`cache-dir`](#cache-dir) {: #cache-dir }
 
 Path to the cache directory.
