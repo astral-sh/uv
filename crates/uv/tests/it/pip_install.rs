@@ -466,19 +466,22 @@ fn install_requirements_txt() -> Result<()> {
 
     // Install Jinja2 (which should already be installed, but shouldn't remove other packages).
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("Jinja2")?;
+    requirements_txt.write_str("iniconfig")?;
 
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
     );
 
     context.assert_command("import flask").success();
@@ -496,25 +499,13 @@ async fn install_remote_requirements_txt() -> Result<()> {
         .chain([(r"127\.0\.0\.1[^\r\n]*", "[LOCALHOST]")])
         .collect::<Vec<_>>();
 
-    let server = MockServer::start().await;
     let username = "user";
     let password = "password";
     let requirements_txt = "Flask";
 
-    Mock::given(method("GET"))
-        .and(path("/requirements.txt"))
-        .and(basic_auth(username, password))
-        .respond_with(ResponseTemplate::new(200).set_body_string(requirements_txt))
-        .mount(&server)
-        .await;
+    let server_url = start_requirements_server(username, password, requirements_txt).await;
 
-    Mock::given(method("GET"))
-        .and(path("/requirements.txt"))
-        .respond_with(ResponseTemplate::new(401))
-        .mount(&server)
-        .await;
-
-    let mut requirements_url = Url::parse(&format!("{}/requirements.txt", &server.uri()))?;
+    let mut requirements_url = Url::parse(&format!("{}/requirements.txt", &server_url))?;
 
     // Should fail without credentials
     uv_snapshot!(filters, context.pip_install()
@@ -558,36 +549,53 @@ async fn install_remote_requirements_txt() -> Result<()> {
 
     context.assert_command("import flask").success();
 
-    let requirements_txt = "Jinja2";
-
-    // Update the mock server to serve the new requirements.txt
-    Mock::given(method("GET"))
-        .and(path("/requirements.txt"))
-        .and(basic_auth(username, password))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_string(requirements_txt)
-                .insert_header("content-type", "text/plain"),
-        )
-        .mount(&server)
-        .await;
+    // Update the mock server to serve a new requirements.txt
+    let requirements_txt = "iniconfig";
+    let server_url = start_requirements_server(username, password, requirements_txt).await;
+    let mut requirements_url = Url::parse(&format!("{}/requirements.txt", &server_url))?;
+    let _ = requirements_url.set_username(username);
+    let _ = requirements_url.set_password(Some(password));
 
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg(requirements_url.as_str())
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
     );
 
     context.assert_command("import flask").success();
 
     Ok(())
+}
+
+async fn start_requirements_server(
+    username: &str,
+    password: &str,
+    requirements_txt: &str,
+) -> String {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/requirements.txt"))
+        .and(basic_auth(username, password))
+        .respond_with(ResponseTemplate::new(200).set_body_string(requirements_txt))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/requirements.txt"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+    server.uri()
 }
 
 /// Warn (but don't fail) when unsupported flags are set in the `requirements.txt`.
