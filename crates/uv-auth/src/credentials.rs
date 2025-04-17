@@ -317,20 +317,9 @@ impl Credentials {
     }
 }
 
-pub fn obfuscate_url_credentials(mut url: Url) -> Url {
-    if !url.username().is_empty() {
-        let _ = url.set_username("****");
-    }
-    if url.password().is_some() {
-        let _ = url.set_password(Some("****"));
-    }
-    url
-}
-
 #[cfg(test)]
 mod tests {
     use insta::assert_debug_snapshot;
-    use url::ParseError;
 
     use super::*;
 
@@ -447,33 +436,5 @@ mod tests {
             debugged,
             "Basic { username: Username(Some(\"user\")), password: Some(****) }"
         );
-    }
-
-    // Test that we obfuscate credentials in URL.
-    #[test]
-    fn test_credentials_obfuscation() -> Result<(), ParseError> {
-        let no_creds_url = Url::parse("https://pypi-proxy.fly.dev/basic-auth/simple")?;
-        let obfuscated_no_creds = obfuscate_url_credentials(no_creds_url.clone());
-        assert_eq!(
-            obfuscated_no_creds.as_str(),
-            "https://pypi-proxy.fly.dev/basic-auth/simple"
-        );
-
-        let user_url = Url::parse("https://user@pypi-proxy.fly.dev/basic-auth/simple")?;
-        let obfuscated_user_url = obfuscate_url_credentials(user_url);
-        assert_eq!(
-            obfuscated_user_url.as_str(),
-            "https://****@pypi-proxy.fly.dev/basic-auth/simple"
-        );
-
-        let user_pass_url =
-            Url::parse("https://user:password@pypi-proxy.fly.dev/basic-auth/simple")?;
-        let obfuscated_user_pass_url = obfuscate_url_credentials(user_pass_url);
-        assert_eq!(
-            obfuscated_user_pass_url.as_str(),
-            "https://****:****@pypi-proxy.fly.dev/basic-auth/simple"
-        );
-
-        Ok(())
     }
 }

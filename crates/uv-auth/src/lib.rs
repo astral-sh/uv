@@ -4,7 +4,7 @@ use tracing::trace;
 use url::Url;
 
 use cache::CredentialsCache;
-pub use credentials::{obfuscate_url_credentials, Credentials};
+pub use credentials::Credentials;
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
 pub use policy::{AuthPolicy, UrlAuthPolicies};
