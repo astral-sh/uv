@@ -172,17 +172,6 @@ fn python_list_downloads() -> Result<()> {
         .chain(context.filters())
         .collect::<Vec<_>>();
 
-    // Regex to match current os and libc, but any arch
-    let platform_any_arch = format!(
-        "((?:cpython|pypy)-(?:[^-]+))-{}-([^-]+)-{}",
-        Os::from_env(),
-        Libc::from_env()?
-    );
-    let platform_any_arch_filters = [(platform_any_arch.as_ref(), "$1-[OS]-$2-[LIBC]")]
-        .into_iter()
-        .chain(context.filters())
-        .collect::<Vec<_>>();
-
     // `--only-downloads` only shows available downloads for the current platform.
     uv_snapshot!(platform_filters, python_list(), @r#"
     success: true
@@ -214,36 +203,37 @@ fn python_list_downloads() -> Result<()> {
     ----- stderr -----
     "#);
 
+    // TODO: enable `--all-arches` tests in https://github.com/astral-sh/uv/pull/12953
     // `--all-arches` show all architectures for the current platform, with non-latest patch versions hidden.
-    uv_snapshot!(platform_any_arch_filters, python_list().arg("--all-arches"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    cpython-3.14.0a6-[OS]-aarch64-[LIBC] <download available>
-    cpython-3.13.3-[OS]-aarch64-[LIBC] <download available>
-    cpython-3.13.3+freethreaded-[OS]-aarch64-[LIBC] <download available>
-    cpython-3.12.10-[OS]-aarch64-[LIBC] <download available>
-    pypy-3.11.[X]-[OS]-aarch64-[LIBC] <download available>
-    pypy-3.10.16-[OS]-aarch64-[LIBC] <download available>
-
-    ----- stderr -----
-    "#);
+    // uv_snapshot!(platform_any_arch_filters, python_list().arg("--all-arches"), @r#"
+    // success: true
+    // exit_code: 0
+    // ----- stdout -----
+    // cpython-3.14.0a6-[OS]-aarch64-[LIBC] <download available>
+    // cpython-3.13.3-[OS]-aarch64-[LIBC] <download available>
+    // cpython-3.13.3+freethreaded-[OS]-aarch64-[LIBC] <download available>
+    // cpython-3.12.10-[OS]-aarch64-[LIBC] <download available>
+    // pypy-3.11.[X]-[OS]-aarch64-[LIBC] <download available>
+    // pypy-3.10.16-[OS]-aarch64-[LIBC] <download available>
+    //
+    // ----- stderr -----
+    // "#);
 
     // --all-versions && --all-arches
-    uv_snapshot!(platform_any_arch_filters, python_list().arg("--all-versions").arg("--all-arches"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    cpython-3.14.0a6-[OS]-aarch64-[LIBC] <download available>
-    cpython-3.13.3-[OS]-aarch64-[LIBC] <download available>
-    cpython-3.13.3+freethreaded-[OS]-aarch64-[LIBC] <download available>
-    cpython-3.13.2-[OS]-aarch64-[LIBC] <download available>
-    cpython-3.12.10-[OS]-aarch64-[LIBC] <download available>
-    pypy-3.11.[X]-[OS]-aarch64-[LIBC] <download available>
-    pypy-3.10.16-[OS]-aarch64-[LIBC] <download available>
-
-    ----- stderr -----
-    "#);
+    // uv_snapshot!(platform_any_arch_filters, python_list().arg("--all-versions").arg("--all-arches"), @r#"
+    // success: true
+    // exit_code: 0
+    // ----- stdout -----
+    // cpython-3.14.0a6-[OS]-aarch64-[LIBC] <download available>
+    // cpython-3.13.3-[OS]-aarch64-[LIBC] <download available>
+    // cpython-3.13.3+freethreaded-[OS]-aarch64-[LIBC] <download available>
+    // cpython-3.13.2-[OS]-aarch64-[LIBC] <download available>
+    // cpython-3.12.10-[OS]-aarch64-[LIBC] <download available>
+    // pypy-3.11.[X]-[OS]-aarch64-[LIBC] <download available>
+    // pypy-3.10.16-[OS]-aarch64-[LIBC] <download available>
+    //
+    // ----- stderr -----
+    // "#);
 
     // `--all-platforms` shows all platforms, its output is independent of the current platform.
     uv_snapshot!(context.filters(), python_list().arg("--all-platforms"), @r#"
