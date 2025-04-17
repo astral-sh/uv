@@ -479,9 +479,9 @@ impl Ord for PythonInstallationKey {
         self.implementation
             .cmp(&other.implementation)
             .then_with(|| self.version().cmp(&other.version()))
+            .then_with(|| self.variant.cmp(&other.variant).reverse()) // we want Default to come first
             .then_with(|| self.os.to_string().cmp(&other.os.to_string()))
             .then_with(|| self.arch.to_string().cmp(&other.arch.to_string()))
             .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
-            .then_with(|| self.variant.cmp(&other.variant).reverse()) // we want Default to come first
     }
 }
