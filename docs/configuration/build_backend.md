@@ -7,7 +7,7 @@
     When preview mode is not enabled, uv uses [hatchling](https://pypi.org/project/hatchling/) as the default build backend.
 
 A build backend transforms a source tree (i.e., a directory) into a source distribution or a wheel. While uv
-supports all build backends (PEP 517), it ships with the `uv_build` backend that integrates tightly
+supports all build backends (as specified by PEP 517), it includes a `uv_build` backend that integrates tightly
 with uv.
 
 The uv build backend currently only supports Python code and only builds universal wheels. An
