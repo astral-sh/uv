@@ -152,6 +152,36 @@ pub enum PythonVariant {
     Freethreaded,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PythonPrerelease {
+    /// Any prerelease, e.g., from `3.14-dev`
+    Any,
+    /// A specific prerelease, e.g., from `3.14b1` or `3.14b`
+    Specific(Prerelease),
+}
+
+impl PythonPrerelease {
+    pub(crate) fn matches(&self, prerelease: Option<Prerelease>) -> bool {
+        let Some(pre) = prerelease else {
+            return false;
+        };
+
+        match self {
+            PythonPrerelease::Any => true,
+            PythonPrerelease::Specific(request) => *request == pre,
+        }
+    }
+}
+
+impl std::fmt::Display for PythonPrerelease {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            PythonPrerelease::Any => write!(f, "-dev"),
+            PythonPrerelease::Specific(inner) => write!(f, "{inner}"),
+        }
+    }
+}
+
 /// A Python discovery version request.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum VersionRequest {
@@ -163,7 +193,7 @@ pub enum VersionRequest {
     Major(u8, PythonVariant),
     MajorMinor(u8, u8, PythonVariant),
     MajorMinorPatch(u8, u8, u8, PythonVariant),
-    MajorMinorPrerelease(u8, u8, Prerelease, PythonVariant),
+    MajorMinorPrerelease(u8, u8, PythonPrerelease, PythonVariant),
     Range(VersionSpecifiers, PythonVariant),
 }
 
@@ -1393,6 +1423,22 @@ impl PythonRequest {
             return Self::Default;
         }
 
+        // e.g., 3.14-dev
+        if let Some((first, second)) = value.split_once('-') {
+            if second.eq_ignore_ascii_case("dev") {
+                if let Ok(VersionRequest::MajorMinor(major, minor, variant)) =
+                    VersionRequest::from_str(first)
+                {
+                    return Self::Version(VersionRequest::MajorMinorPrerelease(
+                        major,
+                        minor,
+                        PythonPrerelease::Any,
+                        variant,
+                    ));
+                }
+            }
+        }
+
         // e.g. `3.12.1`, `312`, or `>=3.12`
         if let Ok(version) = VersionRequest::from_str(value) {
             return Self::Version(version);
@@ -1931,12 +1977,16 @@ impl VersionRequest {
         &self,
         implementation: Option<&ImplementationName>,
     ) -> Vec<ExecutableName> {
-        let prerelease = if let Self::MajorMinorPrerelease(_, _, prerelease, _) = self {
-            // Include the prerelease version, e.g., `python3.8a`
-            Some(prerelease)
-        } else {
-            None
-        };
+        let prerelease =
+            // TODO(zanieb): Determine a way to handle `[PythonPrerelease::Any]`
+            if let Self::MajorMinorPrerelease(_, _, PythonPrerelease::Specific(prerelease), _) =
+                self
+            {
+                // Include the prerelease version, e.g., `python3.8a`
+                Some(prerelease)
+            } else {
+                None
+            };
 
         // Push a default one
         let mut names = Vec::new();
@@ -2149,14 +2199,8 @@ impl VersionRequest {
             }
             Self::MajorMinorPrerelease(major, minor, prerelease, variant) => {
                 let version = interpreter.python_version();
-                let Some(interpreter_prerelease) = version.pre() else {
-                    return false;
-                };
-                (
-                    interpreter.python_major(),
-                    interpreter.python_minor(),
-                    interpreter_prerelease,
-                ) == (*major, *minor, *prerelease)
+                (interpreter.python_major(), interpreter.python_minor()) == (*major, *minor)
+                    && prerelease.matches(version.pre())
                     && variant.matches_interpreter(interpreter)
             }
         }
@@ -2179,8 +2223,8 @@ impl VersionRequest {
             }
             Self::Range(specifiers, _) => specifiers.contains(&version.version),
             Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
-                (version.major(), version.minor(), version.pre())
-                    == (*major, *minor, Some(*prerelease))
+                (version.major(), version.minor()) == (*major, *minor)
+                    && prerelease.matches(version.pre())
             }
         }
     }
@@ -2252,7 +2296,7 @@ impl VersionRequest {
             Self::MajorMinorPrerelease(self_major, self_minor, self_prerelease, _) => {
                 // Pre-releases of Python versions are always for the zero patch version
                 (*self_major, *self_minor, 0) == (major, minor, patch)
-                    && prerelease.is_none_or(|pre| *self_prerelease == pre)
+                    && self_prerelease.matches(prerelease)
             }
         }
     }
@@ -2420,7 +2464,10 @@ impl FromStr for VersionRequest {
             [major, minor] => {
                 if let Some(prerelease) = prerelease {
                     return Ok(Self::MajorMinorPrerelease(
-                        *major, *minor, prerelease, variant,
+                        *major,
+                        *minor,
+                        PythonPrerelease::Specific(prerelease),
+                        variant,
                     ));
                 }
                 Ok(Self::MajorMinor(*major, *minor, variant))
@@ -2434,7 +2481,10 @@ impl FromStr for VersionRequest {
                         return Err(Error::InvalidVersionRequest(s.to_string()));
                     }
                     return Ok(Self::MajorMinorPrerelease(
-                        *major, *minor, prerelease, variant,
+                        *major,
+                        *minor,
+                        PythonPrerelease::Specific(prerelease),
+                        variant,
                     ));
                 }
                 Ok(Self::MajorMinorPatch(*major, *minor, *patch, variant))
@@ -2709,7 +2759,7 @@ mod tests {
     use uv_pep440::{Prerelease, PrereleaseKind, VersionSpecifiers};
 
     use crate::{
-        discovery::{PythonRequest, VersionRequest},
+        discovery::{PythonPrerelease, PythonRequest, VersionRequest},
         implementation::ImplementationName,
     };
 
@@ -2734,6 +2784,25 @@ mod tests {
         assert_eq!(
             PythonRequest::parse(">=3.12,<3.13"),
             PythonRequest::Version(VersionRequest::from_str(">=3.12,<3.13").unwrap())
+        );
+
+        assert_eq!(
+            PythonRequest::parse("3.13-dev"),
+            PythonRequest::Version(VersionRequest::MajorMinorPrerelease(
+                3,
+                13,
+                PythonPrerelease::Any,
+                PythonVariant::Default
+            ))
+        );
+        assert_eq!(
+            PythonRequest::parse("3.13t-dev"),
+            PythonRequest::Version(VersionRequest::MajorMinorPrerelease(
+                3,
+                13,
+                PythonPrerelease::Any,
+                PythonVariant::Freethreaded
+            ))
         );
 
         assert_eq!(
@@ -3026,10 +3095,10 @@ mod tests {
             VersionRequest::MajorMinorPrerelease(
                 3,
                 13,
-                Prerelease {
+                PythonPrerelease::Specific(Prerelease {
                     kind: PrereleaseKind::Alpha,
                     number: 1
-                },
+                }),
                 PythonVariant::Default
             )
         );
@@ -3038,10 +3107,10 @@ mod tests {
             VersionRequest::MajorMinorPrerelease(
                 3,
                 13,
-                Prerelease {
+                PythonPrerelease::Specific(Prerelease {
                     kind: PrereleaseKind::Beta,
                     number: 1
-                },
+                }),
                 PythonVariant::Default
             )
         );
@@ -3050,10 +3119,10 @@ mod tests {
             VersionRequest::MajorMinorPrerelease(
                 3,
                 13,
-                Prerelease {
+                PythonPrerelease::Specific(Prerelease {
                     kind: PrereleaseKind::Beta,
                     number: 2
-                },
+                }),
                 PythonVariant::Default
             )
         );
@@ -3062,10 +3131,10 @@ mod tests {
             VersionRequest::MajorMinorPrerelease(
                 3,
                 13,
-                Prerelease {
+                PythonPrerelease::Specific(Prerelease {
                     kind: PrereleaseKind::Rc,
                     number: 3
-                },
+                }),
                 PythonVariant::Default
             )
         );
