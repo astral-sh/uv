@@ -14,7 +14,7 @@ The uv build backend currently only supports Python code and only builds univers
 alternative backend is required if you want to create a
 [library with extension modules](../concepts/projects/init.md#projects-with-extension-modules).
 
-To use the uv build backend, configure it in `pyproject.toml`:
+To use the uv build backend in an existing project, add it to the `[build-system]` section in your `pyproject.toml`:
 
 ```toml
 [build-system]
