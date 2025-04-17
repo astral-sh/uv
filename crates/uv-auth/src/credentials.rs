@@ -426,6 +426,7 @@ mod tests {
         assert_eq!(Credentials::from_header_value(&header), Some(credentials));
     }
 
+    // Test that we don't include the password in debug messages.
     #[test]
     fn test_password_obfuscation() {
         let credentials =
