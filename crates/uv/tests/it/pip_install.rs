@@ -10,6 +10,10 @@ use fs_err::File;
 use indoc::indoc;
 use predicates::prelude::predicate;
 use url::Url;
+use wiremock::{
+    matchers::{basic_auth, method, path},
+    Mock, MockServer, ResponseTemplate,
+};
 
 #[cfg(feature = "git")]
 use crate::common::{self, decode_token};
@@ -467,6 +471,110 @@ fn install_requirements_txt() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 1 package in [TIME]
+    "###
+    );
+
+    context.assert_command("import flask").success();
+
+    Ok(())
+}
+
+/// Install a package from a remote `requirements.txt` into a virtual environment.
+#[tokio::test]
+async fn install_remote_requirements_txt() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"127\.0\.0\.1[^\r\n]*", "[LOCALHOST]")])
+        .collect::<Vec<_>>();
+
+    let server = MockServer::start().await;
+    let username = "user";
+    let password = "password";
+    let requirements_txt = "Flask";
+
+    Mock::given(method("GET"))
+        .and(path("/requirements.txt"))
+        .and(basic_auth(username, password))
+        .respond_with(ResponseTemplate::new(200).set_body_string(requirements_txt))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/requirements.txt"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let mut requirements_url = Url::parse(&format!("{}/requirements.txt", &server.uri()))?;
+
+    // Should fail without credentials
+    uv_snapshot!(filters, context.pip_install()
+        .arg("-r")
+        .arg(requirements_url.as_str())
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error while accessing remote requirements file: `http://[LOCALHOST]
+    "###
+    );
+
+    let _ = requirements_url.set_username(username);
+    let _ = requirements_url.set_password(Some(password));
+
+    // Should succeed with credentials
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg(requirements_url.as_str())
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
+    "###
+    );
+
+    context.assert_command("import flask").success();
+
+    let requirements_txt = "Jinja2";
+
+    // Update the mock server to serve the new requirements.txt
+    Mock::given(method("GET"))
+        .and(path("/requirements.txt"))
+        .and(basic_auth(username, password))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(requirements_txt)
+                .insert_header("content-type", "text/plain"),
+        )
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg(requirements_url.as_str())
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
