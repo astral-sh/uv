@@ -1527,7 +1527,7 @@ impl TreeSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct ExportSettings {
-    pub(crate) format: ExportFormat,
+    pub(crate) format: Option<ExportFormat>,
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) prune: Vec<PackageName>,

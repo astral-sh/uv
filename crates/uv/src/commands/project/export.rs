@@ -51,7 +51,7 @@ impl<'lock> From<&'lock ExportTarget> for LockTarget<'lock> {
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn export(
     project_dir: &Path,
-    format: ExportFormat,
+    format: Option<ExportFormat>,
     all_packages: bool,
     package: Option<PackageName>,
     prune: Vec<PackageName>,
@@ -251,6 +251,18 @@ pub(crate) async fn export(
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
+
+    // Determine the output format.
+    let format = format.unwrap_or_else(|| {
+        let extension = output_file.as_deref().and_then(Path::extension);
+        if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("txt")) {
+            ExportFormat::RequirementsTxt
+        } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("toml")) {
+            ExportFormat::PylockToml
+        } else {
+            ExportFormat::RequirementsTxt
+        }
+    });
 
     // Generate the export.
     match format {

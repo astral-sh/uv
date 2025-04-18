@@ -3764,8 +3764,11 @@ pub struct ExportArgs {
     /// The format to which `uv.lock` should be exported.
     ///
     /// Supports both `requirements.txt` and `pylock.toml` (PEP 751) output formats.
-    #[arg(long, value_enum, default_value_t = ExportFormat::default())]
-    pub format: ExportFormat,
+    ///
+    /// uv will infer the output format from the file extension of the output file, if
+    /// provided. Otherwise, defaults to `requirements.txt`.
+    #[arg(long, value_enum)]
+    pub format: Option<ExportFormat>,
 
     /// Export the entire workspace.
     ///
