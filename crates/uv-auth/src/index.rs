@@ -60,6 +60,23 @@ pub struct Index {
     pub auth_policy: AuthPolicy,
 }
 
+impl Index {
+    pub fn is_prefix_for(&self, url: &Url) -> bool {
+        if self.root_url.scheme() != url.scheme()
+            || self.root_url.host_str() != url.host_str()
+            || self.root_url.port_or_known_default() != url.port_or_known_default()
+        {
+            return false;
+        }
+
+        url.path().starts_with(self.root_url.path())
+    }
+}
+
+// TODO(john): Multiple methods in this struct need to iterate over
+// all the indexes in the set. There are probably not many URLs to
+// iterate through, but we could use a trie instead of a HashSet here
+// for more efficient search.
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct Indexes(FxHashSet<Index>);
 
@@ -79,36 +96,17 @@ impl Indexes {
 
     /// Get the index URL prefix for a URL if one exists.
     pub fn index_url_for(&self, url: &Url) -> Option<&Url> {
-        // TODO(john): There are probably not many URLs to iterate through,
-        // but we could use a trie instead of a HashSet here for more
-        // efficient search.
-        self.0
-            .iter()
-            .find(|index| is_url_prefix(&index.root_url, url))
-            .map(|index| &index.url)
+        self.find_prefix_index(url).map(|index| &index.url)
     }
 
     /// Get the [`AuthPolicy`] for a URL.
-    pub fn policy_for(&self, url: &Url) -> AuthPolicy {
-        // TODO(john): There are probably not many URLs to iterate through,
-        // but we could use a trie instead of a HashMap here for more
-        // efficient search.
-        for index in &self.0 {
-            if is_url_prefix(&index.root_url, url) {
-                return index.auth_policy;
-            }
-        }
-        AuthPolicy::Auto
-    }
-}
-
-fn is_url_prefix(base: &Url, url: &Url) -> bool {
-    if base.scheme() != url.scheme()
-        || base.host_str() != url.host_str()
-        || base.port_or_known_default() != url.port_or_known_default()
-    {
-        return false;
+    pub fn auth_policy_for(&self, url: &Url) -> AuthPolicy {
+        self.find_prefix_index(url)
+            .map(|index| index.auth_policy)
+            .unwrap_or(AuthPolicy::Auto)
     }
 
-    url.path().starts_with(base.path())
+    fn find_prefix_index(&self, url: &Url) -> Option<&Index> {
+        self.0.iter().find(|&index| index.is_prefix_for(url))
+    }
 }
