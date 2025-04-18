@@ -1740,6 +1740,10 @@ uv sync [OPTIONS]
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
 
 <p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt id="uv-sync--no-default-extras"><a href="#uv-sync--no-default-extras"><code>--no-default-extras</code></a></dt><dd><p>Ignore the default extras.</p>
+
+<p>uv includes the extras defined in <code>tool.uv.default-extras</code> by default. This disables that option, however, specific extras can still be included with <code>--extra</code>.</p>
+
 </dd><dt id="uv-sync--no-default-groups"><a href="#uv-sync--no-default-groups"><code>--no-default-groups</code></a></dt><dd><p>Ignore the default dependency groups.</p>
 
 <p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
@@ -1751,7 +1755,9 @@ uv sync [OPTIONS]
 </dd><dt id="uv-sync--no-editable"><a href="#uv-sync--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 
 <p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p>
-</dd><dt id="uv-sync--no-extra"><a href="#uv-sync--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
+</dd><dt id="uv-sync--no-extra"><a href="#uv-sync--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Disable the specified extra.</p>
+
+<p>This options always takes precedence over default extras, <code>--all-extras</code>, and <code>--extra</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -1799,6 +1805,10 @@ uv sync [OPTIONS]
 <p>The project and its dependencies will be omitted.</p>
 
 <p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
+
+</dd><dt id="uv-sync--only-extra"><a href="#uv-sync--only-extra"><code>--only-extra</code></a> <i>only-extra</i></dt><dd><p>Only include dependencies from the specified extra.</p>
+
+<p>May be provided multiple times. Implies <code>--no-default-extras</code>.</p>
 
 </dd><dt id="uv-sync--only-group"><a href="#uv-sync--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 

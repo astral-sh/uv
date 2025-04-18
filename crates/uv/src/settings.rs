@@ -1075,6 +1075,8 @@ impl SyncSettings {
         let SyncArgs {
             extra,
             all_extras,
+            no_default_extras,
+            only_extra,
             no_extra,
             no_all_extras,
             dev,
@@ -1132,10 +1134,8 @@ impl SyncSettings {
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
                 no_extra,
-                // TODO(blueraft): support no_default_extras
-                false,
-                // TODO(blueraft): support only_extra
-                vec![],
+                no_default_extras,
+                only_extra,
                 flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
             dev: DependencyGroups::from_args(

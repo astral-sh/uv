@@ -3092,11 +3092,27 @@ pub struct SyncArgs {
     #[arg(long, conflicts_with = "extra")]
     pub all_extras: bool,
 
-    /// Exclude the specified optional dependencies, if `--all-extras` is supplied.
+    /// Disable the specified extra.
+    ///
+    /// This options always takes precedence over default extras,
+    /// `--all-extras`, and `--extra`.
     ///
     /// May be provided multiple times.
     #[arg(long)]
     pub no_extra: Vec<ExtraName>,
+
+    /// Ignore the default extras.
+    ///
+    /// uv includes the extras defined in `tool.uv.default-extras` by default.
+    /// This disables that option, however, specific extras can still be included with `--extra`.
+    #[arg(long)]
+    pub no_default_extras: bool,
+
+    /// Only include dependencies from the specified extra.
+    ///
+    /// May be provided multiple times. Implies `--no-default-extras`.
+    #[arg(long, conflicts_with_all = ["extra", "all_extras"])]
+    pub only_extra: Vec<ExtraName>,
 
     #[arg(long, overrides_with("all_extras"), hide = true)]
     pub no_all_extras: bool,
