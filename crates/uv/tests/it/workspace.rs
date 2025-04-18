@@ -1210,9 +1210,9 @@ fn workspace_inherit_sources() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
-        revision = 1
+        revision = 2
         requires-python = ">=3.12"
 
         [options]
@@ -1244,7 +1244,7 @@ fn workspace_inherit_sources() -> Result<()> {
         name = "workspace"
         version = "0.1.0"
         source = { editable = "." }
-        "###
+        "#
         );
     });
 
