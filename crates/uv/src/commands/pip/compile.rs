@@ -238,20 +238,18 @@ pub(crate) async fn pip_compile(
     // If all the metadata could be statically resolved, validate that every extra was used. If we
     // need to resolve metadata via PEP 517, we don't know which extras are used until much later.
     if source_trees.is_empty() {
-        if let ExtrasSpecification::Some(extras) = &extras {
-            let mut unused_extras = extras
-                .iter()
-                .filter(|extra| !used_extras.contains(extra))
-                .collect::<Vec<_>>();
-            if !unused_extras.is_empty() {
-                unused_extras.sort_unstable();
-                unused_extras.dedup();
-                let s = if unused_extras.len() == 1 { "" } else { "s" };
-                return Err(anyhow!(
-                    "Requested extra{s} not found: {}",
-                    unused_extras.iter().join(", ")
-                ));
-            }
+        let mut unused_extras = extras
+            .explicit_names()
+            .filter(|extra| !used_extras.contains(extra))
+            .collect::<Vec<_>>();
+        if !unused_extras.is_empty() {
+            unused_extras.sort_unstable();
+            unused_extras.dedup();
+            let s = if unused_extras.len() == 1 { "" } else { "s" };
+            return Err(anyhow!(
+                "Requested extra{s} not found: {}",
+                unused_extras.iter().join(", ")
+            ));
         }
     }
 

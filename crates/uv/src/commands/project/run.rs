@@ -24,7 +24,7 @@ use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::{DefaultGroups, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
@@ -284,7 +284,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             match project::sync::do_sync(
                 target,
                 &environment,
-                &extras,
+                &extras.with_defaults(DefaultExtras::default()),
                 &dev.with_defaults(DefaultGroups::default()),
                 editable,
                 install_options,
@@ -531,8 +531,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
         if no_project {
             // If the user ran with `--no-project` and provided a project-only setting, warn.
-            if !extras.is_empty() {
-                warn_user!("Extras have no effect when used alongside `--no-project`");
+            for flag in extras.history().as_flags_pretty() {
+                warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
             for flag in dev.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
@@ -548,8 +548,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             }
         } else if project.is_none() {
             // If we can't find a project and the user provided a project-only setting, warn.
-            if !extras.is_empty() {
-                warn_user!("Extras have no effect when used outside of a project");
+            for flag in extras.history().as_flags_pretty() {
+                warn_user!("`{flag}` has no effect when used outside of a project");
             }
             for flag in dev.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
@@ -669,7 +669,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // Validate that any referenced dependency groups are defined in the workspace.
 
                 // Determine the default groups to include.
-                let defaults = default_dependency_groups(project.pyproject_toml())?;
+                let default_groups = default_dependency_groups(project.pyproject_toml())?;
+
+                // Determine the default extras to include.
+                let default_extras = DefaultExtras::default();
 
                 // Determine the lock mode.
                 let mode = if frozen {
@@ -755,7 +758,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 };
 
                 let install_options = InstallOptions::default();
-                let dev = dev.with_defaults(defaults);
+                let dev = dev.with_defaults(default_groups);
+                let extras = extras.with_defaults(default_extras);
 
                 // Validate that the set of requested extras and development groups are defined in the lockfile.
                 target.validate_extras(&extras)?;

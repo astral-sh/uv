@@ -6,7 +6,7 @@ use owo_colors::OwoColorize;
 use url::Url;
 
 use uv_configuration::{
-    DependencyGroupsWithDefaults, EditableMode, ExtrasSpecification, InstallOptions,
+    DependencyGroupsWithDefaults, EditableMode, ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_filename::{DistExtension, SourceDistExtension};
 use uv_fs::Simplified;
@@ -30,7 +30,7 @@ impl<'lock> RequirementsTxtExport<'lock> {
     pub fn from_lock(
         target: &impl Installable<'lock>,
         prune: &[PackageName],
-        extras: &ExtrasSpecification,
+        extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
         annotate: bool,
         editable: EditableMode,

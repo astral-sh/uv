@@ -30,7 +30,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
-use uv_normalize::{DefaultGroups, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{DefaultExtras, PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{ExtraName, MarkerTree, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -52,8 +52,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    init_script_python_requirement, PlatformState, ProjectEnvironment, ProjectError,
-    ProjectInterpreter, ScriptInterpreter, UniversalState,
+    default_dependency_groups, init_script_python_requirement, PlatformState, ProjectEnvironment,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, project, ExitStatus, ScriptPath};
@@ -892,26 +892,32 @@ async fn lock_and_sync(
     // Sync the environment.
     let (extras, dev) = match dependency_type {
         DependencyType::Production => {
-            let extras = ExtrasSpecification::None;
+            let extras = ExtrasSpecification::from_extra(vec![]);
             let dev = DependencyGroups::from_dev_mode(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Dev => {
-            let extras = ExtrasSpecification::None;
+            let extras = ExtrasSpecification::from_extra(vec![]);
             let dev = DependencyGroups::from_dev_mode(DevMode::Include);
             (extras, dev)
         }
         DependencyType::Optional(ref extra_name) => {
-            let extras = ExtrasSpecification::Some(vec![extra_name.clone()]);
+            let extras = ExtrasSpecification::from_extra(vec![extra_name.clone()]);
             let dev = DependencyGroups::from_dev_mode(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Group(ref group_name) => {
-            let extras = ExtrasSpecification::None;
+            let extras = ExtrasSpecification::from_extra(vec![]);
             let dev = DependencyGroups::from_group(group_name.clone());
             (extras, dev)
         }
     };
+
+    // Determine the default groups to include.
+    let default_groups = default_dependency_groups(project.pyproject_toml())?;
+
+    // Determine the default extras to include.
+    let default_extras = DefaultExtras::default();
 
     // Identify the installation target.
     let target = match &project {
@@ -929,8 +935,8 @@ async fn lock_and_sync(
     project::sync::do_sync(
         target,
         venv,
-        &extras,
-        &dev.with_defaults(DefaultGroups::default()),
+        &extras.with_defaults(default_extras),
+        &dev.with_defaults(default_groups),
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,
