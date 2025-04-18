@@ -2332,11 +2332,11 @@ uv export [OPTIONS]
 
 <p>At present, only <code>requirements-txt</code> is supported.</p>
 
-<p>[default: requirements-txt]</p>
+<p>[default: requirements.txt]</p>
 <p>Possible values:</p>
 
 <ul>
-<li><code>requirements-txt</code>:  Export in <code>requirements.txt</code> format</li>
+<li><code>requirements.txt</code>:  Export in <code>requirements.txt</code> format</li>
 </ul>
 </dd><dt id="uv-export--frozen"><a href="#uv-export--frozen"><code>--frozen</code></a></dt><dd><p>Do not update the <code>uv.lock</code> before exporting.</p>
 
