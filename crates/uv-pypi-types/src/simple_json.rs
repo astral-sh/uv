@@ -185,11 +185,15 @@ impl Default for Yanked {
 /// A dictionary mapping a hash name to a hex encoded digest of the file.
 ///
 /// PEP 691 says multiple hashes can be included and the interpretation is left to the client.
-#[derive(Debug, Clone, Eq, PartialEq, Default, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Default, Deserialize, Serialize)]
 pub struct Hashes {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub md5: Option<SmallString>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sha256: Option<SmallString>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sha384: Option<SmallString>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sha512: Option<SmallString>,
 }
 
@@ -487,6 +491,21 @@ impl From<Hashes> for HashDigests {
             });
         }
         Self::from(digests)
+    }
+}
+
+impl From<HashDigests> for Hashes {
+    fn from(value: HashDigests) -> Self {
+        let mut hashes = Hashes::default();
+        for digest in value {
+            match digest.algorithm() {
+                HashAlgorithm::Md5 => hashes.md5 = Some(digest.digest),
+                HashAlgorithm::Sha256 => hashes.sha256 = Some(digest.digest),
+                HashAlgorithm::Sha384 => hashes.sha384 = Some(digest.digest),
+                HashAlgorithm::Sha512 => hashes.sha512 = Some(digest.digest),
+            }
+        }
+        hashes
     }
 }
 

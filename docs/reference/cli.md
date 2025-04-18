@@ -2330,13 +2330,15 @@ uv export [OPTIONS]
 </ul>
 </dd><dt id="uv-export--format"><a href="#uv-export--format"><code>--format</code></a> <i>format</i></dt><dd><p>The format to which <code>uv.lock</code> should be exported.</p>
 
-<p>At present, only <code>requirements-txt</code> is supported.</p>
+<p>Supports both <code>requirements.txt</code> and <code>pylock.toml</code> (PEP 751) output formats.</p>
 
 <p>[default: requirements.txt]</p>
 <p>Possible values:</p>
 
 <ul>
 <li><code>requirements.txt</code>:  Export in <code>requirements.txt</code> format</li>
+
+<li><code>pylock.toml</code>:  Export in <code>pylock.toml</code> format</li>
 </ul>
 </dd><dt id="uv-export--frozen"><a href="#uv-export--frozen"><code>--frozen</code></a></dt><dd><p>Do not update the <code>uv.lock</code> before exporting.</p>
 
