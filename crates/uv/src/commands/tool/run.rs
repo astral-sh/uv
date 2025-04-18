@@ -19,6 +19,7 @@ use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Constraints;
 use uv_configuration::{Concurrency, PreviewMode};
+use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
     IndexUrl, Name, NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirement, UnresolvedRequirementSpecification,
@@ -39,6 +40,7 @@ use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
@@ -270,6 +272,7 @@ pub(crate) async fn run(
     ))
     .await;
 
+    let explicit_from = from.is_some();
     let (from, environment) = match result {
         Ok(resolution) => resolution,
         Err(ProjectError::Operation(err)) => {
@@ -304,6 +307,29 @@ pub(crate) async fn run(
 
     // TODO(zanieb): Determine the executable command via the package entry points
     let executable = from.executable();
+    let site_packages = SitePackages::from_environment(&environment)?;
+
+    // Check if the provided command is not part of the executables for the `from` package,
+    // and if it's provided by another package in the environment.
+    let providers =
+        ExecutableProviderPackages::new(executable, &from, &site_packages, invocation_source);
+
+    if providers.not_from_any() {
+        if !explicit_from {
+            // If the user didn't use `--from` and the command isn't in the environment, we're now
+            // just invoking an arbitrary executable on the `PATH` and should exit instead.
+            writeln!(printer.stderr(), "{providers}")?;
+            return Ok(ExitStatus::Failure);
+        }
+        // In the case where `--from` is used, we'll warn on failure if the command is not found
+        // TODO(zanieb): Consider if we should require `--with` instead of `--from` in this case?
+        // It'd be a breaking change but would make `uvx` invocations safer.
+    } else if providers.not_from_expected() {
+        // However, if the user used `--from`, we shouldn't fail because they requested that the
+        // package and executable be different. We'll warn if the executable comes from another
+        // package though, because that could be confusing
+        warn_user_once!("{providers}");
+    }
 
     // Construct the command
     let mut process = if cfg!(windows) {
@@ -327,7 +353,6 @@ pub(crate) async fn run(
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
-    // TODO(zanieb): Throw a nicer error message if the command is not found
     let space = if args.is_empty() { "" } else { " " };
     debug!(
         "Running `{}{space}{}`",
@@ -335,35 +360,15 @@ pub(crate) async fn run(
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
 
-    let site_packages = SitePackages::from_environment(&environment)?;
-
-    // We check if the provided command is not part of the executables for the `from` package.
-    // If the command is found in other packages, we warn the user about the correct package to use.
-    match &from {
-        ToolRequirement::Python => {}
-        ToolRequirement::Package {
-            requirement: from, ..
-        } => {
-            warn_executable_not_provided_by_package(
-                executable,
-                &from.name,
-                &site_packages,
-                invocation_source,
-            );
-        }
-    }
-
     let handle = match process.spawn() {
         Ok(handle) => Ok(handle),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            if let Some(exit_status) = hint_on_not_found(
-                executable,
-                &from,
-                &site_packages,
-                invocation_source,
-                printer,
-            )? {
-                return Ok(exit_status);
+            if providers.not_from_any() && explicit_from {
+                // We deferred this warning earlier, because `--from` was used and the command
+                // could have come from the `PATH`. Display a more helpful message instead of the
+                // OS error.
+                writeln!(printer.stderr(), "{providers}")?;
+                return Ok(ExitStatus::Failure);
             }
             Err(err)
         }
@@ -372,67 +377,6 @@ pub(crate) async fn run(
     .with_context(|| format!("Failed to spawn: `{executable}`"))?;
 
     run_to_completion(handle).await
-}
-
-/// Show a hint when a command fails due to a missing executable.
-///
-/// Returns an exit status if the caller should exit after hinting.
-fn hint_on_not_found(
-    executable: &str,
-    from: &ToolRequirement,
-    site_packages: &SitePackages,
-    invocation_source: ToolRunCommand,
-    printer: Printer,
-) -> anyhow::Result<Option<ExitStatus>> {
-    let from = match from {
-        ToolRequirement::Python => return Ok(None),
-        ToolRequirement::Package {
-            requirement: from, ..
-        } => from,
-    };
-    match get_entrypoints(&from.name, site_packages) {
-        Ok(entrypoints) => {
-            writeln!(
-                printer.stdout(),
-                "The executable `{}` was not found.",
-                executable.cyan(),
-            )?;
-            if entrypoints.is_empty() {
-                warn_user!(
-                    "Package `{}` does not provide any executables.",
-                    from.name.red()
-                );
-            } else {
-                warn_user!(
-                    "An executable named `{}` is not provided by package `{}`.",
-                    executable.cyan(),
-                    from.name.red()
-                );
-                writeln!(
-                    printer.stdout(),
-                    "The following executables are provided by `{}`:",
-                    from.name.green()
-                )?;
-                for (name, _) in entrypoints {
-                    writeln!(printer.stdout(), "- {}", name.cyan())?;
-                }
-                let suggested_command = format!(
-                    "{} --from {} <EXECUTABLE_NAME>",
-                    invocation_source, from.name
-                );
-                writeln!(
-                    printer.stdout(),
-                    "Consider using `{}` instead.",
-                    suggested_command.green()
-                )?;
-            }
-            Ok(Some(ExitStatus::Failure))
-        }
-        Err(err) => {
-            warn!("Failed to get entrypoints for `{from}`: {err}");
-            Ok(None)
-        }
-    }
 }
 
 /// Return the entry points for the specified package.
@@ -517,52 +461,163 @@ async fn show_help(
     Ok(())
 }
 
-/// Display a warning if an executable is not provided by package.
-///
-/// If found in a dependency of the requested package instead of the requested package itself, we will hint to use that instead.
-fn warn_executable_not_provided_by_package(
-    executable: &str,
-    from_package: &PackageName,
-    site_packages: &SitePackages,
+struct ExecutableProviderPackages<'a> {
+    /// The requested executable for the command
+    executable: &'a str,
+    /// The package from which the executable is expected to come from
+    from: &'a ToolRequirement,
+    /// The packages in the Pythonenvironment the command will run it
+    site_packages: &'a SitePackages,
+    /// The matching packages
+    packages: Vec<InstalledDist>,
     invocation_source: ToolRunCommand,
-) {
-    let packages = matching_packages(executable, site_packages);
-    if !packages
-        .iter()
-        .any(|package| package.name() == from_package)
-    {
+}
+
+impl<'a> ExecutableProviderPackages<'a> {
+    fn new(
+        executable: &'a str,
+        from: &'a ToolRequirement,
+        site_packages: &'a SitePackages,
+        invocation_source: ToolRunCommand,
+    ) -> Self {
+        let packages = matching_packages(executable, site_packages);
+        ExecutableProviderPackages {
+            executable,
+            from,
+            site_packages,
+            packages,
+            invocation_source,
+        }
+    }
+
+    fn not_from_expected(&self) -> bool {
+        let from = match self.from {
+            // Nothing to do for Python
+            ToolRequirement::Python => return false,
+            ToolRequirement::Package { requirement, .. } => requirement,
+        };
+        !self
+            .packages
+            .iter()
+            .any(|package| package.name() == &from.name)
+    }
+
+    fn not_from_any(&self) -> bool {
+        match self.from {
+            // Nothing to do for Python
+            ToolRequirement::Python => return false,
+            ToolRequirement::Package { .. } => {}
+        }
+        self.packages.is_empty()
+    }
+}
+
+impl std::fmt::Display for ExecutableProviderPackages<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self {
+            executable,
+            from,
+            site_packages,
+            packages,
+            invocation_source,
+        } = self;
+
+        let from = match from {
+            // Nothing to do for Python
+            ToolRequirement::Python => {
+                debug_assert!(false, "Attempted to display providers for a `python` invocation which is always available");
+                return Ok(());
+            }
+            ToolRequirement::Package { requirement, .. } => requirement,
+        };
+
         match packages.as_slice() {
-            [] => {}
+            [] => {
+                let entrypoints = match get_entrypoints(&from.name, site_packages) {
+                    Ok(entrypoints) => entrypoints,
+                    Err(err) => {
+                        warn!("Failed to get entrypoints for `{from}`: {err}");
+                        return Ok(());
+                    }
+                };
+                if entrypoints.is_empty() {
+                    write!(
+                        f,
+                        "Package `{}` does not provide any executables.",
+                        from.name.red()
+                    )?;
+                    return Ok(());
+                }
+                writeln!(
+                    f,
+                    "An executable named `{}` is not provided by package `{}`.",
+                    executable.cyan(),
+                    from.name.cyan(),
+                )?;
+                writeln!(f, "The following executables are available:")?;
+                for (name, _) in &entrypoints {
+                    writeln!(f, "- {}", name.cyan())?;
+                }
+                let name = match entrypoints.as_slice() {
+                    [entrypoint] => entrypoint.0.as_str(),
+                    _ => "<EXECUTABLE-NAME>",
+                };
+                // If the user didn't use `--from`, suggest it
+                if *executable == from.name.as_str() {
+                    let suggested_command =
+                        format!("{} --from {} {name}", invocation_source, from.name);
+                    writeln!(f, "\nUse `{}` instead.", suggested_command.green().bold())?;
+                }
+            }
+            [package] if package.name() == &from.name => {
+                write!(
+                    f,
+                    "An executable named `{}` is provided by package `{}`",
+                    executable.cyan(),
+                    from.name.cyan(),
+                )?;
+            }
             [package] => {
                 let suggested_command = format!(
                     "{invocation_source} --from {} {}",
                     package.name(),
                     executable
                 );
-                warn_user!(
-                    "An executable named `{}` is not provided by package `{}` but is available via the dependency `{}`. Consider using `{}` instead.",
-                    executable.cyan(),
-                    from_package.cyan(),
-                    package.name().cyan(),
-                    suggested_command.green()
-                );
+                write!(f,
+                        "An executable named `{}` is not provided by package `{}` but is available via the dependency `{}`. Consider using `{}` instead.",
+                        executable.cyan(),
+                        from.name.cyan(),
+                        package.name().cyan(),
+                        suggested_command.green()
+                    )?;
             }
             packages => {
-                let suggested_command = format!("{invocation_source} --from PKG {executable}");
                 let provided_by = packages
                     .iter()
                     .map(uv_distribution_types::Name::name)
                     .map(|name| format!("- {}", name.cyan()))
                     .join("\n");
-                warn_user!(
-                    "An executable named `{}` is not provided by package `{}` but is available via the following dependencies:\n- {}\nConsider using `{}` instead.",
-                    executable.cyan(),
-                    from_package.cyan(),
-                    provided_by,
-                    suggested_command.green(),
-                );
+                if self.not_from_expected() {
+                    let suggested_command = format!("{invocation_source} --from PKG {executable}");
+                    write!(f,
+                            "An executable named `{}` is not provided by package `{}` but is available via the following dependencies:\n- {}\nConsider using `{}` instead.",
+                            executable.cyan(),
+                            from.name.cyan(),
+                            provided_by,
+                            suggested_command.green(),
+                        )?;
+                } else {
+                    write!(f,
+                        "An executable named `{}` is provided by package `{}` but is also available via the following dependencies:\n- {}\nUnexpected behavior may occur.",
+                        executable.cyan(),
+                        from.name.cyan(),
+                        provided_by,
+                    )?;
+                }
             }
         }
+
+        Ok(())
     }
 }
 

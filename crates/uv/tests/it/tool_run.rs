@@ -139,15 +139,10 @@ fn tool_run_at_version() {
         .arg("pytest@8.0.0")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable `pytest@8.0.0` was not found.
-    The following executables are provided by `pytest`:
-    - py.test
-    - pytest
-    Consider using `uv tool run --from pytest <EXECUTABLE_NAME>` instead.
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -157,8 +152,11 @@ fn tool_run_at_version() {
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.1.1
-    warning: An executable named `pytest@8.0.0` is not provided by package `pytest`.
-    "###);
+    An executable named `pytest@8.0.0` is not provided by package `pytest`.
+    The following executables are available:
+    - py.test
+    - pytest
+    ");
 }
 
 #[test]
@@ -265,15 +263,10 @@ fn tool_run_suggest_valid_commands() {
     .arg("black")
     .arg("orange")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable `orange` was not found.
-    The following executables are provided by `black`:
-    - black
-    - blackd
-    Consider using `uv tool run --from black <EXECUTABLE_NAME>` instead.
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -285,17 +278,19 @@ fn tool_run_suggest_valid_commands() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    warning: An executable named `orange` is not provided by package `black`.
-    "###);
+    An executable named `orange` is not provided by package `black`.
+    The following executables are available:
+    - black
+    - blackd
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
     .arg("fastapi-cli")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable `fastapi-cli` was not found.
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -304,8 +299,8 @@ fn tool_run_suggest_valid_commands() {
      + fastapi-cli==0.0.1
      + importlib-metadata==1.7.0
      + zipp==3.18.1
-    warning: Package `fastapi-cli` does not provide any executables.
-    "###);
+    Package `fastapi-cli` does not provide any executables.
+    ");
 }
 
 #[test]
@@ -327,7 +322,7 @@ fn tool_run_warn_executable_not_in_from() {
         .arg("fastapi")
         .arg("fastapi")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -371,7 +366,7 @@ fn tool_run_warn_executable_not_in_from() {
      + watchfiles==0.21.0
      + websockets==12.0
     warning: An executable named `fastapi` is not provided by package `fastapi` but is available via the dependency `fastapi-cli`. Consider using `uv tool run --from fastapi-cli fastapi` instead.
-    "###);
+    ");
 }
 
 #[test]
@@ -1540,11 +1535,10 @@ fn warn_no_executables_found() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("requests")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable `requests` was not found.
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
@@ -1555,8 +1549,8 @@ fn warn_no_executables_found() {
      + idna==3.6
      + requests==2.31.0
      + urllib3==2.2.1
-    warning: Package `requests` does not provide any executables.
-    "###);
+    Package `requests` does not provide any executables.
+    ");
 }
 
 /// Warn when a user passes `--upgrade` to `uv tool run`.
@@ -2198,19 +2192,19 @@ fn tool_run_verbatim_name() {
         .arg("change-wheel-version")
         .arg("--help")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable `change-wheel-version` was not found.
-    The following executables are provided by `change-wheel-version`:
-    - change_wheel_version
-    Consider using `uv tool run --from change-wheel-version <EXECUTABLE_NAME>` instead.
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    warning: An executable named `change-wheel-version` is not provided by package `change-wheel-version`.
-    "###);
+    An executable named `change-wheel-version` is not provided by package `change-wheel-version`.
+    The following executables are available:
+    - change_wheel_version
+
+    Use `uv tool run --from change-wheel-version change_wheel_version` instead.
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
