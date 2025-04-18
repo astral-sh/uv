@@ -268,8 +268,9 @@ impl PythonDownloadRequest {
     /// Iterate over all [`PythonDownload`]'s that match this request.
     pub fn iter_downloads(
         &self,
+        python_downloads_json_url: Option<&str>,
     ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload> + use<'_>, Error> {
-        Ok(ManagedPythonDownload::iter_all()?
+        Ok(ManagedPythonDownload::iter_all(python_downloads_json_url)?
             .filter(move |download| self.satisfied_by_download(download)))
     }
 
@@ -496,8 +497,9 @@ impl ManagedPythonDownload {
     /// be searched for — even if a pre-release was not explicitly requested.
     pub fn from_request(
         request: &PythonDownloadRequest,
+        python_downloads_json_url: Option<&str>,
     ) -> Result<&'static ManagedPythonDownload, Error> {
-        if let Some(download) = request.iter_downloads()?.next() {
+        if let Some(download) = request.iter_downloads(python_downloads_json_url)?.next() {
             return Ok(download);
         }
 
@@ -505,7 +507,7 @@ impl ManagedPythonDownload {
             if let Some(download) = request
                 .clone()
                 .with_prereleases(true)
-                .iter_downloads()?
+                .iter_downloads(python_downloads_json_url)?
                 .next()
             {
                 return Ok(download);
@@ -514,31 +516,32 @@ impl ManagedPythonDownload {
 
         Err(Error::NoDownloadFound(request.clone()))
     }
-
     //noinspection RsUnresolvedPath - RustRover can't see through the `include!`
+
     /// Iterate over all [`ManagedPythonDownload`]s.
-    pub fn iter_all() -> Result<impl Iterator<Item = &'static ManagedPythonDownload>, Error> {
-        let runtime_source = std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL);
-
+    pub fn iter_all(
+        python_downloads_json_url: Option<&str>,
+    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload>, Error> {
         let downloads = PYTHON_DOWNLOADS.get_or_try_init(|| {
-            let json_downloads: HashMap<String, JsonPythonDownload> =
-                if let Ok(json_source) = &runtime_source {
-                    if Url::parse(json_source).is_ok() {
-                        return Err(Error::RemoteJSONNotSupported());
-                    }
+            let json_downloads: HashMap<String, JsonPythonDownload> = if let Some(json_source) =
+                python_downloads_json_url
+            {
+                if Url::parse(json_source).is_ok() {
+                    return Err(Error::RemoteJSONNotSupported());
+                }
 
-                    let file = match fs_err::File::open(json_source) {
-                        Ok(file) => file,
-                        Err(e) => { Err(Error::Io(e)) }?,
-                    };
-
-                    serde_json::from_reader(file)
-                        .map_err(|e| Error::InvalidPythonDownloadsJSON(json_source.clone(), e))?
-                } else {
-                    serde_json::from_str(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
-                        Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_string(), e)
-                    })?
+                let file = match fs_err::File::open(json_source) {
+                    Ok(file) => file,
+                    Err(e) => { Err(Error::Io(e)) }?,
                 };
+
+                serde_json::from_reader(file)
+                    .map_err(|e| Error::InvalidPythonDownloadsJSON(json_source.to_string(), e))?
+            } else {
+                serde_json::from_str(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
+                    Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_string(), e)
+                })?
+            };
 
             let result = parse_json_downloads(json_downloads);
             Ok(Cow::Owned(result))

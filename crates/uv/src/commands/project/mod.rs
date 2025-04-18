@@ -710,6 +710,7 @@ impl ScriptInterpreter {
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?
         .into_interpreter();
@@ -903,6 +904,7 @@ impl ProjectInterpreter {
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?;
 
@@ -2280,6 +2282,7 @@ pub(crate) async fn init_script_python_requirement(
         Some(reporter),
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
     .into_interpreter();

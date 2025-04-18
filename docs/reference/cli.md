@@ -4770,6 +4770,11 @@ uv python list [OPTIONS] [REQUEST]
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 <p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
+</dd><dt id="uv-python-list--python-downloads-json-url"><a href="#uv-python-list--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations.</p>
+
+<p>Note that currently, only local paths are supported.</p>
+
+<p>May also be set with the <code>UV_PYTHON_DOWNLOADS_JSON_URL</code> environment variable.</p>
 </dd><dt id="uv-python-list--quiet"><a href="#uv-python-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
@@ -4941,6 +4946,11 @@ uv python install [OPTIONS] [TARGETS]...
 <p>Distributions can be read from a local directory by using the <code>file://</code> URL scheme.</p>
 
 <p>May also be set with the <code>UV_PYPY_INSTALL_MIRROR</code> environment variable.</p>
+</dd><dt id="uv-python-install--python-downloads-json-url"><a href="#uv-python-install--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations.</p>
+
+<p>Note that currently, only local paths are supported.</p>
+
+<p>May also be set with the <code>UV_PYTHON_DOWNLOADS_JSON_URL</code> environment variable.</p>
 </dd><dt id="uv-python-install--quiet"><a href="#uv-python-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>

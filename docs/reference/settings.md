@@ -1655,6 +1655,32 @@ Whether to allow Python downloads.
 
 ---
 
+### [`python-downloads-json-url`](#python-downloads-json-url) {: #python-downloads-json-url }
+
+URL pointing to JSON of custom Python installations.
+
+Note that currently, only local paths are supported.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    python-downloads-json-url = "/etc/uv/python-downloads.json"
+    ```
+=== "uv.toml"
+
+    ```toml
+    python-downloads-json-url = "/etc/uv/python-downloads.json"
+    ```
+
+---
+
 ### [`python-install-mirror`](#python-install-mirror) {: #python-install-mirror }
 
 Mirror URL for downloading managed Python installations.
