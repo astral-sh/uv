@@ -430,6 +430,7 @@ impl From<&ParsedDirectoryUrl> for DirectUrl {
             dir_info: DirInfo {
                 editable: value.editable.then_some(true),
             },
+            subdirectory: None,
         }
     }
 }
