@@ -618,6 +618,12 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
                 arch,
             }]
         }
+        (Os::Pyodide { major, minor }, Arch::Wasm32) => {
+            vec![PlatformTag::Pyodide {
+                major: *major,
+                minor: *minor,
+            }]
+        }
         _ => {
             return Err(PlatformError::OsVersionDetectionError(format!(
                 "Unsupported operating system and architecture combination: {os} {arch}"
