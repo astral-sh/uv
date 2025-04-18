@@ -348,6 +348,8 @@ impl RunSettings {
             extra,
             all_extras,
             no_extra,
+            no_default_extras,
+            only_extra,
             no_all_extras,
             dev,
             no_dev,
@@ -397,10 +399,8 @@ impl RunSettings {
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
                 no_extra,
-                // TODO(blueraft): support no_default_extras
-                false,
-                // TODO(blueraft): support only_extra
-                vec![],
+                no_default_extras,
+                only_extra,
                 flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
             dev: DependencyGroups::from_args(
@@ -1567,6 +1567,8 @@ impl ExportSettings {
             prune,
             extra,
             all_extras,
+            no_default_extras,
+            only_extra,
             no_extra,
             no_all_extras,
             dev,
@@ -1609,10 +1611,8 @@ impl ExportSettings {
             extras: ExtrasSpecification::from_args(
                 extra.unwrap_or_default(),
                 no_extra,
-                // TODO(blueraft): support no_default_extras
-                false,
-                // TODO(blueraft): support only_extra
-                vec![],
+                no_default_extras,
+                only_extra,
                 flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
             dev: DependencyGroups::from_args(
