@@ -48,9 +48,9 @@ use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::WorkspaceMember;
 
 use crate::fork_strategy::ForkStrategy;
+pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;
-pub use crate::lock::requirements_txt::RequirementsTxtExport;
 pub use crate::lock::tree::TreeDisplay;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
@@ -60,9 +60,9 @@ use crate::{
     ResolverOutput,
 };
 
+mod export;
 mod installable;
 mod map;
-mod requirements_txt;
 mod tree;
 
 /// The current version of the lockfile format.
