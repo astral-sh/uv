@@ -879,6 +879,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                context.workdir.as_ref(),
             )
         })??;
 
@@ -912,6 +913,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                context.workdir.as_ref(),
             )
         })??;
 
@@ -948,6 +950,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    context.workdir.as_ref(),
                 )
             })??;
         assert!(
@@ -978,6 +981,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    context.workdir.as_ref(),
                 )
             })??;
         assert!(

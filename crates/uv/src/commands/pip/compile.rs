@@ -111,6 +111,7 @@ pub(crate) async fn pip_compile(
     cache: Cache,
     printer: Printer,
     preview: PreviewMode,
+    project_dir: &Path,
 ) -> Result<ExitStatus> {
     // If the user provides a `pyproject.toml` or other TOML file as the output file, raise an
     // error.
@@ -278,7 +279,13 @@ pub(crate) async fn pip_compile(
         } else {
             PythonRequest::default()
         };
-        PythonInstallation::find_best(&request, environment_preference, python_preference, &cache)
+        PythonInstallation::find_best(
+            &request,
+            environment_preference,
+            python_preference,
+            &cache,
+            project_dir,
+        )
     }?
     .into_interpreter();
 
