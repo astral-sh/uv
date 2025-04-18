@@ -65,6 +65,7 @@ Ok(
                         },
                         hash: None,
                         size: None,
+                        upload_time: None,
                         filename: WheelFilename {
                             name: PackageName(
                                 "anyio",
