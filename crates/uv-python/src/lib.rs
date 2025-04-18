@@ -51,11 +51,6 @@ pub(crate) const COMPANY_KEY: &str = "Astral";
 #[cfg(windows)]
 pub(crate) const COMPANY_DISPLAY_NAME: &str = "Astral Software Inc.";
 
-#[cfg(not(test))]
-pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
-    std::env::current_dir()
-}
-
 #[cfg(test)]
 pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
     std::env::var_os(EnvVars::PWD)
@@ -880,6 +875,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                context.workdir.as_ref(),
             )
         })??;
 
@@ -913,6 +909,7 @@ mod tests {
                 EnvironmentPreference::Any,
                 PythonPreference::OnlySystem,
                 &context.cache,
+                context.workdir.as_ref(),
             )
         })??;
 
@@ -949,6 +946,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    context.workdir.as_ref(),
                 )
             })??;
         assert!(
@@ -979,6 +977,7 @@ mod tests {
                     EnvironmentPreference::Any,
                     PythonPreference::OnlySystem,
                     &context.cache,
+                    context.workdir.as_ref(),
                 )
             })??;
         assert!(

@@ -3,6 +3,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::collections::BTreeMap;
 use std::fmt::Write;
+use std::path::Path;
 use tracing::debug;
 
 use uv_cache::Cache;
@@ -48,6 +49,7 @@ pub(crate) async fn upgrade(
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
+    project_dir: &Path,
 ) -> Result<ExitStatus> {
     let installed_tools = InstalledTools::from_settings()?.init()?;
     let _lock = installed_tools.lock().await?;
@@ -99,6 +101,7 @@ pub(crate) async fn upgrade(
                 install_mirrors.python_install_mirror.as_deref(),
                 install_mirrors.pypy_install_mirror.as_deref(),
                 install_mirrors.python_downloads_json_url.as_deref(),
+                project_dir,
             )
             .await?
             .into_interpreter(),

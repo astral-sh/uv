@@ -117,6 +117,7 @@ pub(crate) async fn find_script(
     no_config: bool,
     cache: &Cache,
     printer: Printer,
+    project_dir: &Path,
 ) -> Result<ExitStatus> {
     let interpreter = match ScriptInterpreter::discover(
         script,
@@ -130,6 +131,7 @@ pub(crate) async fn find_script(
         Some(false),
         cache,
         printer,
+        project_dir,
     )
     .await
     {

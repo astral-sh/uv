@@ -1,9 +1,6 @@
-<<<<<<< HEAD
-use assert_fs::prelude::{FileTouch, PathChild};
-=======
 use assert_cmd::assert::OutputAssertExt;
+use assert_fs::prelude::FileTouch;
 use assert_fs::prelude::PathChild;
->>>>>>> acd01479d (respect --project during uv python find (#11990))
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
 use indoc::indoc;
 

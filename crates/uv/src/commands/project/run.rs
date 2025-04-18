@@ -234,6 +234,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 cache,
                 DryRun::Disabled,
                 printer,
+                project_dir,
             )
             .await?
             .into_environment()?;
@@ -358,6 +359,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     cache,
                     DryRun::Disabled,
                     printer,
+                    project_dir,
                 )
                 .await?
                 .into_environment()?;
@@ -432,6 +434,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     active.map_or(Some(false), Some),
                     cache,
                     printer,
+                    project_dir,
                 )
                 .await?
                 .into_interpreter();
@@ -617,6 +620,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
+                    project_dir,
                 )
                 .await?
                 .into_interpreter();
@@ -852,6 +856,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
+                    project_dir,
                 )
                 .await?;
 

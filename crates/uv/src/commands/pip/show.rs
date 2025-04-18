@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::path::Path;
 
 use anyhow::Result;
 use fs_err::File;
@@ -27,6 +28,7 @@ pub(crate) fn pip_show(
     files: bool,
     cache: &Cache,
     printer: Printer,
+    project_dir: &Path,
 ) -> Result<ExitStatus> {
     if packages.is_empty() {
         #[allow(clippy::print_stderr)]
@@ -46,6 +48,7 @@ pub(crate) fn pip_show(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         cache,
+        project_dir,
     )?;
 
     report_target_environment(&environment, cache, printer)?;
