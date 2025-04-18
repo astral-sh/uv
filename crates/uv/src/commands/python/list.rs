@@ -59,6 +59,7 @@ pub(crate) async fn list(
     all_arches: bool,
     show_urls: bool,
     output_format: PythonListFormat,
+    python_downloads_json_url: Option<String>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
@@ -101,7 +102,7 @@ pub(crate) async fn list(
 
         let downloads = download_request
             .as_ref()
-            .map(PythonDownloadRequest::iter_downloads)
+            .map(|a| PythonDownloadRequest::iter_downloads(a, python_downloads_json_url.as_deref()))
             .transpose()?
             .into_iter()
             .flatten();

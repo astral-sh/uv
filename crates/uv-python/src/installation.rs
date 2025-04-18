@@ -88,6 +88,7 @@ impl PythonInstallation {
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
+        python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
 
@@ -127,6 +128,7 @@ impl PythonInstallation {
             reporter,
             python_install_mirror,
             pypy_install_mirror,
+            python_downloads_json_url,
         )
         .await
         {
@@ -146,13 +148,14 @@ impl PythonInstallation {
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
+        python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
         let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
 
-        let download = ManagedPythonDownload::from_request(&request)?;
+        let download = ManagedPythonDownload::from_request(&request, python_downloads_json_url)?;
         let client = client_builder.build();
 
         info!("Fetching requested Python...");
