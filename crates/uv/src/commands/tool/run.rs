@@ -514,11 +514,7 @@ impl<'a> ExecutableProviderHints<'a> {
 
     /// If the executable is not provided by any package.
     fn not_from_any(&self) -> bool {
-        match self.from {
-            // Nothing to do for Python
-            ToolRequirement::Python => return false,
-            ToolRequirement::Package { .. } => self.packages.is_empty(),
-        }
+        self.packages.is_empty()
     }
 }
 

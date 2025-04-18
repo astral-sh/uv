@@ -2506,16 +2506,14 @@ fn tool_run_windows_runnable_types() -> anyhow::Result<()> {
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable `does_not_exist` was not found.
-    The following executables are provided by `foo`:
+
+    ----- stderr -----
+    An executable named `does_not_exist` is not provided by package `foo`.
+    The following executables are available:
     - custom_pydoc.exe
     - custom_pydoc.bat
     - custom_pydoc.cmd
     - custom_pydoc.ps1
-    Consider using `uv tool run --from foo <EXECUTABLE_NAME>` instead.
-
-    ----- stderr -----
-    warning: An executable named `does_not_exist` is not provided by package `foo`.
     "###);
 
     // Test with explicit .bat extension
