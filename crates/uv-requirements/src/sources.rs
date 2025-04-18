@@ -228,3 +228,9 @@ impl std::fmt::Display for RequirementsSource {
         }
     }
 }
+
+/// Returns `true` if a file name matches the `pylock.toml` pattern defined in PEP 751.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
+pub fn is_pylock_toml(file_name: &str) -> bool {
+    file_name.starts_with("pylock.") && file_name.ends_with(".toml")
+}

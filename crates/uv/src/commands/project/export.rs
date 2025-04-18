@@ -1,10 +1,10 @@
 use std::env;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::path::{Path, PathBuf};
-use uv_settings::PythonInstallMirrors;
 
 use uv_cache::Cache;
 use uv_configuration::{
@@ -13,8 +13,10 @@ use uv_configuration::{
 };
 use uv_normalize::{DefaultGroups, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
+use uv_requirements::is_pylock_toml;
 use uv_resolver::{PylockToml, RequirementsTxtExport};
 use uv_scripts::{Pep723ItemRef, Pep723Script};
+use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
@@ -51,7 +53,7 @@ impl<'lock> From<&'lock ExportTarget> for LockTarget<'lock> {
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn export(
     project_dir: &Path,
-    format: ExportFormat,
+    format: Option<ExportFormat>,
     all_packages: bool,
     package: Option<PackageName>,
     prune: Vec<PackageName>,
@@ -251,6 +253,26 @@ pub(crate) async fn export(
 
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
+
+    // Determine the output format.
+    let format = format.unwrap_or_else(|| {
+        if output_file
+            .as_deref()
+            .and_then(Path::extension)
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("txt"))
+        {
+            ExportFormat::RequirementsTxt
+        } else if output_file
+            .as_deref()
+            .and_then(Path::file_name)
+            .and_then(OsStr::to_str)
+            .is_some_and(is_pylock_toml)
+        {
+            ExportFormat::PylockToml
+        } else {
+            ExportFormat::RequirementsTxt
+        }
+    });
 
     // Generate the export.
     match format {
