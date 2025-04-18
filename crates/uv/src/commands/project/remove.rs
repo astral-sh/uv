@@ -260,6 +260,7 @@ pub(crate) async fn remove(
                 active,
                 cache,
                 printer,
+                project_dir,
             )
             .await?
             .into_interpreter();

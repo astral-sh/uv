@@ -171,6 +171,7 @@ pub(crate) async fn pip_sync(
                 .unwrap_or_default(),
             EnvironmentPreference::from_system_flag(system, true),
             &cache,
+            std::env::current_dir()?.as_path(),
         )?;
         report_target_environment(&environment, &cache, printer)?;
         environment

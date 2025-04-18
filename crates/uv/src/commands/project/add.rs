@@ -179,6 +179,7 @@ pub(crate) async fn add(
             active,
             cache,
             printer,
+            project_dir,
         )
         .await?
         .into_interpreter();

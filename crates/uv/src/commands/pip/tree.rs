@@ -58,6 +58,7 @@ pub(crate) async fn pip_tree(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         cache,
+        std::env::current_dir()?.as_path(),
     )?;
 
     report_target_environment(&environment, cache, printer)?;
