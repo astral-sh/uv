@@ -141,6 +141,9 @@ pub struct Options {
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub r#package: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub build_backend: Option<serde::de::IgnoredAny>,
 }
 
 impl Options {
@@ -1842,7 +1845,6 @@ pub struct OptionsWire {
     dev_dependencies: Option<serde::de::IgnoredAny>,
 
     // Build backend
-    #[allow(dead_code)]
     build_backend: Option<serde::de::IgnoredAny>,
 }
 
@@ -1907,7 +1909,7 @@ impl From<OptionsWire> for Options {
             managed,
             package,
             // Used by the build backend
-            build_backend: _,
+            build_backend,
         } = value;
 
         Self {
@@ -1956,6 +1958,7 @@ impl From<OptionsWire> for Options {
             },
             pip,
             cache_keys,
+            build_backend,
             override_dependencies,
             constraint_dependencies,
             build_constraint_dependencies,

@@ -18,7 +18,7 @@ use rustc_hash::{FxBuildHasher, FxHashSet};
 use serde::{de::IntoDeserializer, de::SeqAccess, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use url::Url;
-
+use uv_build_backend::BuildBackendSettings;
 use uv_distribution_types::{Index, IndexName, RequirementSource};
 use uv_fs::{relative_to, PortablePathBuf};
 use uv_git_types::GitReference;
@@ -583,6 +583,15 @@ pub struct ToolUv {
         "#
     )]
     pub conflicts: Option<SchemaConflicts>,
+
+    // Only exists on this type for schema and docs generation, the build backend settings are
+    // never merged in a workspace and read separately by the backend code.
+    /// Configuration for the uv build backend.
+    ///
+    /// Note that those settings only apply when using the `uv_build` backend, other build backends
+    /// (such as hatchling) have their own configuration.
+    #[option_group]
+    pub build_backend: Option<BuildBackendSettings>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
