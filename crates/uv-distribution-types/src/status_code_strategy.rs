@@ -113,6 +113,7 @@ impl<'de> Deserialize<'de> for SerializableStatusCode {
     }
 }
 
+#[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SerializableStatusCode {
     fn schema_name() -> String {
         "StatusCode".to_string()

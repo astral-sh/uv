@@ -211,6 +211,25 @@ credentials cannot be found. If the discovered credentials are not valid (i.e., 
 HTTP 401 or 403), then uv will treat packages as unavailable and query the next configured index as
 described in the [index strategy](#searching-across-multiple-indexes) section.
 
+### Ignoring error codes when searching across indexes
+
+When using the `first-index` strategy, uv will stop searching if it encounters a `401 Unauthorized`
+or `403 Forbidden` response status code. The one exception is that uv will ignore 403s when
+searching the `pytorch` index (since this index returns a 403 when a package is not present).
+
+Users can configure which error codes are ignored for an index, using the `ignored-error-codes`
+setting. For example, to ignore 403s (but not 401s) for a private index:
+
+```toml
+[[tool.uv.index]]
+name = "private-index"
+url = "https://private-index.com/simple"
+authenticate = "always"
+ignore-error-codes = [403]
+```
+
+uv will always continue searching when it encounters a `404 Not Found`. This cannot be overridden.
+
 ### Disabling authentication
 
 To prevent leaking credentials, authentication can be disabled for an index:
