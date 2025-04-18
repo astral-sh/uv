@@ -508,11 +508,12 @@ impl AuthMiddleware {
 fn tracing_url(request: &Request, credentials: Option<&Credentials>) -> String {
     if tracing::enabled!(tracing::Level::DEBUG) {
         let mut url = request.url().clone();
-        if let Some(username) = credentials
+        if credentials
             .as_ref()
             .and_then(|credentials| credentials.username())
+            .is_some()
         {
-            let _ = url.set_username(username);
+            let _ = url.set_username("****");
         }
         if credentials
             .as_ref()
