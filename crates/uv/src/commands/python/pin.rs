@@ -76,6 +76,10 @@ pub(crate) async fn pin(
     };
     let request = PythonRequest::parse(&request);
 
+    if let PythonRequest::ExecutableName(name) = request {
+        bail!("Requests for arbitrary names (e.g., `{name}`) are not supported in version files");
+    }
+
     let python = match PythonInstallation::find(
         &request,
         EnvironmentPreference::OnlySystem,
