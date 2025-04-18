@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::Write;
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{bail, Result};
@@ -62,6 +63,7 @@ pub(crate) async fn install(
     cache: Cache,
     printer: Printer,
     preview: PreviewMode,
+    project_dir: &Path,
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(network_settings.connectivity)
@@ -84,6 +86,7 @@ pub(crate) async fn install(
         Some(&reporter),
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
+        project_dir,
     )
     .await?
     .into_interpreter();
@@ -492,6 +495,7 @@ pub(crate) async fn install(
                         python_preference,
                         python_downloads,
                         &cache,
+                        project_dir,
                     )
                     .await
                     .ok()

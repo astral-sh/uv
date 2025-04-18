@@ -354,6 +354,7 @@ async fn build_impl(
             *link_mode,
             config_setting,
             preview,
+            project_dir,
         );
         async {
             let result = future.await;
@@ -432,6 +433,7 @@ async fn build_package(
     link_mode: LinkMode,
     config_setting: &ConfigSettings,
     preview: PreviewMode,
+    project_dir: &Path,
 ) -> Result<Vec<BuildMessage>, Error> {
     let output_dir = if let Some(output_dir) = output_dir {
         Cow::Owned(std::path::absolute(output_dir)?)
@@ -485,6 +487,7 @@ async fn build_package(
         Some(&PythonDownloadReporter::single(printer)),
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
+        project_dir,
     )
     .await?
     .into_interpreter();

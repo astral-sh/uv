@@ -1179,18 +1179,13 @@ pub fn find_best_python_installation(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &Cache,
+    discovery_root: &Path,
 ) -> Result<FindPythonResult, Error> {
     debug!("Starting Python discovery for {}", request);
 
     // First, check for an exact match (or the first available version if no Python version was provided)
     debug!("Looking for exact match for request {request}");
-    let result = find_python_installation(
-        request,
-        environments,
-        preference,
-        cache,
-        crate::current_dir()?.as_path(),
-    );
+    let result = find_python_installation(request, environments, preference, cache, discovery_root);
     match result {
         Ok(Ok(installation)) => {
             warn_on_unsupported_python(installation.interpreter());
@@ -1218,13 +1213,8 @@ pub fn find_best_python_installation(
         _ => None,
     } {
         debug!("Looking for relaxed patch version {request}");
-        let result = find_python_installation(
-            &request,
-            environments,
-            preference,
-            cache,
-            crate::current_dir()?.as_path(),
-        );
+        let result =
+            find_python_installation(&request, environments, preference, cache, discovery_root);
         match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
@@ -1240,21 +1230,17 @@ pub fn find_best_python_installation(
     // If a Python version was requested but cannot be fulfilled, just take any version
     debug!("Looking for a default Python installation");
     let request = PythonRequest::Default;
-    Ok(find_python_installation(
-        &request,
-        environments,
-        preference,
-        cache,
-        crate::current_dir()?.as_path(),
-    )?
-    .map_err(|err| {
-        // Use a more general error in this case since we looked for multiple versions
-        PythonNotFound {
-            request,
-            python_preference: err.python_preference,
-            environment_preference: err.environment_preference,
-        }
-    }))
+    Ok(
+        find_python_installation(&request, environments, preference, cache, discovery_root)?
+            .map_err(|err| {
+                // Use a more general error in this case since we looked for multiple versions
+                PythonNotFound {
+                    request,
+                    python_preference: err.python_preference,
+                    environment_preference: err.environment_preference,
+                }
+            }),
+    )
 }
 
 /// Display a warning if the Python version of the [`Interpreter`] is unsupported by uv.

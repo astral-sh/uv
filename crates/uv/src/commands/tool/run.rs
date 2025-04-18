@@ -102,6 +102,7 @@ pub(crate) async fn run(
     env_file: Vec<PathBuf>,
     no_env_file: bool,
     preview: PreviewMode,
+    project_dir: &Path,
 ) -> anyhow::Result<ExitStatus> {
     /// Whether or not a path looks like a Python script based on the file extension.
     fn has_python_script_ext(path: &Path) -> bool {
@@ -267,6 +268,7 @@ pub(crate) async fn run(
         &cache,
         printer,
         preview,
+        project_dir,
     ))
     .await;
 
@@ -621,6 +623,7 @@ async fn get_or_create_environment(
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
+    project_dir: &Path,
 ) -> Result<(ToolRequirement, PythonEnvironment), ProjectError> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(network_settings.connectivity)
@@ -672,6 +675,7 @@ async fn get_or_create_environment(
         Some(&reporter),
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
+        project_dir,
     )
     .await?
     .into_interpreter();
@@ -966,6 +970,7 @@ async fn get_or_create_environment(
                     python_preference,
                     python_downloads,
                     cache,
+                    project_dir,
                 )
                 .await
                 .ok()

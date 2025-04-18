@@ -432,6 +432,7 @@ async fn init_project(
                         Some(&reporter),
                         install_mirrors.python_install_mirror.as_deref(),
                         install_mirrors.pypy_install_mirror.as_deref(),
+                        path,
                     )
                     .await?
                     .into_interpreter();
@@ -458,6 +459,7 @@ async fn init_project(
                     Some(&reporter),
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
+                    path,
                 )
                 .await?
                 .into_interpreter();
@@ -523,6 +525,7 @@ async fn init_project(
                 Some(&reporter),
                 install_mirrors.python_install_mirror.as_deref(),
                 install_mirrors.pypy_install_mirror.as_deref(),
+                path,
             )
             .await?
             .into_interpreter();
@@ -549,6 +552,7 @@ async fn init_project(
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
+            path,
         )
         .await?
         .into_interpreter();
