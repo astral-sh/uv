@@ -311,24 +311,33 @@ pub(crate) async fn run(
 
     // Check if the provided command is not part of the executables for the `from` package,
     // and if it's provided by another package in the environment.
-    let providers =
-        ExecutableProviderPackages::new(executable, &from, &site_packages, invocation_source);
+    let providers = match &from {
+        ToolRequirement::Python => None,
+        ToolRequirement::Package { requirement, .. } => Some(ExecutableProviderPackages::new(
+            executable,
+            requirement,
+            &site_packages,
+            invocation_source,
+        )),
+    };
 
-    if providers.not_from_any() {
-        if !explicit_from {
-            // If the user didn't use `--from` and the command isn't in the environment, we're now
-            // just invoking an arbitrary executable on the `PATH` and should exit instead.
-            writeln!(printer.stderr(), "{providers}")?;
-            return Ok(ExitStatus::Failure);
+    if let Some(ref providers) = providers {
+        if providers.not_from_any() {
+            if !explicit_from {
+                // If the user didn't use `--from` and the command isn't in the environment, we're now
+                // just invoking an arbitrary executable on the `PATH` and should exit instead.
+                writeln!(printer.stderr(), "{providers}")?;
+                return Ok(ExitStatus::Failure);
+            }
+            // In the case where `--from` is used, we'll warn on failure if the command is not found
+            // TODO(zanieb): Consider if we should require `--with` instead of `--from` in this case?
+            // It'd be a breaking change but would make `uvx` invocations safer.
+        } else if providers.not_from_expected() {
+            // However, if the user used `--from`, we shouldn't fail because they requested that the
+            // package and executable be different. We'll warn if the executable comes from another
+            // package though, because that could be confusing
+            warn_user_once!("{providers}");
         }
-        // In the case where `--from` is used, we'll warn on failure if the command is not found
-        // TODO(zanieb): Consider if we should require `--with` instead of `--from` in this case?
-        // It'd be a breaking change but would make `uvx` invocations safer.
-    } else if providers.not_from_expected() {
-        // However, if the user used `--from`, we shouldn't fail because they requested that the
-        // package and executable be different. We'll warn if the executable comes from another
-        // package though, because that could be confusing
-        warn_user_once!("{providers}");
     }
 
     // Construct the command
@@ -363,12 +372,14 @@ pub(crate) async fn run(
     let handle = match process.spawn() {
         Ok(handle) => Ok(handle),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            if providers.not_from_any() && explicit_from {
-                // We deferred this warning earlier, because `--from` was used and the command
-                // could have come from the `PATH`. Display a more helpful message instead of the
-                // OS error.
-                writeln!(printer.stderr(), "{providers}")?;
-                return Ok(ExitStatus::Failure);
+            if let Some(ref providers) = providers {
+                if providers.not_from_any() && explicit_from {
+                    // We deferred this warning earlier, because `--from` was used and the command
+                    // could have come from the `PATH`. Display a more helpful message instead of the
+                    // OS error.
+                    writeln!(printer.stderr(), "{providers}")?;
+                    return Ok(ExitStatus::Failure);
+                }
             }
             Err(err)
         }
@@ -465,7 +476,7 @@ struct ExecutableProviderPackages<'a> {
     /// The requested executable for the command
     executable: &'a str,
     /// The package from which the executable is expected to come from
-    from: &'a ToolRequirement,
+    from: &'a Requirement,
     /// The packages in the Pythonenvironment the command will run it
     site_packages: &'a SitePackages,
     /// The matching packages
@@ -476,7 +487,7 @@ struct ExecutableProviderPackages<'a> {
 impl<'a> ExecutableProviderPackages<'a> {
     fn new(
         executable: &'a str,
-        from: &'a ToolRequirement,
+        from: &'a Requirement,
         site_packages: &'a SitePackages,
         invocation_source: ToolRunCommand,
     ) -> Self {
@@ -491,24 +502,18 @@ impl<'a> ExecutableProviderPackages<'a> {
     }
 
     fn not_from_expected(&self) -> bool {
-        let from = match self.from {
-            // Nothing to do for Python
-            ToolRequirement::Python => return false,
-            ToolRequirement::Package { requirement, .. } => requirement,
-        };
         !self
             .packages
             .iter()
-            .any(|package| package.name() == &from.name)
+            .any(|package| package.name() == &self.from.name)
     }
 
     fn not_from_any(&self) -> bool {
         match self.from {
             // Nothing to do for Python
             ToolRequirement::Python => return false,
-            ToolRequirement::Package { .. } => {}
+            ToolRequirement::Package { .. } => self.packages.is_empty(),
         }
-        self.packages.is_empty()
     }
 }
 
@@ -521,15 +526,6 @@ impl std::fmt::Display for ExecutableProviderPackages<'_> {
             packages,
             invocation_source,
         } = self;
-
-        let from = match from {
-            // Nothing to do for Python
-            ToolRequirement::Python => {
-                debug_assert!(false, "Attempted to display providers for a `python` invocation which is always available");
-                return Ok(());
-            }
-            ToolRequirement::Package { requirement, .. } => requirement,
-        };
 
         match packages.as_slice() {
             [] => {
