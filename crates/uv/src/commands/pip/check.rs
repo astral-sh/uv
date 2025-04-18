@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::path::Path;
 use std::time::Instant;
 
 use anyhow::Result;
@@ -19,6 +20,7 @@ pub(crate) fn pip_check(
     system: bool,
     cache: &Cache,
     printer: Printer,
+    project_dir: &Path,
 ) -> Result<ExitStatus> {
     let start = Instant::now();
 
@@ -27,6 +29,7 @@ pub(crate) fn pip_check(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         cache,
+        project_dir,
     )?;
 
     report_target_environment(&environment, cache, printer)?;

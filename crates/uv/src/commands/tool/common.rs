@@ -3,6 +3,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::collections::Bound;
 use std::fmt::Write;
+use std::path::Path;
 use std::{collections::BTreeSet, ffi::OsString};
 use tracing::{debug, warn};
 use uv_cache::Cache;
@@ -80,6 +81,7 @@ pub(crate) async fn refine_interpreter(
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
+    project_dir: &Path,
 ) -> anyhow::Result<Option<Interpreter>, ProjectError> {
     let pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(no_solution_err)) =
         err
@@ -151,6 +153,7 @@ pub(crate) async fn refine_interpreter(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
+        project_dir,
     )
     .await?
     .into_interpreter();

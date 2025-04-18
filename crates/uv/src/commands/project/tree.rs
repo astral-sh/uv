@@ -96,6 +96,7 @@ pub(crate) async fn tree(
                 Some(false),
                 cache,
                 printer,
+                project_dir,
             )
             .await?
             .into_interpreter(),

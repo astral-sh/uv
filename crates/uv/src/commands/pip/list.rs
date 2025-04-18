@@ -1,5 +1,6 @@
 use std::cmp::max;
 use std::fmt::Write;
+use std::path::Path;
 
 use anstream::println;
 use anyhow::Result;
@@ -52,6 +53,7 @@ pub(crate) async fn pip_list(
     system: bool,
     cache: &Cache,
     printer: Printer,
+    project_dir: &Path,
 ) -> Result<ExitStatus> {
     // Disallow `--outdated` with `--format freeze`.
     if outdated && matches!(format, ListFormat::Freeze) {
@@ -63,6 +65,7 @@ pub(crate) async fn pip_list(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         cache,
+        project_dir,
     )?;
 
     report_target_environment(&environment, cache, printer)?;

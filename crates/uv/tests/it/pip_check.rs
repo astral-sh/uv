@@ -1,9 +1,90 @@
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 
 use crate::common::TestContext;
 use crate::common::uv_snapshot;
+
+#[test]
+fn python_discovery_starts_at_project_root() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+    let filters = std::iter::once((r"Using Python.*", "[USING_PYTHON]"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+
+    // Create 2 separate projects, with separate virtual environments
+    let project1 = context.temp_dir.child("project1");
+    let requirements_txt1 = project1.child("requirements.txt");
+    requirements_txt1.write_str("requests==2.30.0")?;
+    context
+        .venv()
+        .arg("--directory")
+        .arg("project1")
+        .assert()
+        .success();
+
+    let project2 = context.temp_dir.child("project2");
+    let requirements_txt1 = project2.child("requirements.txt");
+    requirements_txt1.write_str("requests==2.31.0")?;
+    context
+        .venv()
+        .arg("--directory")
+        .arg("project2")
+        .assert()
+        .success();
+
+    uv_snapshot!(filters, context
+        .pip_install()
+        .arg("--project")
+        .arg("project1")
+        .arg("-r")
+        .arg("project1/requirements.txt")
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    [USING_PYTHON]
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "###
+    );
+
+    // We pip installed into project1, so expect this to pass
+    uv_snapshot!(filters, context.pip_check().arg("--project").arg("project1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    [USING_PYTHON]
+    Checked 5 packages in [TIME]
+    All installed packages are compatible
+    "###
+    );
+    // We did not pip install in project2
+    uv_snapshot!(filters, context.pip_check().arg("--project").arg("project2"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    [USING_PYTHON]
+    Checked 0 packages in [TIME]
+    All installed packages are compatible
+    "###
+    );
+
+    Ok(())
+}
 
 #[test]
 fn check_compatible_packages() -> Result<()> {

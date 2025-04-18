@@ -50,6 +50,45 @@ fn missing_requirements_txt() {
 }
 
 #[test]
+fn venv_discovery_starts_at_project_root() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin()
+        .with_filtered_exe_suffix();
+
+    // Remove parent venv
+    fs::remove_dir_all(&context.venv)?;
+
+    // Create a child project with a virtual environment
+    let project1 = context.temp_dir.child("project1");
+    let requirements_txt1 = project1.child("requirements.txt");
+    requirements_txt1.write_str("requests==2.30.0")?;
+    context
+        .venv()
+        .arg("--directory")
+        .arg("project1")
+        .assert()
+        .success();
+
+    // This would try to use system Python (or another venv outside the test context) and include
+    // additional log info if project wasn't being respected
+    uv_snapshot!(context.pip_sync().arg("--project").arg("project1").arg("project1/requirements.txt"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    [USING_PYTHON]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + requests==2.30.0
+    "###);
+
+    Ok(())
+}
+
+#[test]
 fn missing_venv() -> Result<()> {
     let context = TestContext::new("3.12")
         .with_filtered_virtualenv_bin()

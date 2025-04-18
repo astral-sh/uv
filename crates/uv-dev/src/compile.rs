@@ -26,6 +26,7 @@ pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
             &PythonRequest::default(),
             EnvironmentPreference::OnlyVirtual,
             &cache,
+            cache.root(),
         )?
         .into_interpreter();
         interpreter.sys_executable().to_path_buf()

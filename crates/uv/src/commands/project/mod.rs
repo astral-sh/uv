@@ -675,6 +675,7 @@ impl ScriptInterpreter {
         active: Option<bool>,
         cache: &Cache,
         printer: Printer,
+        project_dir: &Path,
     ) -> Result<Self, ProjectError> {
         // For now, we assume that scripts are never evaluated in the context of a workspace.
         let workspace = None;
@@ -732,6 +733,7 @@ impl ScriptInterpreter {
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
+            project_dir,
         )
         .await?
         .into_interpreter();
@@ -974,6 +976,7 @@ impl ProjectInterpreter {
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
+            project_dir,
         )
         .await?;
 
@@ -1448,6 +1451,7 @@ impl ScriptEnvironment {
         cache: &Cache,
         dry_run: DryRun,
         printer: Printer,
+        project_dir: &Path,
     ) -> Result<Self, ProjectError> {
         // Lock the script environment to avoid synchronization issues.
         let _lock = ScriptInterpreter::lock(script).await?;
@@ -1464,6 +1468,7 @@ impl ScriptEnvironment {
             active,
             cache,
             printer,
+            project_dir,
         )
         .await?
         {
@@ -2390,6 +2395,7 @@ pub(crate) async fn init_script_python_requirement(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
+        directory,
     )
     .await?
     .into_interpreter();

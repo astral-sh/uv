@@ -69,12 +69,14 @@ impl PythonInstallation {
         environments: EnvironmentPreference,
         preference: PythonPreference,
         cache: &Cache,
+        discovery_root: &Path,
     ) -> Result<Self, Error> {
         Ok(find_best_python_installation(
             request,
             environments,
             preference,
             cache,
+            discovery_root,
         )??)
     }
 
@@ -92,18 +94,12 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
+        discovery_root: &Path,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
-        let root_directory = crate::current_dir()?;
 
         // Search for the installation
-        let err = match Self::find(
-            request,
-            environments,
-            preference,
-            cache,
-            root_directory.as_path(),
-        ) {
+        let err = match Self::find(request, environments, preference, cache, discovery_root) {
             Ok(installation) => return Ok(installation),
             Err(err) => err,
         };

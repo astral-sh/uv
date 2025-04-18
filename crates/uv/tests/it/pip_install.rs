@@ -24,6 +24,67 @@ use crate::common::{
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
+// Ensure python discovery starts at the project root, including when provided explicitly with --project
+#[test]
+fn python_discovery_starts_at_project_root() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"]);
+    // Using anyio version to test the python version discovery
+    let filters = std::iter::once((r"Using Python.*", "[USING_PYTHON]"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = [
+            "anyio==4.0.0; python_version >= '3.12'",
+            "anyio==3.0.0; python_version < '3.12'"
+        ]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    // Create venv in project subdirectory, requesting 3.12
+    context
+        .venv()
+        .arg("-p")
+        .arg("3.12")
+        .arg("--directory")
+        .arg("project")
+        .assert()
+        .success();
+
+    // When the project is specified, we expect 3.12 in the child venv to be used
+    uv_snapshot!(filters, context
+        .pip_install()
+        .arg("-r")
+        .arg("project/pyproject.toml")
+        .arg("--project")
+        .arg("project"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    [USING_PYTHON]
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.0.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    Ok(())
+}
+
 #[test]
 fn missing_requirements_txt() {
     let context = TestContext::new("3.12");
