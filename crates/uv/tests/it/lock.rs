@@ -15745,6 +15745,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG uv [VERSION] ([COMMIT] DATE)
     DEBUG Found workspace root: `[TEMP_DIR]/`
     DEBUG Adding root workspace member: `[TEMP_DIR]/`
+    DEBUG No Python version file found in workspace: [TEMP_DIR]/
     DEBUG Using Python request `>=3.12` from `requires-python` metadata
     DEBUG Checking for Python environment at `.venv`
     DEBUG The virtual environment's Python version satisfies `>=3.12`
