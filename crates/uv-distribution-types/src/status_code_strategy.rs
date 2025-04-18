@@ -1,5 +1,6 @@
-use http::{status::InvalidStatusCode, StatusCode};
+use http::StatusCode;
 use rustc_hash::FxHashSet;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use url::Url;
 
 use crate::{IndexCapabilities, IndexUrl};
@@ -19,7 +20,7 @@ impl IndexStatusCodeStrategy {
     pub fn from_index_url(url: &Url) -> Self {
         if url
             .host_str()
-            .is_some_and(|host| host.contains("pytorch.org"))
+            .is_some_and(|host| host.ends_with("pytorch.org"))
         {
             // The PyTorch registry returns a 403 when a package is not found, so
             // we ignore them when deciding whether to search other indexes.
@@ -32,12 +33,14 @@ impl IndexStatusCodeStrategy {
     }
 
     /// Derive a strategy from a list of status codes to ignore.
-    pub fn from_ignored_error_codes(status_codes: &[u16]) -> Result<Self, InvalidStatusCode> {
-        let status_codes = status_codes
-            .iter()
-            .map(|code| StatusCode::from_u16(*code))
-            .collect::<Result<FxHashSet<_>, _>>()?;
-        Ok(Self::IgnoreErrorCodes { status_codes })
+    pub fn from_ignored_error_codes(status_codes: &[SerializableStatusCode]) -> Self {
+        Self::IgnoreErrorCodes {
+            status_codes: status_codes
+                .iter()
+                .map(SerializableStatusCode::status_code)
+                .copied()
+                .collect::<FxHashSet<_>>(),
+        }
     }
 
     /// Based on the strategy, decide whether to continue searching the next index
@@ -78,9 +81,55 @@ pub enum IndexStatusCodeDecision {
     Stop,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SerializableStatusCode(StatusCode);
+
+impl SerializableStatusCode {
+    pub fn status_code(&self) -> &StatusCode {
+        &self.0
+    }
+}
+
+impl Serialize for SerializableStatusCode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u16(self.0.as_u16())
+    }
+}
+
+impl<'de> Deserialize<'de> for SerializableStatusCode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let code = u16::deserialize(deserializer)?;
+        StatusCode::from_u16(code)
+            .map(SerializableStatusCode)
+            .map_err(|_| {
+                serde::de::Error::custom(format!("{code} is not a valid HTTP status code"))
+            })
+    }
+}
+
+impl schemars::JsonSchema for SerializableStatusCode {
+    fn schema_name() -> String {
+        "StatusCode".to_string()
+    }
+
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        let mut schema = gen.subschema_for::<u16>().into_object();
+        schema.metadata().description = Some("HTTP status code (100-599)".to_string());
+        schema.number().minimum = Some(100.0);
+        schema.number().maximum = Some(599.0);
+
+        schema.into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
     use std::str::FromStr;
 
     use url::Url;
@@ -88,35 +137,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_strategy_normal_registry() -> Result<()> {
-        let url = Url::from_str("https://internal-registry.com/simple")?;
+    fn test_strategy_normal_registry() {
+        let url = Url::from_str("https://internal-registry.com/simple").unwrap();
         assert_eq!(
             IndexStatusCodeStrategy::from_index_url(&url),
             IndexStatusCodeStrategy::Default
         );
-        Ok(())
     }
 
     #[test]
-    fn test_strategy_pytorch_registry() -> Result<()> {
+    fn test_strategy_pytorch_registry() {
         let status_codes = std::iter::once(StatusCode::FORBIDDEN).collect::<FxHashSet<_>>();
-        let url = Url::from_str("https://download.pytorch.org/whl/cu118")?;
+        let url = Url::from_str("https://download.pytorch.org/whl/cu118").unwrap();
         assert_eq!(
             IndexStatusCodeStrategy::from_index_url(&url),
             IndexStatusCodeStrategy::IgnoreErrorCodes { status_codes }
         );
-        Ok(())
     }
 
     #[test]
-    fn test_strategy_custom_error_codes() -> Result<()> {
-        let status_codes =
-            FxHashSet::from_iter([StatusCode::UNAUTHORIZED, StatusCode::FORBIDDEN]);
+    fn test_strategy_custom_error_codes() {
+        let status_codes = FxHashSet::from_iter([StatusCode::UNAUTHORIZED, StatusCode::FORBIDDEN]);
+        let serializable_status_codes = status_codes
+            .iter()
+            .map(|code| SerializableStatusCode(*code))
+            .collect::<Vec<_>>();
         assert_eq!(
-            IndexStatusCodeStrategy::from_ignored_error_codes(&[401, 403])?,
+            IndexStatusCodeStrategy::from_ignored_error_codes(&serializable_status_codes),
             IndexStatusCodeStrategy::IgnoreErrorCodes { status_codes }
         );
-        Ok(())
     }
 
     #[test]

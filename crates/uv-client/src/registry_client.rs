@@ -331,10 +331,8 @@ impl RegistryClient {
                     let _permit = download_concurrency.acquire().await;
                     match index.format {
                         IndexFormat::Simple => {
-                            let status_code_strategy = self
-                                .index_urls
-                                .status_code_strategy_for(index.url)
-                                .map_err(|e| ErrorKind::InvalidStatusCode(e.to_string()))?;
+                            let status_code_strategy =
+                                self.index_urls.status_code_strategy_for(index.url);
                             if let Some(metadata) = self
                                 .simple_single_index(
                                     package_name,
@@ -366,10 +364,8 @@ impl RegistryClient {
                         let _permit = download_concurrency.acquire().await;
                         match index.format {
                             IndexFormat::Simple => {
-                                let status_code_strategy = self
-                                    .index_urls
-                                    .status_code_strategy_for(index.url)
-                                    .map_err(|e| ErrorKind::InvalidStatusCode(e.to_string()))?;
+                                let status_code_strategy =
+                                    self.index_urls.status_code_strategy_for(index.url);
                                 let metadata = self
                                     .simple_single_index(
                                         package_name,

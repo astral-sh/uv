@@ -30,7 +30,6 @@ uv-pypi-types = { workspace = true }
 uv-small-str = { workspace = true }
 
 arcstr = { workspace = true }
-anyhow = { workspace = true }
 bitflags = { workspace = true }
 fs-err = { workspace = true }
 http = { workspace = true }
@@ -49,7 +48,5 @@ tracing = { workspace = true }
 url = { workspace = true }
 version-ranges = { workspace = true }
 
-
 [dev-dependencies]
 toml = { workspace = true }
-

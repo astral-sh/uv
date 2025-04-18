@@ -1,9 +1,7 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use http::status::InvalidStatusCode;
-use http::StatusCode;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
@@ -11,7 +9,7 @@ use uv_auth::{AuthPolicy, Credentials};
 
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
-use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError};
+use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError, SerializableStatusCode};
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -104,8 +102,8 @@ pub struct Index {
     /// url = "https://<omitted>/simple"
     /// ignore-error-codes = [401, 403]
     /// ```
-    #[serde(deserialize_with = "validate_error_codes", default)]
-    pub ignore_error_codes: Option<Vec<u16>>,
+    #[serde(default)]
+    pub ignore_error_codes: Option<Vec<SerializableStatusCode>>,
 }
 
 #[derive(
@@ -231,12 +229,12 @@ impl Index {
     }
 
     /// Return the [`IndexStatusCodeStrategy`] for this index.
-    pub fn status_code_strategy(&self) -> Result<IndexStatusCodeStrategy, IndexSourceError> {
-        Ok(if let Some(ignore_error_codes) = &self.ignore_error_codes {
-            IndexStatusCodeStrategy::from_ignored_error_codes(ignore_error_codes)?
+    pub fn status_code_strategy(&self) -> IndexStatusCodeStrategy {
+        if let Some(ignore_error_codes) = &self.ignore_error_codes {
+            IndexStatusCodeStrategy::from_ignored_error_codes(ignore_error_codes)
         } else {
             IndexStatusCodeStrategy::from_index_url(self.url.url())
-        })
+        }
     }
 }
 
@@ -376,25 +374,6 @@ impl<'a> From<&'a IndexUrl> for IndexMetadataRef<'a> {
     }
 }
 
-/// Validate the provided error codes.
-fn validate_error_codes<'de, D>(deserializer: D) -> Result<Option<Vec<u16>>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let status_codes = Option::<Vec<u16>>::deserialize(deserializer)?;
-    if let Some(codes) = status_codes {
-        for code in &codes {
-            if StatusCode::from_u16(*code).is_err() {
-                return Err(serde::de::Error::custom(format!(
-                    "{code} is not a valid HTTP status code"
-                )));
-            }
-        }
-        return Ok(Some(codes));
-    }
-    Ok(Some(Vec::new()))
-}
-
 /// An error that can occur when parsing an [`Index`].
 #[derive(Error, Debug)]
 pub enum IndexSourceError {
@@ -404,6 +383,4 @@ pub enum IndexSourceError {
     IndexName(#[from] IndexNameError),
     #[error("Index included a name, but the name was empty")]
     EmptyName,
-    #[error(transparent)]
-    StatusCode(#[from] InvalidStatusCode),
 }
