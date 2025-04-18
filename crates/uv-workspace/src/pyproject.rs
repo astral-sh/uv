@@ -343,7 +343,7 @@ pub struct ToolUv {
 
     /// The list of `dependency-groups` to install by default.
     ///
-    /// Can also be the literal "all" to default enable all groups.
+    /// Can also be the literal `"all"` to default enable all groups.
     #[option(
         default = r#"["dev"]"#,
         value_type = r#"str | list[str]"#,

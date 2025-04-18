@@ -119,7 +119,7 @@
       }
     },
     "default-groups": {
-      "description": "The list of `dependency-groups` to install by default.\n\nCan also be the literal \"all\" to default enable all groups.",
+      "description": "The list of `dependency-groups` to install by default.\n\nCan also be the literal `\"all\"` to default enable all groups.",
       "anyOf": [
         {
           "$ref": "#/definitions/DefaultGroups"
