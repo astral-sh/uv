@@ -4686,6 +4686,7 @@ dependencies = [
  "test-log",
  "tokio",
  "tracing",
+ "tracing-test",
  "url",
  "uv-once-map",
  "uv-small-str",
