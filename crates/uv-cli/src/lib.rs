@@ -2470,15 +2470,25 @@ pub struct VenvArgs {
 
     /// Preserve any existing files or directories at the target path.
     ///
-    /// By default, `uv venv` will remove an existing virtual environment at the given path, and
-    /// exit with an error if the path is non-empty but _not_ a virtual environment. The
-    /// `--allow-existing` option will instead write to the given path, regardless of its contents,
-    /// and without clearing it beforehand.
+    /// By default, `uv venv` will exit with an error if the directory is non-empty but _not_ a
+    /// virtual environment. The `--allow-existing` option will instead write to the given path,
+    /// regardless of its contents, and without clearing it beforehand.
     ///
     /// WARNING: This option can lead to unexpected behavior if the existing virtual environment and
     /// the newly-created virtual environment are linked to different Python interpreters.
     #[clap(long)]
     pub allow_existing: bool,
+
+    /// Replace an existing directory at the target path.
+    ///
+    /// By default, `uv venv` will not replace an existing directory. Use `-f` to replace an
+    /// existing virtual environment, or `-ff` to replace a directory that is not a virtual
+    /// environment.
+    ///
+    /// See `--allow-existing` to create a virtual environment in a directory, regardless of its
+    /// contents, and without clearing it beforehand.
+    #[clap(long, action = clap::ArgAction::Count)]
+    pub force: u8,
 
     /// The path to the virtual environment to create.
     ///
