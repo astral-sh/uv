@@ -9,7 +9,7 @@ class KeyringTest(backend.KeyringBackend):
     priority = 9
 
     def get_password(self, service, username):
-        print(f"Request for {username}@{service}", file=sys.stderr)
+        print(f"Keyring request for {username}@{service}", file=sys.stderr)
         entries = json.loads(os.environ.get("KEYRING_TEST_CREDENTIALS", "{}"))
         return entries.get(service, {}).get(username)
 
@@ -20,7 +20,7 @@ class KeyringTest(backend.KeyringBackend):
         raise NotImplementedError()
 
     def get_credential(self, service, username):
-        print(f"Request for {service}", file=sys.stderr)
+        print(f"Keyring request for {service}", file=sys.stderr)
         entries = json.loads(os.environ.get("KEYRING_TEST_CREDENTIALS", "{}"))
         service_entries = entries.get(service, {})
         if not service_entries:
