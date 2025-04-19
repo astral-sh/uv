@@ -10819,10 +10819,10 @@ async fn add_redirect_with_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Request for public@http://[LOCALHOST]
-    Request for public@[LOCALHOST]
-    Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
-    Request for public@pypi-proxy.fly.dev
+    Keyring request for public@http://[LOCALHOST]
+    Keyring request for public@[LOCALHOST]
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
+    Keyring request for public@pypi-proxy.fly.dev
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
