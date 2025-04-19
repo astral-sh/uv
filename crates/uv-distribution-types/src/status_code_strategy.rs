@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use http::StatusCode;
 use rustc_hash::FxHashSet;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -37,7 +39,7 @@ impl IndexStatusCodeStrategy {
         Self::IgnoreErrorCodes {
             status_codes: status_codes
                 .iter()
-                .map(SerializableStatusCode::status_code)
+                .map(SerializableStatusCode::deref)
                 .copied()
                 .collect::<FxHashSet<_>>(),
         }
@@ -84,8 +86,10 @@ pub enum IndexStatusCodeDecision {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SerializableStatusCode(StatusCode);
 
-impl SerializableStatusCode {
-    pub fn status_code(&self) -> &StatusCode {
+impl Deref for SerializableStatusCode {
+    type Target = StatusCode;
+
+    fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
