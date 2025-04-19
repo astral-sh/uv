@@ -332,6 +332,8 @@ pub(crate) struct RunSettings {
     pub(crate) env_file: Vec<PathBuf>,
     pub(crate) no_env_file: bool,
     pub(crate) max_recursion_depth: u32,
+    pub(crate) watch: bool,
+    pub(crate) no_clear_screen: bool,
 }
 
 impl RunSettings {
@@ -384,6 +386,8 @@ impl RunSettings {
             env_file,
             no_env_file,
             max_recursion_depth,
+            watch,
+            no_clear_screen,
         } = args;
 
         let install_mirrors = filesystem
@@ -444,6 +448,8 @@ impl RunSettings {
             no_env_file,
             install_mirrors,
             max_recursion_depth: max_recursion_depth.unwrap_or(Self::DEFAULT_MAX_RECURSION_DEPTH),
+            watch,
+            no_clear_screen,
         }
     }
 }

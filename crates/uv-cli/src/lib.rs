@@ -3055,6 +3055,16 @@ pub struct RunArgs {
     /// If uv reaches the maximum recursion depth, it will exit with an error.
     #[arg(long, hide = true, env = EnvVars::UV_RUN_MAX_RECURSION_DEPTH)]
     pub max_recursion_depth: Option<u32>,
+
+    /// Watch mode
+    ///
+    /// Run the provided script, restarting it when the script changes.
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
+    pub watch: bool,
+
+    /// Do not clear the screen when restarting the script in watch mode
+    #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
+    pub no_clear_screen: bool,
 }
 
 #[derive(Args)]

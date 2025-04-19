@@ -54,6 +54,7 @@ use crate::commands::project::{
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
+use crate::commands::watch::run_and_watch;
 use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
@@ -93,6 +94,8 @@ pub(crate) async fn run(
     no_env_file: bool,
     preview: PreviewMode,
     max_recursion_depth: u32,
+    watch: bool,
+    no_clear_screen: bool,
 ) -> anyhow::Result<ExitStatus> {
     // Check if max recursion depth was exceeded. This most commonly happens
     // for scripts with a shebang line like `#!/usr/bin/env -S uv run`, so try
@@ -1089,6 +1092,13 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     // Ensure `VIRTUAL_ENV` is set.
     if interpreter.is_virtualenv() {
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
+    }
+
+    if watch {
+        if let RunCommand::PythonScript(path, _) = command {
+            return run_and_watch(&mut process, &path, no_clear_screen).await;
+        }
+        panic!("TODO(thejchap) handle this");
     }
 
     // Spawn and wait for completion

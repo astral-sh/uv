@@ -78,6 +78,7 @@ mod self_update;
 mod tool;
 mod venv;
 mod version;
+mod watch;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {
