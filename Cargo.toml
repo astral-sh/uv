@@ -173,6 +173,7 @@ toml_edit = { version = "0.22.21", features = ["serde"] }
 tracing = { version = "0.1.40" }
 tracing-durations-export = { version = "0.3.0", features = ["plot"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "registry"] }
+tracing-test = { version = "0.2.5" }
 tracing-tree = { version = "0.4.0" }
 unicode-width = { version = "0.2.0" }
 unscanny = { version = "0.1.0" }
