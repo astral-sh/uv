@@ -15,14 +15,14 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
-use uv_auth::UrlAuthPolicies;
+use uv_auth::Indexes;
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexMetadataRef, IndexUrl,
-    IndexUrls, Name,
+    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
+    IndexMetadataRef, IndexUrl, IndexUrls, Name,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -68,8 +68,11 @@ impl RegistryClientBuilder<'_> {
 
 impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
-    pub fn index_urls(mut self, index_urls: IndexUrls) -> Self {
-        self.index_urls = index_urls;
+    pub fn index_locations(mut self, index_locations: &IndexLocations) -> Self {
+        self.index_urls = index_locations.index_urls();
+        self.base_client_builder = self
+            .base_client_builder
+            .indexes(Indexes::from(index_locations));
         self
     }
 
@@ -114,14 +117,6 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn native_tls(mut self, native_tls: bool) -> Self {
         self.base_client_builder = self.base_client_builder.native_tls(native_tls);
-        self
-    }
-
-    #[must_use]
-    pub fn url_auth_policies(mut self, url_auth_policies: UrlAuthPolicies) -> Self {
-        self.base_client_builder = self
-            .base_client_builder
-            .url_auth_policies(url_auth_policies);
         self
     }
 

@@ -1,6 +1,6 @@
 use std::fmt::{self, Display, Formatter};
 
-use rustc_hash::FxHashMap;
+use rustc_hash::FxHashSet;
 use url::Url;
 
 /// When to use authentication.
@@ -47,27 +47,45 @@ impl Display for AuthPolicy {
         }
     }
 }
+
+// TODO(john): We are not using `uv_distribution_types::Index` directly
+// here because it would cause circular crate dependencies. However, this
+// could potentially make sense for a future refactor.
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct Index {
+    pub url: Url,
+    /// The root endpoint where authentication is applied.
+    /// For PEP 503 endpoints, this excludes `/simple`.
+    pub root_url: Url,
+    pub auth_policy: AuthPolicy,
+}
+
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
-pub struct UrlAuthPolicies(FxHashMap<Url, AuthPolicy>);
+pub struct Indexes(FxHashSet<Index>);
 
-impl UrlAuthPolicies {
+impl Indexes {
     pub fn new() -> Self {
-        Self(FxHashMap::default())
+        Self(FxHashSet::default())
     }
 
-    /// Create a new [`UrlAuthPolicies`] from a list of URL and [`AuthPolicy`]
-    /// tuples.
-    pub fn from_tuples(tuples: impl IntoIterator<Item = (Url, AuthPolicy)>) -> Self {
-        let mut auth_policies = Self::new();
-        for (url, auth_policy) in tuples {
-            auth_policies.add_policy(url, auth_policy);
+    /// Create a new [`AuthIndexUrls`] from an iterator of [`AuthIndexUrl`]s.
+    pub fn from_indexes(urls: impl IntoIterator<Item = Index>) -> Self {
+        let mut index_urls = Self::new();
+        for url in urls {
+            index_urls.0.insert(url);
         }
-        auth_policies
+        index_urls
     }
 
-    /// An [`AuthPolicy`] for a URL.
-    pub fn add_policy(&mut self, url: Url, auth_policy: AuthPolicy) {
-        self.0.insert(url, auth_policy);
+    /// Get the index URL prefix for a URL if one exists.
+    pub fn index_url_for(&self, url: &Url) -> Option<&Url> {
+        // TODO(john): There are probably not many URLs to iterate through,
+        // but we could use a trie instead of a HashSet here for more
+        // efficient search.
+        self.0
+            .iter()
+            .find(|index| is_url_prefix(&index.root_url, url))
+            .map(|index| &index.url)
     }
 
     /// Get the [`AuthPolicy`] for a URL.
@@ -75,11 +93,22 @@ impl UrlAuthPolicies {
         // TODO(john): There are probably not many URLs to iterate through,
         // but we could use a trie instead of a HashMap here for more
         // efficient search.
-        for (auth_url, auth_policy) in &self.0 {
-            if url.as_str().starts_with(auth_url.as_str()) {
-                return *auth_policy;
+        for index in &self.0 {
+            if is_url_prefix(&index.root_url, url) {
+                return index.auth_policy;
             }
         }
         AuthPolicy::Auto
     }
+}
+
+fn is_url_prefix(base: &Url, url: &Url) -> bool {
+    if base.scheme() != url.scheme()
+        || base.host_str() != url.host_str()
+        || base.port_or_known_default() != url.port_or_known_default()
+    {
+        return false;
+    }
+
+    url.path().starts_with(base.path())
 }

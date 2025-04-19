@@ -9,7 +9,6 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -593,8 +592,7 @@ async fn do_lock(
         .native_tls(network_settings.native_tls)
         .connectivity(network_settings.connectivity)
         .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .url_auth_policies(UrlAuthPolicies::from(index_locations))
-        .index_urls(index_locations.index_urls())
+        .index_locations(index_locations)
         .index_strategy(*index_strategy)
         .keyring(*keyring_provider)
         .markers(interpreter.markers())

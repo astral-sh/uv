@@ -17,8 +17,8 @@ type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 pub struct CredentialsCache {
     /// A cache per realm and username
     realms: RwLock<FxHashMap<(Realm, Username), Arc<Credentials>>>,
-    /// A cache tracking the result of fetches from external services
-    pub(crate) fetches: FxOnceMap<(Realm, Username), Option<Arc<Credentials>>>,
+    /// A cache tracking the result of realm or index URL fetches from external services
+    pub(crate) fetches: FxOnceMap<(String, Username), Option<Arc<Credentials>>>,
     /// A cache per URL, uses a trie for efficient prefix queries.
     urls: RwLock<UrlTrie>,
 }

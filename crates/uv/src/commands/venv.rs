@@ -10,7 +10,6 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -296,9 +295,8 @@ async fn venv_impl(
         let client = RegistryClientBuilder::try_from(client_builder)
             .into_diagnostic()?
             .cache(cache.clone())
-            .index_urls(index_locations.index_urls())
+            .index_locations(index_locations)
             .index_strategy(index_strategy)
-            .url_auth_policies(UrlAuthPolicies::from(index_locations))
             .keyring(keyring_provider)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())
             .markers(interpreter.markers())

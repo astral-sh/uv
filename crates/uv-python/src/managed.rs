@@ -120,7 +120,9 @@ impl ManagedPythonInstallations {
     pub fn from_settings(install_dir: Option<PathBuf>) -> Result<Self, Error> {
         if let Some(install_dir) = install_dir {
             Ok(Self::from_path(install_dir))
-        } else if let Some(install_dir) = std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR) {
+        } else if let Some(install_dir) =
+            std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR).filter(|s| !s.is_empty())
+        {
             Ok(Self::from_path(install_dir))
         } else {
             Ok(Self::from_path(
