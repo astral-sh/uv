@@ -30,7 +30,7 @@ use crate::managed::ManagedPythonInstallations;
 use crate::microsoft_store::find_microsoft_store_pythons;
 use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
-    conda_environment_from_env, virtualenv_from_env, virtualenv_from_working_dir,
+    conda_environment_from_env, virtualenv_from_dir, virtualenv_from_env,
     virtualenv_python_executable, CondaEnvironmentKind,
 };
 #[cfg(windows)]
@@ -251,8 +251,9 @@ pub enum Error {
 /// - Discovered virtual environment (e.g. `.venv` in a parent directory)
 ///
 /// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
-fn python_executables_from_virtual_environments<'a>(
-) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
+fn python_executables_from_virtual_environments(
+    discovery_root: &Path,
+) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + '_ {
     let from_active_environment = iter::once_with(|| {
         virtualenv_from_env()
             .into_iter()
@@ -270,8 +271,8 @@ fn python_executables_from_virtual_environments<'a>(
     })
     .flatten();
 
-    let from_discovered_environment = iter::once_with(|| {
-        virtualenv_from_working_dir()
+    let from_discovered_environment = iter::once_with(move || {
+        virtualenv_from_dir(discovery_root)
             .map(|path| {
                 path.map(virtualenv_python_executable)
                     .map(|path| (PythonSource::DiscoveredEnvironment, path))
@@ -421,6 +422,7 @@ fn python_executables<'a>(
     implementation: Option<&'a ImplementationName>,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    discovery_root: &'a Path,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     // Always read from `UV_INTERNAL__PARENT_INTERPRETER` — it could be a system interpreter
     let from_parent_interpreter = iter::once_with(|| {
@@ -439,7 +441,7 @@ fn python_executables<'a>(
     })
     .flatten();
 
-    let from_virtual_environments = python_executables_from_virtual_environments();
+    let from_virtual_environments = python_executables_from_virtual_environments(discovery_root);
     let from_installed = python_executables_from_installed(version, implementation, preference);
 
     // Limit the search to the relevant environment preference; this avoids unnecessary work like
@@ -634,16 +636,22 @@ fn python_interpreters<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
+    discovery_root: &'a Path,
 ) -> impl Iterator<Item = Result<(PythonSource, Interpreter), Error>> + 'a {
     python_interpreters_from_executables(
         // Perform filtering on the discovered executables based on their source. This avoids
         // unnecessary interpreter queries, which are generally expensive. We'll filter again
         // with `interpreter_satisfies_environment_preference` after querying.
-        python_executables(version, implementation, environments, preference).filter_ok(
-            move |(source, path)| {
-                source_satisfies_environment_preference(*source, path, environments)
-            },
-        ),
+        python_executables(
+            version,
+            implementation,
+            environments,
+            preference,
+            discovery_root,
+        )
+        .filter_ok(move |(source, path)| {
+            source_satisfies_environment_preference(*source, path, environments)
+        }),
         cache,
     )
     .filter_ok(move |(source, interpreter)| {
@@ -881,6 +889,7 @@ pub fn find_python_installations<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
+    discovery_root: &'a Path,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
     let sources = DiscoveryPreferences {
         python_preference: preference,
@@ -961,8 +970,15 @@ pub fn find_python_installations<'a>(
         }
         PythonRequest::Any => Box::new({
             debug!("Searching for any Python interpreter in {sources}");
-            python_interpreters(&VersionRequest::Any, None, environments, preference, cache)
-                .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
+            python_interpreters(
+                &VersionRequest::Any,
+                None,
+                environments,
+                preference,
+                cache,
+                discovery_root,
+            )
+            .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
         PythonRequest::Default => Box::new({
             debug!("Searching for default Python interpreter in {sources}");
@@ -972,6 +988,7 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
+                discovery_root,
             )
             .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
@@ -981,8 +998,15 @@ pub fn find_python_installations<'a>(
             }
             Box::new({
                 debug!("Searching for {request} in {sources}");
-                python_interpreters(version, None, environments, preference, cache)
-                    .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
+                python_interpreters(
+                    version,
+                    None,
+                    environments,
+                    preference,
+                    cache,
+                    discovery_root,
+                )
+                .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
         PythonRequest::Implementation(implementation) => Box::new({
@@ -993,6 +1017,7 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
+                discovery_root,
             )
             .filter_ok(|(_source, interpreter)| {
                 interpreter
@@ -1013,6 +1038,7 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
+                    discovery_root,
                 )
                 .filter_ok(|(_source, interpreter)| {
                     interpreter
@@ -1036,6 +1062,7 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
+                    discovery_root,
                 )
                 .filter_ok(|(_source, interpreter)| request.satisfied_by_interpreter(interpreter))
                 .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
@@ -1053,8 +1080,10 @@ pub(crate) fn find_python_installation(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &Cache,
+    discovery_root: &Path,
 ) -> Result<FindPythonResult, Error> {
-    let installations = find_python_installations(request, environments, preference, cache);
+    let installations =
+        find_python_installations(request, environments, preference, cache, discovery_root);
     let mut first_prerelease = None;
     let mut first_error = None;
     for result in installations {
@@ -1150,12 +1179,13 @@ pub fn find_best_python_installation(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &Cache,
+    discovery_root: &Path,
 ) -> Result<FindPythonResult, Error> {
     debug!("Starting Python discovery for {}", request);
 
     // First, check for an exact match (or the first available version if no Python version was provided)
     debug!("Looking for exact match for request {request}");
-    let result = find_python_installation(request, environments, preference, cache);
+    let result = find_python_installation(request, environments, preference, cache, discovery_root);
     match result {
         Ok(Ok(installation)) => {
             warn_on_unsupported_python(installation.interpreter());
@@ -1183,7 +1213,8 @@ pub fn find_best_python_installation(
         _ => None,
     } {
         debug!("Looking for relaxed patch version {request}");
-        let result = find_python_installation(&request, environments, preference, cache);
+        let result =
+            find_python_installation(&request, environments, preference, cache, discovery_root);
         match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
@@ -1200,14 +1231,15 @@ pub fn find_best_python_installation(
     debug!("Looking for a default Python installation");
     let request = PythonRequest::Default;
     Ok(
-        find_python_installation(&request, environments, preference, cache)?.map_err(|err| {
-            // Use a more general error in this case since we looked for multiple versions
-            PythonNotFound {
-                request,
-                python_preference: err.python_preference,
-                environment_preference: err.environment_preference,
-            }
-        }),
+        find_python_installation(&request, environments, preference, cache, discovery_root)?
+            .map_err(|err| {
+                // Use a more general error in this case since we looked for multiple versions
+                PythonNotFound {
+                    request,
+                    python_preference: err.python_preference,
+                    environment_preference: err.environment_preference,
+                }
+            }),
     )
 }
 

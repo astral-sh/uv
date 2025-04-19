@@ -492,6 +492,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 cache,
                 printer,
                 globals.preview,
+                project_dir.as_path(),
             )
             .await
         }
@@ -1135,6 +1136,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.env_file,
                 args.no_env_file,
                 globals.preview,
+                project_dir.as_path(),
             ))
             .await
         }
@@ -1204,6 +1206,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 cache,
                 printer,
                 globals.preview,
+                project_dir.as_path(),
             ))
             .await
         }
@@ -1249,6 +1252,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &cache,
                 printer,
                 globals.preview,
+                project_dir.as_path(),
             ))
             .await
         }
@@ -1361,6 +1365,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     cli.top_level.no_config,
                     &cache,
                     printer,
+                    project_dir.as_path(),
                 )
                 .await
             } else {
