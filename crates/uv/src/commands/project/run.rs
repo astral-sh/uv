@@ -1092,7 +1092,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     // Ensure `VIRTUAL_ENV` is set.
     if interpreter.is_virtualenv() {
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
-    };
+    }
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
@@ -1107,18 +1107,18 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             if err.kind() == std::io::ErrorKind::NotFound && is_python_executable(&executable) {
                 // Get version from python command string
                 // e.g. python3.12 -> "3.12" or "" if python version not specified. 
-                let version_part = executable.strip_prefix("python").unwrap_or("");
+                let specified_version = executable.strip_prefix("python").unwrap_or("");
                 let current_executable_python_version = base_interpreter.python_version().only_release();
                 // Determine the environment type
                 let env_type = if project_found { "project" } else { "virtual" };
 
                 let message_suffix = if project_found {
                     format!(
-                        "Did you mean to change the environment to Python {version_part} with `uv run -p {version_part} python`?"
+                        "Did you mean to change the environment to Python {specified_version} with `uv run -p {specified_version} python`?"
                     )
                 } else {
                     format!(
-                        "Did you mean to search for a Python {version_part} environment with `uv run -p {version_part} python`?"
+                        "Did you mean to search for a Python {specified_version} environment with `uv run -p {specified_version} python`?"
                     )
                 };
                 anyhow!(
