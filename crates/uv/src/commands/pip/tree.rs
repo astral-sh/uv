@@ -10,7 +10,6 @@ use petgraph::Direction;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::Semaphore;
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::RegistryClientBuilder;
@@ -90,9 +89,8 @@ pub(crate) async fn pip_tree(
                 .native_tls(network_settings.native_tls)
                 .connectivity(network_settings.connectivity)
                 .allow_insecure_host(network_settings.allow_insecure_host.clone())
-                .index_urls(index_locations.index_urls())
+                .index_locations(&index_locations)
                 .index_strategy(index_strategy)
-                .url_auth_policies(UrlAuthPolicies::from(&index_locations))
                 .keyring(keyring_provider)
                 .markers(environment.interpreter().markers())
                 .platform(environment.interpreter().platform())
