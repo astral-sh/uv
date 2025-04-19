@@ -517,6 +517,7 @@ fn tracing_url(request: &Request, credentials: Option<&Credentials>) -> String {
                 let _ = url.set_username(username);
             }
             let _ = url.set_password(Some("****"));
+        // A username on its own might be a secret token.
         } else if creds.username().is_some() {
             let _ = url.set_username("****");
         }
