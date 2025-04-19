@@ -4,6 +4,7 @@ use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context};
 use futures::StreamExt;
@@ -27,7 +28,7 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{DefaultGroups, PackageName};
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
+    PythonInstallation, PythonPreference, PythonRequest, PythonVersion, PythonVersionFile,
     VersionFileDiscoveryOptions,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
@@ -145,6 +146,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     let lock_state = UniversalState::default();
     let sync_state = lock_state.fork();
     let workspace_cache = WorkspaceCache::default();
+    let mut project_found = true;
 
     // Read from the `.env` file, if necessary.
     if !no_env_file {
@@ -806,6 +808,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             venv.into_interpreter()
         } else {
             debug!("No project found; searching for Python interpreter");
+            project_found = false;
 
             let interpreter = {
                 let client_builder = BaseClientBuilder::new()
@@ -1096,6 +1099,39 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     // TODO(zanieb): Throw a nicer error message if the command is not found
     let handle = process
         .spawn()
+        .map_err(|err| {
+            let executable: Cow<'_, str> = command.display_executable();
+            // Special case for providing meaningful error message when users 
+            // attempt to invoke python. E.g. "python3.11". 
+            // Will not work if patch version is provided. I.E. "python3.11.9"
+            if err.kind() == std::io::ErrorKind::NotFound && is_python_executable(&executable) {
+                // Get version from python command string
+                // e.g. python3.12 -> "3.12" or "" if python version not specified. 
+                let specified_version = executable.strip_prefix("python").unwrap_or("");
+                let current_executable_python_version = base_interpreter.python_version().only_release();
+                // Determine the environment type
+                let env_type = if project_found { "project" } else { "virtual" };
+
+                let message_suffix = if project_found {
+                    format!(
+                        "Did you mean to change the environment to Python {specified_version} with `uv run -p {specified_version} python`?"
+                    )
+                } else {
+                    format!(
+                        "Did you mean to search for a Python {specified_version} environment with `uv run -p {specified_version} python`?"
+                    )
+                };
+                anyhow!(
+                    "`{}` not available in the {} environment, which uses python `{}`. {}",
+                    executable,
+                    env_type,
+                    current_executable_python_version,
+                    message_suffix
+                )
+            } else {
+                err.into()
+            }
+        })
         .with_context(|| format!("Failed to spawn: `{}`", command.display_executable()))?;
 
     run_to_completion(handle).await
@@ -1539,4 +1575,113 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
     envvar
         .parse::<u32>()
         .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
+}
+
+/// Matches valid Python executable names:
+/// - ✅ "python", "python39", "python3", "python3.9", "python4", "python3.10", "python3.13.3"
+/// - ❌ "python3abc", "python3.12b3", "", "python-foo"
+fn is_python_executable(executable_command: &str) -> bool {
+    executable_command
+        .strip_prefix("python")
+        .is_some_and(|version| version.is_empty() || is_valid_python_version(version))
+}
+
+/// Checks if a version string is a valid Python major.minor.patch version.
+fn is_valid_python_version(version: &str) -> bool {
+    PythonVersion::from_str(version).is_ok_and(|ver| {
+        ver.is_stable() &&
+            // Should not contain post info. E.g. "3.12b3"
+            !ver.is_post()
+    })
+}
+#[cfg(test)]
+mod tests {
+    use super::{is_python_executable, is_valid_python_version};
+
+    /// Helper function for asserting test cases.
+    /// - If `expected_result` is `true`, it expects the function to return `true` (valid cases).
+    /// - If `expected_result` is `false`, it expects the function to return `false` (invalid cases).
+    fn assert_cases<F: Fn(&str) -> bool>(
+        cases: &[&str],
+        func: F,
+        test_name: &str,
+        expected_result: bool,
+    ) {
+        for &case in cases {
+            let result = func(case);
+            assert_eq!(
+                result, expected_result,
+                "{test_name}: Expected `{expected_result}`, but got `{result}` for case `{case}`"
+            );
+        }
+    }
+
+    #[test]
+    fn valid_is_python_executable() {
+        let valid_cases = [
+            "python3",
+            "python3.9",
+            "python3.10",
+            "python4",
+            "python",
+            "python3.11.3",
+            "python39", // Still a valid executable, although likely a typo
+        ];
+        assert_cases(
+            &valid_cases,
+            is_python_executable,
+            "valid_is_python_executable",
+            true,
+        );
+    }
+
+    #[test]
+    fn invalid_is_python_executable() {
+        let invalid_cases = [
+            "python-foo",
+            "python3abc",
+            "python3.12b3",
+            "pyth0n3",
+            "",
+            "Python3.9",
+            "python.3.9",
+        ];
+        assert_cases(
+            &invalid_cases,
+            is_python_executable,
+            "invalid_is_python_executable",
+            false,
+        );
+    }
+
+    #[test]
+    fn valid_python_versions() {
+        let valid_cases = ["3", "3.9", "4", "3.10", "49", "3.11.3"];
+        assert_cases(
+            &valid_cases,
+            is_valid_python_version,
+            "valid_python_versions",
+            true,
+        );
+    }
+
+    #[test]
+    fn invalid_python_versions() {
+        let invalid_cases = [
+            "3.12b3",
+            "3.12rc1",
+            "3.12a1",
+            "3.12.post1",
+            "3.12.1-foo",
+            "3abc",
+            "..",
+            "",
+        ];
+        assert_cases(
+            &invalid_cases,
+            is_valid_python_version,
+            "invalid_python_versions",
+            false,
+        );
+    }
 }
