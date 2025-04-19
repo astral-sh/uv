@@ -1,14 +1,16 @@
 use std::fmt::Write;
 use std::ops::Deref;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
+use serde::Serialize;
 use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
+use uv_cli::SyncFormat;
 use uv_client::{FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
@@ -46,6 +48,101 @@ use crate::commands::{diagnostics, ExitStatus};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings};
 
+/// Represents an single synchronization entry.
+///
+/// This structure captures the state of a project directory
+/// or a script during a dry run.
+#[derive(Debug, Serialize)]
+struct SyncEntry {
+    /// The project directory path.
+    project_dir: PathBuf,
+    /// The environment details, including path and action.
+    environment: Environment,
+    // Lockfile details, including path and actions taken
+    lockfile: Option<LockfileEntry>,
+}
+
+/// Represents the lockfile details during a dru run.
+///
+/// this struct captures the path to the lockfile and action
+/// that would be taken on it.
+#[derive(Debug, Serialize)]
+struct LockfileEntry {
+    lockfile_path: PathBuf,
+    action: DryRunAction,
+}
+
+/// Represents the action taken during a dry run.
+///
+/// this struct describe the simulated action applied to a
+/// resource (environment, lockfile, package)
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+enum DryRunAction {
+    /// No changes are needed.
+    AlreadyExist,
+    /// The resource would be replaced, Equivalent to `Update` but more expressive.
+    Replace,
+    /// The resource would be updated.
+    Update,
+    /// Create a new resource
+    Create,
+    // No action is being taken(should this ever happen?).
+    None,
+}
+
+/// The dry run environment details, including path, action, and Python configuration.
+#[derive(Serialize, Debug)]
+struct Environment {
+    /// The path to the environment.
+    path: PathBuf,
+    /// The action taken for the environment.
+    action: DryRunAction,
+    // Python executable path
+    python_executable: PathBuf,
+    // Python full version
+    python_version: String,
+}
+impl SyncEntry {
+    /// Creates a new `SyncEntry` with the given project directory.
+    fn new(project_dir: &Path) -> Self {
+        Self {
+            project_dir: project_dir.to_owned(),
+            environment: Environment {
+                path: PathBuf::new(),
+                action: DryRunAction::None,
+                python_executable: PathBuf::new(),
+                python_version: String::new(),
+            },
+            lockfile: None,
+        }
+    }
+    /// Sets the environment path and action.
+    fn set_env_path(&mut self, path: PathBuf, action: DryRunAction) {
+        self.environment.path = path;
+        self.environment.action = action;
+    }
+
+    /// Sets python executable path and full version.
+    fn set_python(&mut self, executable: PathBuf, version: String) {
+        self.environment.python_executable = executable;
+        self.environment.python_version = version;
+    }
+
+    /// Sets lockfile path and action.
+    fn set_lockfile(&mut self, lockfile_path: PathBuf, action: DryRunAction) {
+        self.lockfile = Some(LockfileEntry {
+            lockfile_path,
+            action,
+        });
+    }
+
+    /// Serializes the `SyncEntry` into a JSON string.
+    fn as_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
+    }
+}
+
 /// Sync the project environment.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn sync(
@@ -74,6 +171,7 @@ pub(crate) async fn sync(
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
+    format: SyncFormat,
 ) -> Result<ExitStatus> {
     // Identify the target.
     let workspace_cache = WorkspaceCache::default();
@@ -156,49 +254,24 @@ pub(crate) async fn sync(
         ),
     };
 
+    let mut sync_json = SyncEntry::new(project_dir);
+    // set python version and executable path
+    if format.is_json() {
+        sync_json.set_python(
+            environment.python_executable().to_owned(),
+            environment.interpreter().python_full_version().to_string(),
+        );
+    }
+
     // Notify the user of any environment changes.
     match &environment {
         SyncEnvironment::Project(ProjectEnvironment::Existing(environment))
             if dry_run.enabled() =>
         {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Discovered existing environment at: {}",
-                    environment.root().user_display().bold()
-                )
-                .dimmed()
-            )?;
-        }
-        SyncEnvironment::Project(ProjectEnvironment::WouldReplace(root, ..))
-            if dry_run.enabled() =>
-        {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Would replace existing virtual environment at: {}",
-                    root.user_display().bold()
-                )
-                .dimmed()
-            )?;
-        }
-        SyncEnvironment::Project(ProjectEnvironment::WouldCreate(root, ..))
-            if dry_run.enabled() =>
-        {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Would create virtual environment at: {}",
-                    root.user_display().bold()
-                )
-                .dimmed()
-            )?;
-        }
-        SyncEnvironment::Script(ScriptEnvironment::Existing(environment)) => {
-            if dry_run.enabled() {
+            // formatting
+            if format.is_json() {
+                sync_json.set_env_path(environment.root().to_owned(), DryRunAction::AlreadyExist);
+            } else {
                 writeln!(
                     printer.stderr(),
                     "{}",
@@ -208,6 +281,58 @@ pub(crate) async fn sync(
                     )
                     .dimmed()
                 )?;
+            }
+        }
+        SyncEnvironment::Project(ProjectEnvironment::WouldReplace(root, ..))
+            if dry_run.enabled() =>
+        {
+            if format.is_json() {
+                sync_json.set_env_path(root.to_owned(), DryRunAction::Replace);
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Would replace existing virtual environment at: {}",
+                        root.user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
+        }
+        SyncEnvironment::Project(ProjectEnvironment::WouldCreate(root, ..))
+            if dry_run.enabled() =>
+        {
+            if format.is_json() {
+                sync_json.set_env_path(root.to_owned(), DryRunAction::Create);
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Would create virtual environment at: {}",
+                        root.user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
+        }
+        SyncEnvironment::Script(ScriptEnvironment::Existing(environment)) => {
+            if dry_run.enabled() {
+                if format.is_json() {
+                    sync_json
+                        .set_env_path(environment.root().to_owned(), DryRunAction::AlreadyExist);
+                } else {
+                    writeln!(
+                        printer.stderr(),
+                        "{}",
+                        format!(
+                            "Discovered existing environment at: {}",
+                            environment.root().user_display().bold()
+                        )
+                        .dimmed()
+                    )?;
+                }
             } else {
                 writeln!(
                     printer.stderr(),
@@ -231,29 +356,39 @@ pub(crate) async fn sync(
             )?;
         }
         SyncEnvironment::Script(ScriptEnvironment::WouldReplace(root, ..)) if dry_run.enabled() => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Would replace existing script environment at: {}",
-                    root.user_display().bold()
-                )
-                .dimmed()
-            )?;
+            if format.is_json() {
+                sync_json.set_env_path(environment.root().to_owned(), DryRunAction::Replace);
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Would replace existing script environment at: {}",
+                        root.user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
         }
         SyncEnvironment::Script(ScriptEnvironment::WouldCreate(root, ..)) if dry_run.enabled() => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Would create script environment at: {}",
-                    root.user_display().bold()
-                )
-                .dimmed()
-            )?;
+            if format.is_json() {
+                sync_json.set_env_path(environment.root().to_owned(), DryRunAction::Create);
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Would create script environment at: {}",
+                        root.user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
         }
         _ => {}
     }
+
+    // Notify the user of any environment changes.
 
     // Special-case: we're syncing a script that doesn't have an associated lockfile. In that case,
     // we don't create a lockfile, so the resolve-and-install semantics are different.
@@ -316,7 +451,12 @@ pub(crate) async fn sync(
             )
             .await
             {
-                Ok(..) => return Ok(ExitStatus::Success),
+                Ok(..) => {
+                    if format.is_json() {
+                        writeln!(printer.stdout(), "{}", sync_json.as_json()?)?;
+                    }
+                    return Ok(ExitStatus::Success);
+                }
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
                         network_settings.native_tls,
@@ -366,37 +506,50 @@ pub(crate) async fn sync(
             if dry_run.enabled() {
                 match result {
                     LockResult::Unchanged(..) => {
-                        writeln!(
-                            printer.stderr(),
-                            "{}",
-                            format!(
-                                "Found up-to-date lockfile at: {}",
-                                lock_target.lock_path().user_display().bold()
-                            )
-                            .dimmed()
-                        )?;
+                        if format.is_json() {
+                            sync_json
+                                .set_lockfile(lock_target.lock_path(), DryRunAction::AlreadyExist);
+                        } else {
+                            writeln!(
+                                printer.stderr(),
+                                "{}",
+                                format!(
+                                    "Found up-to-date lockfile at: {}",
+                                    lock_target.lock_path().user_display().bold()
+                                )
+                                .dimmed()
+                            )?;
+                        }
                     }
                     LockResult::Changed(None, ..) => {
-                        writeln!(
-                            printer.stderr(),
-                            "{}",
-                            format!(
-                                "Would create lockfile at: {}",
-                                lock_target.lock_path().user_display().bold()
-                            )
-                            .dimmed()
-                        )?;
+                        if format.is_json() {
+                            sync_json.set_lockfile(lock_target.lock_path(), DryRunAction::Create);
+                        } else {
+                            writeln!(
+                                printer.stderr(),
+                                "{}",
+                                format!(
+                                    "Would create lockfile at: {}",
+                                    lock_target.lock_path().user_display().bold()
+                                )
+                                .dimmed()
+                            )?;
+                        }
                     }
                     LockResult::Changed(Some(..), ..) => {
-                        writeln!(
-                            printer.stderr(),
-                            "{}",
-                            format!(
-                                "Would update lockfile at: {}",
-                                lock_target.lock_path().user_display().bold()
-                            )
-                            .dimmed()
-                        )?;
+                        if format.is_json() {
+                            sync_json.set_lockfile(lock_target.lock_path(), DryRunAction::Update);
+                        } else {
+                            writeln!(
+                                printer.stderr(),
+                                "{}",
+                                format!(
+                                    "Would update lockfile at: {}",
+                                    lock_target.lock_path().user_display().bold()
+                                )
+                                .dimmed()
+                            )?;
+                        }
                     }
                 }
             }
@@ -414,6 +567,10 @@ pub(crate) async fn sync(
         }
         Err(err) => return Err(err.into()),
     };
+
+    if format.is_json() {
+        writeln!(printer.stdout(), "{}", sync_json.as_json()?)?;
+    }
 
     // Identify the installation target.
     let sync_target =
