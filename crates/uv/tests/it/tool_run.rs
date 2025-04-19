@@ -9,46 +9,43 @@ use uv_static::EnvVars;
 #[test]
 fn tool_run_args() {
     let context = TestContext::new("3.12").with_filtered_counts();
+    let mut filters = context.filters();
+    filters.push((
+        r"Usage: uv tool run \[OPTIONS\] (?s).*",
+        "[UV TOOL RUN HELP]",
+    ));
+    filters.push((r"usage: pytest \[options\] (?s).*", "[PYTEST HELP]"));
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // We treat arguments before the command as uv arguments
-    uv_snapshot!(context.filters(), context.tool_run()
-        .arg("--version")
+    // We treat arguments before the command as uv tool run arguments
+    uv_snapshot!(filters, context.tool_run()
+        .arg("--help")
         .arg("pytest")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    uv [VERSION] ([COMMIT] DATE)
+    Run a command provided by a Python package
 
-    ----- stderr -----
-    "###);
+    [UV TOOL RUN HELP]
+    ");
 
-    // We don't treat arguments after the command as uv arguments
-    uv_snapshot!(context.filters(), context.tool_run()
+    // We don't treat arguments after the command as uv tool run arguments
+    uv_snapshot!(filters, context.tool_run()
         .arg("pytest")
-        .arg("--version")
+        .arg("--help")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    pytest 8.1.1
-
-    ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + iniconfig==2.0.0
-     + packaging==24.0
-     + pluggy==1.4.0
-     + pytest==8.1.1
-    "###);
+    [PYTEST HELP]
+    ");
 
     // Can use `--` to separate uv arguments from the command arguments.
-    uv_snapshot!(context.filters(), context.tool_run()
+    uv_snapshot!(filters, context.tool_run()
         .arg("--")
         .arg("pytest")
         .arg("--version")
