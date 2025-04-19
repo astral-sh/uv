@@ -348,6 +348,8 @@ impl RunSettings {
             extra,
             all_extras,
             no_extra,
+            no_default_extras,
+            only_extra,
             no_all_extras,
             dev,
             no_dev,
@@ -395,9 +397,11 @@ impl RunSettings {
             locked,
             frozen,
             extras: ExtrasSpecification::from_args(
-                flag(all_extras, no_all_extras).unwrap_or_default(),
-                no_extra,
                 extra.unwrap_or_default(),
+                no_extra,
+                no_default_extras,
+                only_extra,
+                flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
             dev: DependencyGroups::from_args(
                 dev,
@@ -1071,6 +1075,8 @@ impl SyncSettings {
         let SyncArgs {
             extra,
             all_extras,
+            no_default_extras,
+            only_extra,
             no_extra,
             no_all_extras,
             dev,
@@ -1126,9 +1132,11 @@ impl SyncSettings {
             script,
             active: flag(active, no_active),
             extras: ExtrasSpecification::from_args(
-                flag(all_extras, no_all_extras).unwrap_or_default(),
-                no_extra,
                 extra.unwrap_or_default(),
+                no_extra,
+                no_default_extras,
+                only_extra,
+                flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
             dev: DependencyGroups::from_args(
                 dev,
@@ -1559,6 +1567,8 @@ impl ExportSettings {
             prune,
             extra,
             all_extras,
+            no_default_extras,
+            only_extra,
             no_extra,
             no_all_extras,
             dev,
@@ -1599,9 +1609,11 @@ impl ExportSettings {
             package,
             prune,
             extras: ExtrasSpecification::from_args(
-                flag(all_extras, no_all_extras).unwrap_or_default(),
-                no_extra,
                 extra.unwrap_or_default(),
+                no_extra,
+                no_default_extras,
+                only_extra,
+                flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
             dev: DependencyGroups::from_args(
                 dev,
@@ -2854,10 +2866,15 @@ impl PipSettings {
                 args.no_index.combine(no_index).unwrap_or_default(),
             ),
             extras: ExtrasSpecification::from_args(
-                args.all_extras.combine(all_extras).unwrap_or_default(),
-                args.no_extra.combine(no_extra).unwrap_or_default(),
                 args.extra.combine(extra).unwrap_or_default(),
+                args.no_extra.combine(no_extra).unwrap_or_default(),
+                // TODO(blueraft): support no_default_extras
+                false,
+                // TODO(blueraft): support only_extra
+                vec![],
+                args.all_extras.combine(all_extras).unwrap_or_default(),
             ),
+
             groups: args.group.combine(group).unwrap_or_default(),
             dependency_mode: if args.no_deps.combine(no_deps).unwrap_or_default() {
                 DependencyMode::Direct

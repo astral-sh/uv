@@ -30,8 +30,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, ProjectEnvironment, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState,
+    default_dependency_groups, default_extras, ProjectEnvironment, ProjectError,
+    ProjectInterpreter, ScriptInterpreter, UniversalState,
 };
 use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
@@ -311,11 +311,14 @@ pub(crate) async fn remove(
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
-    let extras = ExtrasSpecification::All;
+    let extras = ExtrasSpecification::from_all_extras();
     let install_options = InstallOptions::default();
 
     // Determine the default groups to include.
-    let defaults = default_dependency_groups(project.pyproject_toml())?;
+    let default_groups = default_dependency_groups(project.pyproject_toml())?;
+
+    // Determine the default extras to include.
+    let default_extras = default_extras(project.pyproject_toml())?;
 
     // Identify the installation target.
     let target = match &project {
@@ -335,8 +338,8 @@ pub(crate) async fn remove(
     match project::sync::do_sync(
         target,
         venv,
-        &extras,
-        &DependencyGroups::default().with_defaults(defaults),
+        &extras.with_defaults(default_extras),
+        &DependencyGroups::default().with_defaults(default_groups),
         EditableMode::Editable,
         install_options,
         Modifications::Exact,

@@ -9,9 +9,8 @@ use itertools::Itertools;
 use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{
-    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions,
-};
+use uv_configuration::ExtrasSpecificationWithDefaults;
+use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOptions};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
@@ -39,7 +38,7 @@ pub trait Installable<'lock> {
         &self,
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
-        extras: &ExtrasSpecification,
+        extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
         build_options: &BuildOptions,
         install_options: &InstallOptions,
