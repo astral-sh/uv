@@ -72,6 +72,10 @@ impl From<Option<String>> for Username {
 pub struct Password(String);
 
 impl Password {
+    pub fn new(password: String) -> Self {
+        Self(password)
+    }
+
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }

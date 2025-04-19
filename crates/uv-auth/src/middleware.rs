@@ -538,6 +538,8 @@ mod tests {
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
+    use crate::credentials::Password;
+
     use super::*;
 
     type Error = Box<dyn std::error::Error>;
@@ -1868,7 +1870,7 @@ mod tests {
         // Log username but mask password if a password is present
         let creds = Credentials::Basic {
             username: Username::new(Some(String::from("user"))),
-            password: Some(String::from("password")),
+            password: Some(Password::new(String::from("password"))),
         };
         let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
         assert_eq!(
