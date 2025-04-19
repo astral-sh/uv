@@ -4773,6 +4773,10 @@ pub struct PythonUninstallArgs {
     /// Uninstall all managed Python versions.
     #[arg(long, conflicts_with("targets"))]
     pub all: bool,
+
+    /// Force uninstall the requested Python version(s), even if they are in use.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Args)]

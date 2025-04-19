@@ -34,6 +34,8 @@ pub struct VirtualEnvironment {
 #[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PyVenvConfiguration {
+    // Home is the parent directory of the interpreter.
+    pub(crate) home: PathBuf,
     /// Was the virtual environment created with the `virtualenv` package?
     pub(crate) virtualenv: bool,
     /// Was the virtual environment created with the `uv` package?
@@ -193,6 +195,7 @@ pub(crate) fn virtualenv_python_executable(venv: impl AsRef<Path>) -> PathBuf {
 impl PyVenvConfiguration {
     /// Parse a `pyvenv.cfg` file into a [`PyVenvConfiguration`].
     pub fn parse(cfg: impl AsRef<Path>) -> Result<Self, Error> {
+        let mut home = PathBuf::new();
         let mut virtualenv = false;
         let mut uv = false;
         let mut relocatable = false;
@@ -210,6 +213,9 @@ impl PyVenvConfiguration {
                 continue;
             };
             match key.trim() {
+                "home" => {
+                    home = PathBuf::from(value.trim());
+                }
                 "virtualenv" => {
                     virtualenv = true;
                 }
@@ -236,6 +242,7 @@ impl PyVenvConfiguration {
         }
 
         Ok(Self {
+            home,
             virtualenv,
             uv,
             relocatable,
@@ -243,6 +250,11 @@ impl PyVenvConfiguration {
             include_system_site_packages,
             version,
         })
+    }
+
+    /// Returns the home directory of the virtual environment.
+    pub fn home(&self) -> &Path {
+        &self.home
     }
 
     /// Returns true if the virtual environment was created with the `virtualenv` package.
