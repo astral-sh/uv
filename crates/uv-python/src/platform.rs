@@ -47,7 +47,7 @@ pub enum Libc {
 }
 
 impl Libc {
-    pub(crate) fn from_env() -> Result<Self, LibcDetectionError> {
+    pub fn from_env() -> Result<Self, LibcDetectionError> {
         match std::env::consts::OS {
             "linux" => Ok(Self::Some(match detect_linux_libc()? {
                 LibcVersion::Manylinux { .. } => match std::env::consts::ARCH {
