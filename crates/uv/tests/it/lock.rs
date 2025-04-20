@@ -7519,12 +7519,13 @@ fn lock_index_workspace_member() -> Result<()> {
     // Locking without the necessary credentials should fail.
     uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/)
+      × No solution found when resolving dependencies:
+      ╰─▶ Because iniconfig was not found in the package registry and child depends on iniconfig>=2, we can conclude that child's requirements are unsatisfiable.
+          And because your workspace requires child, we can conclude that your workspace's requirements are unsatisfiable.
     ");
 
     uv_snapshot!(context.filters(), context.lock()
@@ -8460,12 +8461,14 @@ fn lock_env_credentials() -> Result<()> {
     // Without credentials, the resolution should fail.
     uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/)
+      × No solution found when resolving dependencies:
+      ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     ");
 
     // Provide credentials via environment variables.
@@ -18906,14 +18909,16 @@ fn lock_keyring_explicit_always() -> Result<()> {
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "frog"}}"#)
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Keyring request for https://pypi-proxy.fly.dev/basic-auth/simple
     Keyring request for pypi-proxy.fly.dev
-    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/simple/iniconfig/)
+      × No solution found when resolving dependencies:
+      ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     ");
 
     // With valid credentials, we should succeed

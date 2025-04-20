@@ -333,7 +333,7 @@ impl RegistryClient {
                         IndexFormat::Simple => {
                             let status_code_strategy =
                                 self.index_urls.status_code_strategy_for(index.url);
-                            if let Some(metadata) = self
+                            match self
                                 .simple_single_index(
                                     package_name,
                                     index.url,
@@ -342,8 +342,12 @@ impl RegistryClient {
                                 )
                                 .await?
                             {
-                                results.push((index.url, MetadataFormat::Simple(metadata)));
-                                break;
+                                SimpleMetadataSearchOutcome::Found(metadata) => {
+                                    results.push((index.url, MetadataFormat::Simple(metadata)));
+                                    break;
+                                }
+                                SimpleMetadataSearchOutcome::NotFound => {}
+                                SimpleMetadataSearchOutcome::StatusCodeFailure => break,
                             }
                         }
                         IndexFormat::Flat => {
@@ -365,15 +369,19 @@ impl RegistryClient {
                         match index.format {
                             IndexFormat::Simple => {
                                 let status_code_strategy =
-                                    self.index_urls.status_code_strategy_for(index.url);
-                                let metadata = self
+                                    IndexStatusCodeStrategy::ignore_authentication_error_codes();
+                                let metadata = match self
                                     .simple_single_index(
                                         package_name,
                                         index.url,
                                         capabilities,
                                         &status_code_strategy,
                                     )
-                                    .await?;
+                                    .await?
+                                {
+                                    SimpleMetadataSearchOutcome::Found(metadata) => Some(metadata),
+                                    _ => None,
+                                };
                                 Ok((index.url, metadata.map(MetadataFormat::Simple)))
                             }
                             IndexFormat::Flat => {
@@ -452,15 +460,13 @@ impl RegistryClient {
     ///
     /// The index can either be a PEP 503-compatible remote repository, or a local directory laid
     /// out in the same format.
-    ///
-    /// Returns `Ok(None)` if the package is not found in the index.
     async fn simple_single_index(
         &self,
         package_name: &PackageName,
         index: &IndexUrl,
         capabilities: &IndexCapabilities,
         status_code_strategy: &IndexStatusCodeStrategy,
-    ) -> Result<Option<OwnedArchive<SimpleMetadata>>, Error> {
+    ) -> Result<SimpleMetadataSearchOutcome, Error> {
         // Format the URL for PyPI.
         let mut url = index.url().clone();
         url.path_segments_mut()
@@ -502,28 +508,23 @@ impl RegistryClient {
         };
 
         match result {
-            Ok(metadata) => Ok(Some(metadata)),
+            Ok(metadata) => Ok(SimpleMetadataSearchOutcome::Found(metadata)),
             Err(err) => match err.into_kind() {
                 // The package could not be found in the remote index.
                 ErrorKind::WrappedReqwestError(url, err) => {
-                    let decision = err
-                        .status()
-                        .map_or(IndexStatusCodeDecision::Stop, |status| {
-                            status_code_strategy.handle_status_code(status, index, capabilities)
-                        });
-                    match decision {
-                        IndexStatusCodeDecision::Continue => Ok(None),
-                        IndexStatusCodeDecision::Stop => {
-                            Err(ErrorKind::WrappedReqwestError(url, err).into())
-                        }
-                    }
+                    let Some(status_code) = err.status() else {
+                        return Err(ErrorKind::WrappedReqwestError(url, err).into());
+                    };
+                    Ok(SimpleMetadataSearchOutcome::from(
+                        status_code_strategy.handle_status_code(status_code, index, capabilities),
+                    ))
                 }
 
                 // The package is unavailable due to a lack of connectivity.
-                ErrorKind::Offline(_) => Ok(None),
+                ErrorKind::Offline(_) => Ok(SimpleMetadataSearchOutcome::NotFound),
 
                 // The package could not be found in the local index.
-                ErrorKind::FileNotFound(_) => Ok(None),
+                ErrorKind::FileNotFound(_) => Ok(SimpleMetadataSearchOutcome::NotFound),
 
                 err => Err(err.into()),
             },
@@ -972,6 +973,22 @@ impl RegistryClient {
             )
         } else {
             std::io::Error::new(std::io::ErrorKind::Other, err)
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum SimpleMetadataSearchOutcome {
+    Found(OwnedArchive<SimpleMetadata>),
+    NotFound,
+    StatusCodeFailure,
+}
+
+impl From<IndexStatusCodeDecision> for SimpleMetadataSearchOutcome {
+    fn from(item: IndexStatusCodeDecision) -> Self {
+        match item {
+            IndexStatusCodeDecision::Ignore => Self::NotFound,
+            IndexStatusCodeDecision::Fail => Self::StatusCodeFailure,
         }
     }
 }

@@ -930,12 +930,6 @@ impl PubGrubReportFormatter<'_> {
                 });
             }
             if index_capabilities.forbidden(&index.url) {
-                // If the index is a PyTorch index (e.g., `https://download.pytorch.org/whl/cu118`),
-                // avoid noting the lack of credentials. PyTorch returns a 403 (Forbidden) status
-                // code for any package that does not exist.
-                if index.url.url().host_str() == Some("download.pytorch.org") {
-                    continue;
-                }
                 hints.insert(PubGrubHint::ForbiddenIndex {
                     index: index.url.clone(),
                 });
