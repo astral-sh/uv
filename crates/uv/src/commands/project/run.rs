@@ -1579,17 +1579,28 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
 
 /// Matches valid Python executable names and returns the version part if valid:
 /// - ✅ "python" -> Some("")
-/// - ✅ "python39" -> Some("39")
+/// - ✅ "/usr/bin/python3.9" -> Some("3.9")
+/// - ✅ "/path/to/python39" -> Some("39")
 /// - ✅ "python3" -> Some("3")
-/// - ✅ "python3.9" -> Some("3.9")
+/// - ✅ "python3.exe" -> Some("3")
+/// - ✅ "python3.9.exe" -> Some("3.9")
 /// - ❌ "python3abc" -> None
 /// - ❌ "python3.12b3" -> None
 /// - ❌ "" -> None
 /// - ❌ "python-foo" -> None
+/// - ❌ "Python" -> None // Case-sensitive
 fn python_executable_version(executable_command: &str) -> Option<&str> {
-    executable_command
-        .strip_prefix("python")
-        .filter(|version| version.is_empty() || validate_python_version(version).is_ok())
+    const PYTHON_MARKER: &str = "python";
+
+    // Strip suffix for windows .exe
+    let command = executable_command
+        .strip_suffix(".exe")
+        .unwrap_or(executable_command);
+    let version_start = command.rfind(PYTHON_MARKER)? + PYTHON_MARKER.len();
+    // Retrieve python version string. E.g. "python3.12" -> "3.12"
+    let version = command.get(version_start..)?;
+
+    Some(version).filter(|&v| v.is_empty() || validate_python_version(v).is_ok())
 }
 
 /// Validates if a version string is a valid Python major.minor.patch version.
@@ -1628,6 +1639,9 @@ mod tests {
             ("python3", Some("3")),
             ("python3.9", Some("3.9")),
             ("python3.10", Some("3.10")),
+            ("/usr/bin/python3.9", Some("3.9")),
+            ("python3.9.exe", Some("3.9")),
+            ("python3.9.exe", Some("3.9")),
             ("python4", Some("4")),
             ("python", Some("")),
             ("python3.11.3", Some("3.11.3")),
