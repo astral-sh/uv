@@ -171,6 +171,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        pylock,
         source_trees,
         groups,
         extras: used_extras,
@@ -188,6 +189,13 @@ pub(crate) async fn pip_compile(
         &client_builder,
     )
     .await?;
+
+    // Reject `pylock.toml` files, which are valid outputs but not inputs.
+    if pylock.is_some() {
+        return Err(anyhow!(
+            "`pylock.toml` is not a supported input format for `uv pip compile`"
+        ));
+    }
 
     let constraints = constraints
         .iter()

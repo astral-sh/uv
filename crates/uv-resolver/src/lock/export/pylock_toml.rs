@@ -1,21 +1,75 @@
-use jiff::tz::TimeZone;
-use jiff::Timestamp;
+use std::borrow::Cow;
+use std::ffi::OsStr;
+use std::path::Path;
+use std::str::FromStr;
+use std::sync::Arc;
+
+use jiff::civil::{DateTime, Time};
+use jiff::tz::{Offset, TimeZone};
+use jiff::{civil, Timestamp};
+use serde::Deserialize;
 use toml_edit::{value, Array, ArrayOfTables, Item, Table};
 use url::Url;
 
 use uv_configuration::{DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions};
-use uv_distribution_types::{IndexUrl, RegistryBuiltWheel, RemoteSource, SourceDist};
+use uv_distribution_filename::{
+    BuildTag, DistExtension, ExtensionError, SourceDistExtension, SourceDistFilename,
+    SourceDistFilenameError, WheelFilename, WheelFilenameError,
+};
+use uv_distribution_types::{
+    BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, Edge,
+    FileLocation, GitSourceDist, IndexUrl, Node, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, SourceDist,
+    ToUrlError, UrlString,
+};
 use uv_fs::{relative_to, PortablePathBuf};
-use uv_git_types::GitOid;
+use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::MarkerTree;
-use uv_pypi_types::{Hashes, VcsKind};
+use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
+use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
+use uv_pypi_types::{HashDigests, Hashes, ParsedGitUrl, VcsKind};
 use uv_small_str::SmallString;
 
 use crate::lock::export::ExportableRequirements;
-use crate::lock::{each_element_on_its_line_array, LockErrorKind, Source};
+use crate::lock::{each_element_on_its_line_array, Source};
 use crate::{Installable, LockError, RequiresPython};
+
+#[derive(Debug, thiserror::Error)]
+pub enum PylockTomlError {
+    #[error("`packages` entry for `{0}` must contain one of: `wheels`, `directory`, `archive`, `sdist`, or `vcs`")]
+    MissingSource(PackageName),
+    #[error("`packages.wheel` entry for `{0}` must have a `path` or `url`")]
+    WheelMissingPathUrl(PackageName),
+    #[error("`packages.sdist` entry for `{0}` must have a `path` or `url`")]
+    SdistMissingPathUrl(PackageName),
+    #[error("`packages.archive` entry for `{0}` must have a `path` or `url`")]
+    ArchiveMissingPathUrl(PackageName),
+    #[error("`packages.vcs` entry for `{0}` must have a `url` or `path`")]
+    VcsMissingPathUrl(PackageName),
+    #[error("URL must end in a valid wheel filename: `{0}`")]
+    UrlMissingFilename(Url),
+    #[error("Path must end in a valid wheel filename: `{0}`")]
+    PathMissingFilename(Box<Path>),
+    #[error("Failed to convert path to URL")]
+    PathToUrl,
+    #[error("Failed to convert URL to path")]
+    UrlToPath,
+    #[error(transparent)]
+    WheelFilename(#[from] WheelFilenameError),
+    #[error(transparent)]
+    SourceDistFilename(#[from] SourceDistFilenameError),
+    #[error(transparent)]
+    ToUrl(#[from] ToUrlError),
+    #[error(transparent)]
+    GitUrlParse(#[from] GitUrlParseError),
+    #[error(transparent)]
+    LockError(#[from] LockError),
+    #[error(transparent)]
+    Extension(#[from] ExtensionError),
+    #[error(transparent)]
+    Jiff(#[from] jiff::Error),
+}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -106,7 +160,9 @@ struct PylockTomlArchive {
     size: Option<u64>,
     #[serde(
         skip_serializing_if = "Option::is_none",
-        serialize_with = "timestamp_to_toml_datetime"
+        serialize_with = "timestamp_to_toml_datetime",
+        deserialize_with = "timestamp_from_toml_datetime",
+        default
     )]
     upload_time: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -125,7 +181,9 @@ struct PylockTomlSdist {
     path: Option<PortablePathBuf>,
     #[serde(
         skip_serializing_if = "Option::is_none",
-        serialize_with = "timestamp_to_toml_datetime"
+        serialize_with = "timestamp_to_toml_datetime",
+        deserialize_with = "timestamp_from_toml_datetime",
+        default
     )]
     upload_time: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -137,14 +195,16 @@ struct PylockTomlSdist {
 #[serde(rename_all = "kebab-case")]
 struct PylockTomlWheel {
     #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<SmallString>,
+    name: Option<WheelFilename>,
     #[serde(skip_serializing_if = "Option::is_none")]
     url: Option<Url>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(
         skip_serializing_if = "Option::is_none",
-        serialize_with = "timestamp_to_toml_datetime"
+        serialize_with = "timestamp_to_toml_datetime",
+        deserialize_with = "timestamp_from_toml_datetime",
+        default
     )]
     upload_time: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -167,7 +227,7 @@ impl<'lock> PylockToml {
         dev: &DependencyGroupsWithDefaults,
         annotate: bool,
         install_options: &'lock InstallOptions,
-    ) -> Result<Self, LockError> {
+    ) -> Result<Self, PylockTomlError> {
         // Extract the packages from the lock file.
         let ExportableRequirements(mut nodes) = ExportableRequirements::from_lock(
             target,
@@ -216,14 +276,14 @@ impl<'lock> PylockToml {
                     let wheels = package
                         .wheels
                         .iter()
-                        .map(|wheel| wheel.to_registry_dist(source, target.install_path()))
+                        .map(|wheel| wheel.to_registry_wheel(source, target.install_path()))
                         .collect::<Result<Vec<RegistryBuiltWheel>, LockError>>()?;
                     Some(
                         wheels
                             .into_iter()
                             .map(|wheel| {
                                 let url =
-                                    wheel.file.url.to_url().map_err(LockErrorKind::InvalidUrl)?;
+                                    wheel.file.url.to_url().map_err(PylockTomlError::ToUrl)?;
                                 Ok(PylockTomlWheel {
                                     // Optional "when the last component of path/ url would be the same value".
                                     name: if url
@@ -232,21 +292,20 @@ impl<'lock> PylockToml {
                                     {
                                         None
                                     } else {
-                                        Some(wheel.file.filename.clone())
+                                        Some(wheel.filename.clone())
                                     },
                                     upload_time: wheel
                                         .file
                                         .upload_time_utc_ms
                                         .map(Timestamp::from_millisecond)
-                                        .transpose()
-                                        .map_err(LockErrorKind::InvalidTimestamp)?,
+                                        .transpose()?,
                                     url: Some(url),
                                     path: None,
                                     size: wheel.file.size,
                                     hashes: Hashes::from(wheel.file.hashes),
                                 })
                             })
-                            .collect::<Result<Vec<_>, LockError>>()?,
+                            .collect::<Result<Vec<_>, PylockTomlError>>()?,
                     )
                 }
                 Source::Path(..) => None,
@@ -360,7 +419,7 @@ impl<'lock> PylockToml {
             // Extract the `packages.sdist` field.
             let sdist = match &sdist {
                 Some(SourceDist::Registry(sdist)) => {
-                    let url = sdist.file.url.to_url().map_err(LockErrorKind::InvalidUrl)?;
+                    let url = sdist.file.url.to_url().map_err(PylockTomlError::ToUrl)?;
                     Some(PylockTomlSdist {
                         // Optional "when the last component of path/ url would be the same value".
                         name: if url
@@ -375,8 +434,7 @@ impl<'lock> PylockToml {
                             .file
                             .upload_time_utc_ms
                             .map(Timestamp::from_millisecond)
-                            .transpose()
-                            .map_err(LockErrorKind::InvalidTimestamp)?,
+                            .transpose()?,
                         url: Some(url),
                         path: None,
                         size,
@@ -485,9 +543,116 @@ impl<'lock> PylockToml {
 
         Ok(doc.to_string())
     }
+
+    /// Convert the [`PylockToml`] to a [`Resolution`].
+    pub fn to_resolution(
+        self,
+        install_path: &Path,
+        markers: &MarkerEnvironment,
+        tags: &Tags,
+    ) -> Result<Resolution, PylockTomlError> {
+        let mut graph =
+            petgraph::graph::DiGraph::with_capacity(self.packages.len(), self.packages.len());
+
+        // Add the root node.
+        let root = graph.add_node(Node::Root);
+
+        for package in self.packages {
+            // Omit packages that aren't relevant to the current environment.
+            let install = package.marker.evaluate(markers, &[]);
+
+            // Search for a matching wheel.
+            let dist = if let Some(best_wheel) = package.find_best_wheel(tags) {
+                let hashes = HashDigests::from(best_wheel.hashes.clone());
+                let built_dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
+                    wheels: vec![best_wheel.to_registry_wheel(
+                        install_path,
+                        &package.name,
+                        package.index.as_ref(),
+                    )?],
+                    best_wheel_index: 0,
+                    sdist: None,
+                }));
+                let dist = ResolvedDist::Installable {
+                    dist: Arc::new(built_dist),
+                    version: package.version,
+                };
+                Node::Dist {
+                    dist,
+                    hashes,
+                    install,
+                }
+            } else if let Some(sdist) = package.sdist.as_ref() {
+                let hashes = HashDigests::from(sdist.hashes.clone());
+                let sdist = Dist::Source(SourceDist::Registry(sdist.to_sdist(
+                    install_path,
+                    &package.name,
+                    package.version.as_ref(),
+                    package.index.as_ref(),
+                )?));
+                let dist = ResolvedDist::Installable {
+                    dist: Arc::new(sdist),
+                    version: package.version,
+                };
+                Node::Dist {
+                    dist,
+                    hashes,
+                    install,
+                }
+            } else if let Some(sdist) = package.directory.as_ref() {
+                let hashes = HashDigests::empty();
+                let sdist = Dist::Source(SourceDist::Directory(
+                    sdist.to_sdist(install_path, &package.name)?,
+                ));
+                let dist = ResolvedDist::Installable {
+                    dist: Arc::new(sdist),
+                    version: package.version,
+                };
+                Node::Dist {
+                    dist,
+                    hashes,
+                    install,
+                }
+            } else if let Some(sdist) = package.vcs.as_ref() {
+                let hashes = HashDigests::empty();
+                let sdist = Dist::Source(SourceDist::Git(
+                    sdist.to_sdist(install_path, &package.name)?,
+                ));
+                let dist = ResolvedDist::Installable {
+                    dist: Arc::new(sdist),
+                    version: package.version,
+                };
+                Node::Dist {
+                    dist,
+                    hashes,
+                    install,
+                }
+            } else if let Some(dist) = package.archive.as_ref() {
+                let hashes = HashDigests::from(dist.hashes.clone());
+                let dist = dist.to_dist(install_path, &package.name, package.version.as_ref())?;
+                let dist = ResolvedDist::Installable {
+                    dist: Arc::new(dist),
+                    version: package.version,
+                };
+                Node::Dist {
+                    dist,
+                    hashes,
+                    install,
+                }
+            } else {
+                return Err(PylockTomlError::MissingSource(package.name.clone()));
+            };
+
+            let index = graph.add_node(dist);
+            graph.add_edge(root, index, Edge::Prod(package.marker));
+        }
+
+        Ok(Resolution::new(graph))
+    }
 }
 
 impl PylockTomlPackage {
+    /// Convert the [`PylockTomlPackage`] to a TOML [`Table`].
     fn to_toml(&self) -> Result<Table, toml_edit::ser::Error> {
         let mut table = Table::new();
         table.insert("name", value(self.name.to_string()));
@@ -571,6 +736,338 @@ impl PylockTomlPackage {
 
         Ok(table)
     }
+
+    /// Return the index of the best wheel for the given tags.
+    fn find_best_wheel(&self, tags: &Tags) -> Option<&PylockTomlWheel> {
+        type WheelPriority = (TagPriority, Option<BuildTag>);
+
+        let mut best: Option<(WheelPriority, &PylockTomlWheel)> = None;
+        for wheel in self.wheels.iter().flatten() {
+            let Ok(filename) = wheel.filename(&self.name) else {
+                continue;
+            };
+            let TagCompatibility::Compatible(tag_priority) = filename.compatibility(tags) else {
+                continue;
+            };
+            let build_tag = filename.build_tag().cloned();
+            let wheel_priority = (tag_priority, build_tag);
+            match &best {
+                None => {
+                    best = Some((wheel_priority, wheel));
+                }
+                Some((best_priority, _)) => {
+                    if wheel_priority > *best_priority {
+                        best = Some((wheel_priority, wheel));
+                    }
+                }
+            }
+        }
+
+        best.map(|(_, i)| i)
+    }
+}
+
+impl PylockTomlWheel {
+    /// Return the [`WheelFilename`] for this wheel.
+    fn filename(&self, name: &PackageName) -> Result<Cow<'_, WheelFilename>, PylockTomlError> {
+        if let Some(name) = self.name.as_ref() {
+            Ok(Cow::Borrowed(name))
+        } else if let Some(path) = self.path.as_ref() {
+            let Some(filename) = path.as_ref().file_name().and_then(OsStr::to_str) else {
+                return Err(PylockTomlError::PathMissingFilename(Box::<Path>::from(
+                    path.clone(),
+                )));
+            };
+            let filename = WheelFilename::from_str(filename).map(Cow::Owned)?;
+            Ok(filename)
+        } else if let Some(url) = self.url.as_ref() {
+            let Some(filename) = url.filename().ok() else {
+                return Err(PylockTomlError::UrlMissingFilename(url.clone()));
+            };
+            let filename = WheelFilename::from_str(&filename).map(Cow::Owned)?;
+            Ok(filename)
+        } else {
+            Err(PylockTomlError::WheelMissingPathUrl(name.clone()))
+        }
+    }
+
+    /// Convert the wheel to a [`RegistryBuiltWheel`].
+    fn to_registry_wheel(
+        &self,
+        install_path: &Path,
+        name: &PackageName,
+        index: Option<&Url>,
+    ) -> Result<RegistryBuiltWheel, PylockTomlError> {
+        let filename = self.filename(name)?.into_owned();
+
+        let file_url = if let Some(url) = self.url.as_ref() {
+            UrlString::from(url)
+        } else if let Some(path) = self.path.as_ref() {
+            let path = install_path.join(path);
+            let url = Url::from_file_path(path).map_err(|()| PylockTomlError::PathToUrl)?;
+            UrlString::from(url)
+        } else {
+            return Err(PylockTomlError::WheelMissingPathUrl(name.clone()));
+        };
+
+        let index = if let Some(index) = index {
+            IndexUrl::from(VerbatimUrl::from_url(index.clone()))
+        } else {
+            // Including the index is only a SHOULD in PEP 751. If it's omitted, we treat the
+            // URL (less the filename) as the index. This isn't correct, but it's the best we can
+            // do. In practice, the only effect here should be that we cache the wheel under a hash
+            // of this URL (since we cache under the hash of the index).
+            let mut index = file_url.to_url().map_err(PylockTomlError::ToUrl)?;
+            index.path_segments_mut().unwrap().pop();
+            IndexUrl::from(VerbatimUrl::from_url(index))
+        };
+
+        let file = Box::new(uv_distribution_types::File {
+            dist_info_metadata: false,
+            filename: SmallString::from(filename.to_string()),
+            hashes: HashDigests::from(self.hashes.clone()),
+            requires_python: None,
+            size: self.size,
+            upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
+            url: FileLocation::AbsoluteUrl(file_url),
+            yanked: None,
+        });
+
+        Ok(RegistryBuiltWheel {
+            filename,
+            file,
+            index,
+        })
+    }
+}
+
+impl PylockTomlDirectory {
+    /// Convert the sdist to a [`DirectorySourceDist`].
+    fn to_sdist(
+        &self,
+        install_path: &Path,
+        name: &PackageName,
+    ) -> Result<DirectorySourceDist, PylockTomlError> {
+        let path = if let Some(subdirectory) = self.subdirectory.as_ref() {
+            install_path.join(&self.path).join(subdirectory)
+        } else {
+            install_path.join(&self.path)
+        };
+        let path = uv_fs::normalize_path_buf(path);
+        let url =
+            VerbatimUrl::from_normalized_path(&path).map_err(|_| PylockTomlError::PathToUrl)?;
+        Ok(DirectorySourceDist {
+            name: name.clone(),
+            install_path: path.into_boxed_path(),
+            editable: self.editable.unwrap_or(false),
+            r#virtual: false,
+            url,
+        })
+    }
+}
+
+impl PylockTomlVcs {
+    /// Convert the sdist to a [`GitSourceDist`].
+    fn to_sdist(
+        &self,
+        install_path: &Path,
+        name: &PackageName,
+    ) -> Result<GitSourceDist, PylockTomlError> {
+        let subdirectory = self.subdirectory.clone().map(Box::<Path>::from);
+
+        // Reconstruct the `GitUrl` from the individual fields.
+        let git_url = {
+            let mut url = if let Some(url) = self.url.as_ref() {
+                url.clone()
+            } else if let Some(path) = self.path.as_ref() {
+                Url::from_directory_path(install_path.join(path))
+                    .map_err(|()| PylockTomlError::PathToUrl)?
+            } else {
+                return Err(PylockTomlError::VcsMissingPathUrl(name.clone()));
+            };
+            url.set_fragment(None);
+            url.set_query(None);
+
+            let reference = self
+                .requested_revision
+                .clone()
+                .map(GitReference::from_rev)
+                .unwrap_or_else(|| GitReference::BranchOrTagOrCommit(self.commit_id.to_string()));
+            let precise = self.commit_id;
+
+            GitUrl::from_commit(url, reference, precise)?
+        };
+
+        // Reconstruct the PEP 508-compatible URL from the `GitSource`.
+        let url = Url::from(ParsedGitUrl {
+            url: git_url.clone(),
+            subdirectory: subdirectory.clone(),
+        });
+
+        Ok(GitSourceDist {
+            name: name.clone(),
+            git: Box::new(git_url),
+            subdirectory: self.subdirectory.clone().map(Box::<Path>::from),
+            url: VerbatimUrl::from_url(url),
+        })
+    }
+}
+
+impl PylockTomlSdist {
+    /// Return the filename for this sdist.
+    fn filename(&self, name: &PackageName) -> Result<Cow<'_, SmallString>, PylockTomlError> {
+        if let Some(name) = self.name.as_ref() {
+            Ok(Cow::Borrowed(name))
+        } else if let Some(path) = self.path.as_ref() {
+            let Some(filename) = path.as_ref().file_name().and_then(OsStr::to_str) else {
+                return Err(PylockTomlError::PathMissingFilename(Box::<Path>::from(
+                    path.clone(),
+                )));
+            };
+            Ok(Cow::Owned(SmallString::from(filename)))
+        } else if let Some(url) = self.url.as_ref() {
+            let Some(filename) = url.filename().ok() else {
+                return Err(PylockTomlError::UrlMissingFilename(url.clone()));
+            };
+            Ok(Cow::Owned(SmallString::from(filename)))
+        } else {
+            Err(PylockTomlError::SdistMissingPathUrl(name.clone()))
+        }
+    }
+
+    /// Convert the sdist to a [`RegistrySourceDist`].
+    fn to_sdist(
+        &self,
+        install_path: &Path,
+        name: &PackageName,
+        version: Option<&Version>,
+        index: Option<&Url>,
+    ) -> Result<RegistrySourceDist, PylockTomlError> {
+        let filename = self.filename(name)?.into_owned();
+        let ext = SourceDistExtension::from_path(filename.as_ref())?;
+
+        let version = if let Some(version) = version {
+            Cow::Borrowed(version)
+        } else {
+            let filename = SourceDistFilename::parse(&filename, ext, name)?;
+            Cow::Owned(filename.version)
+        };
+
+        let file_url = if let Some(url) = self.url.as_ref() {
+            UrlString::from(url)
+        } else if let Some(path) = self.path.as_ref() {
+            let path = install_path.join(path);
+            let url = Url::from_file_path(path).map_err(|()| PylockTomlError::PathToUrl)?;
+            UrlString::from(url)
+        } else {
+            return Err(PylockTomlError::SdistMissingPathUrl(name.clone()));
+        };
+
+        let index = if let Some(index) = index {
+            IndexUrl::from(VerbatimUrl::from_url(index.clone()))
+        } else {
+            // Including the index is only a SHOULD in PEP 751. If it's omitted, we treat the
+            // URL (less the filename) as the index. This isn't correct, but it's the best we can
+            // do. In practice, the only effect here should be that we cache the sdist under a hash
+            // of this URL (since we cache under the hash of the index).
+            let mut index = file_url.to_url().map_err(PylockTomlError::ToUrl)?;
+            index.path_segments_mut().unwrap().pop();
+            IndexUrl::from(VerbatimUrl::from_url(index))
+        };
+
+        let file = Box::new(uv_distribution_types::File {
+            dist_info_metadata: false,
+            filename,
+            hashes: HashDigests::from(self.hashes.clone()),
+            requires_python: None,
+            size: self.size,
+            upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
+            url: FileLocation::AbsoluteUrl(file_url),
+            yanked: None,
+        });
+
+        Ok(RegistrySourceDist {
+            name: name.clone(),
+            version: version.into_owned(),
+            file,
+            ext,
+            index,
+            wheels: vec![],
+        })
+    }
+}
+
+impl PylockTomlArchive {
+    fn to_dist(
+        &self,
+        install_path: &Path,
+        name: &PackageName,
+        version: Option<&Version>,
+    ) -> Result<Dist, PylockTomlError> {
+        if let Some(url) = self.url.as_ref() {
+            let filename = url
+                .filename()
+                .map_err(|_| PylockTomlError::UrlMissingFilename(url.clone()))?;
+
+            let ext = DistExtension::from_path(filename.as_ref())?;
+            match ext {
+                DistExtension::Wheel => {
+                    let filename = WheelFilename::from_str(&filename)?;
+                    Ok(Dist::Built(BuiltDist::DirectUrl(DirectUrlBuiltDist {
+                        filename,
+                        location: Box::new(url.clone()),
+                        url: VerbatimUrl::from_url(url.clone()),
+                    })))
+                }
+                DistExtension::Source(ext) => {
+                    Ok(Dist::Source(SourceDist::DirectUrl(DirectUrlSourceDist {
+                        name: name.clone(),
+                        location: Box::new(url.clone()),
+                        subdirectory: self.subdirectory.clone().map(Box::<Path>::from),
+                        ext,
+                        url: VerbatimUrl::from_url(url.clone()),
+                    })))
+                }
+            }
+        } else if let Some(path) = self.path.as_ref() {
+            let filename = path
+                .as_ref()
+                .file_name()
+                .and_then(OsStr::to_str)
+                .ok_or_else(|| {
+                    PylockTomlError::PathMissingFilename(Box::<Path>::from(path.clone()))
+                })?;
+
+            let ext = DistExtension::from_path(filename)?;
+            match ext {
+                DistExtension::Wheel => {
+                    let filename = WheelFilename::from_str(filename)?;
+                    let install_path = install_path.join(path);
+                    let url = VerbatimUrl::from_absolute_path(&install_path)
+                        .map_err(|_| PylockTomlError::PathToUrl)?;
+                    Ok(Dist::Built(BuiltDist::Path(PathBuiltDist {
+                        filename,
+                        install_path: install_path.into_boxed_path(),
+                        url,
+                    })))
+                }
+                DistExtension::Source(ext) => {
+                    let install_path = install_path.join(path);
+                    let url = VerbatimUrl::from_absolute_path(&install_path)
+                        .map_err(|_| PylockTomlError::PathToUrl)?;
+                    Ok(Dist::Source(SourceDist::Path(PathSourceDist {
+                        name: name.clone(),
+                        version: version.cloned(),
+                        install_path: install_path.into_boxed_path(),
+                        ext,
+                        url,
+                    })))
+                }
+            }
+        } else {
+            return Err(PylockTomlError::ArchiveMissingPathUrl(name.clone()));
+        }
+    }
 }
 
 /// Convert a Jiff timestamp to a TOML datetime.
@@ -601,4 +1098,52 @@ where
         offset: Some(toml_edit::Offset::Z),
     };
     serializer.serialize_some(&timestamp)
+}
+
+/// Convert a TOML datetime to a Jiff timestamp.
+fn timestamp_from_toml_datetime<'de, D>(deserializer: D) -> Result<Option<Timestamp>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let Some(datetime) = Option::<toml_edit::Datetime>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    let Some(date) = datetime.date else {
+        return Err(serde::de::Error::custom("missing date"));
+    };
+
+    let year = i16::try_from(date.year).map_err(serde::de::Error::custom)?;
+    let month = i8::try_from(date.month).map_err(serde::de::Error::custom)?;
+    let day = i8::try_from(date.day).map_err(serde::de::Error::custom)?;
+    let date = civil::date(year, month, day);
+
+    // If the timezone is omitted, assume UTC.
+    let tz = if let Some(offset) = datetime.offset {
+        match offset {
+            toml_edit::Offset::Z => TimeZone::UTC,
+            toml_edit::Offset::Custom { minutes } => {
+                let hours = i8::try_from(minutes / 60).map_err(serde::de::Error::custom)?;
+                TimeZone::fixed(Offset::constant(hours))
+            }
+        }
+    } else {
+        TimeZone::UTC
+    };
+
+    // If the time is omitted, assume midnight.
+    let time = if let Some(time) = datetime.time {
+        let hour = i8::try_from(time.hour).map_err(serde::de::Error::custom)?;
+        let minute = i8::try_from(time.minute).map_err(serde::de::Error::custom)?;
+        let second = i8::try_from(time.second).map_err(serde::de::Error::custom)?;
+        let nanosecond = i32::try_from(time.nanosecond).map_err(serde::de::Error::custom)?;
+        Time::constant(hour, minute, second, nanosecond)
+    } else {
+        Time::midnight()
+    };
+
+    let zoned = DateTime::from_parts(date, time)
+        .to_zoned(tz)
+        .map_err(serde::de::Error::custom)?;
+    let timestamp = zoned.timestamp();
+    Ok(Some(timestamp))
 }
