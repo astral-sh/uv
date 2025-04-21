@@ -906,7 +906,13 @@ jobs:
     steps:
       - name: "Install python3.9"
         run: |
-          sudo add-apt-repository ppa:deadsnakes
+          for i in {1..5}; do
+            sudo add-apt-repository ppa:deadsnakes && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
+            if [ $i -eq 5 ]; then
+              echo "Failed to add repository after 5 attempts"
+              exit 1
+            fi
+          done
           sudo apt-get update
           sudo apt-get install python3.9
 
