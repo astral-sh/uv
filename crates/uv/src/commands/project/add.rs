@@ -438,6 +438,126 @@ pub(crate) async fn add(
             DependencyTarget::PyProjectToml,
         ),
     }?;
+    let edits = edits(
+        requirements,
+        &target,
+        editable,
+        &dependency_type,
+        raw_sources,
+        rev.as_deref(),
+        tag.as_deref(),
+        branch.as_deref(),
+        &extras,
+        index,
+        &mut toml,
+    )?;
+
+    // Add any indexes that were provided on the command-line, in priority order.
+    if !raw_sources {
+        let urls = IndexUrls::from_indexes(indexes);
+        for index in urls.defined_indexes() {
+            toml.add_index(index)?;
+        }
+    }
+
+    let content = toml.to_string();
+
+    // Save the modified `pyproject.toml` or script.
+    let modified = target.write(&content)?;
+
+    // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
+    // to exist at all.
+    if frozen {
+        return Ok(ExitStatus::Success);
+    }
+
+    // If we're modifying a script, and lockfile doesn't exist, don't create it.
+    if let AddTarget::Script(ref script, _) = target {
+        if !LockTarget::from(script).lock_path().is_file() {
+            writeln!(
+                printer.stderr(),
+                "Updated `{}`",
+                script.path.user_display().cyan()
+            )?;
+            return Ok(ExitStatus::Success);
+        }
+    }
+
+    // Store the content prior to any modifications.
+    let snapshot = target.snapshot().await?;
+
+    // Update the `pypackage.toml` in-memory.
+    let target = target.update(&content)?;
+
+    // Set the Ctrl-C handler to revert changes on exit.
+    let _ = ctrlc::set_handler({
+        let snapshot = snapshot.clone();
+        move || {
+            if modified {
+                let _ = snapshot.revert();
+            }
+
+            #[allow(clippy::exit, clippy::cast_possible_wrap)]
+            std::process::exit(if cfg!(windows) {
+                0xC000_013A_u32 as i32
+            } else {
+                130
+            });
+        }
+    });
+
+    // Use separate state for locking and syncing.
+    let lock_state = state.fork();
+    let sync_state = state;
+
+    match Box::pin(lock_and_sync(
+        target,
+        &mut toml,
+        &edits,
+        lock_state,
+        sync_state,
+        locked,
+        &dependency_type,
+        raw_sources,
+        constraints,
+        &settings,
+        &network_settings,
+        installer_metadata,
+        concurrency,
+        cache,
+        printer,
+        preview,
+    ))
+    .await
+    {
+        Ok(()) => Ok(ExitStatus::Success),
+        Err(err) => {
+            if modified {
+                let _ = snapshot.revert();
+            }
+            match err {
+                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
+                err => Err(err.into()),
+            }
+        }
+    }
+}
+
+fn edits(
+    requirements: Vec<Requirement>,
+    target: &AddTarget,
+    editable: Option<bool>,
+    dependency_type: &DependencyType,
+    raw_sources: bool,
+    rev: Option<&str>,
+    tag: Option<&str>,
+    branch: Option<&str>,
+    extras: &[ExtraName],
+    index: Option<&IndexName>,
+    toml: &mut PyProjectTomlMut,
+) -> Result<Vec<DependencyEdit>> {
     let mut edits = Vec::<DependencyEdit>::with_capacity(requirements.len());
     for mut requirement in requirements {
         // Add the specified extras.
@@ -461,9 +581,9 @@ pub(crate) async fn add(
                     false,
                     editable,
                     index.cloned(),
-                    rev.clone(),
-                    tag.clone(),
-                    branch.clone(),
+                    rev.map(ToString::to_string),
+                    tag.map(ToString::to_string),
+                    branch.map(ToString::to_string),
                     script_dir,
                     existing_sources,
                 )?
@@ -485,9 +605,9 @@ pub(crate) async fn add(
                     workspace,
                     editable,
                     index.cloned(),
-                    rev.clone(),
-                    tag.clone(),
-                    branch.clone(),
+                    rev.map(ToString::to_string),
+                    tag.map(ToString::to_string),
+                    branch.map(ToString::to_string),
                     project.root(),
                     existing_sources,
                 )?
@@ -609,98 +729,7 @@ pub(crate) async fn add(
             edit,
         });
     }
-
-    // Add any indexes that were provided on the command-line, in priority order.
-    if !raw_sources {
-        let urls = IndexUrls::from_indexes(indexes);
-        for index in urls.defined_indexes() {
-            toml.add_index(index)?;
-        }
-    }
-
-    let content = toml.to_string();
-
-    // Save the modified `pyproject.toml` or script.
-    let modified = target.write(&content)?;
-
-    // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
-    // to exist at all.
-    if frozen {
-        return Ok(ExitStatus::Success);
-    }
-
-    // If we're modifying a script, and lockfile doesn't exist, don't create it.
-    if let AddTarget::Script(ref script, _) = target {
-        if !LockTarget::from(script).lock_path().is_file() {
-            writeln!(
-                printer.stderr(),
-                "Updated `{}`",
-                script.path.user_display().cyan()
-            )?;
-            return Ok(ExitStatus::Success);
-        }
-    }
-
-    // Store the content prior to any modifications.
-    let snapshot = target.snapshot().await?;
-
-    // Update the `pypackage.toml` in-memory.
-    let target = target.update(&content)?;
-
-    // Set the Ctrl-C handler to revert changes on exit.
-    let _ = ctrlc::set_handler({
-        let snapshot = snapshot.clone();
-        move || {
-            if modified {
-                let _ = snapshot.revert();
-            }
-
-            #[allow(clippy::exit, clippy::cast_possible_wrap)]
-            std::process::exit(if cfg!(windows) {
-                0xC000_013A_u32 as i32
-            } else {
-                130
-            });
-        }
-    });
-
-    // Use separate state for locking and syncing.
-    let lock_state = state.fork();
-    let sync_state = state;
-
-    match Box::pin(lock_and_sync(
-        target,
-        &mut toml,
-        &edits,
-        lock_state,
-        sync_state,
-        locked,
-        &dependency_type,
-        raw_sources,
-        constraints,
-        &settings,
-        &network_settings,
-        installer_metadata,
-        concurrency,
-        cache,
-        printer,
-        preview,
-    ))
-    .await
-    {
-        Ok(()) => Ok(ExitStatus::Success),
-        Err(err) => {
-            if modified {
-                let _ = snapshot.revert();
-            }
-            match err {
-                ProjectError::Operation(err) => diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls).with_hint(format!("If you want to add the package regardless of the failed resolution, provide the `{}` flag to skip locking and syncing.", "--frozen".green()))
-                    .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into())),
-                err => Err(err.into()),
-            }
-        }
-    }
+    Ok(edits)
 }
 
 /// Re-lock and re-sync the project after a series of edits.
@@ -801,20 +830,7 @@ async fn lock_and_sync(
             // For example, convert `1.2.3+local` to `1.2.3`.
             let minimum = (*minimum).clone().without_local();
 
-            match edit.dependency_type {
-                DependencyType::Production => {
-                    toml.set_dependency_minimum_version(*index, minimum)?;
-                }
-                DependencyType::Dev => {
-                    toml.set_dev_dependency_minimum_version(*index, minimum)?;
-                }
-                DependencyType::Optional(ref extra) => {
-                    toml.set_optional_dependency_minimum_version(extra, *index, minimum)?;
-                }
-                DependencyType::Group(ref group) => {
-                    toml.set_dependency_group_requirement_minimum_version(group, *index, minimum)?;
-                }
-            }
+            toml.set_dependency_minimum_version(&edit.dependency_type, *index, minimum)?;
 
             modified = true;
         }
