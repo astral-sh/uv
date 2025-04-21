@@ -3281,7 +3281,6 @@ fn pep_751_dependency() -> Result<()> {
 
     [[packages]]
     name = "project"
-    version = "0.1.0"
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -3343,7 +3342,6 @@ fn pep_751_export_no_header() -> Result<()> {
 
     [[packages]]
     name = "project"
-    version = "0.1.0"
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -3454,7 +3452,6 @@ fn pep_751_dependency_extra() -> Result<()> {
 
     [[packages]]
     name = "project"
-    version = "0.1.0"
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -3515,7 +3512,6 @@ fn pep_751_project_extra() -> Result<()> {
 
     [[packages]]
     name = "project"
-    version = "0.1.0"
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -3555,7 +3551,6 @@ fn pep_751_project_extra() -> Result<()> {
 
     [[packages]]
     name = "project"
-    version = "0.1.0"
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -3595,7 +3590,6 @@ fn pep_751_project_extra() -> Result<()> {
 
     [[packages]]
     name = "project"
-    version = "0.1.0"
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -3642,7 +3636,6 @@ fn pep_751_project_extra() -> Result<()> {
 
     [[packages]]
     name = "project"
-    version = "0.1.0"
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -3689,7 +3682,6 @@ fn pep_751_project_extra() -> Result<()> {
 
     [[packages]]
     name = "project"
-    version = "0.1.0"
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -3995,7 +3987,6 @@ fn pep_751_infer_output_format() -> Result<()> {
 
     [[packages]]
     name = "project"
-    version = "0.1.0"
     directory = { path = ".", editable = true }
 
     [[packages]]
@@ -4035,7 +4026,6 @@ fn pep_751_infer_output_format() -> Result<()> {
 
     [[packages]]
     name = "project"
-    version = "0.1.0"
     directory = { path = ".", editable = true }
 
     [[packages]]

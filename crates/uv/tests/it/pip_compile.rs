@@ -16420,7 +16420,6 @@ fn pep_751_compile_directory() -> Result<()> {
 
     [[packages]]
     name = "foo"
-    version = "1.0.0"
     directory = { path = "foo" }
 
     [[packages]]
