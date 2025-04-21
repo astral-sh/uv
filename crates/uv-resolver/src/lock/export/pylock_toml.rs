@@ -4,9 +4,9 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use jiff::civil::{DateTime, Time};
+use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::{Offset, TimeZone};
-use jiff::{civil, Timestamp};
+use jiff::Timestamp;
 use serde::Deserialize;
 use toml_edit::{value, Array, ArrayOfTables, Item, Table};
 use url::Url;
@@ -1169,6 +1169,8 @@ where
     let Some(datetime) = Option::<toml_edit::Datetime>::deserialize(deserializer)? else {
         return Ok(None);
     };
+
+    // If the date is omitted, we can't parse the datetime.
     let Some(date) = datetime.date else {
         return Err(serde::de::Error::custom("missing date"));
     };
@@ -1176,7 +1178,7 @@ where
     let year = i16::try_from(date.year).map_err(serde::de::Error::custom)?;
     let month = i8::try_from(date.month).map_err(serde::de::Error::custom)?;
     let day = i8::try_from(date.day).map_err(serde::de::Error::custom)?;
-    let date = civil::date(year, month, day);
+    let date = Date::new(year, month, day).map_err(serde::de::Error::custom)?;
 
     // If the timezone is omitted, assume UTC.
     let tz = if let Some(offset) = datetime.offset {
@@ -1197,14 +1199,13 @@ where
         let minute = i8::try_from(time.minute).map_err(serde::de::Error::custom)?;
         let second = i8::try_from(time.second).map_err(serde::de::Error::custom)?;
         let nanosecond = i32::try_from(time.nanosecond).map_err(serde::de::Error::custom)?;
-        Time::constant(hour, minute, second, nanosecond)
+        Time::new(hour, minute, second, nanosecond).map_err(serde::de::Error::custom)?
     } else {
         Time::midnight()
     };
 
-    let zoned = DateTime::from_parts(date, time)
-        .to_zoned(tz)
+    let timestamp = tz
+        .to_timestamp(DateTime::from_parts(date, time))
         .map_err(serde::de::Error::custom)?;
-    let timestamp = zoned.timestamp();
     Ok(Some(timestamp))
 }
