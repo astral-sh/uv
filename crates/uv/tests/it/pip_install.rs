@@ -10,6 +10,10 @@ use fs_err::File;
 use indoc::indoc;
 use predicates::prelude::predicate;
 use url::Url;
+use wiremock::{
+    matchers::{basic_auth, method, path},
+    Mock, MockServer, ResponseTemplate,
+};
 
 #[cfg(feature = "git")]
 use crate::common::{self, decode_token};
@@ -83,21 +87,11 @@ fn missing_pyproject_toml() {
 
 #[test]
 fn missing_find_links() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_missing_file_error();
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("flask")?;
 
-    let error = regex::escape("The system cannot find the path specified. (os error 3)");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(std::iter::once((
-            error.as_str(),
-            "No such file or directory (os error 2)",
-        )))
-        .collect::<Vec<_>>();
-
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
         .arg("--find-links")
@@ -109,7 +103,7 @@ fn missing_find_links() -> Result<()> {
 
     ----- stderr -----
     error: Failed to read `--find-links` directory: [TEMP_DIR]/missing
-      Caused by: No such file or directory (os error 2)
+      Caused by: [OS ERROR 2]
     "###
     );
 
@@ -472,24 +466,136 @@ fn install_requirements_txt() -> Result<()> {
 
     // Install Jinja2 (which should already be installed, but shouldn't remove other packages).
     let requirements_txt = context.temp_dir.child("requirements.txt");
-    requirements_txt.write_str("Jinja2")?;
+    requirements_txt.write_str("iniconfig")?;
 
     uv_snapshot!(context.pip_install()
         .arg("-r")
         .arg("requirements.txt")
+        .arg("--strict"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    context.assert_command("import flask").success();
+
+    Ok(())
+}
+
+/// Install a package from a remote `requirements.txt` into a virtual environment.
+#[tokio::test]
+async fn install_remote_requirements_txt() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"127\.0\.0\.1[^\r\n]*", "[LOCALHOST]")])
+        .collect::<Vec<_>>();
+
+    let username = "user";
+    let password = "password";
+    let requirements_txt = "Flask";
+
+    let server_url = start_requirements_server(username, password, requirements_txt).await;
+
+    let mut requirements_url = Url::parse(&format!("{}/requirements.txt", &server_url))?;
+
+    // Should fail without credentials
+    uv_snapshot!(filters, context.pip_install()
+        .arg("-r")
+        .arg(requirements_url.as_str())
+        .arg("--strict"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Error while accessing remote requirements file: `http://[LOCALHOST]
+    "###
+    );
+
+    let _ = requirements_url.set_username(username);
+    let _ = requirements_url.set_password(Some(password));
+
+    // Should succeed with credentials
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg(requirements_url.as_str())
         .arg("--strict"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
+    Resolved 7 packages in [TIME]
+    Prepared 7 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + blinker==1.7.0
+     + click==8.1.7
+     + flask==3.0.2
+     + itsdangerous==2.1.2
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + werkzeug==3.0.1
     "###
     );
 
     context.assert_command("import flask").success();
 
+    let requirements_txt = "iniconfig";
+    // Update the mock server to serve a new requirements.txt
+    let server_url = start_requirements_server(username, password, requirements_txt).await;
+    let mut requirements_url = Url::parse(&format!("{}/requirements.txt", &server_url))?;
+    let _ = requirements_url.set_username(username);
+    let _ = requirements_url.set_password(Some(password));
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg(requirements_url.as_str())
+        .arg("--strict"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    context.assert_command("import flask").success();
+
     Ok(())
+}
+
+async fn start_requirements_server(
+    username: &str,
+    password: &str,
+    requirements_txt: &str,
+) -> String {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/requirements.txt"))
+        .and(basic_auth(username, password))
+        .respond_with(ResponseTemplate::new(200).set_body_string(requirements_txt))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/requirements.txt"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+    server.uri()
 }
 
 /// Warn (but don't fail) when unsupported flags are set in the `requirements.txt`.

@@ -36,4 +36,5 @@ insta = { version = "1.40.0" }
 tempfile = { workspace = true }
 test-log = { version = "0.2.16", features = ["trace"], default-features = false }
 tokio = { workspace = true }
+tracing-test = { workspace = true }
 wiremock = { workspace = true }

@@ -519,8 +519,8 @@ async fn build_package(
 
     let build_constraints = Constraints::from_requirements(
         build_constraints
-            .iter()
-            .map(|constraint| constraint.requirement.clone()),
+            .into_iter()
+            .map(|constraint| constraint.requirement),
     );
 
     // Initialize the registry client.

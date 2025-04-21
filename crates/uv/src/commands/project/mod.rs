@@ -661,7 +661,6 @@ impl ScriptInterpreter {
         } = ScriptPython::from_request(python_request, workspace, script, no_config).await?;
 
         let root = Self::root(script, active, cache);
-
         match PythonEnvironment::from_root(&root, cache) {
             Ok(venv) => {
                 if python_request.as_ref().is_none_or(|request| {
@@ -804,21 +803,27 @@ impl ProjectInterpreter {
         let venv = workspace.venv(active);
         match PythonEnvironment::from_root(&venv, cache) {
             Ok(venv) => {
-                if python_request.as_ref().is_none_or(|request| {
-                    if request.satisfied(venv.interpreter(), cache) {
-                        debug!(
-                            "The virtual environment's Python version satisfies `{}`",
-                            request.to_canonical_string()
-                        );
-                        true
-                    } else {
-                        debug!(
-                            "The virtual environment's Python version does not satisfy `{}`",
-                            request.to_canonical_string()
-                        );
-                        false
-                    }
-                }) {
+                let venv_matches_interpreter = venv.matches_interpreter(venv.interpreter());
+                if !venv_matches_interpreter {
+                    debug!("The virtual environment's interpreter version does not match the version it was created from.");
+                }
+                if venv_matches_interpreter
+                    && python_request.as_ref().is_none_or(|request| {
+                        if request.satisfied(venv.interpreter(), cache) {
+                            debug!(
+                                "The virtual environment's Python version satisfies `{}`",
+                                request.to_canonical_string()
+                            );
+                            true
+                        } else {
+                            debug!(
+                                "The virtual environment's Python version does not satisfy `{}`",
+                                request.to_canonical_string()
+                            );
+                            false
+                        }
+                    })
+                {
                     if let Some(requires_python) = requires_python.as_ref() {
                         if requires_python.contains(venv.interpreter().python_version()) {
                             return Ok(Self::Environment(venv));
@@ -1824,6 +1829,7 @@ pub(crate) async fn sync_environment(
     venv: PythonEnvironment,
     resolution: &Resolution,
     modifications: Modifications,
+    build_constraints: Constraints,
     settings: InstallerSettingsRef<'_>,
     network_settings: &NetworkSettings,
     state: &PlatformState,
@@ -1891,7 +1897,6 @@ pub(crate) async fn sync_environment(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let dry_run = DryRun::default();
     let hasher = HashStrategy::default();
@@ -1982,6 +1987,7 @@ pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
     modifications: Modifications,
+    build_constraints: Constraints,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
     state: &SharedState,
@@ -2113,7 +2119,6 @@ pub(crate) async fn update_environment(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::new();

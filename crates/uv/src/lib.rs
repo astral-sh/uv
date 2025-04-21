@@ -26,6 +26,7 @@ use uv_cli::{
 use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLevelArgs};
 #[cfg(feature = "self-update")]
 use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
+use uv_configuration::min_stack_size;
 use uv_fs::{Simplified, CWD};
 use uv_pep508::VersionOrUrl;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
@@ -1104,12 +1105,19 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
 
+            let build_constraints = args
+                .build_constraints
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
+
             Box::pin(commands::tool_run(
                 args.command,
                 args.from,
                 &requirements,
                 &constraints,
                 &overrides,
+                &build_constraints,
                 args.show_resolution || globals.verbose > 0,
                 args.python,
                 args.install_mirrors,
@@ -1169,6 +1177,11 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
                 .collect::<Vec<_>>();
+            let build_constraints = args
+                .build_constraints
+                .into_iter()
+                .map(RequirementsSource::from_constraints_txt)
+                .collect::<Vec<_>>();
 
             Box::pin(commands::tool_install(
                 args.package,
@@ -1177,6 +1190,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &requirements,
                 &constraints,
                 &overrides,
+                &build_constraints,
                 args.python,
                 args.install_mirrors,
                 args.force,
@@ -2023,32 +2037,12 @@ where
         }
     };
 
-    // Running out of stack has been an issue for us. We box types and futures in various places
-    // to mitigate this, with this being an especially important case.
-    //
-    // Non-main threads should all have 2MB, as Rust forces platform consistency there,
-    // but that can be overridden with the RUST_MIN_STACK environment variable if you need more.
-    //
-    // Main thread stack-size is the real issue. There's BIG variety here across platforms
-    // and it's harder to control (which is why Rust doesn't by default). Notably
-    // on macOS and Linux you will typically get 8MB main thread, while on Windows you will
-    // typically get 1MB, which is *tiny*:
-    // https://learn.microsoft.com/en-us/cpp/build/reference/stack-stack-allocations?view=msvc-170
-    //
-    // To normalize this we just spawn a new thread called main2 with a size we can set
-    // ourselves. 2MB is typically too small (especially for our debug builds), while 4MB
-    // seems fine. Also we still try to respect RUST_MIN_STACK if it's set, in case useful,
-    // but don't let it ask for a smaller stack to avoid messy misconfiguration since we
-    // know we use quite a bit of main stack space.
-    let main_stack_size = std::env::var(EnvVars::RUST_MIN_STACK)
-        .ok()
-        .and_then(|var| var.parse::<usize>().ok())
-        .unwrap_or(0)
-        .max(4 * 1024 * 1024);
-
+    // See `min_stack_size` doc comment about `main2`
+    let min_stack_size = min_stack_size();
     let main2 = move || {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
+            .thread_stack_size(min_stack_size)
             .build()
             .expect("Failed building the Runtime");
         // Box the large main future to avoid stack overflows.
@@ -2063,7 +2057,7 @@ where
     };
     let result = std::thread::Builder::new()
         .name("main2".to_owned())
-        .stack_size(main_stack_size)
+        .stack_size(min_stack_size)
         .spawn(main2)
         .expect("Tokio executor failed, was there a panic?")
         .join()

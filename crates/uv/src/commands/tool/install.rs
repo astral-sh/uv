@@ -9,7 +9,7 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, DryRun, PreviewMode, Reinstall, Upgrade};
+use uv_configuration::{Concurrency, Constraints, DryRun, PreviewMode, Reinstall, Upgrade};
 use uv_distribution_types::{
     NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirementSpecification,
@@ -27,7 +27,7 @@ use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
-use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
     EnvironmentSpecification, PlatformState, ProjectError,
@@ -48,6 +48,7 @@ pub(crate) async fn install(
     with: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     force: bool,
@@ -290,6 +291,14 @@ pub(crate) async fn install(
     )
     .await?;
 
+    // Resolve the build constraints.
+    let build_constraints: Vec<Requirement> =
+        operations::read_constraints(build_constraints, &client_builder)
+            .await?
+            .into_iter()
+            .map(|constraint| constraint.requirement)
+            .collect();
+
     // Convert to tool options.
     let options = ToolOptions::from(options);
 
@@ -362,6 +371,7 @@ pub(crate) async fn install(
             if requirements == tool_receipt.requirements()
                 && constraints == tool_receipt.constraints()
                 && overrides == tool_receipt.overrides()
+                && build_constraints == tool_receipt.build_constraints()
             {
                 if *tool_receipt.options() != options {
                     // ...but the options differ, we need to update the receipt.
@@ -410,6 +420,7 @@ pub(crate) async fn install(
             environment,
             spec,
             Modifications::Exact,
+            Constraints::from_requirements(build_constraints.iter().cloned()),
             &settings,
             &network_settings,
             &state,
@@ -540,6 +551,7 @@ pub(crate) async fn install(
             environment,
             &resolution.into(),
             Modifications::Exact,
+            Constraints::from_requirements(build_constraints.iter().cloned()),
             (&settings).into(),
             &network_settings,
             &state,
@@ -576,6 +588,7 @@ pub(crate) async fn install(
         requirements,
         constraints,
         overrides,
+        build_constraints,
         printer,
     )
 }

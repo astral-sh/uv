@@ -3713,3 +3713,83 @@ fn init_without_description() -> Result<()> {
 
     Ok(())
 }
+
+/// Run `uv init --python 3.13t` to create a pin to a freethreaded Python.
+#[test]
+fn init_python_variant() -> Result<()> {
+    let context = TestContext::new("3.13");
+    uv_snapshot!(context.filters(), context.init().arg("foo").arg("--python").arg("3.13t"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo` at `[TEMP_DIR]/foo`
+    "###);
+
+    let python_version = fs_err::read_to_string(context.temp_dir.join("foo/.python-version"))?;
+    assert_eq!(python_version, "3.13t\n");
+
+    Ok(())
+}
+
+/// Check how `uv init` reacts to working and broken git with different `--vcs` options.
+#[test]
+fn git_states() {
+    let context = TestContext::new("3.12");
+
+    // First, with working git.
+
+    context.init().arg("working").assert().success();
+    assert!(context.temp_dir.child("working/.git").is_dir());
+
+    context
+        .init()
+        .arg("working-no-git")
+        .arg("--vcs")
+        .arg("none")
+        .assert()
+        .success();
+    assert!(!context.temp_dir.child("working-no-git/.git").is_dir());
+
+    context
+        .init()
+        .arg("working-git")
+        .arg("--vcs")
+        .arg("git")
+        .assert()
+        .success();
+    assert!(context.temp_dir.child("working-git/.git").is_dir());
+
+    // The same tests again, but with broken git.
+    TestContext::disallow_git_cli(&context.bin_dir)
+        .expect("Failed to setup disallowed `git` command");
+
+    context.init().arg("broken").assert().success();
+    assert!(!context.temp_dir.child("broken/.git").is_dir());
+
+    context
+        .init()
+        .arg("broken-no-git")
+        .arg("--vcs")
+        .arg("none")
+        .assert()
+        .success();
+    assert!(!context.temp_dir.child("broken-no-git/.git").is_dir());
+
+    uv_snapshot!(context.filters(), context
+        .init()
+        .arg("broken-git")
+        .arg("--vcs")
+        .arg("git"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to initialize Git repository at `[TEMP_DIR]/broken-git`
+    stdout:
+    stderr: error: `git` operations are not allowed — are you missing a cfg for the `git` feature?
+    ");
+    assert!(!context.temp_dir.child("broken-git/.git").is_dir());
+}

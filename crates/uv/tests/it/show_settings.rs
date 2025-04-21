@@ -2833,6 +2833,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         with_editable: [],
         constraints: [],
         overrides: [],
+        build_constraints: [],
         python: None,
         refresh: None(
             Timestamp(

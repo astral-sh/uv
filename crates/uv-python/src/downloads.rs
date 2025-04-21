@@ -107,15 +107,15 @@ pub struct ManagedPythonDownload {
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct PythonDownloadRequest {
-    version: Option<VersionRequest>,
-    implementation: Option<ImplementationName>,
-    arch: Option<Arch>,
-    os: Option<Os>,
-    libc: Option<Libc>,
+    pub(crate) version: Option<VersionRequest>,
+    pub(crate) implementation: Option<ImplementationName>,
+    pub(crate) arch: Option<Arch>,
+    pub(crate) os: Option<Os>,
+    pub(crate) libc: Option<Libc>,
 
     /// Whether to allow pre-releases or not. If not set, defaults to true if [`Self::version`] is
     /// not None, and false otherwise.
-    prereleases: Option<bool>,
+    pub(crate) prereleases: Option<bool>,
 }
 
 impl PythonDownloadRequest {
@@ -206,10 +206,7 @@ impl PythonDownloadRequest {
     /// Fill empty entries with default values.
     ///
     /// Platform information is pulled from the environment.
-    pub fn fill(mut self) -> Result<Self, Error> {
-        if self.implementation.is_none() {
-            self.implementation = Some(ImplementationName::CPython);
-        }
+    pub fn fill_platform(mut self) -> Result<Self, Error> {
         if self.arch.is_none() {
             self.arch = Some(Arch::from_env());
         }
@@ -219,6 +216,14 @@ impl PythonDownloadRequest {
         if self.libc.is_none() {
             self.libc = Some(Libc::from_env()?);
         }
+        Ok(self)
+    }
+
+    pub fn fill(mut self) -> Result<Self, Error> {
+        if self.implementation.is_none() {
+            self.implementation = Some(ImplementationName::CPython);
+        }
+        self = self.fill_platform()?;
         Ok(self)
     }
 
@@ -419,39 +424,29 @@ impl FromStr for PythonDownloadRequest {
         let mut arch = None;
         let mut libc = None;
 
+        let mut position = 0;
         loop {
             // Consume each part
             let Some(part) = parts.next() else { break };
+            position += 1;
 
-            if implementation.is_none() {
-                implementation = Some(ImplementationName::from_str(part)?);
+            if part.eq_ignore_ascii_case("any") {
                 continue;
             }
 
-            if version.is_none() {
-                version = Some(
-                    VersionRequest::from_str(part)
-                        .map_err(|_| Error::InvalidPythonVersion(part.to_string()))?,
-                );
-                continue;
+            match position {
+                1 => implementation = Some(ImplementationName::from_str(part)?),
+                2 => {
+                    version = Some(
+                        VersionRequest::from_str(part)
+                            .map_err(|_| Error::InvalidPythonVersion(part.to_string()))?,
+                    );
+                }
+                3 => os = Some(Os::from_str(part)?),
+                4 => arch = Some(Arch::from_str(part)?),
+                5 => libc = Some(Libc::from_str(part)?),
+                _ => return Err(Error::TooManyParts(s.to_string())),
             }
-
-            if os.is_none() {
-                os = Some(Os::from_str(part)?);
-                continue;
-            }
-
-            if arch.is_none() {
-                arch = Some(Arch::from_str(part)?);
-                continue;
-            }
-
-            if libc.is_none() {
-                libc = Some(Libc::from_str(part)?);
-                continue;
-            }
-
-            return Err(Error::TooManyParts(s.to_string()));
         }
         Ok(Self::new(version, implementation, arch, os, libc, None))
     }

@@ -68,11 +68,6 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
         r"uv(-.*)? \d+\.\d+\.\d+(\+\d+)?( \(.*\))?",
         r"uv [VERSION] ([COMMIT] DATE)",
     ),
-    // The exact message is host language dependent
-    (
-        r"Caused by: .* \(os error 2\)",
-        "Caused by: No such file or directory (os error 2)",
-    ),
     // Trim end-of-line whitespaces, to allow removing them on save.
     (r"([^\s])[ \t]+(\r?\n)", "$1$2"),
 ];
@@ -155,13 +150,18 @@ impl TestContext {
 
     /// Add extra standard filtering for Windows-compatible missing file errors.
     pub fn with_filtered_missing_file_error(mut self) -> Self {
+        // The exact message string depends on the system language, so we remove it.
+        // We want to only remove the phrase after `Caused by:`
         self.filters.push((
-            regex::escape("The system cannot find the file specified. (os error 2)"),
-            "[OS ERROR 2]".to_string(),
+            r"[^:\n]* \(os error 2\)".to_string(),
+            " [OS ERROR 2]".to_string(),
         ));
+        // Replace the Windows "The system cannot find the path specified. (os error 3)"
+        // with the Unix "No such file or directory (os error 2)"
+        // and mask the language-dependent message.
         self.filters.push((
-            regex::escape("No such file or directory (os error 2)"),
-            "[OS ERROR 2]".to_string(),
+            r"[^:\n]* \(os error 3\)".to_string(),
+            " [OS ERROR 2]".to_string(),
         ));
         self
     }
@@ -619,7 +619,7 @@ impl TestContext {
         command
     }
 
-    fn disallow_git_cli(bin_dir: &Path) -> std::io::Result<()> {
+    pub fn disallow_git_cli(bin_dir: &Path) -> std::io::Result<()> {
         let contents = r"#!/bin/sh
     echo 'error: `git` operations are not allowed — are you missing a cfg for the `git` feature?' >&2
     exit 127";
@@ -1586,8 +1586,7 @@ pub async fn download_to_disk(url: &str, path: &Path) {
         .allow_insecure_host(trusted_hosts)
         .build();
     let url: reqwest::Url = url.parse().unwrap();
-    let client = client.for_host(&url);
-    let response = client.request(http::Method::GET, url).send().await.unwrap();
+    let response = client.for_host(&url).get(url).send().await.unwrap();
 
     let mut file = tokio::fs::File::create(path).await.unwrap();
     let mut stream = response.bytes_stream();

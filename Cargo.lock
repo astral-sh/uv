@@ -4661,6 +4661,7 @@ dependencies = [
  "version-ranges",
  "walkdir",
  "which",
+ "wiremock",
  "zip",
 ]
 
@@ -4685,6 +4686,7 @@ dependencies = [
  "test-log",
  "tokio",
  "tracing",
+ "tracing-test",
  "url",
  "uv-once-map",
  "uv-small-str",
@@ -4930,6 +4932,7 @@ dependencies = [
  "uv-torch",
  "uv-version",
  "uv-warnings",
+ "wiremock",
 ]
 
 [[package]]
@@ -4955,12 +4958,12 @@ dependencies = [
  "uv-cache-info",
  "uv-cache-key",
  "uv-distribution-types",
+ "uv-git",
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
  "uv-platform-tags",
  "uv-static",
- "which",
 ]
 
 [[package]]

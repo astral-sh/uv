@@ -168,6 +168,7 @@ pub(crate) fn install_executables(
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
+    build_constraints: Vec<Requirement>,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     let site_packages = SitePackages::from_environment(environment)?;
@@ -289,6 +290,7 @@ pub(crate) fn install_executables(
         requirements,
         constraints,
         overrides,
+        build_constraints,
         python,
         target_entry_points
             .into_iter()

@@ -7,7 +7,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, DryRun, PreviewMode};
+use uv_configuration::{Concurrency, Constraints, DryRun, PreviewMode};
 use uv_distribution_types::Requirement;
 use uv_fs::CWD;
 use uv_normalize::PackageName;
@@ -268,6 +268,9 @@ async fn upgrade_tool(
     );
     let settings = ResolverInstallerSettings::from(options.clone());
 
+    let build_constraints =
+        Constraints::from_requirements(existing_tool_receipt.build_constraints().iter().cloned());
+
     // Resolve the requirements.
     let spec = RequirementsSpecification::from_overrides(
         existing_tool_receipt.requirements().to_vec(),
@@ -310,6 +313,7 @@ async fn upgrade_tool(
             environment,
             &resolution.into(),
             Modifications::Exact,
+            build_constraints,
             (&settings).into(),
             network_settings,
             &state,
@@ -334,6 +338,7 @@ async fn upgrade_tool(
             environment,
             spec,
             Modifications::Exact,
+            build_constraints,
             &settings,
             network_settings,
             &state,
@@ -379,6 +384,7 @@ async fn upgrade_tool(
             existing_tool_receipt.requirements().to_vec(),
             existing_tool_receipt.constraints().to_vec(),
             existing_tool_receipt.overrides().to_vec(),
+            existing_tool_receipt.build_constraints().to_vec(),
             printer,
         )?;
     }
