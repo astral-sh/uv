@@ -5473,6 +5473,8 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
+</dd><dt id="uv-python-uninstall--force"><a href="#uv-python-uninstall--force"><code>--force</code></a></dt><dd><p>Force uninstall the requested Python version(s), even if they are in use</p>
+
 </dd><dt id="uv-python-uninstall--help"><a href="#uv-python-uninstall--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt id="uv-python-uninstall--install-dir"><a href="#uv-python-uninstall--install-dir"><code>--install-dir</code></a>, <code>-i</code> <i>install-dir</i></dt><dd><p>The directory where the Python was installed</p>

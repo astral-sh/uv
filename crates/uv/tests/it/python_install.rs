@@ -1,6 +1,6 @@
 use std::{path::Path, process::Command};
 
-use crate::common::{uv_snapshot, TestContext};
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{
     assert::PathAssert,
     prelude::{FileTouch, PathChild, PathCreateDir},
@@ -8,6 +8,8 @@ use assert_fs::{
 use predicates::prelude::predicate;
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+
+use crate::common::{uv_snapshot, TestContext};
 
 #[test]
 fn python_install() {
@@ -1200,4 +1202,72 @@ fn python_install_patch_dylib() {
 
     ----- stderr -----
     "###);
+}
+
+/// Uninstall a managed Python that is still used by a tool.
+#[test]
+fn uninstall_in_use() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // A installed tool should prevent uninstallation
+    context
+        .tool_install()
+        .arg("black")
+        .arg("-p")
+        .arg("3.12")
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.12
+    Following Python installations are in use by tools:
+     cpython-3.12.10-[PLATFORM]
+       - black
+    Use `uv python uninstall --force` to force uninstall it
+    "#);
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("--all"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python installations
+    Following Python installations are in use by tools:
+     cpython-3.12.10-[PLATFORM]
+       - black
+    Use `uv python uninstall --force` to force uninstall it
+    "#);
+
+    // Uninstall the tool so we can uninstall the Python
+    context.tool_uninstall().arg("black").assert().success();
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.12
+    Uninstalled Python 3.12.10 in [TIME]
+     - cpython-3.12.10-[PLATFORM]
+    "#);
+
+    // Use `--force` to ignore the tool
+    context.python_install().arg("3.12").assert().success();
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.12").arg("--force"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.12
+    Uninstalled Python 3.12.10 in [TIME]
+     - cpython-3.12.10-[PLATFORM]
+    "#);
 }

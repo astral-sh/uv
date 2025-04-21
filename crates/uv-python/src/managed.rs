@@ -291,7 +291,7 @@ Error=This Python installation is managed by uv and should not be modified.
 ";
 
 /// A uv-managed Python installation on the current system.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct ManagedPythonInstallation {
     /// The path to the top-level directory of the installed Python.
     path: PathBuf,
