@@ -160,7 +160,10 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
                         continue;
                     }
 
-                    debug!("Received SIGINT, forwarding to child at {child_pid}");
+                    // The shell may still be forwarding these signals, give the child a moment to
+                    // handle that signal before hitting it with another one
+                    debug!("Received SIGINT, forwarding to child at {child_pid} in 200ms");
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                     let _ = signal::kill(child_pid, signal::Signal::SIGINT);
                 },
                 _ = sigterm_handle.recv() => {
