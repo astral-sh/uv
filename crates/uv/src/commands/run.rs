@@ -42,7 +42,24 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
         use nix::sys::signal;
         use nix::unistd::{getpgid, Pid};
         use tokio::select;
-        use tokio::signal::unix::{signal as handle_signal, SignalKind};
+        use tokio::signal::unix::{signal as handle_signal, Signal, SignalKind};
+
+        /// A wrapper for a signal handler that is not available on all platforms, `recv` never
+        /// returns on unsupported platforms.
+        #[allow(dead_code)]
+        enum PlatformSpecificSignal {
+            Signal(Signal),
+            Dummy,
+        }
+
+        impl PlatformSpecificSignal {
+            async fn recv(&mut self) -> Option<()> {
+                match self {
+                    PlatformSpecificSignal::Signal(ref mut signal) => signal.recv().await,
+                    PlatformSpecificSignal::Dummy => std::future::pending().await,
+                }
+            }
+        }
 
         /// Simple new type for `Pid` allowing construction from [`Child`].
         ///
@@ -76,6 +93,44 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
         let mut sigterm_handle = handle_signal(SignalKind::terminate())?;
         let mut sigint_handle = handle_signal(SignalKind::interrupt())?;
         let mut sigint_count = 0;
+
+        // The following signals are terminal by default, but can be have user defined handlers.
+        // Forward them to the child process for handling.
+        let mut sigusr1_handle = handle_signal(SignalKind::user_defined1())?;
+        let mut sigusr2_handle = handle_signal(SignalKind::user_defined2())?;
+        let mut sighup_handle = handle_signal(SignalKind::hangup())?;
+        let mut sigalrm_handle = handle_signal(SignalKind::alarm())?;
+        let mut sigquit_handle = handle_signal(SignalKind::quit())?;
+
+        // The following signals are ignored by default, but can be have user defined handlers.
+        // Forward them to the child process for handling.
+        let mut sigwinch_handle = handle_signal(SignalKind::window_change())?;
+        let mut sigpipe_handle = handle_signal(SignalKind::pipe())?;
+
+        // This signal is only available on some platforms, copied from `tokio::signal::unix`
+        #[cfg(any(
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "illumos",
+        ))]
+        let mut siginfo_handle = PlatformSpecificSignal::Signal(handle_signal(SignalKind::info())?);
+
+        #[cfg(not(any(
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "illumos",
+        )))]
+        let mut siginfo_handle = PlatformSpecificSignal::Dummy;
+
+        // Notably, we do not handle `SIGCHLD` (sent when a child process status changes) and
+        // `SIGIO` or `SIGPOLL` (sent when a file descriptor is ready for io) as they don't make
+        // sense for this parent / child relationship.
 
         loop {
             select! {
@@ -119,6 +174,94 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
                     // isn't usually handled by the shell and in cases like
                     debug!("Received SIGTERM, forwarding to child at {child_pid}");
                     let _ = signal::kill(child_pid, signal::Signal::SIGTERM);
+                }
+                _ = sigusr1_handle.recv() => {
+                    let Some(child_pid) = *ChildPid::from(&handle) else {
+                        debug!("Received SIGUSR1, but the child has already exited");
+                        continue;
+                    };
+
+                    // We unconditionally forward SIGUSR1 to the child process.
+                    debug!("Received SIGUSR1, forwarding to child at {child_pid}");
+                    let _ = signal::kill(child_pid, signal::Signal::SIGUSR1);
+                }
+                _ = sigusr2_handle.recv() => {
+                    let Some(child_pid) = *ChildPid::from(&handle) else {
+                        debug!("Received SIGUSR2, but the child has already exited");
+                        continue;
+                    };
+
+                    // We unconditionally forward SIGUSR2 to the child process.
+                    debug!("Received SIGUSR2, forwarding to child at {child_pid}");
+                    let _ = signal::kill(child_pid, signal::Signal::SIGUSR2);
+                }
+                _ = sighup_handle.recv() => {
+                    let Some(child_pid) = *ChildPid::from(&handle) else {
+                        debug!("Received SIGHUP, but the child has already exited");
+                        continue;
+                    };
+
+                    // We unconditionally forward SIGHUP to the child process.
+                    debug!("Received SIGHUP, forwarding to child at {child_pid}");
+                    let _ = signal::kill(child_pid, signal::Signal::SIGHUP);
+                }
+                _ = sigalrm_handle.recv() => {
+                    let Some(child_pid) = *ChildPid::from(&handle) else {
+                        debug!("Received SIGALRM, but the child has already exited");
+                        continue;
+                    };
+
+                    // We unconditionally forward SIGALRM to the child process.
+                    debug!("Received SIGALRM, forwarding to child at {child_pid}");
+                    let _ = signal::kill(child_pid, signal::Signal::SIGALRM);
+                }
+                _ = sigquit_handle.recv() => {
+                    let Some(child_pid) = *ChildPid::from(&handle) else {
+                        debug!("Received SIGQUIT, but the child has already exited");
+                        continue;
+                    };
+
+                    // We unconditionally forward SIGQUIT to the child process.
+                    debug!("Received SIGQUIT, forwarding to child at {child_pid}");
+                    let _ = signal::kill(child_pid, signal::Signal::SIGQUIT);
+                }
+                _ = sigwinch_handle.recv() => {
+                    let Some(child_pid) = *ChildPid::from(&handle) else {
+                        debug!("Received SIGWINCH, but the child has already exited");
+                        continue;
+                    };
+
+                    // We unconditionally forward SIGWINCH to the child process.
+                    debug!("Received SIGWINCH, forwarding to child at {child_pid}");
+                    let _ = signal::kill(child_pid, signal::Signal::SIGWINCH);
+                }
+                _ = sigpipe_handle.recv() => {
+                    let Some(child_pid) = *ChildPid::from(&handle) else {
+                        debug!("Received SIGPIPE, but the child has already exited");
+                        continue;
+                    };
+
+                    // We unconditionally forward SIGPIPE to the child process.
+                    debug!("Received SIGPIPE, forwarding to child at {child_pid}");
+                    let _ = signal::kill(child_pid, signal::Signal::SIGPIPE);
+                }
+                _ = siginfo_handle.recv() => {
+                    let Some(child_pid) = *ChildPid::from(&handle) else {
+                        debug!("Received SIGINFO, but the child has already exited");
+                        continue;
+                    };
+
+                    // We unconditionally forward SIGINFO to the child process.
+                    debug!("Received SIGINFO, forwarding to child at {child_pid}");
+                    #[cfg(any(
+                        target_os = "dragonfly",
+                        target_os = "freebsd",
+                        target_os = "macos",
+                        target_os = "netbsd",
+                        target_os = "openbsd",
+                        target_os = "illumos",
+                    ))]
+                    let _ = signal::kill(child_pid, signal::Signal::SIGINFO);
                 }
             };
         }
