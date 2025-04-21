@@ -2332,7 +2332,8 @@ uv export [OPTIONS]
 
 <p>Supports both <code>requirements.txt</code> and <code>pylock.toml</code> (PEP 751) output formats.</p>
 
-<p>[default: requirements.txt]</p>
+<p>uv will infer the output format from the file extension of the output file, if provided. Otherwise, defaults to <code>requirements.txt</code>.</p>
+
 <p>Possible values:</p>
 
 <ul>
