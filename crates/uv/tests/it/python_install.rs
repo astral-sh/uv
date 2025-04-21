@@ -1207,7 +1207,9 @@ fn python_install_314() {
     let context: TestContext = TestContext::new_with_versions(&[])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
+        .with_managed_python_dirs()
+        .with_filtered_python_names()
+        .with_filtered_python_install_bin();
 
     // Install 3.14
     // For now, this provides test coverage of pre-release handling
@@ -1238,7 +1240,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0a6-[PLATFORM]/bin/python3.14
+    [TEMP_DIR]/managed/cpython-3.14.0a6-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");
@@ -1247,7 +1249,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0a6-[PLATFORM]/bin/python3.14
+    [TEMP_DIR]/managed/cpython-3.14.0a6-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");
@@ -1259,15 +1261,15 @@ fn python_install_314() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.2 in [TIME]
-     + cpython-3.13.2-[PLATFORM]
+    Installed Python 3.13.3 in [TIME]
+     + cpython-3.13.3-[PLATFORM]
     ");
 
     uv_snapshot!(context.filters(), context.python_find().arg("3"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.13.2-[PLATFORM]/bin/python3.13
+    [TEMP_DIR]/managed/cpython-3.13.3-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");
