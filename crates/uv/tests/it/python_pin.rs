@@ -717,7 +717,7 @@ fn python_pin_resolve() {
 
     // Request CPython 3.13 for the current platform
     let os = Os::from_env();
-    let arch = Arch::from_env();
+    let arch = Arch::from_env().without_variant();
 
     uv_snapshot!(context.filters(), context.python_pin().arg("--resolved")
     .arg(format!("cpython-3.13-{os}-{arch}"))

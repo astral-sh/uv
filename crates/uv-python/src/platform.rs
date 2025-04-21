@@ -117,7 +117,12 @@ impl Arch {
             return true;
         }
 
-        // TODO: Implement `variant` support checks
+        if self
+            .variant
+            .is_some_and(|variant| variant.supports(other.variant))
+        {
+            return true;
+        }
 
         // Windows ARM64 runs emulated x86_64 binaries transparently
         if cfg!(windows) && matches!(self.family, target_lexicon::Architecture::Aarch64(_)) {
@@ -134,10 +139,19 @@ impl Arch {
     pub fn is_arm(&self) -> bool {
         matches!(self.family, target_lexicon::Architecture::Arm(_))
     }
+
+    #[must_use]
+    pub fn without_variant(self) -> Self {
+        Self {
+            family: self.family,
+            variant: None,
+        }
+    }
 }
 
 impl ArchVariant {
-    #[cfg(target_arch = "x86_64")]
+    /// Only Linux `x86_64` variants are published upstream at this time.
+    #[cfg(all(unix, target_arch = "x86_64"))]
     pub fn from_env() -> Option<Self> {
         if is_x86_feature_detected!("avx512f")
             && is_x86_feature_detected!("avx512bw")
@@ -169,9 +183,30 @@ impl ArchVariant {
         }
     }
 
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(not(all(unix, target_arch = "x86_64")))]
     pub fn from_env() -> Option<Self> {
         None
+    }
+
+    /// Does the current variant support running the other?
+    ///
+    /// When the variants are equal, this is always true. Otherwise, this is true if the given
+    /// variant is a subset of the current one.
+    pub(crate) fn supports(self, other: Option<Self>) -> bool {
+        // `None` can be used on any architecture
+        let Some(other) = other else {
+            return true;
+        };
+        // Equal variants are always supported
+        if self == other {
+            return true;
+        }
+        // Check for variant subsets
+        match self {
+            Self::V2 => false, // We already tested for equality and `None`
+            Self::V3 => matches!(other, Self::V2),
+            Self::V4 => matches!(other, Self::V2 | Self::V3),
+        }
     }
 }
 

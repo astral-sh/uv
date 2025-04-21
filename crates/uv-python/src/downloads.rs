@@ -286,11 +286,13 @@ impl PythonDownloadRequest {
                 return false;
             }
         }
+
         if let Some(implementation) = &self.implementation {
             if key.implementation != LenientImplementationName::from(*implementation) {
                 return false;
             }
         }
+
         // If we don't allow pre-releases, don't match a key with a pre-release tag
         if !self.allows_prereleases() && key.prerelease.is_some() {
             return false;
