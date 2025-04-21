@@ -81,7 +81,6 @@ version_files = [
   "crates/uv-version/Cargo.toml",
   "crates/uv-build/Cargo.toml",
   "crates/uv-build/pyproject.toml",
-  "docs/configuration/build_backend.md",
   "docs/getting-started/installation.md",
   "docs/guides/integration/docker.md",
   "docs/guides/integration/pre-commit.md",
