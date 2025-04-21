@@ -37,7 +37,27 @@ use crate::{Installable, LockError, RequiresPython};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlError {
-    #[error("`packages` entry for `{0}` must contain one of: `wheels`, `directory`, `archive`, `sdist`, or `vcs`")]
+    #[error("Package `{0}` includes both a registry (`packages.wheels`) and a directory source (`packages.directory`)")]
+    WheelWithDirectory(PackageName),
+    #[error("Package `{0}` includes both a registry (`packages.wheels`) and a VCS source (`packages.vcs`)")]
+    WheelWithVcs(PackageName),
+    #[error("Package `{0}` includes both a registry (`packages.wheels`) and an archive source (`packages.archive`)")]
+    WheelWithArchive(PackageName),
+    #[error("Package `{0}` includes both a registry (`packages.sdist`) and a directory source (`packages.directory`)")]
+    SdistWithDirectory(PackageName),
+    #[error("Package `{0}` includes both a registry (`packages.sdist`) and a VCS source (`packages.vcs`)")]
+    SdistWithVcs(PackageName),
+    #[error("Package `{0}` includes both a registry (`packages.sdist`) and an archive source (`packages.archive`)")]
+    SdistWithArchive(PackageName),
+    #[error("Package `{0}` includes both a directory (`packages.directory`) and a VCS source (`packages.vcs`)")]
+    DirectoryWithVcs(PackageName),
+    #[error("Package `{0}` includes both a directory (`packages.directory`) and an archive source (`packages.archive`)")]
+    DirectoryWithArchive(PackageName),
+    #[error("Package `{0}` includes both a VCS (`packages.vcs`) and an archive source (`packages.archive`)")]
+    VcsWithArchive(PackageName),
+    #[error(
+        "Package `{0}` must include one of: `wheels`, `directory`, `archive`, `sdist`, or `vcs`"
+    )]
     MissingSource(PackageName),
     #[error("`packages.wheel` entry for `{0}` must have a `path` or `url`")]
     WheelMissingPathUrl(PackageName),
@@ -558,6 +578,47 @@ impl<'lock> PylockToml {
         let root = graph.add_node(Node::Root);
 
         for package in self.packages {
+            match (
+                package.wheels.is_some(),
+                package.sdist.is_some(),
+                package.directory.is_some(),
+                package.vcs.is_some(),
+                package.archive.is_some(),
+            ) {
+                // `packages.wheels` is mutually exclusive with `packages.directory`, `packages.vcs`, and `packages.archive`.
+                (true, _, true, _, _) => {
+                    return Err(PylockTomlError::WheelWithDirectory(package.name.clone()));
+                }
+                (true, _, _, true, _) => {
+                    return Err(PylockTomlError::WheelWithVcs(package.name.clone()));
+                }
+                (true, _, _, _, true) => {
+                    return Err(PylockTomlError::WheelWithArchive(package.name.clone()));
+                }
+                // `packages.sdist` is mutually exclusive with `packages.directory`, `packages.vcs`, and `packages.archive`.
+                (_, true, true, _, _) => {
+                    return Err(PylockTomlError::SdistWithDirectory(package.name.clone()));
+                }
+                (_, true, _, true, _) => {
+                    return Err(PylockTomlError::SdistWithVcs(package.name.clone()));
+                }
+                (_, true, _, _, true) => {
+                    return Err(PylockTomlError::SdistWithArchive(package.name.clone()));
+                }
+                // `packages.directory` is mutually exclusive with `packages.vcs`, and `packages.archive`.
+                (_, _, true, true, _) => {
+                    return Err(PylockTomlError::DirectoryWithVcs(package.name.clone()));
+                }
+                (_, _, true, _, true) => {
+                    return Err(PylockTomlError::DirectoryWithArchive(package.name.clone()));
+                }
+                // `packages.vcs` is mutually exclusive with `packages.archive`.
+                (_, _, _, true, true) => {
+                    return Err(PylockTomlError::VcsWithArchive(package.name.clone()));
+                }
+                _ => {}
+            }
+
             // Omit packages that aren't relevant to the current environment.
             let install = package.marker.evaluate(markers, &[]);
 
