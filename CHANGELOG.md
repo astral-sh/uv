@@ -62,7 +62,7 @@
 - Fix highlight line in explicit index documentation ([#12887](https://github.com/astral-sh/uv/pull/12887))
 - Add explicit source (matching PyTorch guide) ([#12844](https://github.com/astral-sh/uv/pull/12844))
 - Fix link to issue ([#12823](https://github.com/astral-sh/uv/pull/12823))
-- Fix gramatical error in FastAPI guide ([#12908](https://github.com/astral-sh/uv/pull/12908))
+- Fix grammatical error in FastAPI guide ([#12908](https://github.com/astral-sh/uv/pull/12908))
 - Add `--locked` to `uv sync` in GitHub Actions guide ([#12819](https://github.com/astral-sh/uv/pull/12819))
 - Improve formatting for `"all"` `default-groups` setting documentation ([#12963](https://github.com/astral-sh/uv/pull/12963))
 - Replace `--frozen` with `--locked` in Docker integration guide ([#12818](https://github.com/astral-sh/uv/pull/12818))
