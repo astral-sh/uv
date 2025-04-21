@@ -50,8 +50,9 @@ use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::WorkspaceMember;
 
 use crate::fork_strategy::ForkStrategy;
-pub use crate::lock::export::PylockToml;
+pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
+pub use crate::lock::export::{PylockToml, PylockTomlError};
 pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::TreeDisplay;

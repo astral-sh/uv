@@ -14,7 +14,8 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItem;
 
 use crate::graph_ops::{marker_reachability, Reachable};
-pub use crate::lock::export::pylock_toml::PylockToml;
+pub(crate) use crate::lock::export::pylock_toml::PylockTomlPackage;
+pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
 use crate::universal_marker::resolve_conflicts;
 use crate::{Installable, Package};

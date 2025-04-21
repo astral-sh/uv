@@ -11,6 +11,7 @@ use serde::Deserialize;
 use toml_edit::{value, Array, ArrayOfTables, Item, Table};
 use url::Url;
 
+use uv_cache_key::RepositoryUrl;
 use uv_configuration::{DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, SourceDistFilename,
@@ -18,11 +19,12 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     BuiltDist, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist, Dist, Edge,
-    FileLocation, GitSourceDist, IndexUrl, Node, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution, ResolvedDist, SourceDist,
-    ToUrlError, UrlString,
+    FileLocation, GitSourceDist, IndexUrl, Name, Node, PathBuiltDist, PathSourceDist,
+    RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution,
+    ResolvedDist, SourceDist, ToUrlError, UrlString,
 };
 use uv_fs::{relative_to, PortablePathBuf};
+use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
@@ -33,7 +35,8 @@ use uv_small_str::SmallString;
 
 use crate::lock::export::ExportableRequirements;
 use crate::lock::{each_element_on_its_line_array, Source};
-use crate::{Installable, LockError, RequiresPython};
+use crate::resolution::ResolutionGraphNode;
+use crate::{Installable, LockError, RequiresPython, ResolverOutput};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlError {
@@ -89,6 +92,10 @@ pub enum PylockTomlError {
     Extension(#[from] ExtensionError),
     #[error(transparent)]
     Jiff(#[from] jiff::Error),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Deserialize(#[from] toml::de::Error),
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -105,17 +112,19 @@ pub struct PylockToml {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     default_groups: Vec<GroupName>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    packages: Vec<PylockTomlPackage>,
+    pub packages: Vec<PylockTomlPackage>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     attestation_identities: Vec<PylockTomlAttestationIdentity>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct PylockTomlPackage {
-    name: PackageName,
+pub struct PylockTomlPackage {
+    pub name: PackageName,
     #[serde(skip_serializing_if = "Option::is_none")]
-    version: Option<Version>,
+    pub version: Option<Version>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index: Option<Url>,
     #[serde(
         skip_serializing_if = "uv_pep508::marker::ser::is_empty",
         serialize_with = "uv_pep508::marker::ser::serialize",
@@ -126,8 +135,6 @@ struct PylockTomlPackage {
     requires_python: Option<RequiresPython>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     dependencies: Vec<PylockTomlDependency>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    index: Option<Url>,
     #[serde(skip_serializing_if = "Option::is_none")]
     vcs: Option<PylockTomlVcs>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -239,6 +246,267 @@ struct PylockTomlAttestationIdentity {
 }
 
 impl<'lock> PylockToml {
+    /// Construct a [`PylockToml`] from a [`ResolverOutput`].
+    pub fn from_resolution(
+        resolution: &ResolverOutput,
+        omit: &[PackageName],
+        install_path: &Path,
+    ) -> Result<Self, PylockTomlError> {
+        // The lock version is always `1.0` at time of writing.
+        let lock_version = Version::new([1, 0]);
+
+        // The created by field is always `uv` at time of writing.
+        let created_by = "uv".to_string();
+
+        // Use the `requires-python` from the target lockfile.
+        let requires_python = resolution.requires_python.clone();
+
+        // We don't support locking for multiple extras at time of writing.
+        let extras = vec![];
+
+        // We don't support locking for multiple dependency groups at time of writing.
+        let dependency_groups = vec![];
+
+        // We don't support locking for multiple dependency groups at time of writing.
+        let default_groups = vec![];
+
+        // We don't support attestation identities at time of writing.
+        let attestation_identities = vec![];
+
+        // Convert each node to a `pylock.toml`-style package.
+        let mut packages = Vec::with_capacity(resolution.graph.node_count());
+        for node_index in resolution.graph.node_indices() {
+            let ResolutionGraphNode::Dist(node) = &resolution.graph[node_index] else {
+                continue;
+            };
+            if !node.is_base() {
+                continue;
+            }
+            let ResolvedDist::Installable { dist, version } = &node.dist else {
+                continue;
+            };
+            if omit.contains(dist.name()) {
+                continue;
+            }
+
+            // Create a `pylock.toml`-style package.
+            let mut package = PylockTomlPackage {
+                name: dist.name().clone(),
+                version: version.clone(),
+                marker: node.marker.pep508(),
+                requires_python: None,
+                dependencies: vec![],
+                index: None,
+                vcs: None,
+                directory: None,
+                archive: None,
+                sdist: None,
+                wheels: None,
+            };
+
+            match &**dist {
+                Dist::Built(BuiltDist::DirectUrl(dist)) => {
+                    package.archive = Some(PylockTomlArchive {
+                        url: Some((*dist.location).clone()),
+                        path: None,
+                        size: dist.size(),
+                        upload_time: None,
+                        subdirectory: None,
+                        hashes: Hashes::from(node.hashes.clone()),
+                    });
+                }
+                Dist::Built(BuiltDist::Path(dist)) => {
+                    let path = relative_to(&dist.install_path, install_path)
+                        .map(Box::<Path>::from)
+                        .unwrap_or_else(|_| dist.install_path.clone());
+                    package.archive = Some(PylockTomlArchive {
+                        url: None,
+                        path: Some(PortablePathBuf::from(path)),
+                        size: dist.size(),
+                        upload_time: None,
+                        subdirectory: None,
+                        hashes: Hashes::from(node.hashes.clone()),
+                    });
+                }
+                Dist::Built(BuiltDist::Registry(dist)) => {
+                    package.wheels = Some(
+                        dist.wheels
+                            .iter()
+                            .map(|wheel| {
+                                let url =
+                                    wheel.file.url.to_url().map_err(PylockTomlError::ToUrl)?;
+                                Ok(PylockTomlWheel {
+                                    // Optional "when the last component of path/ url would be the same value".
+                                    name: if url
+                                        .filename()
+                                        .is_ok_and(|filename| filename == *wheel.file.filename)
+                                    {
+                                        None
+                                    } else {
+                                        Some(wheel.filename.clone())
+                                    },
+                                    upload_time: wheel
+                                        .file
+                                        .upload_time_utc_ms
+                                        .map(Timestamp::from_millisecond)
+                                        .transpose()?,
+                                    url: Some(
+                                        wheel.file.url.to_url().map_err(PylockTomlError::ToUrl)?,
+                                    ),
+                                    path: None,
+                                    size: wheel.file.size,
+                                    hashes: Hashes::from(wheel.file.hashes.clone()),
+                                })
+                            })
+                            .collect::<Result<Vec<_>, PylockTomlError>>()?,
+                    );
+
+                    if let Some(sdist) = dist.sdist.as_ref() {
+                        let url = sdist.file.url.to_url().map_err(PylockTomlError::ToUrl)?;
+                        package.sdist = Some(PylockTomlSdist {
+                            // Optional "when the last component of path/ url would be the same value".
+                            name: if url
+                                .filename()
+                                .is_ok_and(|filename| filename == *sdist.file.filename)
+                            {
+                                None
+                            } else {
+                                Some(sdist.file.filename.clone())
+                            },
+                            upload_time: sdist
+                                .file
+                                .upload_time_utc_ms
+                                .map(Timestamp::from_millisecond)
+                                .transpose()?,
+                            url: Some(url),
+                            path: None,
+                            size: sdist.file.size,
+                            hashes: Hashes::from(sdist.file.hashes.clone()),
+                        });
+                    }
+                }
+                Dist::Source(SourceDist::DirectUrl(dist)) => {
+                    package.archive = Some(PylockTomlArchive {
+                        url: Some((*dist.location).clone()),
+                        path: None,
+                        size: dist.size(),
+                        upload_time: None,
+                        subdirectory: dist.subdirectory.clone().map(PortablePathBuf::from),
+                        hashes: Hashes::from(node.hashes.clone()),
+                    });
+                }
+                Dist::Source(SourceDist::Directory(dist)) => {
+                    let path = relative_to(&dist.install_path, install_path)
+                        .map(Box::<Path>::from)
+                        .unwrap_or_else(|_| dist.install_path.clone());
+                    package.directory = Some(PylockTomlDirectory {
+                        path: PortablePathBuf::from(path),
+                        editable: if dist.editable { Some(true) } else { None },
+                        subdirectory: None,
+                    });
+                }
+                Dist::Source(SourceDist::Git(dist)) => {
+                    package.vcs = Some(PylockTomlVcs {
+                        r#type: VcsKind::Git,
+                        url: Some(dist.git.repository().clone()),
+                        path: None,
+                        requested_revision: dist.git.reference().as_str().map(ToString::to_string),
+                        commit_id: dist.git.precise().unwrap_or_else(|| {
+                            panic!("Git distribution is missing a precise hash: {dist}")
+                        }),
+                        subdirectory: dist.subdirectory.clone().map(PortablePathBuf::from),
+                    });
+                }
+                Dist::Source(SourceDist::Path(dist)) => {
+                    let path = relative_to(&dist.install_path, install_path)
+                        .map(Box::<Path>::from)
+                        .unwrap_or_else(|_| dist.install_path.clone());
+                    package.archive = Some(PylockTomlArchive {
+                        url: None,
+                        path: Some(PortablePathBuf::from(path)),
+                        size: dist.size(),
+                        upload_time: None,
+                        subdirectory: None,
+                        hashes: Hashes::from(node.hashes.clone()),
+                    });
+                }
+                Dist::Source(SourceDist::Registry(dist)) => {
+                    package.wheels = Some(
+                        dist.wheels
+                            .iter()
+                            .map(|wheel| {
+                                let url =
+                                    wheel.file.url.to_url().map_err(PylockTomlError::ToUrl)?;
+                                Ok(PylockTomlWheel {
+                                    // Optional "when the last component of path/ url would be the same value".
+                                    name: if url
+                                        .filename()
+                                        .is_ok_and(|filename| filename == *wheel.file.filename)
+                                    {
+                                        None
+                                    } else {
+                                        Some(wheel.filename.clone())
+                                    },
+                                    upload_time: wheel
+                                        .file
+                                        .upload_time_utc_ms
+                                        .map(Timestamp::from_millisecond)
+                                        .transpose()?,
+                                    url: Some(
+                                        wheel.file.url.to_url().map_err(PylockTomlError::ToUrl)?,
+                                    ),
+                                    path: None,
+                                    size: wheel.file.size,
+                                    hashes: Hashes::from(wheel.file.hashes.clone()),
+                                })
+                            })
+                            .collect::<Result<Vec<_>, PylockTomlError>>()?,
+                    );
+
+                    let url = dist.file.url.to_url().map_err(PylockTomlError::ToUrl)?;
+                    package.sdist = Some(PylockTomlSdist {
+                        // Optional "when the last component of path/ url would be the same value".
+                        name: if url
+                            .filename()
+                            .is_ok_and(|filename| filename == *dist.file.filename)
+                        {
+                            None
+                        } else {
+                            Some(dist.file.filename.clone())
+                        },
+                        upload_time: dist
+                            .file
+                            .upload_time_utc_ms
+                            .map(Timestamp::from_millisecond)
+                            .transpose()?,
+                        url: Some(url),
+                        path: None,
+                        size: dist.file.size,
+                        hashes: Hashes::from(dist.file.hashes.clone()),
+                    });
+                }
+            }
+
+            // Add the package to the list of packages.
+            packages.push(package);
+        }
+
+        // Sort the packages by name, then version.
+        packages.sort_by(|a, b| a.name.cmp(&b.name).then(a.version.cmp(&b.version)));
+
+        // Return the constructed `pylock.toml`.
+        Ok(PylockToml {
+            lock_version,
+            created_by,
+            requires_python: Some(requires_python),
+            extras,
+            dependency_groups,
+            default_groups,
+            packages,
+            attestation_identities,
+        })
+    }
+
     /// Construct a [`PylockToml`] from a uv lockfile.
     pub fn from_lock(
         target: &impl Installable<'lock>,
@@ -258,7 +526,7 @@ impl<'lock> PylockToml {
             install_options,
         );
 
-        // Sort the nodes, such that unnamed URLs (editables) appear at the top.
+        // Sort the nodes.
         nodes.sort_unstable_by_key(|node| &node.package.id);
 
         // The lock version is always `1.0` at time of writing.
@@ -825,6 +1093,20 @@ impl PylockTomlPackage {
         }
 
         best.map(|(_, i)| i)
+    }
+
+    /// Returns the [`ResolvedRepositoryReference`] for the package, if it is a Git source.
+    pub fn as_git_ref(&self) -> Option<ResolvedRepositoryReference> {
+        let vcs = self.vcs.as_ref()?;
+        let url = vcs.url.as_ref()?;
+        let requested_revision = vcs.requested_revision.as_ref()?;
+        Some(ResolvedRepositoryReference {
+            reference: RepositoryReference {
+                url: RepositoryUrl::new(url),
+                reference: GitReference::from_rev(requested_revision.clone()),
+            },
+            sha: vcs.commit_id,
+        })
     }
 }
 

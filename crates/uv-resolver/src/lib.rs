@@ -5,7 +5,7 @@ pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
 pub use fork_strategy::ForkStrategy;
 pub use lock::{
-    Installable, Lock, LockError, LockVersion, Package, PackageMap, PylockToml,
+    Installable, Lock, LockError, LockVersion, Package, PackageMap, PylockToml, PylockTomlError,
     RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay, VERSION,
 };
 pub use manifest::Manifest;
