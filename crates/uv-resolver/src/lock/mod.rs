@@ -2202,7 +2202,7 @@ impl Package {
                         let wheels = self
                             .wheels
                             .iter()
-                            .map(|wheel| wheel.to_registry_dist(source, workspace_root))
+                            .map(|wheel| wheel.to_registry_wheel(source, workspace_root))
                             .collect::<Result<_, LockError>>()?;
                         let reg_built_dist = RegistryBuiltDist {
                             wheels,
@@ -4183,7 +4183,7 @@ impl Wheel {
         }
     }
 
-    pub(crate) fn to_registry_dist(
+    pub(crate) fn to_registry_wheel(
         &self,
         source: &RegistrySource,
         root: &Path,
