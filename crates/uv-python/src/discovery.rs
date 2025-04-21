@@ -239,7 +239,7 @@ pub enum Error {
     InvalidVersionRequest(String),
 
     // TODO(zanieb): Is this error case necessary still? We should probably drop it.
-    #[error("Interpreter discovery for `{0}` requires `{1}` but only {2} is allowed")]
+    #[error("Interpreter discovery for `{0}` requires `{1}` but only `{2}` is allowed")]
     SourceNotAllowed(PythonRequest, PythonSource, PythonPreference),
 }
 
