@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 use uv_auth::UrlAuthPolicies;
 use uv_cache::{Cache, CacheBucket};
@@ -766,6 +766,43 @@ impl ScriptInterpreter {
     }
 }
 
+/// Whether an environment is usable for the project, i.e., if it matches the requirements.
+fn environment_is_usable(
+    environment: &PythonEnvironment,
+    python_request: Option<&PythonRequest>,
+    requires_python: Option<&RequiresPython>,
+    cache: &Cache,
+) -> bool {
+    if !environment.matches_interpreter(environment.interpreter()) {
+        debug!("The virtual environment's interpreter version does not match the version it was created from.");
+        return false;
+    }
+
+    if let Some(request) = python_request {
+        if request.satisfied(environment.interpreter(), cache) {
+            debug!("The virtual environment's Python version satisfies the request: `{request}`");
+        } else {
+            debug!("The virtual environment's Python version does not satisfy the request: `{request}`");
+            return false;
+        }
+    }
+
+    if let Some(requires_python) = requires_python.as_ref() {
+        if requires_python.contains(environment.interpreter().python_version()) {
+            trace!(
+                "The virtual environment's Python version meets the Python requirement: `{requires_python}`"
+            );
+        } else {
+            debug!(
+                "The virtual environment's Python version does not meet the Python requirement: `{requires_python}`"
+            );
+            return false;
+        }
+    }
+
+    true
+}
+
 /// An interpreter suitable for the project.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
@@ -803,37 +840,13 @@ impl ProjectInterpreter {
         let venv = workspace.venv(active);
         match PythonEnvironment::from_root(&venv, cache) {
             Ok(venv) => {
-                let venv_matches_interpreter = venv.matches_interpreter(venv.interpreter());
-                if !venv_matches_interpreter {
-                    debug!("The virtual environment's interpreter version does not match the version it was created from.");
-                }
-                if venv_matches_interpreter
-                    && python_request.as_ref().is_none_or(|request| {
-                        if request.satisfied(venv.interpreter(), cache) {
-                            debug!(
-                                "The virtual environment's Python version satisfies `{}`",
-                                request.to_canonical_string()
-                            );
-                            true
-                        } else {
-                            debug!(
-                                "The virtual environment's Python version does not satisfy `{}`",
-                                request.to_canonical_string()
-                            );
-                            false
-                        }
-                    })
-                {
-                    if let Some(requires_python) = requires_python.as_ref() {
-                        if requires_python.contains(venv.interpreter().python_version()) {
-                            return Ok(Self::Environment(venv));
-                        }
-                        debug!(
-                            "The virtual environment's Python version does not meet the project's Python requirement: `{requires_python}`"
-                        );
-                    } else {
-                        return Ok(Self::Environment(venv));
-                    }
+                if environment_is_usable(
+                    &venv,
+                    python_request.as_ref(),
+                    requires_python.as_ref(),
+                    cache,
+                ) {
+                    return Ok(Self::Environment(venv));
                 }
             }
             Err(uv_python::Error::MissingEnvironment(_)) => {}
