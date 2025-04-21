@@ -3064,8 +3064,8 @@ fn add_non_normalized_source() -> Result<()> {
     Ok(())
 }
 
-/// Test updating an existing Git reference with branch/tag/rev options without respecifying URL
-/// in project
+/// Test updating an existing Git reference with branch/tag/rev options without re- specifying the
+/// URL.
 #[test]
 #[cfg(feature = "git")]
 fn add_update_git_reference_project() -> Result<()> {
@@ -3136,8 +3136,8 @@ fn add_update_git_reference_project() -> Result<()> {
     Ok(())
 }
 
-/// Test updating an existing Git reference with branch/tag/rev options without respecifying URL
-/// in script
+/// Test updating an existing Git reference with branch/tag/rev options without re-specifying the
+/// URL in a script.
 #[test]
 #[cfg(feature = "git")]
 fn add_update_git_reference_script() -> Result<()> {
