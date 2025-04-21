@@ -1632,7 +1632,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 {
                     // With 429 hitting GitHub may no longer be the fast path.
                     // Error and skip the subsequent Git fetch.
-                    return Err(error.into())
+                    return Err(error.into());
                 }
                 Err(err) => {
                     debug!("Failed to resolve commit via GitHub fast path for: {source} ({err})");
