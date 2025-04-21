@@ -94,7 +94,7 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
         let mut sigint_handle = handle_signal(SignalKind::interrupt())?;
         let mut sigint_count = 0;
 
-        // The following signals are terminal by default, but can be have user defined handlers.
+        // The following signals are terminal by default, but can have user defined handlers.
         // Forward them to the child process for handling.
         let mut sigusr1_handle = handle_signal(SignalKind::user_defined1())?;
         let mut sigusr2_handle = handle_signal(SignalKind::user_defined2())?;
