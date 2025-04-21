@@ -289,10 +289,15 @@ impl<'lock> PylockToml {
                 continue;
             }
 
+            // "The version MUST NOT be included when it cannot be guaranteed to be consistent with the code used (i.e. when a source tree is used)."
+            let version = version
+                .as_ref()
+                .filter(|_| !matches!(&**dist, Dist::Source(SourceDist::Directory(..))));
+
             // Create a `pylock.toml`-style package.
             let mut package = PylockTomlPackage {
                 name: dist.name().clone(),
-                version: version.clone(),
+                version: version.cloned(),
                 marker: node.marker.pep508(),
                 requires_python: None,
                 dependencies: vec![],
@@ -737,9 +742,21 @@ impl<'lock> PylockToml {
                 .index(target.install_path())?
                 .map(IndexUrl::into_url);
 
+            // Extract the `packages.name` field.
+            let name = package.id.name.clone();
+
+            // Extract the `packages.version` field.
+            // "The version MUST NOT be included when it cannot be guaranteed to be consistent with the code used (i.e. when a source tree is used)."
+            let version = package
+                .id
+                .version
+                .as_ref()
+                .filter(|_| directory.is_none())
+                .cloned();
+
             let package = PylockTomlPackage {
-                name: package.id.name.clone(),
-                version: package.id.version.clone(),
+                name,
+                version,
                 marker: node.marker,
                 requires_python: None,
                 dependencies: vec![],
