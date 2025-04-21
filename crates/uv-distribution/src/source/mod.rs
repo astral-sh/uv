@@ -1627,6 +1627,13 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 Ok(None) => {
                     // Nothing to do.
                 }
+                Err(uv_git::GitResolverError::Reqwest(error))
+                    if error.status() == Some(StatusCode::TOO_MANY_REQUESTS) =>
+                {
+                    // With 429 hitting GitHub may no longer be the fast path.
+                    // Error and skip the subsequent Git fetch.
+                    return Err(error.into())
+                }
                 Err(err) => {
                     debug!("Failed to resolve commit via GitHub fast path for: {source} ({err})");
                 }
