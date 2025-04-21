@@ -485,13 +485,28 @@ pub enum DownloadResult {
 
 impl ManagedPythonDownload {
     /// Return the first [`ManagedPythonDownload`] matching a request, if any.
+    ///
+    /// If there is no stable version matching the request, a compatible pre-release version will
+    /// be searched for — even if a pre-release was not explicitly requested.
     pub fn from_request(
         request: &PythonDownloadRequest,
     ) -> Result<&'static ManagedPythonDownload, Error> {
-        request
-            .iter_downloads()?
-            .next()
-            .ok_or(Error::NoDownloadFound(request.clone()))
+        if let Some(download) = request.iter_downloads()?.next() {
+            return Ok(download);
+        }
+
+        if !request.allows_prereleases() {
+            if let Some(download) = request
+                .clone()
+                .with_prereleases(true)
+                .iter_downloads()?
+                .next()
+            {
+                return Ok(download);
+            }
+        }
+
+        Err(Error::NoDownloadFound(request.clone()))
     }
 
     /// Iterate over all [`ManagedPythonDownload`]s.

@@ -206,9 +206,9 @@ impl TestContext {
                 .push(("python.exe".to_string(), "python".to_string()));
         } else {
             self.filters
-                .push((r"python\d".to_string(), "python".to_string()));
-            self.filters
                 .push((r"python\d.\d\d".to_string(), "python".to_string()));
+            self.filters
+                .push((r"python\d".to_string(), "python".to_string()));
         }
         self
     }
@@ -221,6 +221,25 @@ impl TestContext {
             format!(r"[\\/]{}", venv_bin_path(PathBuf::new()).to_string_lossy()),
             "/[BIN]".to_string(),
         ));
+        self
+    }
+
+    /// Add extra standard filtering for Python installation `bin/` directories, which are not
+    /// present on Windows but are on Unix. See [`TestContext::with_filtered_virtualenv_bin`] for
+    /// the virtual environment equivalent.
+    #[must_use]
+    pub fn with_filtered_python_install_bin(mut self) -> Self {
+        if cfg!(unix) {
+            self.filters.push((
+                r"[\\/]bin/python".to_string(),
+                "/[INSTALL-BIN]/python".to_string(),
+            ));
+        } else {
+            self.filters.push((
+                r"[\\/]python".to_string(),
+                "/[INSTALL-BIN]/python".to_string(),
+            ));
+        }
         self
     }
 
