@@ -1025,7 +1025,7 @@ mod tests {
                             referer: true,
                             default_headers: {
                                 "accept": "*/*",
-                                "user-agent": "uv/0.6.14",
+                                "user-agent": "uv/0.6.15",
                             },
                             read_timeout: 30s,
                         },
@@ -1203,7 +1203,7 @@ mod tests {
                             referer: true,
                             default_headers: {
                                 "accept": "*/*",
-                                "user-agent": "uv/0.6.14",
+                                "user-agent": "uv/0.6.15",
                             },
                             read_timeout: 30s,
                         },
