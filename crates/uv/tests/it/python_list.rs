@@ -352,3 +352,123 @@ fn python_list_duplicate_path_entries() {
         ");
     }
 }
+
+#[test]
+fn python_list_downloads() {
+    let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_keys();
+
+    // We do not test showing all interpreters — as it differs per platform
+    // Instead, we choose a Python version where our available distributions are stable
+
+    // Test the default display, which requires reverting the test context disabling Python downloads
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.17-[PLATFORM]    <download available>
+    pypy-3.10.16-[PLATFORM]       <download available>
+
+    ----- stderr -----
+    ");
+
+    // Show patch versions
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--all-versions").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.17-[PLATFORM]    <download available>
+    cpython-3.10.16-[PLATFORM]    <download available>
+    cpython-3.10.15-[PLATFORM]    <download available>
+    cpython-3.10.14-[PLATFORM]    <download available>
+    cpython-3.10.13-[PLATFORM]    <download available>
+    cpython-3.10.12-[PLATFORM]    <download available>
+    cpython-3.10.11-[PLATFORM]    <download available>
+    cpython-3.10.9-[PLATFORM]     <download available>
+    cpython-3.10.8-[PLATFORM]     <download available>
+    cpython-3.10.7-[PLATFORM]     <download available>
+    cpython-3.10.6-[PLATFORM]     <download available>
+    cpython-3.10.5-[PLATFORM]     <download available>
+    cpython-3.10.4-[PLATFORM]     <download available>
+    cpython-3.10.3-[PLATFORM]     <download available>
+    cpython-3.10.2-[PLATFORM]     <download available>
+    cpython-3.10.0-[PLATFORM]     <download available>
+    pypy-3.10.16-[PLATFORM]       <download available>
+    pypy-3.10.14-[PLATFORM]       <download available>
+    pypy-3.10.13-[PLATFORM]       <download available>
+    pypy-3.10.12-[PLATFORM]       <download available>
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
+#[cfg(feature = "python-managed")]
+fn python_list_downloads_installed() {
+    use assert_cmd::assert::OutputAssertExt;
+
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_python_names()
+        .with_filtered_python_install_bin()
+        .with_managed_python_dirs();
+
+    // We do not test showing all interpreters — as it differs per platform
+    // Instead, we choose a Python version where our available distributions are stable
+
+    // First, the download is shown as available
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.17-[PLATFORM]    <download available>
+    pypy-3.10.16-[PLATFORM]       <download available>
+
+    ----- stderr -----
+    ");
+
+    // TODO(zanieb): It'd be nice to test `--show-urls` here too but we need special filtering for
+    // the URL
+
+    // But not if `--only-installed` is used
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-installed").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+
+    // Install a Python version
+    context.python_install().arg("3.10").assert().success();
+
+    // Then, it should be listed as installed instead of available
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.17-[PLATFORM]    managed/cpython-3.10.17-[PLATFORM]/[INSTALL-BIN]/python
+    pypy-3.10.16-[PLATFORM]       <download available>
+
+    ----- stderr -----
+    ");
+
+    // But, the display should be reverted if `--only-downloads` is used
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--only-downloads").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.10.17-[PLATFORM]    <download available>
+    pypy-3.10.16-[PLATFORM]       <download available>
+
+    ----- stderr -----
+    ");
+
+    // And should not be shown if `--no-managed-python` is used
+    uv_snapshot!(context.filters(), context.python_list().arg("3.10").arg("--no-managed-python").env_remove("UV_PYTHON_DOWNLOADS"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    ");
+}
