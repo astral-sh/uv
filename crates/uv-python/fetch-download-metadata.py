@@ -582,6 +582,14 @@ def render(downloads: list[PythonDownload]) -> None:
     results = {}
     for download in downloads:
         key = download.key()
+        if (download.version.major, download.version.minor) < (3, 8):
+            logging.info(
+                "Skipping unsupported version %s%s",
+                key,
+                (" (%s)" % download.flavor) if download.flavor else "",
+            )
+            continue
+
         logging.info(
             "Selected %s%s", key, (" (%s)" % download.flavor) if download.flavor else ""
         )
