@@ -1201,3 +1201,34 @@ fn python_install_patch_dylib() {
     ----- stderr -----
     "###);
 }
+
+#[test]
+fn python_install_314() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // Install 3.14
+    // For now, this provides test coverage of pre-release handling
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.0a5 in [TIME]
+     + cpython-3.14.0a5-[PLATFORM]
+    ");
+
+    // Install a specific pre-release
+    uv_snapshot!(context.filters(), context.python_install().arg("3.14.0a4"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.14.0a4 in [TIME]
+     + cpython-3.14.0a4-[PLATFORM]
+    ");
+}

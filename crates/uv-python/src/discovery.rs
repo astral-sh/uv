@@ -2294,9 +2294,9 @@ impl VersionRequest {
         match self {
             Self::Default => false,
             Self::Any => true,
-            Self::Major(..) => true,
-            Self::MajorMinor(..) => true,
-            Self::MajorMinorPatch(..) => true,
+            Self::Major(..) => false,
+            Self::MajorMinor(..) => false,
+            Self::MajorMinorPatch(..) => false,
             Self::MajorMinorPrerelease(..) => true,
             Self::Range(specifiers, _) => specifiers.iter().any(VersionSpecifier::any_prerelease),
         }
