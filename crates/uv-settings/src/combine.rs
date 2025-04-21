@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use url::Url;
 
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, RequiredVersion, TargetTriple,
-    TrustedPublishing,
+    ConfigSettings, ExportFormat, IndexStrategy, KeyringProviderType, RequiredVersion,
+    TargetTriple, TrustedPublishing,
 };
 use uv_distribution_types::{Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex};
 use uv_install_wheel::LinkMode;
@@ -75,6 +75,7 @@ macro_rules! impl_combine_or {
 
 impl_combine_or!(AnnotationStyle);
 impl_combine_or!(ExcludeNewer);
+impl_combine_or!(ExportFormat);
 impl_combine_or!(ForkStrategy);
 impl_combine_or!(Index);
 impl_combine_or!(IndexStrategy);

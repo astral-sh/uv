@@ -5723,6 +5723,19 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
 </ul>
+</dd><dt id="uv-pip-compile--format"><a href="#uv-pip-compile--format"><code>--format</code></a> <i>format</i></dt><dd><p>The format in which the resolution should be output.</p>
+
+<p>Supports both <code>requirements.txt</code> and <code>pylock.toml</code> (PEP 751) output formats.</p>
+
+<p>uv will infer the output format from the file extension of the output file, if provided. Otherwise, defaults to <code>requirements.txt</code>.</p>
+
+<p>Possible values:</p>
+
+<ul>
+<li><code>requirements.txt</code>:  Export in <code>requirements.txt</code> format</li>
+
+<li><code>pylock.toml</code>:  Export in <code>pylock.toml</code> format</li>
+</ul>
 </dd><dt id="uv-pip-compile--generate-hashes"><a href="#uv-pip-compile--generate-hashes"><code>--generate-hashes</code></a></dt><dd><p>Include distribution hashes in the output file</p>
 
 </dd><dt id="uv-pip-compile--group"><a href="#uv-pip-compile--group"><code>--group</code></a> <i>group</i></dt><dd><p>Install the specified dependency group from a <code>pyproject.toml</code>.</p>
@@ -5872,7 +5885,7 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 
 <p>Multiple packages may be provided. Disable binaries for all packages with <code>:all:</code>. Clear previously specified packages with <code>:none:</code>.</p>
 
-</dd><dt id="uv-pip-compile--output-file"><a href="#uv-pip-compile--output-file"><code>--output-file</code></a>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the compiled requirements to the given <code>requirements.txt</code> file.</p>
+</dd><dt id="uv-pip-compile--output-file"><a href="#uv-pip-compile--output-file"><code>--output-file</code></a>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the compiled requirements to the given <code>requirements.txt</code> or <code>pylock.toml</code> file.</p>
 
 <p>If the file already exists, the existing versions will be preferred when resolving dependencies, unless <code>--upgrade</code> is also specified.</p>
 

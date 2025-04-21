@@ -1638,6 +1638,7 @@ impl ExportSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipCompileSettings {
+    pub(crate) format: Option<ExportFormat>,
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
@@ -1666,6 +1667,7 @@ impl PipCompileSettings {
             deps,
             group,
             output_file,
+            format,
             no_strip_extras,
             strip_extras,
             no_strip_markers,
@@ -1754,6 +1756,7 @@ impl PipCompileSettings {
         };
 
         Self {
+            format,
             src_file,
             constraints: constraints
                 .into_iter()

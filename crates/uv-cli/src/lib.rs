@@ -1075,12 +1075,21 @@ pub struct PipCompileArgs {
     #[arg(long, group = "sources")]
     pub group: Vec<PipGroupName>,
 
-    /// Write the compiled requirements to the given `requirements.txt` file.
+    /// Write the compiled requirements to the given `requirements.txt` or `pylock.toml` file.
     ///
     /// If the file already exists, the existing versions will be preferred when resolving
     /// dependencies, unless `--upgrade` is also specified.
     #[arg(long, short)]
     pub output_file: Option<PathBuf>,
+
+    /// The format in which the resolution should be output.
+    ///
+    /// Supports both `requirements.txt` and `pylock.toml` (PEP 751) output formats.
+    ///
+    /// uv will infer the output format from the file extension of the output file, if
+    /// provided. Otherwise, defaults to `requirements.txt`.
+    #[arg(long, value_enum)]
+    pub format: Option<ExportFormat>,
 
     /// Include extras in the output file.
     ///

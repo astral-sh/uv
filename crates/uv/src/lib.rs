@@ -450,6 +450,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.extras,
                 groups,
                 args.settings.output_file.as_deref(),
+                args.format,
                 args.settings.resolution,
                 args.settings.prerelease,
                 args.settings.fork_strategy,
