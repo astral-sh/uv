@@ -14,10 +14,12 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItem;
 
 use crate::graph_ops::{marker_reachability, Reachable};
+pub use crate::lock::export::pylock_toml::PylockToml;
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
 use crate::universal_marker::resolve_conflicts;
 use crate::{Installable, Package};
 
+mod pylock_toml;
 mod requirements_txt;
 
 /// A flat requirement, with its associated marker.

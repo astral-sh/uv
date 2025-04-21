@@ -42,13 +42,15 @@ use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    ConflictPackage, Conflicts, HashDigest, HashDigests, ParsedArchiveUrl, ParsedGitUrl,
+    ConflictPackage, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
+    ParsedGitUrl,
 };
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::WorkspaceMember;
 
 use crate::fork_strategy::ForkStrategy;
+pub use crate::lock::export::PylockToml;
 pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;
@@ -3685,7 +3687,7 @@ impl SourceDist {
         }
     }
 
-    fn hash(&self) -> Option<&Hash> {
+    pub(crate) fn hash(&self) -> Option<&Hash> {
         match &self {
             SourceDist::Metadata { metadata } => metadata.hash.as_ref(),
             SourceDist::Url { metadata, .. } => metadata.hash.as_ref(),
@@ -3693,7 +3695,7 @@ impl SourceDist {
         }
     }
 
-    fn size(&self) -> Option<u64> {
+    pub(crate) fn size(&self) -> Option<u64> {
         match &self {
             SourceDist::Metadata { metadata } => metadata.size,
             SourceDist::Url { metadata, .. } => metadata.size,
@@ -4181,7 +4183,7 @@ impl Wheel {
         }
     }
 
-    fn to_registry_dist(
+    pub(crate) fn to_registry_dist(
         &self,
         source: &RegistrySource,
         root: &Path,
@@ -4562,6 +4564,37 @@ impl<'de> serde::Deserialize<'de> for Hash {
         }
 
         deserializer.deserialize_str(Visitor)
+    }
+}
+
+impl From<Hash> for Hashes {
+    fn from(value: Hash) -> Self {
+        match value.0.algorithm {
+            HashAlgorithm::Md5 => Hashes {
+                md5: Some(value.0.digest),
+                sha256: None,
+                sha384: None,
+                sha512: None,
+            },
+            HashAlgorithm::Sha256 => Hashes {
+                md5: None,
+                sha256: Some(value.0.digest),
+                sha384: None,
+                sha512: None,
+            },
+            HashAlgorithm::Sha384 => Hashes {
+                md5: None,
+                sha256: None,
+                sha384: Some(value.0.digest),
+                sha512: None,
+            },
+            HashAlgorithm::Sha512 => Hashes {
+                md5: None,
+                sha256: None,
+                sha384: None,
+                sha512: Some(value.0.digest),
+            },
+        }
     }
 }
 

@@ -3763,7 +3763,7 @@ pub struct TreeArgs {
 pub struct ExportArgs {
     /// The format to which `uv.lock` should be exported.
     ///
-    /// At present, only `requirements-txt` is supported.
+    /// Supports both `requirements.txt` and `pylock.toml` (PEP 751) output formats.
     #[arg(long, value_enum, default_value_t = ExportFormat::default())]
     pub format: ExportFormat,
 

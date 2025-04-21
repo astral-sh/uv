@@ -11,4 +11,8 @@ pub enum ExportFormat {
         clap(name = "requirements.txt", alias = "requirements-txt")
     )]
     RequirementsTxt,
+    /// Export in `pylock.toml` format.
+    #[serde(rename = "pylock.toml", alias = "pylock-toml")]
+    #[cfg_attr(feature = "clap", clap(name = "pylock.toml", alias = "pylock-toml"))]
+    PylockToml,
 }
