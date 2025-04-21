@@ -18,10 +18,10 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
     ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement, VersionOrUrl,
 };
-use uv_pypi_types::{Identifier, Metadata23, VerbatimParsedUrl};
+use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
 
 use crate::serde_verbatim::SerdeVerbatim;
-use crate::Error;
+use crate::{BuildBackendSettings, Error};
 
 /// By default, we ignore generated python files.
 pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
@@ -794,149 +794,6 @@ pub(crate) struct Tool {
 pub(crate) struct ToolUv {
     /// Configuration for building source distributions and wheels with the uv build backend
     build_backend: Option<BuildBackendSettings>,
-}
-
-/// To select which files to include in the source distribution, we first add the includes, then
-/// remove the excludes from that.
-///
-/// ## Include and exclude configuration
-///
-/// When building the source distribution, the following files and directories are included:
-/// * `pyproject.toml`
-/// * The module under `tool.uv.build-backend.module-root`, by default
-///   `src/<module-name or project_name_with_underscores>/**`.
-/// * `project.license-files` and `project.readme`.
-/// * All directories under `tool.uv.build-backend.data`.
-/// * All patterns from `tool.uv.build-backend.source-include`.
-///
-/// From these, we remove the `tool.uv.build-backend.source-exclude` matches.
-///
-/// When building the wheel, the following files and directories are included:
-/// * The module under `tool.uv.build-backend.module-root`, by default
-///   `src/<module-name or project_name_with_underscores>/**`.
-/// * `project.license-files` and `project.readme`, as part of the project metadata.
-/// * Each directory under `tool.uv.build-backend.data`, as data directories.
-///
-/// From these, we remove the `tool.uv.build-backend.source-exclude` and
-/// `tool.uv.build-backend.wheel-exclude` matches. The source dist excludes are applied to avoid
-/// source tree -> wheel source including more files than
-/// source tree -> source distribution -> wheel.
-///
-/// There are no specific wheel includes. There must only be one top level module, and all data
-/// files must either be under the module root or in a data directory. Most packages store small
-/// data in the module root alongside the source code.
-///
-/// ## Include and exclude syntax
-///
-/// Includes are anchored, which means that `pyproject.toml` includes only
-/// `<project root>/pyproject.toml`. Use for example `assets/**/sample.csv` to include for all
-/// `sample.csv` files in `<project root>/assets` or any child directory. To recursively include
-/// all files under a directory, use a `/**` suffix, e.g. `src/**`. For performance and
-/// reproducibility, avoid unanchored matches such as `**/sample.csv`.
-///
-/// Excludes are not anchored, which means that `__pycache__` excludes all directories named
-/// `__pycache__` and it's children anywhere. To anchor a directory, use a `/` prefix, e.g.,
-/// `/dist` will exclude only `<project root>/dist`.
-///
-/// The glob syntax is the reduced portable glob from
-/// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
-#[derive(Deserialize, Debug, Clone)]
-#[serde(default, rename_all = "kebab-case")]
-pub(crate) struct BuildBackendSettings {
-    /// The directory that contains the module directory, usually `src`, or an empty path when
-    /// using the flat layout over the src layout.
-    pub(crate) module_root: PathBuf,
-
-    /// The name of the module directory inside `module-root`.
-    ///
-    /// The default module name is the package name with dots and dashes replaced by underscores.
-    ///
-    /// Note that using this option runs the risk of creating two packages with different names but
-    /// the same module names. Installing such packages together leads to unspecified behavior,
-    /// often with corrupted files or directory trees.
-    pub(crate) module_name: Option<Identifier>,
-
-    /// Glob expressions which files and directories to additionally include in the source
-    /// distribution.
-    ///
-    /// `pyproject.toml` and the contents of the module directory are always included.
-    ///
-    /// The glob syntax is the reduced portable glob from
-    /// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
-    pub(crate) source_include: Vec<String>,
-
-    /// If set to `false`, the default excludes aren't applied.
-    ///
-    /// Default excludes: `__pycache__`, `*.pyc`, and `*.pyo`.
-    pub(crate) default_excludes: bool,
-
-    /// Glob expressions which files and directories to exclude from the source distribution.
-    pub(crate) source_exclude: Vec<String>,
-
-    /// Glob expressions which files and directories to exclude from the wheel.
-    pub(crate) wheel_exclude: Vec<String>,
-
-    /// Data includes for wheels.
-    ///
-    /// The directories included here are also included in the source distribution. They are copied
-    /// to the right wheel subdirectory on build.
-    pub(crate) data: WheelDataIncludes,
-}
-
-impl Default for BuildBackendSettings {
-    fn default() -> Self {
-        Self {
-            module_root: PathBuf::from("src"),
-            module_name: None,
-            source_include: Vec::new(),
-            default_excludes: true,
-            source_exclude: Vec::new(),
-            wheel_exclude: Vec::new(),
-            data: WheelDataIncludes::default(),
-        }
-    }
-}
-
-/// Data includes for wheels.
-///
-/// Each entry is a directory, whose contents are copied to the matching directory in the wheel in
-/// `<name>-<version>.data/(purelib|platlib|headers|scripts|data)`. Upon installation, this data
-/// is moved to its target location, as defined by
-/// <https://docs.python.org/3.12/library/sysconfig.html#installation-paths>:
-/// - `data`: Installed over the virtualenv environment root. Warning: This may override existing
-///   files!
-/// - `scripts`: Installed to the directory for executables, `<venv>/bin` on Unix or
-///   `<venv>\Scripts` on Windows. This directory is added to PATH when the virtual environment is
-///   activated or when using `uv run`, so this data type can be used to install additional
-///   binaries. Consider using `project.scripts` instead for starting Python code.
-/// - `headers`: Installed to the include directory, where compilers building Python packages with
-///   this package as built requirement will search for header files.
-/// - `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended to
-///   uses these two options.
-#[derive(Default, Deserialize, Debug, Clone)]
-// `deny_unknown_fields` to catch typos such as `header` vs `headers`.
-#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
-pub(crate) struct WheelDataIncludes {
-    purelib: Option<String>,
-    platlib: Option<String>,
-    headers: Option<String>,
-    scripts: Option<String>,
-    data: Option<String>,
-}
-
-impl WheelDataIncludes {
-    /// Yield all data directories name and corresponding paths.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (&'static str, &str)> {
-        [
-            ("purelib", self.purelib.as_deref()),
-            ("platlib", self.platlib.as_deref()),
-            ("headers", self.headers.as_deref()),
-            ("scripts", self.scripts.as_deref()),
-            ("data", self.data.as_deref()),
-        ]
-        .into_iter()
-        .filter_map(|(name, value)| Some((name, value?)))
-    }
 }
 
 #[cfg(test)]

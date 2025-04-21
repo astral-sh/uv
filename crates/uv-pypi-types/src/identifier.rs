@@ -1,3 +1,4 @@
+use serde::{Serialize, Serializer};
 use std::fmt::Display;
 use std::str::FromStr;
 use thiserror::Error;
@@ -84,6 +85,39 @@ impl<'de> serde::de::Deserialize<'de> for Identifier {
     {
         let s = String::deserialize(deserializer)?;
         Identifier::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl Serialize for Identifier {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        Serialize::serialize(&self.0, serializer)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for Identifier {
+    fn schema_name() -> String {
+        "Identifier".to_string()
+    }
+
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            string: Some(Box::new(schemars::schema::StringValidation {
+                // Best-effort Unicode support (https://stackoverflow.com/a/68844380/3549270)
+                pattern: Some(r"^[_\p{Alphabetic}][_0-9\p{Alphabetic}]*$".to_string()),
+                ..schemars::schema::StringValidation::default()
+            })),
+            metadata: Some(Box::new(schemars::schema::Metadata {
+                description: Some("An identifier in Python".to_string()),
+                ..schemars::schema::Metadata::default()
+            })),
+            ..schemars::schema::SchemaObject::default()
+        }
+        .into()
     }
 }
 

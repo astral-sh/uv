@@ -17,8 +17,10 @@ use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 use uv_pypi_types::Identifier;
 use uv_warnings::warn_user_once;
 
-use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
-use crate::{find_roots, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
+use crate::metadata::DEFAULT_EXCLUDES;
+use crate::{
+    find_roots, BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+};
 
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_wheel(
