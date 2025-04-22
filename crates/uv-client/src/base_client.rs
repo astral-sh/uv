@@ -16,6 +16,7 @@ use reqwest_retry::{
     DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
 };
 use tracing::{debug, trace};
+use url::ParseError;
 use url::Url;
 
 use uv_auth::{AuthMiddleware, UrlAuthPolicies};
@@ -520,12 +521,15 @@ impl RedirectClientWithMiddleware {
         }
     }
 
-    /// Executes a request. If the response is a 302 redirect, executes the
-    /// request again with the redirect location URL (up to a maximum number
-    /// of redirects).
+    /// Executes a request. If the response is a redirect (one of HTTP 301, 302, 307, or 308), the
+    /// request is executed again with the redirect location URL (up to a maximum number of
+    /// redirects).
     ///
-    /// Unlike the built-in reqwest redirect policies, this sends the
-    /// redirect request through the entire middleware pipeline again.
+    /// Unlike the built-in reqwest redirect policies, this sends the redirect request through the
+    /// entire middleware pipeline again.
+    ///
+    /// See RFC 7231 7.1.2 <https://www.rfc-editor.org/rfc/rfc7231#section-7.1.2> for details on
+    /// redirect semantics.
     async fn execute_with_redirect_handling(
         &self,
         req: Request,
@@ -536,6 +540,7 @@ impl RedirectClientWithMiddleware {
         let max_redirects = 10;
 
         loop {
+            let request_url = request.url().clone();
             let result = self
                 .client
                 .execute(request.try_clone().expect("HTTP request must be cloneable"))
@@ -568,11 +573,27 @@ impl RedirectClientWithMiddleware {
                             "Invalid HTTP {status} 'Location' value: must only contain visible ascii characters"
                         ))
                     })?;
-                let redirect_url = Url::parse(location).map_err(|err| {
-                    reqwest_middleware::Error::Middleware(anyhow!(
-                        "Invalid HTTP {status} 'Location' value `{location}`: {err}"
-                    ))
-                })?;
+
+                let mut redirect_url = match Url::parse(location) {
+                    Ok(url) => url,
+                    // Per RFC 7231, URLs should be resolved against the request URL.
+                    Err(ParseError::RelativeUrlWithoutBase) => request_url.join(location).map_err(|err| {
+                        reqwest_middleware::Error::Middleware(anyhow!(
+                            "Invalid HTTP {status} 'Location' value `{location}` relative to `{request_url}`: {err}"
+                        ))
+                    })?,
+                    Err(err) => {
+                        return Err(reqwest_middleware::Error::Middleware(anyhow!(
+                            "Invalid HTTP {status} 'Location' value `{location}`: {err}"
+                        )));
+                    }
+                };
+
+                // Per RFC 7231, fragments must be propagated
+                if let Some(fragment) = request_url.fragment() {
+                    redirect_url.set_fragment(Some(fragment));
+                }
+
                 debug!("Received HTTP {status} to {redirect_url}");
                 *request.url_mut() = redirect_url;
                 redirects += 1;
