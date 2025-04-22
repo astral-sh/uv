@@ -21,9 +21,9 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence  # noqa:I001
     from typing import Any  # noqa:I001
 
-# Use "uv build-backend" command rather than "uv-build".  This options is provided
-# for downstreams who provide "uv" and wish to avoid building a partially overlapping
-# "uv-build" executable.
+# Use the `uv build-backend` command rather than `uv-build`. This options is provided
+# for downstream distributions who provide `uv` and wish to avoid building a partially
+# overlapping `uv-build` executable.
 USE_UV_EXECUTABLE = False
 
 
@@ -43,10 +43,12 @@ def call(
     import sys
 
     warn_config_settings(config_settings)
+
+    uv_bin_name = "uv" if USE_UV_EXECUTABLE else "uv-build"
     # Unlike `find_uv_bin`, this mechanism must work according to PEP 517
-    uv_bin = shutil.which("uv" if USE_UV_EXECUTABLE else "uv-build")
+    uv_bin = shutil.which(uv_bin_name)
     if uv_bin is None:
-        raise RuntimeError("uv was not properly installed")
+        raise RuntimeError(f"{uv_bin_name} was not properly installed")
     build_backend_args = ["build-backend"] if USE_UV_EXECUTABLE else []
     # Forward stderr, capture stdout for the filename
     result = subprocess.run(
@@ -59,7 +61,10 @@ def call(
     sys.stdout.writelines(stdout[:-1])
     # Fail explicitly instead of an irrelevant stacktrace
     if not stdout:
-        print("uv subprocess did not return a filename on stdout", file=sys.stderr)
+        print(
+            f"{uv_bin_name} subprocess did not return a filename on stdout",
+            file=sys.stderr,
+        )
         sys.exit(1)
     return stdout[-1].strip()
 
