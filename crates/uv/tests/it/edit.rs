@@ -10436,6 +10436,43 @@ fn add_empty_ignore_error_codes() -> Result<()> {
     Ok(())
 }
 
+/// uv should not report a credential error on a missing package for pytorch since
+/// pytorch returns 403s to indicate not found.
+#[test]
+fn add_missing_package_on_pytorch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+
+        [tool.uv.sources]
+        fakepkg = { index = "pytorch" }
+
+        [[tool.uv.index]]
+        name = "pytorch"
+        url = "https://download.pytorch.org/whl/cpu"
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("fakepkg"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because fakepkg was not found in the package registry and your project depends on fakepkg, we can conclude that your project's requirements are unsatisfiable.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+    Ok(())
+}
+
 /// uv should fail to parse `pyproject.toml` if `ignore-error-codes`
 /// contains an invalid status code number.
 #[test]

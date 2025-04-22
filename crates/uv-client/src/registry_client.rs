@@ -346,7 +346,10 @@ impl RegistryClient {
                                     results.push((index.url, MetadataFormat::Simple(metadata)));
                                     break;
                                 }
+                                // Package not found, so we will continue on to the next index (if there is one)
                                 SimpleMetadataSearchOutcome::NotFound => {}
+                                // The search failed because of an HTTP status code that we don't ignore for
+                                // this index. We end our search here.
                                 SimpleMetadataSearchOutcome::StatusCodeFailure => break,
                             }
                         }
