@@ -16264,7 +16264,7 @@ fn pep_751_compile_registry_wheel() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig")?;
 
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16277,7 +16277,7 @@ fn pep_751_compile_registry_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "iniconfig"
@@ -16313,7 +16313,7 @@ fn pep_751_compile_registry_sdist() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source-distribution")?;
 
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16326,7 +16326,7 @@ fn pep_751_compile_registry_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "source-distribution"
@@ -16397,7 +16397,7 @@ fn pep_751_compile_directory() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16410,7 +16410,7 @@ fn pep_751_compile_directory() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "anyio"
@@ -16468,7 +16468,7 @@ fn pep_751_compile_git() -> Result<()> {
         "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@0.0.1",
     )?;
 
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16481,7 +16481,7 @@ fn pep_751_compile_git() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "uv-public-pypackage"
@@ -16518,7 +16518,7 @@ fn pep_751_compile_url_wheel() -> Result<()> {
         "anyio @ https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl",
     )?;
 
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16531,7 +16531,7 @@ fn pep_751_compile_url_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "anyio"
@@ -16582,7 +16582,7 @@ fn pep_751_compile_url_sdist() -> Result<()> {
         "anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz",
     )?;
 
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16595,7 +16595,7 @@ fn pep_751_compile_url_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "anyio"
@@ -16651,7 +16651,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("./iniconfig-2.0.0-py3-none-any.whl")?;
 
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16664,7 +16664,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "iniconfig"
@@ -16689,7 +16689,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
     );
 
     // Ensure that the path is relative to the output `pylock.toml` file.
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16702,7 +16702,7 @@ fn pep_751_compile_path_wheel() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o nested/pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "iniconfig"
@@ -16730,7 +16730,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("./iniconfig-2.0.0.tar.gz")?;
 
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16743,7 +16743,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "iniconfig"
@@ -16769,7 +16769,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     );
 
     // Ensure that the path is relative to the output `pylock.toml` file.
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16782,7 +16782,7 @@ fn pep_751_compile_path_sdist() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o nested/pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "iniconfig"
@@ -16806,7 +16806,7 @@ fn pep_751_compile_preferences() -> Result<()> {
         idna==3.0.0
     "})?;
 
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16819,7 +16819,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "anyio"
@@ -16847,7 +16847,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     requirements_txt.write_str("anyio")?;
 
     // The `anyio` version should be retained, since we respect the existing preferences.
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16860,7 +16860,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "anyio"
@@ -16885,7 +16885,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     "#);
 
     // Unless we pass `--upgrade-package`.
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16900,7 +16900,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "anyio"
@@ -16925,7 +16925,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     "#);
 
     // Or `--upgrade`.
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16939,7 +16939,7 @@ fn pep_751_compile_preferences() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "anyio"
@@ -16973,7 +16973,7 @@ fn pep_751_compile_warn() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("iniconfig")?;
 
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -16987,7 +16987,7 @@ fn pep_751_compile_warn() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --emit-index-url
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "iniconfig"
@@ -17011,7 +17011,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
     requirements_txt.write_str("black")?;
 
     // `colorama` should be excluded, since we're on Linux.
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--python-platform")
@@ -17025,7 +17025,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --python-platform linux -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "black"
@@ -17090,7 +17090,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
     "#);
 
     // `colorama` should be included, since we're on Windows.
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--python-platform")
@@ -17104,7 +17104,7 @@ fn pep_751_compile_non_universal() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --python-platform windows -o pylock.toml
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "black"
@@ -17185,7 +17185,7 @@ fn pep_751_compile_no_emit_package() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("anyio")?;
 
-    uv_snapshot!(context
+    uv_snapshot!(context.filters(), context
         .pip_compile()
         .arg("requirements.txt")
         .arg("--universal")
@@ -17200,7 +17200,7 @@ fn pep_751_compile_no_emit_package() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --no-emit-package idna
     lock-version = "1.0"
     created-by = "uv"
-    requires-python = ">=3.12.9"
+    requires-python = ">=3.12.[X]"
 
     [[packages]]
     name = "anyio"
