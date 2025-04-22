@@ -70,7 +70,7 @@ As of this release, `pylock.toml` is supported in the following commands:
 - Fix lockfile note ([#12793](https://github.com/astral-sh/uv/pull/12793))
 - Fix typo in a reference ([#12858](https://github.com/astral-sh/uv/pull/12858))
 - Improve docs for `uv python list --only-downloads` and `--only-installed` ([#12916](https://github.com/astral-sh/uv/pull/12916))
-- Update not on lack of musl distributions to ARM-only ([#12825](https://github.com/astral-sh/uv/pull/12825))
+- Update note on lack of musl distributions to ARM-only ([#12825](https://github.com/astral-sh/uv/pull/12825))
 - Add section on shebangs for scripts ([#11553](https://github.com/astral-sh/uv/pull/11553))
 - Display aliases for long and short args in the CLI reference ([#12824](https://github.com/astral-sh/uv/pull/12824))
 - Fix highlight line in explicit index documentation ([#12887](https://github.com/astral-sh/uv/pull/12887))
