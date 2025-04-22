@@ -1,6 +1,6 @@
 [package]
 name = "uv-build"
-version = "0.6.14"
+version = "0.6.15"
 edition.workspace = true
 rust-version.workspace = true
 homepage.workspace = true
