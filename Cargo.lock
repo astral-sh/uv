@@ -4935,6 +4935,7 @@ dependencies = [
  "uv-torch",
  "uv-version",
  "uv-warnings",
+ "wiremock",
 ]
 
 [[package]]
