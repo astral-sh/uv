@@ -1,9 +1,6 @@
 use std::io::Cursor;
 use std::process::Command;
 
-#[cfg(feature = "git")]
-use crate::common::{self, decode_token};
-
 use anyhow::Result;
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
@@ -20,7 +17,6 @@ use wiremock::{
 
 #[cfg(feature = "git")]
 use crate::common::{self, decode_token};
-
 use crate::common::{
     build_vendor_links_url, download_to_disk, get_bin, uv_snapshot, venv_bin_path,
     venv_to_interpreter, TestContext,
