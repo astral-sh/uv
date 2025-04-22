@@ -355,7 +355,7 @@ uv run [OPTIONS] [COMMAND]
 
 </dd><dt id="uv-run--no-group"><a href="#uv-run--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 
-<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
+<p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -1757,7 +1757,7 @@ uv sync [OPTIONS]
 
 </dd><dt id="uv-sync--no-group"><a href="#uv-sync--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 
-<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
+<p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -2492,7 +2492,7 @@ uv export [OPTIONS]
 
 </dd><dt id="uv-export--no-group"><a href="#uv-export--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 
-<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
+<p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -2855,7 +2855,7 @@ uv tree [OPTIONS]
 
 </dd><dt id="uv-tree--no-group"><a href="#uv-tree--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 
-<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
+<p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 

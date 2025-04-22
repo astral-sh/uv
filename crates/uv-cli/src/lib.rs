@@ -2837,7 +2837,7 @@ pub struct RunArgs {
 
     /// Disable the specified dependency group.
     ///
-    /// This options always takes precedence over default groups,
+    /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
@@ -3132,7 +3132,7 @@ pub struct SyncArgs {
 
     /// Disable the specified dependency group.
     ///
-    /// This options always takes precedence over default groups,
+    /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
@@ -3674,7 +3674,7 @@ pub struct TreeArgs {
 
     /// Disable the specified dependency group.
     ///
-    /// This options always takes precedence over default groups,
+    /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
@@ -3850,7 +3850,7 @@ pub struct ExportArgs {
 
     /// Disable the specified dependency group.
     ///
-    /// This options always takes precedence over default groups,
+    /// This option always takes precedence over default groups,
     /// `--all-groups`, and `--group`.
     ///
     /// May be provided multiple times.
