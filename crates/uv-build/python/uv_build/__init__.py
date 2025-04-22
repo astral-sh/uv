@@ -21,6 +21,11 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence  # noqa:I001
     from typing import Any  # noqa:I001
 
+# Use "uv build-backend" command rather than "uv-build".  This options is provided
+# for downstreams who provide "uv" and wish to avoid building a partially overlapping
+# "uv-build" executable.
+USE_UV_EXECUTABLE = False
+
 
 def warn_config_settings(config_settings: "Mapping[Any, Any] | None" = None) -> None:
     import sys
@@ -39,11 +44,14 @@ def call(
 
     warn_config_settings(config_settings)
     # Unlike `find_uv_bin`, this mechanism must work according to PEP 517
-    uv_bin = shutil.which("uv-build")
+    uv_bin = shutil.which("uv" if USE_UV_EXECUTABLE else "uv-build")
     if uv_bin is None:
         raise RuntimeError("uv was not properly installed")
+    build_backend_args = ["build-backend"] if USE_UV_EXECUTABLE else []
     # Forward stderr, capture stdout for the filename
-    result = subprocess.run([uv_bin, *args], stdout=subprocess.PIPE)
+    result = subprocess.run(
+        [uv_bin, *build_backend_args, *args], stdout=subprocess.PIPE
+    )
     if result.returncode != 0:
         sys.exit(result.returncode)
     # If there was extra stdout, forward it (there should not be extra stdout)
