@@ -589,6 +589,13 @@ impl RedirectClientWithMiddleware {
                     }
                 };
 
+                // Ensure the URL is a valid HTTP URI.
+                if let Err(err) = redirect_url.as_str().parse::<http::Uri>() {
+                    return Err(reqwest_middleware::Error::Middleware(anyhow!(
+                        "Invalid HTTP {status} 'Location' value `{location}`: {err}"
+                    )));
+                }
+
                 // Per RFC 7231, fragments must be propagated
                 if let Some(fragment) = request_url.fragment() {
                     redirect_url.set_fragment(Some(fragment));
