@@ -17,7 +17,6 @@ use wiremock::{
 
 #[cfg(feature = "git")]
 use crate::common::{self, decode_token};
-
 use crate::common::{
     build_vendor_links_url, download_to_disk, get_bin, uv_snapshot, venv_bin_path,
     venv_to_interpreter, TestContext,
@@ -11103,6 +11102,40 @@ fn pep_751_multiple_sources() -> Result<()> {
 
     ----- stderr -----
     error: Package `typing-extensions` includes both a registry (`packages.wheels`) and an archive source (`packages.archive`)
+    "
+    );
+
+    Ok(())
+}
+
+/// Test that uv doesn't hang if an index returns a distribution for the wrong package.
+#[tokio::test]
+async fn bogus_redirect() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let redirect_server = MockServer::start().await;
+
+    // Configure a bogus redirect where for all packages, anyio is returned.
+    Mock::given(method("GET"))
+        .respond_with(
+            ResponseTemplate::new(302).insert_header("Location", "https://pypi.org/simple/anyio/"),
+        )
+        .mount(&redirect_server)
+        .await;
+
+    uv_snapshot!(
+        context
+            .pip_install()
+            .arg("--default-index")
+            .arg(redirect_server.uri())
+            .arg("sniffio"),
+        @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The index returned metadata for the wrong package: expected distribution for sniffio, got distribution for anyio
     "
     );
 
