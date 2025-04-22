@@ -878,9 +878,7 @@
             "null"
           ],
           "items": {
-            "type": "integer",
-            "format": "uint16",
-            "minimum": 0.0
+            "$ref": "#/definitions/StatusCode"
           }
         },
         "name": {
@@ -2017,6 +2015,13 @@
           ]
         }
       }
+    },
+    "StatusCode": {
+      "description": "HTTP status code (100-599)",
+      "type": "integer",
+      "format": "uint16",
+      "maximum": 599.0,
+      "minimum": 100.0
     },
     "String": {
       "type": "string"

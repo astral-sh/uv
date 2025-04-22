@@ -5510,14 +5510,16 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "foobar"}}"#)
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
     Keyring request for public@pypi-proxy.fly.dev
-    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/anyio/`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/simple/anyio/)
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 }
@@ -5551,14 +5553,16 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"other": "heron"}}"#)
         .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
     success: false
-    exit_code: 2
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
     Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
     Keyring request for public@pypi-proxy.fly.dev
-    error: Failed to fetch: `https://pypi-proxy.fly.dev/basic-auth/simple/anyio/`
-      Caused by: HTTP status client error (401 Unauthorized) for url (https://pypi-proxy.fly.dev/basic-auth/simple/anyio/)
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
     "
     );
 }

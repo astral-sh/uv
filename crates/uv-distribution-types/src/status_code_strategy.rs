@@ -45,6 +45,18 @@ impl IndexStatusCodeStrategy {
         }
     }
 
+    /// Derive a strategy for ignoring authentication error codes.
+    pub fn ignore_authentication_error_codes() -> Self {
+        Self::IgnoreErrorCodes {
+            status_codes: FxHashSet::from_iter([
+                StatusCode::UNAUTHORIZED,
+                StatusCode::FORBIDDEN,
+                StatusCode::NETWORK_AUTHENTICATION_REQUIRED,
+                StatusCode::PROXY_AUTHENTICATION_REQUIRED,
+            ]),
+        }
+    }
+
     /// Based on the strategy, decide whether to continue searching the next index
     /// based on the status code returned by this one.
     pub fn handle_status_code(
@@ -53,17 +65,22 @@ impl IndexStatusCodeStrategy {
         index_url: &IndexUrl,
         capabilities: &IndexCapabilities,
     ) -> IndexStatusCodeDecision {
-        capabilities.set_by_status_code(status_code, index_url);
         match self {
             IndexStatusCodeStrategy::Default => match status_code {
-                StatusCode::NOT_FOUND => IndexStatusCodeDecision::Continue,
-                StatusCode::UNAUTHORIZED => IndexStatusCodeDecision::Stop,
-                StatusCode::FORBIDDEN => IndexStatusCodeDecision::Stop,
-                _ => IndexStatusCodeDecision::Stop,
+                StatusCode::NOT_FOUND => IndexStatusCodeDecision::Ignore,
+                StatusCode::UNAUTHORIZED => {
+                    capabilities.set_unauthorized(index_url.clone());
+                    IndexStatusCodeDecision::Fail
+                }
+                StatusCode::FORBIDDEN => {
+                    capabilities.set_forbidden(index_url.clone());
+                    IndexStatusCodeDecision::Fail
+                }
+                _ => IndexStatusCodeDecision::Fail,
             },
             IndexStatusCodeStrategy::IgnoreErrorCodes { status_codes } => {
                 if status_codes.contains(&status_code) {
-                    IndexStatusCodeDecision::Continue
+                    IndexStatusCodeDecision::Ignore
                 } else {
                     IndexStatusCodeStrategy::Default.handle_status_code(
                         status_code,
@@ -79,8 +96,8 @@ impl IndexStatusCodeStrategy {
 /// Decision on whether to continue searching the next index.
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub enum IndexStatusCodeDecision {
-    Continue,
-    Stop,
+    Ignore,
+    Fail,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -180,7 +197,7 @@ mod tests {
         let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Stop);
+        assert_eq!(decision, IndexStatusCodeDecision::Fail);
     }
 
     #[test]
@@ -190,7 +207,7 @@ mod tests {
         let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Stop);
+        assert_eq!(decision, IndexStatusCodeDecision::Fail);
         assert!(capabilities.unauthorized(&index_url));
         assert!(!capabilities.forbidden(&index_url));
     }
@@ -202,7 +219,7 @@ mod tests {
         let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Stop);
+        assert_eq!(decision, IndexStatusCodeDecision::Fail);
         assert!(capabilities.forbidden(&index_url));
         assert!(!capabilities.unauthorized(&index_url));
     }
@@ -214,7 +231,7 @@ mod tests {
         let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Continue);
+        assert_eq!(decision, IndexStatusCodeDecision::Ignore);
         assert!(!capabilities.forbidden(&index_url));
         assert!(!capabilities.unauthorized(&index_url));
     }
@@ -227,11 +244,11 @@ mod tests {
         // Test we continue on 403 for PyTorch registry.
         let status_code = StatusCode::FORBIDDEN;
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Continue);
+        assert_eq!(decision, IndexStatusCodeDecision::Ignore);
         // Test we stop on 401 for PyTorch registry.
         let status_code = StatusCode::UNAUTHORIZED;
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Stop);
+        assert_eq!(decision, IndexStatusCodeDecision::Fail);
     }
 
     #[test]
@@ -249,11 +266,11 @@ mod tests {
         // Test each ignored status code
         for status_code in status_codes {
             let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-            assert_eq!(decision, IndexStatusCodeDecision::Continue);
+            assert_eq!(decision, IndexStatusCodeDecision::Ignore);
         }
         // Test a status code that's not ignored
         let other_status_code = StatusCode::FORBIDDEN;
         let decision = strategy.handle_status_code(other_status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Stop);
+        assert_eq!(decision, IndexStatusCodeDecision::Fail);
     }
 }
