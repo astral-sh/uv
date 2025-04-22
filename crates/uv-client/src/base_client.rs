@@ -676,6 +676,10 @@ impl<'a> RequestBuilder<'a> {
     pub async fn send(self) -> reqwest_middleware::Result<Response> {
         self.client.execute(self.build()?).await
     }
+
+    pub fn raw_builder(&self) -> &reqwest_middleware::RequestBuilder {
+        &self.builder
+    }
 }
 
 /// Extends [`DefaultRetryableStrategy`], to log transient request failures and additional retry cases.

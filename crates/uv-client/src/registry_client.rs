@@ -1177,7 +1177,7 @@ mod tests {
     use crate::{html::SimpleHtml, SimpleMetadata, SimpleMetadatum};
 
     use uv_cache::Cache;
-    use wiremock::matchers::{basic_auth, method};
+    use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use crate::RegistryClientBuilder;
@@ -1219,7 +1219,7 @@ mod tests {
             .mount(&redirect_server)
             .await;
 
-        let redirect_url = Url::parse(&redirect_server.uri())?;
+        let redirect_server_url = Url::parse(&redirect_server.uri())?;
 
         let cache = Cache::temp()?;
         let registry_client = RegistryClientBuilder::new(cache).build();
@@ -1227,7 +1227,7 @@ mod tests {
 
         assert_eq!(
             client
-                .for_host(&redirect_url)
+                .for_host(&redirect_server_url)
                 .get(redirect_server.uri())
                 .send()
                 .await?
@@ -1236,19 +1236,150 @@ mod tests {
             "Requests should fail if credentials are missing"
         );
 
-        let mut url = redirect_url.clone();
+        let mut url = redirect_server_url.clone();
         let _ = url.set_username(username);
         let _ = url.set_password(Some(password));
 
         assert_eq!(
             client
-                .for_host(&redirect_url)
+                .for_host(&redirect_server_url)
                 .get(format!("{url}"))
                 .send()
                 .await?
                 .status(),
             200,
             "Requests should succeed if credentials are present"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_redirect_root_relative_url() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+
+        let redirect_server = MockServer::start().await;
+
+        // Configure the redirect server to respond with a 307 with a relative URL.
+        Mock::given(method("GET"))
+            .and(path_regex("/foo/"))
+            .respond_with(
+                ResponseTemplate::new(307).insert_header("Location", "/bar/baz/".to_string()),
+            )
+            .mount(&redirect_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/bar/baz/"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&redirect_server)
+            .await;
+
+        let redirect_server_url = Url::parse(&redirect_server.uri())?.join("foo/")?;
+
+        let cache = Cache::temp()?;
+        let registry_client = RegistryClientBuilder::new(cache).build();
+        let client = registry_client.cached_client().uncached();
+
+        let mut url = redirect_server_url.clone();
+        let _ = url.set_username(username);
+        let _ = url.set_password(Some(password));
+
+        assert_eq!(
+            client
+                .for_host(&url)
+                .get(format!("{url}"))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests should succeed for relative URL"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_redirect_relative_url() -> Result<(), Error> {
+        let username = "user";
+        let password = "password";
+
+        let redirect_server = MockServer::start().await;
+
+        // Configure the redirect server to respond with a 307 with a relative URL.
+        Mock::given(method("GET"))
+            .and(path_regex("/foo/bar/baz/"))
+            .and(basic_auth(username, password))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&redirect_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/foo/"))
+            .respond_with(
+                ResponseTemplate::new(307).insert_header("Location", "bar/baz/".to_string()),
+            )
+            .mount(&redirect_server)
+            .await;
+
+        let cache = Cache::temp()?;
+        let registry_client = RegistryClientBuilder::new(cache).build();
+        let client = registry_client.cached_client().uncached();
+
+        let redirect_server_url = Url::parse(&redirect_server.uri())?.join("foo/")?;
+        let mut url = redirect_server_url.clone();
+        let _ = url.set_username(username);
+        let _ = url.set_password(Some(password));
+
+        assert_eq!(
+            client
+                .for_host(&url)
+                .get(format!("{url}"))
+                .send()
+                .await?
+                .status(),
+            200,
+            "Requests should succeed for relative URL"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_redirect_preserve_fragment() -> Result<(), Error> {
+        let redirect_server = MockServer::start().await;
+
+        // Configure the redirect server to respond with a 307 with a relative URL.
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(307).insert_header("Location", "/foo".to_string()))
+            .mount(&redirect_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path_regex("/foo"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&redirect_server)
+            .await;
+
+        let cache = Cache::temp()?;
+        let registry_client = RegistryClientBuilder::new(cache).build();
+        let client = registry_client.cached_client().uncached();
+
+        let mut url = Url::parse(&redirect_server.uri())?;
+        url.set_fragment(Some("fragment"));
+
+        assert_eq!(
+            client
+                .for_host(&url)
+                .get(format!("{}", url.clone()))
+                .send()
+                .await?
+                .url()
+                .to_string(),
+            format!("{}/foo#fragment", redirect_server.uri()),
+            "Requests should preserve fragment"
         );
 
         Ok(())

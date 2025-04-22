@@ -979,60 +979,33 @@ mod tests {
         insta::with_settings!({
             filters => [("boundary=[0-9a-f-]+", "boundary=[...]")],
         }, {
-            assert_debug_snapshot!(&request, @r#"
+            assert_debug_snapshot!(&request.raw_builder(), @r#"
             RequestBuilder {
-                builder: RequestBuilder {
-                    inner: RequestBuilder {
-                        method: POST,
-                        url: Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "example.org",
-                                ),
+                inner: RequestBuilder {
+                    method: POST,
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "example.org",
                             ),
-                            port: None,
-                            path: "/upload",
-                            query: None,
-                            fragment: None,
-                        },
-                        headers: {
-                            "content-type": "multipart/form-data; boundary=[...]",
-                            "content-length": "6803",
-                            "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
-                            "authorization": Sensitive,
-                        },
+                        ),
+                        port: None,
+                        path: "/upload",
+                        query: None,
+                        fragment: None,
                     },
-                    ..
-                },
-                client: RedirectClientWithMiddleware {
-                    client: ClientWithMiddleware {
-                        inner: Client {
-                            accepts: Accepts {
-                                gzip: true,
-                            },
-                            proxies: [
-                                Proxy(
-                                    System(
-                                        {},
-                                    ),
-                                    None,
-                                ),
-                            ],
-                            referer: true,
-                            default_headers: {
-                                "accept": "*/*",
-                                "user-agent": "uv/0.6.15",
-                            },
-                            read_timeout: 30s,
-                        },
-                        ..
+                    headers: {
+                        "content-type": "multipart/form-data; boundary=[...]",
+                        "content-length": "6803",
+                        "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
+                        "authorization": Sensitive,
                     },
-                    redirect_policy: BypassMiddleware,
                 },
+                ..
             }
             "#);
         });
@@ -1157,60 +1130,33 @@ mod tests {
         insta::with_settings!({
             filters => [("boundary=[0-9a-f-]+", "boundary=[...]")],
         }, {
-            assert_debug_snapshot!(&request, @r#"
+            assert_debug_snapshot!(&request.raw_builder(), @r#"
             RequestBuilder {
-                builder: RequestBuilder {
-                    inner: RequestBuilder {
-                        method: POST,
-                        url: Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "example.org",
-                                ),
+                inner: RequestBuilder {
+                    method: POST,
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "example.org",
                             ),
-                            port: None,
-                            path: "/upload",
-                            query: None,
-                            fragment: None,
-                        },
-                        headers: {
-                            "content-type": "multipart/form-data; boundary=[...]",
-                            "content-length": "19330",
-                            "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
-                            "authorization": Sensitive,
-                        },
+                        ),
+                        port: None,
+                        path: "/upload",
+                        query: None,
+                        fragment: None,
                     },
-                    ..
-                },
-                client: RedirectClientWithMiddleware {
-                    client: ClientWithMiddleware {
-                        inner: Client {
-                            accepts: Accepts {
-                                gzip: true,
-                            },
-                            proxies: [
-                                Proxy(
-                                    System(
-                                        {},
-                                    ),
-                                    None,
-                                ),
-                            ],
-                            referer: true,
-                            default_headers: {
-                                "accept": "*/*",
-                                "user-agent": "uv/0.6.15",
-                            },
-                            read_timeout: 30s,
-                        },
-                        ..
+                    headers: {
+                        "content-type": "multipart/form-data; boundary=[...]",
+                        "content-length": "19330",
+                        "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
+                        "authorization": Sensitive,
                     },
-                    redirect_policy: BypassMiddleware,
                 },
+                ..
             }
             "#);
         });
