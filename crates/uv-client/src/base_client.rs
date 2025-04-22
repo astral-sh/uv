@@ -548,29 +548,32 @@ impl RedirectClientWithMiddleware {
             };
 
             // Handle redirect if we receive a 301, 302, 307, or 308.
+            let status = response.status();
             if matches!(
-                response.status(),
+                status,
                 StatusCode::MOVED_PERMANENTLY
                     | StatusCode::FOUND
                     | StatusCode::TEMPORARY_REDIRECT
                     | StatusCode::PERMANENT_REDIRECT
             ) {
-                let location_str = response
+                let location = response
                     .headers()
                     .get("location")
                     .ok_or(reqwest_middleware::Error::Middleware(anyhow!(
-                        "Missing 302 location header"
+                        "Missing expected HTTP {status} 'Location' header"
                     )))?
                     .to_str()
                     .map_err(|_| {
                         reqwest_middleware::Error::Middleware(anyhow!(
-                            "Invalid 302 location header"
+                            "Invalid HTTP {status} 'Location' value: must only contain visible ascii characters"
                         ))
                     })?;
-                let redirect_url = Url::parse(location_str).map_err(|_| {
-                    reqwest_middleware::Error::Middleware(anyhow!("Invalid 302 location URL"))
+                let redirect_url = Url::parse(location).map_err(|err| {
+                    reqwest_middleware::Error::Middleware(anyhow!(
+                        "Invalid HTTP {status} 'Location' value `{location}`: {err}"
+                    ))
                 })?;
-                debug!("Received 302 redirect to {redirect_url}");
+                debug!("Received HTTP {status} to {redirect_url}");
                 *request.url_mut() = redirect_url;
                 redirects += 1;
                 continue;
