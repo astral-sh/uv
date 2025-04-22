@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence  # noqa:I001
     from typing import Any  # noqa:I001
 
-# Use the `uv build-backend` command rather than `uv-build`. This options is provided
+# Use the `uv build-backend` command rather than `uv-build`. This option is provided
 # for downstream distributions who provide `uv` and wish to avoid building a partially
 # overlapping `uv-build` executable.
 USE_UV_EXECUTABLE = False
