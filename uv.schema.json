@@ -2322,6 +2322,13 @@
           ]
         },
         {
+          "description": "Use the PyTorch index for CUDA 12.8.",
+          "type": "string",
+          "enum": [
+            "cu128"
+          ]
+        },
+        {
           "description": "Use the PyTorch index for CUDA 12.6.",
           "type": "string",
           "enum": [

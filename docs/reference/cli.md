@@ -6073,6 +6073,8 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 
 <li><code>cpu</code>:  Use the CPU-only PyTorch index</li>
 
+<li><code>cu128</code>:  Use the PyTorch index for CUDA 12.8</li>
+
 <li><code>cu126</code>:  Use the PyTorch index for CUDA 12.6</li>
 
 <li><code>cu125</code>:  Use the PyTorch index for CUDA 12.5</li>
@@ -6547,6 +6549,8 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <li><code>auto</code>:  Select the appropriate PyTorch index based on the operating system and CUDA driver version</li>
 
 <li><code>cpu</code>:  Use the CPU-only PyTorch index</li>
+
+<li><code>cu128</code>:  Use the PyTorch index for CUDA 12.8</li>
 
 <li><code>cu126</code>:  Use the PyTorch index for CUDA 12.6</li>
 
@@ -7094,6 +7098,8 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <li><code>auto</code>:  Select the appropriate PyTorch index based on the operating system and CUDA driver version</li>
 
 <li><code>cpu</code>:  Use the CPU-only PyTorch index</li>
+
+<li><code>cu128</code>:  Use the PyTorch index for CUDA 12.8</li>
 
 <li><code>cu126</code>:  Use the PyTorch index for CUDA 12.6</li>
 
