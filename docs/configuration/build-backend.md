@@ -10,8 +10,8 @@ A build backend transforms a source tree (i.e., a directory) into a source distr
 While uv supports all build backends (as specified by PEP 517), it includes a `uv_build` backend
 that integrates tightly with uv to improve performance and user experience.
 
-The uv build backend currently only supports Python code and only builds universal wheels. An
-alternative backend is required if you want to create a
+The uv build backend currently only supports Python code. An alternative backend is required if you
+want to create a
 [library with extension modules](../concepts/projects/init.md#projects-with-extension-modules).
 
 To use the uv build backend in an existing project, add it to the `[build-system]` section in your
