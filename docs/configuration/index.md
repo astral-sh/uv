@@ -6,7 +6,7 @@ Read about the various ways to configure uv:
 - [Using environment variables](./environment.md)
 - [Configuring authentication](./authentication.md)
 - [Configuring package indexes](./indexes.md)
-- [The uv build backend](./build_backend.md)
+- [The uv build backend](build-backend.md)
 
 Or, jump to the [settings reference](../reference/settings.md) which enumerates the available
 configuration options.

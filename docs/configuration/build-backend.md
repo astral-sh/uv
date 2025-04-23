@@ -6,15 +6,16 @@
 
     When preview mode is not enabled, uv uses [hatchling](https://pypi.org/project/hatchling/) as the default build backend.
 
-A build backend transforms a source tree (i.e., a directory) into a source distribution or a wheel. While uv
-supports all build backends (as specified by PEP 517), it includes a `uv_build` backend that integrates tightly
-with uv to improve performance and user experience.
+A build backend transforms a source tree (i.e., a directory) into a source distribution or a wheel.
+While uv supports all build backends (as specified by PEP 517), it includes a `uv_build` backend
+that integrates tightly with uv to improve performance and user experience.
 
 The uv build backend currently only supports Python code and only builds universal wheels. An
 alternative backend is required if you want to create a
 [library with extension modules](../concepts/projects/init.md#projects-with-extension-modules).
 
-To use the uv build backend in an existing project, add it to the `[build-system]` section in your `pyproject.toml`:
+To use the uv build backend in an existing project, add it to the `[build-system]` section in your
+`pyproject.toml`:
 
 ```toml
 [build-system]
@@ -28,15 +29,16 @@ You can also create a new project that uses the uv build backend with `uv init`:
 uv init --build-backend uv
 ```
 
-`uv_build` is a separate package from uv, optimized for a small size and high portability. `uv`
-includes a copy of the build backend, so when running `uv build`, the same version will be used for
-the build backend as for the uv process. Other build frontends, such as `python -m build`, will
-choose the latest compatible `uv_build` version.
+`uv_build` is a separate package from uv, optimized for portability and small binary size. The `uv`
+command includes a copy of the build backend, so when running `uv build`, the same version will be
+used for the build backend as for the uv process. Other build frontends, such as `python -m build`,
+will choose the latest compatible `uv_build` version.
 
 ## Include and exclude configuration
 
 To select which files to include in the source distribution, uv first adds the included files and
-directories, then removes the excluded files and directories. This means that exclusions always take precedence over inclusions.
+directories, then removes the excluded files and directories. This means that exclusions always take
+precedence over inclusions.
 
 When building the source distribution, the following files and directories are included:
 
@@ -47,7 +49,7 @@ When building the source distribution, the following files and directories are i
 - All directories under `tool.uv.build-backend.data`.
 - All patterns from `tool.uv.build-backend.source-include`.
 
-From these, we remove the `tool.uv.build-backend.source-exclude` and the default excludes.
+From these, `tool.uv.build-backend.source-exclude` and the default excludes are removed.
 
 When building the wheel, the following files and directories are included:
 
@@ -56,10 +58,9 @@ When building the wheel, the following files and directories are included:
 - `project.license-files` and `project.readme`, as part of the project metadata.
 - Each directory under `tool.uv.build-backend.data`, as data directories.
 
-From these, we remove the `tool.uv.build-backend.source-exclude`,
-`tool.uv.build-backend.wheel-exclude` and default excludes. The source dist excludes are applied to
-avoid source tree to wheel source builds including more files than source tree to source
-distribution to wheel build.
+From these, `tool.uv.build-backend.source-exclude`, `tool.uv.build-backend.wheel-exclude` and the
+default excludes are removed. The source dist excludes are applied to avoid source tree to wheel
+source builds including more files than source tree to source distribution to wheel build.
 
 There are no specific wheel includes. There must only be one top level module, and all data files
 must either be under the module root or in the appropriate
@@ -71,8 +72,11 @@ module root alongside the source code.
 Includes are anchored, which means that `pyproject.toml` includes only
 `<project root>/pyproject.toml`. For example, `assets/**/sample.csv` includes all `sample.csv` files
 in `<project root>/assets` or any child directory. To recursively include all files under a
-directory, use a `/**` suffix, e.g. `src/**`. For performance and reproducibility, avoid patterns
-without an anchor such as `**/sample.csv`.
+directory, use a `/**` suffix, e.g. `src/**`.
+
+!!! note
+
+    For performance and reproducibility, avoid patterns without an anchor such as `**/sample.csv`.
 
 Excludes are not anchored, which means that `__pycache__` excludes all directories named
 `__pycache__` and its children anywhere. To anchor a directory, use a `/` prefix, e.g., `/dist` will
