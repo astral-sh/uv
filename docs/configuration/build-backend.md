@@ -23,6 +23,12 @@ requires = ["uv_build>=0.6.13,<0.7"]
 build-backend = "uv_build"
 ```
 
+!!! important
+
+    The uv build backend follows the same
+    [versioning policy](https://docs.astral.sh/uv/reference/versioning/), setting an upper bound on
+    the `uv_build` version ensures that the package continues to build in the future.
+
 You can also create a new project that uses the uv build backend with `uv init`:
 
 ```shell
