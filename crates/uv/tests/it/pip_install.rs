@@ -365,6 +365,26 @@ dependencies = ["flask==1.0.x"]
 }
 
 #[test]
+fn invalid_python_version() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("flask")
+        .arg("--python-version")
+        .arg("311"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value '311' for '--python-version <PYTHON_VERSION>': Python version `311` has an invalid major version (311)
+
+    For more information, try '--help'.
+    "
+    );
+}
+
+#[test]
 fn missing_pip() {
     uv_snapshot!(Command::new(get_bin()).arg("install"), @r###"
     success: false
