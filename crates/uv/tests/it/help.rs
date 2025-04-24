@@ -32,7 +32,7 @@ fn help() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Display uv's version
+      version                    Read or update the project's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
@@ -111,7 +111,7 @@ fn help_flag() {
       publish  Upload distributions to an index
       cache    Manage uv's cache
       self     Manage the uv executable
-      version  Display uv's version
+      version  Read or update the project's version
       help     Display documentation for a command
 
     Cache options:
@@ -188,7 +188,7 @@ fn help_short_flag() {
       publish  Upload distributions to an index
       cache    Manage uv's cache
       self     Manage the uv executable
-      version  Display uv's version
+      version  Read or update the project's version
       help     Display documentation for a command
 
     Cache options:
@@ -837,7 +837,7 @@ fn help_flag_subsubcommand() {
 fn help_unknown_subcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("foobar"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("foobar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -862,9 +862,9 @@ fn help_unknown_subcommand() {
         self
         version
         generate-shell-completion
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -889,7 +889,7 @@ fn help_unknown_subcommand() {
         self
         version
         generate-shell-completion
-    "###);
+    ");
 }
 
 #[test]
@@ -941,7 +941,7 @@ fn help_with_global_option() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Display uv's version
+      version                    Read or update the project's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
@@ -1055,7 +1055,7 @@ fn help_with_no_pager() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Display uv's version
+      version                    Read or update the project's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
