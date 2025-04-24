@@ -74,7 +74,7 @@ const STYLES: Styles = Styles::styled()
     .placeholder(AnsiColor::Cyan.on_default());
 
 #[derive(Parser)]
-#[command(name = "uv", author, long_version = crate::version::version())]
+#[command(name = "uv", author, long_version = crate::version::uv_self_version())]
 #[command(about = "An extremely fast Python package manager.")]
 #[command(propagate_version = true)]
 #[command(
@@ -494,11 +494,8 @@ pub enum Commands {
     /// Clear the cache, removing all entries or those linked to specific packages.
     #[command(hide = true)]
     Clean(CleanArgs),
-    /// Display uv's version
-    Version {
-        #[arg(long, value_enum, default_value = "text")]
-        output_format: VersionFormat,
-    },
+    /// Read or update the project's version.
+    Version(VersionArgs),
     /// Generate shell completion
     #[command(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion(GenerateShellCompletionArgs),
@@ -529,6 +526,41 @@ pub struct HelpArgs {
     pub command: Option<Vec<String>>,
 }
 
+#[derive(Args, Debug)]
+#[command(group = clap::ArgGroup::new("operation"))]
+pub struct VersionArgs {
+    /// Set the project version to this value
+    ///
+    /// To update the project using semantic versioning components instead, use `--bump`.
+    #[arg(group = "operation")]
+    pub value: Option<String>,
+    /// Update the project version using the given semantics
+    #[arg(group = "operation", long)]
+    pub bump: Option<VersionBump>,
+    /// Don't write a new version to the `pyproject.toml`
+    ///
+    /// Instead, the version will be displayed.
+    #[arg(long)]
+    pub dry_run: bool,
+    /// Only show the version
+    ///
+    /// By default, uv will show the project name before the version.
+    #[arg(long)]
+    pub short: bool,
+    #[arg(long, value_enum, default_value = "text")]
+    pub output_format: VersionFormat,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, clap::ValueEnum)]
+pub enum VersionBump {
+    /// Increase the major version (1.2.3 => 2.0.0)
+    Major,
+    /// Increase the minor version (1.2.3 => 1.3.0)
+    Minor,
+    /// Increase the patch version (1.2.3 => 1.2.4)
+    Patch,
+}
+
 #[derive(Args)]
 pub struct SelfNamespace {
     #[command(subcommand)]
@@ -539,6 +571,14 @@ pub struct SelfNamespace {
 pub enum SelfCommand {
     /// Update uv.
     Update(SelfUpdateArgs),
+    /// Display uv's version
+    Version {
+        /// Only print the version
+        #[arg(long)]
+        short: bool,
+        #[arg(long, value_enum, default_value = "text")]
+        output_format: VersionFormat,
+    },
 }
 
 #[derive(Args, Debug)]
