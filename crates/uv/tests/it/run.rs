@@ -167,7 +167,7 @@ fn run_matching_python_patch_version() -> Result<()> {
      + cpython-3.11.9-[PLATFORM]
     ");
 
-    // Try runnning a patch version with the same as installed.
+    // Try running a patch version with the same as installed.
     uv_snapshot!(context.filters(), context.run().arg("python3.11.9"), @r"
     success: false
     exit_code: 2
@@ -186,7 +186,7 @@ fn run_matching_python_patch_version() -> Result<()> {
 }
 
 #[test]
-fn run_missing_python_minor_version_no_project() -> Result<()> {
+fn run_missing_python_minor_version_no_project() {
     let context = TestContext::new_with_versions(&["3.12"]);
 
     uv_snapshot!(context.filters(), context.run().arg("python3.11"), @r"
@@ -198,12 +198,10 @@ fn run_missing_python_minor_version_no_project() -> Result<()> {
     error: Failed to spawn: `python3.11`
       Caused by: `python3.11` not available in the virtual environment, which uses python `3.12.[X]`. Did you mean to search for a Python 3.11 environment with `uv run -p 3.11 python`?
     ");
-
-    Ok(())
 }
 
 #[test]
-fn run_missing_python_patch_version_no_project() -> Result<()> {
+fn run_missing_python_patch_version_no_project() {
     let context = TestContext::new_with_versions(&["3.12"])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
@@ -218,8 +216,6 @@ fn run_missing_python_patch_version_no_project() -> Result<()> {
     error: Failed to spawn: `python3.11.9`
       Caused by: `python3.11.9` not available in the virtual environment, which uses python `3.12.[X]`. Did you mean to search for a Python 3.11.9 environment with `uv run -p 3.11.9 python`?
     ");
-
-    Ok(())
 }
 
 #[test]
