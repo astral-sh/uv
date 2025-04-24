@@ -3,13 +3,13 @@
 #[cfg(feature = "git")]
 mod conditional_imports {
     pub(crate) use crate::common::{decode_token, READ_ONLY_GITHUB_TOKEN};
-    pub(crate) use assert_cmd::assert::OutputAssertExt;
 }
 
 #[cfg(feature = "git")]
 use conditional_imports::*;
 
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
