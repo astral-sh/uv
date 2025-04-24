@@ -31,6 +31,27 @@ impl FromStr for PythonVersion {
         if version.epoch() != 0 {
             return Err(format!("Python version `{s}` has a non-zero epoch"));
         }
+        if let Some(major) = version.release().first() {
+            if u8::try_from(*major).is_err() {
+                return Err(format!(
+                    "Python version `{s}` has an invalid major version ({major})"
+                ));
+            }
+        }
+        if let Some(minor) = version.release().get(1) {
+            if u8::try_from(*minor).is_err() {
+                return Err(format!(
+                    "Python version `{s}` has an invalid minor version ({minor})"
+                ));
+            }
+        }
+        if let Some(patch) = version.release().get(2) {
+            if u8::try_from(*patch).is_err() {
+                return Err(format!(
+                    "Python version `{s}` has an invalid patch version ({patch})"
+                ));
+            }
+        }
 
         Ok(Self(version))
     }

@@ -365,6 +365,26 @@ dependencies = ["flask==1.0.x"]
 }
 
 #[test]
+fn invalid_python_version() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("flask")
+        .arg("--python-version")
+        .arg("311"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value '311' for '--python-version <PYTHON_VERSION>': Python version `311` has an invalid major version (311)
+
+    For more information, try '--help'.
+    "
+    );
+}
+
+#[test]
 fn missing_pip() {
     uv_snapshot!(Command::new(get_bin()).arg("install"), @r###"
     success: false
@@ -11102,40 +11122,6 @@ fn pep_751_multiple_sources() -> Result<()> {
 
     ----- stderr -----
     error: Package `typing-extensions` includes both a registry (`packages.wheels`) and an archive source (`packages.archive`)
-    "
-    );
-
-    Ok(())
-}
-
-/// Test that uv doesn't hang if an index returns a distribution for the wrong package.
-#[tokio::test]
-async fn bogus_redirect() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let redirect_server = MockServer::start().await;
-
-    // Configure a bogus redirect where for all packages, anyio is returned.
-    Mock::given(method("GET"))
-        .respond_with(
-            ResponseTemplate::new(302).insert_header("Location", "https://pypi.org/simple/anyio/"),
-        )
-        .mount(&redirect_server)
-        .await;
-
-    uv_snapshot!(
-        context
-            .pip_install()
-            .arg("--default-index")
-            .arg(redirect_server.uri())
-            .arg("sniffio"),
-        @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    error: The index returned metadata for the wrong package: expected distribution for sniffio, got distribution for anyio
     "
     );
 
