@@ -844,6 +844,28 @@ impl Name for Dist {
     }
 }
 
+impl Name for CompatibleDist<'_> {
+    fn name(&self) -> &PackageName {
+        match self {
+            CompatibleDist::InstalledDist(dist) => dist.name(),
+            CompatibleDist::SourceDist {
+                sdist,
+                prioritized: _,
+            } => sdist.name(),
+            CompatibleDist::CompatibleWheel {
+                wheel,
+                priority: _,
+                prioritized: _,
+            } => wheel.name(),
+            CompatibleDist::IncompatibleWheel {
+                sdist,
+                wheel: _,
+                prioritized: _,
+            } => sdist.name(),
+        }
+    }
+}
+
 impl DistributionMetadata for RegistryBuiltWheel {
     fn version_or_url(&self) -> VersionOrUrlRef {
         VersionOrUrlRef::Version(&self.filename.version)

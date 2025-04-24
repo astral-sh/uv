@@ -1320,7 +1320,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             candidate.choice_kind(),
             filename,
         );
-        self.visit_candidate(&candidate, dist, package, pins, request_sink)?;
+        self.visit_candidate(&candidate, dist, package, name, pins, request_sink)?;
 
         let version = candidate.version().clone();
         Ok(Some(ResolverVersion::Unforked(version)))
@@ -1480,7 +1480,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 base_candidate.choice_kind(),
                 filename,
             );
-            self.visit_candidate(&base_candidate, base_dist, package, pins, request_sink)?;
+            self.visit_candidate(
+                &base_candidate,
+                base_dist,
+                package,
+                name,
+                pins,
+                request_sink,
+            )?;
 
             return Ok(Some(ResolverVersion::Unforked(
                 base_candidate.version().clone(),
@@ -1527,8 +1534,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .collect::<Vec<_>>()
                 .join(", ")
         );
-        self.visit_candidate(candidate, dist, package, pins, request_sink)?;
-        self.visit_candidate(&base_candidate, base_dist, package, pins, request_sink)?;
+        self.visit_candidate(candidate, dist, package, name, pins, request_sink)?;
+        self.visit_candidate(
+            &base_candidate,
+            base_dist,
+            package,
+            name,
+            pins,
+            request_sink,
+        )?;
 
         let forks = vec![
             VersionFork {
@@ -1551,6 +1565,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         candidate: &Candidate,
         dist: &CompatibleDist,
         package: &PubGrubPackage,
+        name: &PackageName,
         pins: &mut FilePins,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
@@ -1562,6 +1577,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if matches!(&**package, PubGrubPackageInner::Package { .. }) {
             if self.dependency_mode.is_transitive() {
                 if self.index.distributions().register(candidate.version_id()) {
+                    if name != dist.name() {
+                        return Err(ResolveError::MismatchedPackageName {
+                            request: "distribution",
+                            expected: name.clone(),
+                            actual: dist.name().clone(),
+                        });
+                    }
                     // Verify that the package is allowed under the hash-checking policy.
                     if !self
                         .hasher
