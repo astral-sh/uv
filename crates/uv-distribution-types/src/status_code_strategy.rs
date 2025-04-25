@@ -197,7 +197,10 @@ mod tests {
         let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Fail(StatusCode::BAD_REQUEST));
+        assert_eq!(
+            decision,
+            IndexStatusCodeDecision::Fail(StatusCode::BAD_REQUEST)
+        );
     }
 
     #[test]
@@ -207,7 +210,10 @@ mod tests {
         let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Fail(StatusCode::UNAUTHORIZED));
+        assert_eq!(
+            decision,
+            IndexStatusCodeDecision::Fail(StatusCode::UNAUTHORIZED)
+        );
         assert!(capabilities.unauthorized(&index_url));
         assert!(!capabilities.forbidden(&index_url));
     }
@@ -219,7 +225,10 @@ mod tests {
         let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Fail(StatusCode::FORBIDDEN));
+        assert_eq!(
+            decision,
+            IndexStatusCodeDecision::Fail(StatusCode::FORBIDDEN)
+        );
         assert!(capabilities.forbidden(&index_url));
         assert!(!capabilities.unauthorized(&index_url));
     }
@@ -248,7 +257,10 @@ mod tests {
         // Test we stop on 401 for PyTorch registry.
         let status_code = StatusCode::UNAUTHORIZED;
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Fail(StatusCode::UNAUTHORIZED));
+        assert_eq!(
+            decision,
+            IndexStatusCodeDecision::Fail(StatusCode::UNAUTHORIZED)
+        );
     }
 
     #[test]
@@ -271,6 +283,9 @@ mod tests {
         // Test a status code that's not ignored
         let other_status_code = StatusCode::FORBIDDEN;
         let decision = strategy.handle_status_code(other_status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Fail(StatusCode::FORBIDDEN));
+        assert_eq!(
+            decision,
+            IndexStatusCodeDecision::Fail(StatusCode::FORBIDDEN)
+        );
     }
 }

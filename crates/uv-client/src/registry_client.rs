@@ -13,7 +13,6 @@ use reqwest::{Proxy, Response};
 use reqwest_middleware::ClientWithMiddleware;
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::field::debug;
 use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
@@ -354,7 +353,7 @@ impl RegistryClient {
                                 SimpleMetadataSearchOutcome::StatusCodeFailure(status_code) => {
                                     debug!("Indexes search failed because of status code failure: {status_code}");
                                     break;
-                                },
+                                }
                             }
                         }
                         IndexFormat::Flat => {
@@ -523,9 +522,17 @@ impl RegistryClient {
                     let Some(status_code) = err.status() else {
                         return Err(ErrorKind::WrappedReqwestError(url, err).into());
                     };
-                    Ok(SimpleMetadataSearchOutcome::from(
-                        status_code_strategy.handle_status_code(status_code, index, capabilities),
-                    ))
+                    let decision =
+                        status_code_strategy.handle_status_code(status_code, index, capabilities);
+                    if let IndexStatusCodeDecision::Fail(status_code) = decision {
+                        if !matches!(
+                            status_code,
+                            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+                        ) {
+                            return Err(ErrorKind::WrappedReqwestError(url, err).into());
+                        }
+                    }
+                    Ok(SimpleMetadataSearchOutcome::from(decision))
                 }
 
                 // The package is unavailable due to a lack of connectivity.
