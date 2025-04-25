@@ -3,6 +3,21 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.6.17
+
+### Preview features
+
+- Add PyTorch v2.7.0 to GPU backend ([#13072](https://github.com/astral-sh/uv/pull/13072))
+
+### Bug fixes
+
+- Avoid panic for invalid Python versions ([#13077](https://github.com/astral-sh/uv/pull/13077))
+- Block scripts from overwriting `python` ([#13051](https://github.com/astral-sh/uv/pull/13051))
+- Check distribution names to handle invalid redirects ([#12917](https://github.com/astral-sh/uv/pull/12917))
+- Check for mismatched package and distribution names on resolver thread ([#13088](https://github.com/astral-sh/uv/pull/13088))
+- Fix panic with invalid last character in PEP 508 name ([#13105](https://github.com/astral-sh/uv/pull/13105))
+- Reject `requires-python` even if not listed on the index page ([#13086](https://github.com/astral-sh/uv/pull/13086))
+
 ## 0.6.16
 
 ### Bug fixes
