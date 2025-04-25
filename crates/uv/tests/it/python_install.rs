@@ -1351,7 +1351,12 @@ fn python_install_cached() {
     ");
 
     // 3.12 isn't cached, so it can't be installed
-    uv_snapshot!(context.filters(), context
+    let mut filters = context.filters();
+    filters.push((
+        "cpython-3.12.10.*.tar.gz",
+        "cpython-3.12.10[DATE]-[PLATFORM].tar.gz",
+    ));
+    uv_snapshot!(filters, context
         .python_install()
         .arg("3.12")
         .arg("--offline")
@@ -1362,6 +1367,6 @@ fn python_install_cached() {
 
     ----- stderr -----
     error: Failed to install cpython-3.12.10-[PLATFORM]
-      Caused by: An offline Python installation was requested, but cpython-3.12.10-[PLATFORM] (from https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.12.10%2B20250409-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz) is missing in python-cache
+      Caused by: An offline Python installation was requested, but cpython-3.12.10[DATE]-[PLATFORM].tar.gz) is missing in python-cache
     ");
 }

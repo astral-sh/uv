@@ -99,7 +99,7 @@ pub enum Error {
     #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
     OfflinePythonMissing {
         file: Box<PythonInstallationKey>,
-        url: Url,
+        url: Box<Url>,
         python_builds_dir: PathBuf,
     },
 }
@@ -683,7 +683,7 @@ impl ManagedPythonDownload {
                         if client.connectivity().is_offline() {
                             return Err(Error::OfflinePythonMissing {
                                 file: Box::new(self.key().clone()),
-                                url,
+                                url: Box::new(url),
                                 python_builds_dir,
                             });
                         }
