@@ -1,4 +1,4 @@
-use std::{path::Path, process::Command};
+use std::{env, path::Path, process::Command};
 
 use crate::common::{uv_snapshot, TestContext};
 use assert_fs::{
@@ -6,6 +6,7 @@ use assert_fs::{
     prelude::{FileTouch, PathChild, PathCreateDir},
 };
 use predicates::prelude::predicate;
+use tracing::debug;
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
@@ -1272,5 +1273,95 @@ fn python_install_314() {
     [TEMP_DIR]/managed/cpython-3.13.3-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
+    ");
+}
+
+/// Test caching Python archives with `UV_PYTHON_CACHE_DIR`.
+#[test]
+fn python_install_cached() {
+    // It does not make sense to run this test when the developer selected faster test runs
+    // by setting the env var.
+    if env::var_os("UV_PYTHON_CACHE_DIR").is_some() {
+        debug!("Skipping test because UV_PYTHON_CACHE_DIR is set");
+        return;
+    }
+
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    let python_cache = context.temp_dir.child("python-cache");
+
+    // Install the latest version
+    uv_snapshot!(context.filters(), context
+        .python_install()
+        .env(EnvVars::UV_PYTHON_CACHE_DIR, python_cache.as_ref()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.3 in [TIME]
+     + cpython-3.13.3-[PLATFORM]
+    ");
+
+    let bin_python = context
+        .bin_dir
+        .child(format!("python3.13{}", std::env::consts::EXE_SUFFIX));
+
+    // The executable should not be installed in the bin directory (requires preview)
+    bin_python.assert(predicate::path::missing());
+
+    // Should be a no-op when already installed
+    uv_snapshot!(context.filters(), context
+        .python_install()
+        .env(EnvVars::UV_PYTHON_CACHE_DIR, python_cache.as_ref()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Python is already installed. Use `uv python install <request>` to install another version.
+    "###);
+
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.13
+    Uninstalled Python 3.13.3 in [TIME]
+     - cpython-3.13.3-[PLATFORM]
+    ");
+
+    // The cached archive can be installed offline
+    uv_snapshot!(context.filters(), context
+        .python_install()
+        .arg("--offline")
+        .env(EnvVars::UV_PYTHON_CACHE_DIR, python_cache.as_ref()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.3 in [TIME]
+     + cpython-3.13.3-[PLATFORM]
+    ");
+
+    // 3.12 isn't cached, so it can't be installed
+    uv_snapshot!(context.filters(), context
+        .python_install()
+        .arg("3.12")
+        .arg("--offline")
+        .env(EnvVars::UV_PYTHON_CACHE_DIR, python_cache.as_ref()), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to install cpython-3.12.10-[PLATFORM]
+      Caused by: An offline Python installation was requested, but cpython-3.12.10-[PLATFORM] (from https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.12.10%2B20250409-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz) is missing in python-cache
     ");
 }

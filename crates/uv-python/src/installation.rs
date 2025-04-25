@@ -164,7 +164,6 @@ impl PythonInstallation {
                 false,
                 python_install_mirror,
                 pypy_install_mirror,
-                cache,
                 reporter,
             )
             .await?;

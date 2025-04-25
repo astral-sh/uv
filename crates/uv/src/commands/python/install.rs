@@ -11,7 +11,6 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 
-use uv_cache::Cache;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
@@ -136,7 +135,6 @@ pub(crate) async fn install(
     default: bool,
     python_downloads: PythonDownloads,
     no_config: bool,
-    cache: &Cache,
     preview: PreviewMode,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -317,7 +315,6 @@ pub(crate) async fn install(
                         reinstall,
                         python_install_mirror.as_deref(),
                         pypy_install_mirror.as_deref(),
-                        cache,
                         Some(&reporter),
                     )
                     .await,
