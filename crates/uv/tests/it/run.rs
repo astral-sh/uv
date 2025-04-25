@@ -188,8 +188,11 @@ fn run_matching_python_patch_version() -> Result<()> {
 #[test]
 fn run_missing_python_minor_version_no_project() {
     let context = TestContext::new_with_versions(&["3.12"]);
+    let bin_dir = context.temp_dir.child("bin");
 
-    uv_snapshot!(context.filters(), context.run().arg("python3.11"), @r"
+    uv_snapshot!(context.filters(), context.run()
+        .arg("python3.11")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -206,8 +209,11 @@ fn run_missing_python_patch_version_no_project() {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
+    let bin_dir = context.temp_dir.child("bin");
 
-    uv_snapshot!(context.filters(), context.run().arg("python3.11.9"), @r"
+    uv_snapshot!(context.filters(), context.run()
+        .arg("python3.11.9")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -224,6 +230,7 @@ fn run_missing_python_minor_version_in_project() -> Result<()> {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
+    let bin_dir = context.temp_dir.child("bin");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -235,7 +242,9 @@ fn run_missing_python_minor_version_in_project() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("python3.11"), @r"
+    uv_snapshot!(context.filters(), context.run()
+        .arg("python3.11")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -258,6 +267,7 @@ fn run_missing_python_patch_version_in_project() -> Result<()> {
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
+    let bin_dir = context.temp_dir.child("bin");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -269,7 +279,9 @@ fn run_missing_python_patch_version_in_project() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("python3.11.9"), @r"
+    uv_snapshot!(context.filters(), context.run()
+        .arg("python3.11.9")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
