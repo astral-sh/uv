@@ -8,6 +8,12 @@ use uv_pep508::{MarkerEnvironment, StringVersion};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PythonVersion(StringVersion);
 
+impl From<StringVersion> for PythonVersion {
+    fn from(version: StringVersion) -> Self {
+        Self(version)
+    }
+}
+
 impl Deref for PythonVersion {
     type Target = StringVersion;
 
@@ -174,6 +180,11 @@ impl PythonVersion {
     /// Return the full parsed Python version.
     pub fn version(&self) -> &Version {
         &self.0.version
+    }
+
+    /// Return the full parsed Python version.
+    pub fn into_version(self) -> Version {
+        self.0.version
     }
 
     /// Return the major version of this Python version.

@@ -773,8 +773,8 @@ fn environment_is_usable(
     requires_python: Option<&RequiresPython>,
     cache: &Cache,
 ) -> bool {
-    if !environment.matches_interpreter(environment.interpreter()) {
-        debug!("The virtual environment's interpreter version does not match the version it was created from.");
+    if let Some((cfg_version, int_version)) = environment.get_pyvenv_version_conflict() {
+        debug!("The interpreter in the virtual environment has different version ({int_version}) than it was created with ({cfg_version})");
         return false;
     }
 

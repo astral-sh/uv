@@ -11,7 +11,7 @@ use thiserror::Error;
 use uv_pypi_types::Scheme;
 use uv_static::EnvVars;
 
-use crate::{Interpreter, PythonVersion};
+use crate::PythonVersion;
 
 /// The layout of a virtual environment.
 #[derive(Debug)]
@@ -268,18 +268,6 @@ impl PyVenvConfiguration {
     /// Returns true if the virtual environment should include system site packages.
     pub fn include_system_site_packages(&self) -> bool {
         self.include_system_site_packages
-    }
-
-    /// Returns true if the virtual environment has the same `pyvenv.cfg` version
-    /// as the interpreter Python version. Also returns true if there is no version.
-    pub fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
-        self.version.as_ref().is_none_or(|version| {
-            interpreter.python_major() == version.major()
-                && interpreter.python_minor() == version.minor()
-                && version
-                    .patch()
-                    .is_none_or(|patch| patch == interpreter.python_patch())
-        })
     }
 
     /// Set the key-value pair in the `pyvenv.cfg` file.
