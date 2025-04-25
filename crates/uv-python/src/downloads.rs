@@ -633,8 +633,8 @@ impl ManagedPythonDownload {
             return Ok(DownloadResult::AlreadyAvailable(path));
         }
 
-        // We improve compatibility by using neither the URL-encoded `%2B` nor the `+` it decodes
-        // to.
+        // We improve filesystem compatibility by using neither the URL-encoded `%2B` nor the `+` it
+        // decodes to.
         let filename = url
             .path_segments()
             .unwrap()
@@ -783,7 +783,7 @@ impl ManagedPythonDownload {
         Ok(DownloadResult::Fetched(path))
     }
 
-    /// Download the managed Python archive into the cache.
+    /// Download the managed Python archive into the cache directory.
     async fn download_archive(
         &self,
         url: &Url,
