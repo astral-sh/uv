@@ -11,6 +11,7 @@ use regex::Regex;
 use thiserror::Error;
 use url::{ParseError, Url};
 
+#[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_imports))]
 use uv_fs::{normalize_absolute_path, normalize_url_path};
 
 use crate::Pep508Url;

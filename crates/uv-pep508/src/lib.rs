@@ -443,27 +443,22 @@ fn parse_name<T: Pep508Url>(cursor: &mut Cursor) -> Result<PackageName, Pep508Er
         });
     }
 
-    loop {
-        if let Some((index, char @ ('A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'))) =
-            cursor.peek()
-        {
-            cursor.next();
-            // [.-_] can't be the final character
-            if cursor.peek().is_none() && matches!(char, '.' | '-' | '_') {
-                return Err(Pep508Error {
-                    message: Pep508ErrorSource::String(format!(
-                        "Package name must end with an alphanumeric character, not `{char}`"
-                    )),
-                    start: index,
-                    len: char.len_utf8(),
-                    input: cursor.to_string(),
-                });
-            }
-        } else {
-            let len = cursor.pos() - start;
-            return Ok(PackageName::from_str(cursor.slice(start, len)).unwrap());
-        }
+    cursor.take_while(|char| matches!(char, 'A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'));
+    let len = cursor.pos() - start;
+    // Unwrap-safety: The block above ensures that there is at least one char in the buffer.
+    let last = cursor.slice(start, len).chars().last().unwrap();
+    // [.-_] can't be the final character
+    if !matches!(last, 'A'..='Z' | 'a'..='z' | '0'..='9') {
+        return Err(Pep508Error {
+            message: Pep508ErrorSource::String(format!(
+                "Package name must end with an alphanumeric character, not `{last}`"
+            )),
+            start: cursor.pos() - last.len_utf8(),
+            len: last.len_utf8(),
+            input: cursor.to_string(),
+        });
     }
+    Ok(PackageName::from_str(cursor.slice(start, len)).unwrap())
 }
 
 /// Parse a potential URL from the [`Cursor`], advancing the [`Cursor`] to the end of the URL.
@@ -1529,6 +1524,24 @@ mod tests {
           ^
     "#
         );
+    }
+
+    #[test]
+    fn parse_name_with_star() {
+        assert_snapshot!(
+            parse_pep508_err("wheel-*.whl"),
+            @r"
+        Package name must end with an alphanumeric character, not `-`
+        wheel-*.whl
+             ^
+        ");
+        assert_snapshot!(
+            parse_pep508_err("wheelѦ"),
+            @r"
+        Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `Ѧ`
+        wheelѦ
+             ^
+        ");
     }
 
     #[test]
