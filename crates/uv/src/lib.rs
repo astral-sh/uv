@@ -1067,7 +1067,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: run_variant @ (ToolCommand::Uvx(_) | ToolCommand::Run(_)),
         }) => {
             let (args, invocation_source) = match run_variant {
-                ToolCommand::Uvx(args) => (args, ToolRunCommand::Uvx),
+                ToolCommand::Uvx(args) => (args.tool_run, ToolRunCommand::Uvx),
                 ToolCommand::Run(args) => (args, ToolRunCommand::ToolRun),
                 // OK guarded by the outer match statement
                 _ => unreachable!(),
