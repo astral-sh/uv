@@ -11161,3 +11161,78 @@ async fn bogus_redirect() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn reserved_script_name() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        "activate.bash" = "project:activate"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    warning: The script name `activate.bash` is reserved for virtual environment activation scripts.
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "
+    );
+
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        "python" = "project:python"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    error: Failed to install: project-0.1.0-py3-none-any.whl (project==0.1.0 (from file://[TEMP_DIR]/))
+      Caused by: Scripts must not use the reserved name python
+    "
+    );
+
+    Ok(())
+}
