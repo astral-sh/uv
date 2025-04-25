@@ -1454,6 +1454,27 @@ jobs:
       - name: "Prepare binary"
         run: chmod +x ./uv
 
+      - name: "Build astral-test-pypa-gh-action"
+        run: |
+          # Build a yet unused version of `astral-test-pypa-gh-action`
+          mkdir astral-test-pypa-gh-action
+          cd astral-test-pypa-gh-action
+          ../uv init --package
+          # Get the latest patch version
+          patch_version=$(curl https://test.pypi.org/simple/astral-test-pypa-gh-action/?format=application/vnd.pypi.simple.v1+json | jq --raw-output '.files[-1].filename' | sed 's/astral_test_pypa_gh_action-0\.1\.\([0-9]\+\)\.tar\.gz/\1/')
+          # Set the current version to one higher (which should be unused)
+          sed -i "s/0.1.0/0.1.$((patch_version + 1))/g" pyproject.toml
+          ../uv build
+
+      - name: "Publish astral-test-pypa-gh-action"
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc # release/v1
+        with:
+          # With this GitHub action, we can't do as rigid checks as with our custom Python script, so we publish more
+          # leniently
+          skip-existing: "true"
+          repository-url: "https://test.pypi.org/legacy/"
+          packages-dir: "astral-test-pypa-gh-action/dist"
+
       - name: "Add password to keyring"
         run: |
           # `keyrings.alt` contains the plaintext keyring
