@@ -1771,6 +1771,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
+                // If there was no requires-python on the index page, we may have an incompatible
+                // distribution.
+                if let Some(requires_python) = &metadata.requires_python {
+                    if !python_requirement.target().is_contained_by(requires_python) {
+                        return Ok(Dependencies::Unavailable(
+                            UnavailableVersion::RequiresPython(requires_python.clone()),
+                        ));
+                    }
+                }
+
                 let requirements = self.flatten_requirements(
                     &metadata.requires_dist,
                     &metadata.dependency_groups,
