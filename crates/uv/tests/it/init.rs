@@ -531,6 +531,53 @@ fn init_library_preview() -> Result<()> {
     Ok(())
 }
 
+/// Test the uv build backend with using `uv init --package --preview`. To be merged with the regular
+/// init lib test once the uv build backend becomes the stable default.
+#[test]
+fn init_package_preview() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--package").arg("--preview"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(child.join("pyproject.toml"))?;
+    let mut filters = context.filters();
+    filters.push((r#"\["uv_build>=.*,<.*"\]"#, r#"["uv_build[SPECIFIERS]"]"#));
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            pyproject, @r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [project.scripts]
+        foo = "foo:main"
+
+        [build-system]
+        requires = ["uv_build[SPECIFIERS]"]
+        build-backend = "uv_build"
+        "#
+        );
+    });
+
+    Ok(())
+}
+
 #[test]
 fn init_bare_lib() {
     let context = TestContext::new("3.12");
