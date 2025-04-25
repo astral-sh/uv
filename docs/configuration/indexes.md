@@ -213,7 +213,7 @@ described in the [index strategy](#searching-across-multiple-indexes) section.
 
 ### Ignoring error codes when searching across indexes
 
-When using the [first-index strategy](#searching-across-multiple-indexes), uv will stop searching if
+When using the [first-index strategy](#searching-across-multiple-indexes), uv will stop searching across indexes if
 an HTTP 401 Unauthorized or HTTP 403 Forbidden status code is encountered. The one exception is that
 uv will ignore 403s when searching the `pytorch` index (since this index returns a 403 when a
 package is not present).
@@ -229,7 +229,7 @@ authenticate = "always"
 ignore-error-codes = [403]
 ```
 
-uv will always continue searching when it encounters a `404 Not Found`. This cannot be overridden.
+uv will always continue searching across indexes when it encounters a `404 Not Found`. This cannot be overridden.
 
 ### Disabling authentication
 

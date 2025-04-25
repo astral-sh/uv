@@ -70,13 +70,13 @@ impl IndexStatusCodeStrategy {
                 StatusCode::NOT_FOUND => IndexStatusCodeDecision::Ignore,
                 StatusCode::UNAUTHORIZED => {
                     capabilities.set_unauthorized(index_url.clone());
-                    IndexStatusCodeDecision::Fail
+                    IndexStatusCodeDecision::Fail(status_code)
                 }
                 StatusCode::FORBIDDEN => {
                     capabilities.set_forbidden(index_url.clone());
-                    IndexStatusCodeDecision::Fail
+                    IndexStatusCodeDecision::Fail(status_code)
                 }
-                _ => IndexStatusCodeDecision::Fail,
+                _ => IndexStatusCodeDecision::Fail(status_code),
             },
             IndexStatusCodeStrategy::IgnoreErrorCodes { status_codes } => {
                 if status_codes.contains(&status_code) {
@@ -97,7 +97,7 @@ impl IndexStatusCodeStrategy {
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub enum IndexStatusCodeDecision {
     Ignore,
-    Fail,
+    Fail(StatusCode),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -197,7 +197,7 @@ mod tests {
         let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Fail);
+        assert_eq!(decision, IndexStatusCodeDecision::Fail(StatusCode::BAD_REQUEST));
     }
 
     #[test]
@@ -207,7 +207,7 @@ mod tests {
         let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Fail);
+        assert_eq!(decision, IndexStatusCodeDecision::Fail(StatusCode::UNAUTHORIZED));
         assert!(capabilities.unauthorized(&index_url));
         assert!(!capabilities.forbidden(&index_url));
     }
@@ -219,7 +219,7 @@ mod tests {
         let index_url = IndexUrl::parse("https://internal-registry.com/simple", None).unwrap();
         let capabilities = IndexCapabilities::default();
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Fail);
+        assert_eq!(decision, IndexStatusCodeDecision::Fail(StatusCode::FORBIDDEN));
         assert!(capabilities.forbidden(&index_url));
         assert!(!capabilities.unauthorized(&index_url));
     }
@@ -248,7 +248,7 @@ mod tests {
         // Test we stop on 401 for PyTorch registry.
         let status_code = StatusCode::UNAUTHORIZED;
         let decision = strategy.handle_status_code(status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Fail);
+        assert_eq!(decision, IndexStatusCodeDecision::Fail(StatusCode::UNAUTHORIZED));
     }
 
     #[test]
@@ -271,6 +271,6 @@ mod tests {
         // Test a status code that's not ignored
         let other_status_code = StatusCode::FORBIDDEN;
         let decision = strategy.handle_status_code(other_status_code, &index_url, &capabilities);
-        assert_eq!(decision, IndexStatusCodeDecision::Fail);
+        assert_eq!(decision, IndexStatusCodeDecision::Fail(StatusCode::FORBIDDEN));
     }
 }

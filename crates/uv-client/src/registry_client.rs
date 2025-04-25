@@ -7,13 +7,14 @@ use std::time::Duration;
 
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, StreamExt, TryStreamExt};
-use http::HeaderMap;
+use http::{HeaderMap, StatusCode};
 use itertools::Either;
 use reqwest::{Proxy, Response};
 use reqwest_middleware::ClientWithMiddleware;
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{info_span, instrument, trace, warn, Instrument};
+use tracing::field::debug;
+use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
 use uv_auth::Indexes;
@@ -350,7 +351,10 @@ impl RegistryClient {
                                 SimpleMetadataSearchOutcome::NotFound => {}
                                 // The search failed because of an HTTP status code that we don't ignore for
                                 // this index. We end our search here.
-                                SimpleMetadataSearchOutcome::StatusCodeFailure => break,
+                                SimpleMetadataSearchOutcome::StatusCodeFailure(status_code) => {
+                                    debug!("Indexes search failed because of status code failure: {status_code}");
+                                    break;
+                                },
                             }
                         }
                         IndexFormat::Flat => {
@@ -371,6 +375,7 @@ impl RegistryClient {
                         let _permit = download_concurrency.acquire().await;
                         match index.format {
                             IndexFormat::Simple => {
+                                // For unsafe matches, ignore authentication failures.
                                 let status_code_strategy =
                                     IndexStatusCodeStrategy::ignore_authentication_error_codes();
                                 let metadata = match self
@@ -982,16 +987,20 @@ impl RegistryClient {
 
 #[derive(Debug)]
 pub(crate) enum SimpleMetadataSearchOutcome {
+    /// Simple metadata was found
     Found(OwnedArchive<SimpleMetadata>),
+    /// Simple metadata was not found
     NotFound,
-    StatusCodeFailure,
+    /// A status code failure was encountered when searching for
+    /// simple metadata and our strategy did not ignore it
+    StatusCodeFailure(StatusCode),
 }
 
 impl From<IndexStatusCodeDecision> for SimpleMetadataSearchOutcome {
     fn from(item: IndexStatusCodeDecision) -> Self {
         match item {
             IndexStatusCodeDecision::Ignore => Self::NotFound,
-            IndexStatusCodeDecision::Fail => Self::StatusCodeFailure,
+            IndexStatusCodeDecision::Fail(status_code) => Self::StatusCodeFailure(status_code),
         }
     }
 }
