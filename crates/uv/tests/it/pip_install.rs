@@ -246,6 +246,27 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
 }
 
 #[test]
+fn invalid_toml_filename() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let test_toml = context.temp_dir.child("test.toml");
+    test_toml.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("test.toml"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `test.toml` is not a valid PEP 751 filename: expected TOML file to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
 fn invalid_uv_toml_option_disallowed() -> Result<()> {
     let context = TestContext::new("3.12");
     let uv_toml = context.temp_dir.child("uv.toml");

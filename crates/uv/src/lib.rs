@@ -407,22 +407,22 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .src_file
                 .into_iter()
                 .map(RequirementsSource::from_requirements_file)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let constraints = args
                 .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let overrides = args
                 .overrides
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             let mut groups = BTreeMap::new();
             for group in args.settings.groups {
@@ -516,17 +516,17 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .src_file
                 .into_iter()
                 .map(RequirementsSource::from_requirements_file)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let constraints = args
                 .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             commands::pip_sync(
                 &requirements,
@@ -588,23 +588,24 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             requirements.extend(
                 args.requirements
                     .into_iter()
-                    .map(RequirementsSource::from_requirements_file),
+                    .map(RequirementsSource::from_requirements_file)
+                    .collect::<Result<Vec<_>, _>>()?,
             );
             let constraints = args
                 .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let overrides = args
                 .overrides
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             let mut groups = BTreeMap::new();
             for group in args.settings.groups {
@@ -735,7 +736,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             sources.extend(
                 args.requirements
                     .into_iter()
-                    .map(RequirementsSource::from_requirements_file),
+                    .map(RequirementsSource::from_requirements_file)
+                    .collect::<Result<Vec<_>, _>>()?,
             );
             commands::pip_uninstall(
                 &sources,
@@ -908,7 +910,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             commands::build_frontend(
                 &project_dir,
@@ -1121,7 +1123,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 requirements.extend(
                     args.with_requirements
                         .into_iter()
-                        .map(RequirementsSource::from_requirements_file),
+                        .map(RequirementsSource::from_requirements_file)
+                        .collect::<Result<Vec<_>, _>>()?,
                 );
                 requirements
             };
@@ -1129,18 +1132,18 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let overrides = args
                 .overrides
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             let build_constraints = args
                 .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             Box::pin(commands::tool_run(
                 args.command,
@@ -1195,24 +1198,25 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             requirements.extend(
                 args.with_requirements
                     .into_iter()
-                    .map(RequirementsSource::from_requirements_file),
+                    .map(RequirementsSource::from_requirements_file)
+                    .collect::<Result<Vec<_>, _>>()?,
             );
 
             let constraints = args
                 .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let overrides = args
                 .overrides
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             Box::pin(commands::tool_install(
                 args.package,
@@ -1639,7 +1643,8 @@ async fn run_project(
             requirements.extend(
                 args.with_requirements
                     .into_iter()
-                    .map(RequirementsSource::from_requirements_file),
+                    .map(RequirementsSource::from_requirements_file)
+                    .collect::<Result<Vec<_>, _>>()?,
             );
 
             Box::pin(commands::run(
@@ -1803,15 +1808,14 @@ async fn run_project(
                 .chain(
                     args.requirements
                         .into_iter()
-                        .map(RequirementsSource::from_requirements_file)
-                        .map(Ok),
+                        .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Result<Vec<_>>>()?;
             let constraints = args
                 .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             Box::pin(commands::add(
                 project_dir,
