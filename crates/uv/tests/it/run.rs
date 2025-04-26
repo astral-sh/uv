@@ -179,7 +179,7 @@ fn run_matching_python_patch_version() -> Result<()> {
     Resolved 1 package in [TIME]
     Audited in [TIME]
     error: Failed to spawn: `python3.11.9`
-      Caused by: `python3.11.9` not available in the project environment, which uses python `3.11.9`. Did you mean to change the environment to Python 3.11.9 with `uv run -p 3.11.9 python`?
+      Caused by: Please omit patch version. Try: `uv run python3.11`. Did you mean to change the environment to Python 3.11.9 with `uv run -p 3.11.9 python`?
     ");
 
     Ok(())
@@ -220,7 +220,7 @@ fn run_missing_python_patch_version_no_project() {
 
     ----- stderr -----
     error: Failed to spawn: `python3.11.9`
-      Caused by: `python3.11.9` not available in the virtual environment, which uses python `3.12.[X]`. Did you mean to search for a Python 3.11.9 environment with `uv run -p 3.11.9 python`?
+      Caused by: Please omit patch version. Try: `uv run python3.11`. Did you mean to search for a Python 3.11.9 environment with `uv run -p 3.11.9 python`?
     ");
 }
 
@@ -292,7 +292,7 @@ fn run_missing_python_patch_version_in_project() -> Result<()> {
     Resolved 1 package in [TIME]
     Audited in [TIME]
     error: Failed to spawn: `python3.11.9`
-      Caused by: `python3.11.9` not available in the project environment, which uses python `3.12.[X]`. Did you mean to change the environment to Python 3.11.9 with `uv run -p 3.11.9 python`?
+      Caused by: Please omit patch version. Try: `uv run python3.11`. Did you mean to change the environment to Python 3.11.9 with `uv run -p 3.11.9 python`?
     ");
 
     Ok(())
