@@ -618,21 +618,22 @@ pub struct PipNamespace {
 
 #[derive(Subcommand)]
 pub enum PipCommand {
-    /// Compile a `requirements.in` file to a `requirements.txt` file.
+    /// Compile a `requirements.in` file to a `requirements.txt` or `pylock.toml` file.
     #[command(
         after_help = "Use `uv help pip compile` for more details.",
         after_long_help = ""
     )]
     Compile(PipCompileArgs),
-    /// Sync an environment with a `requirements.txt` file.
+    /// Sync an environment with a `requirements.txt` or `pylock.toml` file.
     ///
-    /// When syncing an environment, any packages not listed in the `requirements.txt` file will
-    /// be removed. To retain extraneous packages, use `uv pip install` instead.
+    /// When syncing an environment, any packages not listed in the `requirements.txt` or
+    /// `pylock.toml` file will be removed. To retain extraneous packages, use `uv pip install`
+    /// instead.
     ///
-    /// The `requirements.txt` file is presumed to be the output of a `pip compile` or `uv export`
-    /// operation, in which it will include all transitive dependencies. If transitive dependencies
-    /// are not present in the file, they will not be installed. Use `--strict` to warn if any
-    /// transitive dependencies are missing.
+    /// The input file is presumed to be the output of a `pip compile` or `uv export` operation,
+    /// in which it will include all transitive dependencies. If transitive dependencies are not
+    /// present in the file, they will not be installed. Use `--strict` to warn if any transitive
+    /// dependencies are missing.
     #[command(
         after_help = "Use `uv help pip sync` for more details.",
         after_long_help = ""
@@ -815,7 +816,7 @@ pub enum ProjectCommand {
     Lock(LockArgs),
     /// Export the project's lockfile to an alternate format.
     ///
-    /// At present, only `requirements-txt` is supported.
+    /// At present, both `requirements.txt` and `pylock.toml` (PEP 751) formats are supported.
     ///
     /// The project is re-locked before exporting unless the `--locked` or `--frozen` flag is
     /// provided.
@@ -1605,7 +1606,7 @@ pub struct PipInstallArgs {
     #[arg(group = "sources")]
     pub package: Vec<String>,
 
-    /// Install all packages listed in the given `requirements.txt` files.
+    /// Install all packages listed in the given `requirements.txt` or `pylock.toml` files.
     ///
     /// If a `pyproject.toml`, `setup.py`, or `setup.cfg` file is provided, uv will extract the
     /// requirements for the relevant project.
