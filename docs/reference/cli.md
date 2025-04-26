@@ -2214,7 +2214,7 @@ uv lock [OPTIONS]
 
 Export the project's lockfile to an alternate format.
 
-At present, only `requirements-txt` is supported.
+At present, only `requirements-txt` is supported and single use PEP-751 compatible lock files are supported.
 
 The project is re-locked before exporting unless the `--locked` or `--frozen` flag is provided.
 
@@ -5553,7 +5553,7 @@ uv pip [OPTIONS] <COMMAND>
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="#uv-pip-compile"><code>uv pip compile</code></a></dt><dd><p>Compile a <code>requirements.in</code> file to a <code>requirements.txt</code> file</p>
+<dl class="cli-reference"><dt><a href="#uv-pip-compile"><code>uv pip compile</code></a></dt><dd><p>Compile a <code>requirements.in</code> file to a <code>requirements.txt</code> or a <code>pylock.toml</code> file</p>
 </dd>
 <dt><a href="#uv-pip-sync"><code>uv pip sync</code></a></dt><dd><p>Sync an environment with a <code>requirements.txt</code> file</p>
 </dd>
@@ -6141,9 +6141,9 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 
 ### uv pip sync
 
-Sync an environment with a `requirements.txt` file.
+Sync an environment with a `requirements.txt` or a single-use PEP-751 compatible lock file.
 
-When syncing an environment, any packages not listed in the `requirements.txt` file will be removed. To retain extraneous packages, use `uv pip install` instead.
+When syncing an environment, any packages not listed in the `requirements.txt` or the PEP-751 compatible lock file will be removed. To retain extraneous packages, use `uv pip install` instead.
 
 The `requirements.txt` file is presumed to be the output of a `pip compile` or `uv export` operation, in which it will include all transitive dependencies. If transitive dependencies are not present in the file, they will not be installed. Use `--strict` to warn if any transitive dependencies are missing.
 
@@ -7050,7 +7050,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 </ul>
 
 <p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p>
-</dd><dt id="uv-pip-install--requirements"><a href="#uv-pip-install--requirements"><code>--requirements</code></a>, <code>--requirement</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Install all packages listed in the given <code>requirements.txt</code> files.</p>
+</dd><dt id="uv-pip-install--requirements"><a href="#uv-pip-install--requirements"><code>--requirements</code></a>, <code>--requirement</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Install all packages listed in the given <code>requirements.txt</code> or PEP-751 compatible lock files.</p>
 
 <p>If a <code>pyproject.toml</code>, <code>setup.py</code>, or <code>setup.cfg</code> file is provided, uv will extract the requirements for the relevant project.</p>
 
