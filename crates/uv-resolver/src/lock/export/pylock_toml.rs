@@ -36,12 +36,12 @@ use uv_pypi_types::{HashDigests, Hashes, ParsedGitUrl, VcsKind};
 use uv_small_str::SmallString;
 
 use crate::lock::export::ExportableRequirements;
-use crate::lock::{each_element_on_its_line_array, Source};
+use crate::lock::{each_element_on_its_line_array, Source, WheelTagHint};
 use crate::resolution::ResolutionGraphNode;
 use crate::{Installable, LockError, RequiresPython, ResolverOutput};
 
 #[derive(Debug, thiserror::Error)]
-pub enum PylockTomlError {
+pub enum PylockTomlErrorKind {
     #[error("Package `{0}` includes both a registry (`packages.wheels`) and a directory source (`packages.directory`)")]
     WheelWithDirectory(PackageName),
     #[error("Package `{0}` includes both a registry (`packages.wheels`) and a VCS source (`packages.vcs`)")]
@@ -112,6 +112,40 @@ pub enum PylockTomlError {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Deserialize(#[from] toml::de::Error),
+}
+
+#[derive(Debug)]
+pub struct PylockTomlError {
+    kind: Box<PylockTomlErrorKind>,
+    hint: Option<WheelTagHint>,
+}
+
+impl std::error::Error for PylockTomlError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.kind.source()
+    }
+}
+
+impl std::fmt::Display for PylockTomlError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.kind)?;
+        if let Some(hint) = &self.hint {
+            write!(f, "\n\n{hint}")?;
+        }
+        Ok(())
+    }
+}
+
+impl<E> From<E> for PylockTomlError
+where
+    PylockTomlErrorKind: From<E>,
+{
+    fn from(err: E) -> Self {
+        PylockTomlError {
+            kind: Box::new(PylockTomlErrorKind::from(err)),
+            hint: None,
+        }
+    }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -267,7 +301,7 @@ impl<'lock> PylockToml {
         resolution: &ResolverOutput,
         omit: &[PackageName],
         install_path: &Path,
-    ) -> Result<Self, PylockTomlError> {
+    ) -> Result<Self, PylockTomlErrorKind> {
         // The lock version is always `1.0` at time of writing.
         let lock_version = Version::new([1, 0]);
 
@@ -354,8 +388,11 @@ impl<'lock> PylockToml {
                         dist.wheels
                             .iter()
                             .map(|wheel| {
-                                let url =
-                                    wheel.file.url.to_url().map_err(PylockTomlError::ToUrl)?;
+                                let url = wheel
+                                    .file
+                                    .url
+                                    .to_url()
+                                    .map_err(PylockTomlErrorKind::ToUrl)?;
                                 Ok(PylockTomlWheel {
                                     // Optional "when the last component of path/ url would be the same value".
                                     name: if url
@@ -372,18 +409,26 @@ impl<'lock> PylockToml {
                                         .map(Timestamp::from_millisecond)
                                         .transpose()?,
                                     url: Some(
-                                        wheel.file.url.to_url().map_err(PylockTomlError::ToUrl)?,
+                                        wheel
+                                            .file
+                                            .url
+                                            .to_url()
+                                            .map_err(PylockTomlErrorKind::ToUrl)?,
                                     ),
                                     path: None,
                                     size: wheel.file.size,
                                     hashes: Hashes::from(wheel.file.hashes.clone()),
                                 })
                             })
-                            .collect::<Result<Vec<_>, PylockTomlError>>()?,
+                            .collect::<Result<Vec<_>, PylockTomlErrorKind>>()?,
                     );
 
                     if let Some(sdist) = dist.sdist.as_ref() {
-                        let url = sdist.file.url.to_url().map_err(PylockTomlError::ToUrl)?;
+                        let url = sdist
+                            .file
+                            .url
+                            .to_url()
+                            .map_err(PylockTomlErrorKind::ToUrl)?;
                         package.sdist = Some(PylockTomlSdist {
                             // Optional "when the last component of path/ url would be the same value".
                             name: if url
@@ -456,8 +501,11 @@ impl<'lock> PylockToml {
                         dist.wheels
                             .iter()
                             .map(|wheel| {
-                                let url =
-                                    wheel.file.url.to_url().map_err(PylockTomlError::ToUrl)?;
+                                let url = wheel
+                                    .file
+                                    .url
+                                    .to_url()
+                                    .map_err(PylockTomlErrorKind::ToUrl)?;
                                 Ok(PylockTomlWheel {
                                     // Optional "when the last component of path/ url would be the same value".
                                     name: if url
@@ -474,17 +522,21 @@ impl<'lock> PylockToml {
                                         .map(Timestamp::from_millisecond)
                                         .transpose()?,
                                     url: Some(
-                                        wheel.file.url.to_url().map_err(PylockTomlError::ToUrl)?,
+                                        wheel
+                                            .file
+                                            .url
+                                            .to_url()
+                                            .map_err(PylockTomlErrorKind::ToUrl)?,
                                     ),
                                     path: None,
                                     size: wheel.file.size,
                                     hashes: Hashes::from(wheel.file.hashes.clone()),
                                 })
                             })
-                            .collect::<Result<Vec<_>, PylockTomlError>>()?,
+                            .collect::<Result<Vec<_>, PylockTomlErrorKind>>()?,
                     );
 
-                    let url = dist.file.url.to_url().map_err(PylockTomlError::ToUrl)?;
+                    let url = dist.file.url.to_url().map_err(PylockTomlErrorKind::ToUrl)?;
                     package.sdist = Some(PylockTomlSdist {
                         // Optional "when the last component of path/ url would be the same value".
                         name: if url
@@ -536,7 +588,7 @@ impl<'lock> PylockToml {
         dev: &DependencyGroupsWithDefaults,
         annotate: bool,
         install_options: &'lock InstallOptions,
-    ) -> Result<Self, PylockTomlError> {
+    ) -> Result<Self, PylockTomlErrorKind> {
         // Extract the packages from the lock file.
         let ExportableRequirements(mut nodes) = ExportableRequirements::from_lock(
             target,
@@ -591,8 +643,11 @@ impl<'lock> PylockToml {
                         wheels
                             .into_iter()
                             .map(|wheel| {
-                                let url =
-                                    wheel.file.url.to_url().map_err(PylockTomlError::ToUrl)?;
+                                let url = wheel
+                                    .file
+                                    .url
+                                    .to_url()
+                                    .map_err(PylockTomlErrorKind::ToUrl)?;
                                 Ok(PylockTomlWheel {
                                     // Optional "when the last component of path/ url would be the same value".
                                     name: if url
@@ -614,7 +669,7 @@ impl<'lock> PylockToml {
                                     hashes: Hashes::from(wheel.file.hashes),
                                 })
                             })
-                            .collect::<Result<Vec<_>, PylockTomlError>>()?,
+                            .collect::<Result<Vec<_>, PylockTomlErrorKind>>()?,
                     )
                 }
                 Source::Path(..) => None,
@@ -728,7 +783,11 @@ impl<'lock> PylockToml {
             // Extract the `packages.sdist` field.
             let sdist = match &sdist {
                 Some(SourceDist::Registry(sdist)) => {
-                    let url = sdist.file.url.to_url().map_err(PylockTomlError::ToUrl)?;
+                    let url = sdist
+                        .file
+                        .url
+                        .to_url()
+                        .map_err(PylockTomlErrorKind::ToUrl)?;
                     Some(PylockTomlSdist {
                         // Optional "when the last component of path/ url would be the same value".
                         name: if url
@@ -894,37 +953,43 @@ impl<'lock> PylockToml {
             ) {
                 // `packages.wheels` is mutually exclusive with `packages.directory`, `packages.vcs`, and `packages.archive`.
                 (true, _, true, _, _) => {
-                    return Err(PylockTomlError::WheelWithDirectory(package.name.clone()));
+                    return Err(
+                        PylockTomlErrorKind::WheelWithDirectory(package.name.clone()).into(),
+                    );
                 }
                 (true, _, _, true, _) => {
-                    return Err(PylockTomlError::WheelWithVcs(package.name.clone()));
+                    return Err(PylockTomlErrorKind::WheelWithVcs(package.name.clone()).into());
                 }
                 (true, _, _, _, true) => {
-                    return Err(PylockTomlError::WheelWithArchive(package.name.clone()));
+                    return Err(PylockTomlErrorKind::WheelWithArchive(package.name.clone()).into());
                 }
                 // `packages.sdist` is mutually exclusive with `packages.directory`, `packages.vcs`, and `packages.archive`.
                 (_, true, true, _, _) => {
-                    return Err(PylockTomlError::SdistWithDirectory(package.name.clone()));
+                    return Err(
+                        PylockTomlErrorKind::SdistWithDirectory(package.name.clone()).into(),
+                    );
                 }
                 (_, true, _, true, _) => {
-                    return Err(PylockTomlError::SdistWithVcs(package.name.clone()));
+                    return Err(PylockTomlErrorKind::SdistWithVcs(package.name.clone()).into());
                 }
                 (_, true, _, _, true) => {
-                    return Err(PylockTomlError::SdistWithArchive(package.name.clone()));
+                    return Err(PylockTomlErrorKind::SdistWithArchive(package.name.clone()).into());
                 }
                 // `packages.directory` is mutually exclusive with `packages.vcs`, and `packages.archive`.
                 (_, _, true, true, _) => {
-                    return Err(PylockTomlError::DirectoryWithVcs(package.name.clone()));
+                    return Err(PylockTomlErrorKind::DirectoryWithVcs(package.name.clone()).into());
                 }
                 (_, _, true, _, true) => {
-                    return Err(PylockTomlError::DirectoryWithArchive(package.name.clone()));
+                    return Err(
+                        PylockTomlErrorKind::DirectoryWithArchive(package.name.clone()).into(),
+                    );
                 }
                 // `packages.vcs` is mutually exclusive with `packages.archive`.
                 (_, _, _, true, true) => {
-                    return Err(PylockTomlError::VcsWithArchive(package.name.clone()));
+                    return Err(PylockTomlErrorKind::VcsWithArchive(package.name.clone()).into());
                 }
                 (false, false, false, false, false) => {
-                    return Err(PylockTomlError::MissingSource(package.name.clone()));
+                    return Err(PylockTomlErrorKind::MissingSource(package.name.clone()).into());
                 }
                 _ => {}
             }
@@ -1025,18 +1090,28 @@ impl<'lock> PylockToml {
                 }
             } else {
                 return match (no_binary, no_build) {
-                    (true, true) => Err(PylockTomlError::NoBinaryNoBuild(package.name.clone())),
+                    (true, true) => {
+                        Err(PylockTomlErrorKind::NoBinaryNoBuild(package.name.clone()).into())
+                    }
                     (true, false) if is_wheel => {
-                        Err(PylockTomlError::NoBinaryWheelOnly(package.name.clone()))
+                        Err(PylockTomlErrorKind::NoBinaryWheelOnly(package.name.clone()).into())
                     }
-                    (true, false) => Err(PylockTomlError::NoBinary(package.name.clone())),
-                    (false, true) => Err(PylockTomlError::NoBuild(package.name.clone())),
-                    (false, false) if is_wheel => {
-                        Err(PylockTomlError::IncompatibleWheelOnly(package.name.clone()))
+                    (true, false) => {
+                        Err(PylockTomlErrorKind::NoBinary(package.name.clone()).into())
                     }
-                    (false, false) => Err(PylockTomlError::NeitherSourceDistNorWheel(
-                        package.name.clone(),
-                    )),
+                    (false, true) => Err(PylockTomlErrorKind::NoBuild(package.name.clone()).into()),
+                    (false, false) if is_wheel => Err(PylockTomlError {
+                        kind: Box::new(PylockTomlErrorKind::IncompatibleWheelOnly(
+                            package.name.clone(),
+                        )),
+                        hint: package.tag_hint(tags),
+                    }),
+                    (false, false) => Err(PylockTomlError {
+                        kind: Box::new(PylockTomlErrorKind::NeitherSourceDistNorWheel(
+                            package.name.clone(),
+                        )),
+                        hint: package.tag_hint(tags),
+                    }),
                 };
             };
 
@@ -1163,6 +1238,18 @@ impl PylockTomlPackage {
         best.map(|(_, i)| i)
     }
 
+    /// Generate a [`WheelTagHint`] based on wheel-tag incompatibilities.
+    fn tag_hint(&self, tags: &Tags) -> Option<WheelTagHint> {
+        let filenames = self
+            .wheels
+            .iter()
+            .flatten()
+            .filter_map(|wheel| wheel.filename(&self.name).ok())
+            .collect::<Vec<_>>();
+        let filenames = filenames.iter().map(Cow::as_ref).collect::<Vec<_>>();
+        WheelTagHint::from_wheels(&self.name, self.version.as_ref(), &filenames, tags)
+    }
+
     /// Returns the [`ResolvedRepositoryReference`] for the package, if it is a Git source.
     pub fn as_git_ref(&self) -> Option<ResolvedRepositoryReference> {
         let vcs = self.vcs.as_ref()?;
@@ -1180,12 +1267,12 @@ impl PylockTomlPackage {
 
 impl PylockTomlWheel {
     /// Return the [`WheelFilename`] for this wheel.
-    fn filename(&self, name: &PackageName) -> Result<Cow<'_, WheelFilename>, PylockTomlError> {
+    fn filename(&self, name: &PackageName) -> Result<Cow<WheelFilename>, PylockTomlErrorKind> {
         if let Some(name) = self.name.as_ref() {
             Ok(Cow::Borrowed(name))
         } else if let Some(path) = self.path.as_ref() {
             let Some(filename) = path.as_ref().file_name().and_then(OsStr::to_str) else {
-                return Err(PylockTomlError::PathMissingFilename(Box::<Path>::from(
+                return Err(PylockTomlErrorKind::PathMissingFilename(Box::<Path>::from(
                     path.clone(),
                 )));
             };
@@ -1193,12 +1280,12 @@ impl PylockTomlWheel {
             Ok(filename)
         } else if let Some(url) = self.url.as_ref() {
             let Some(filename) = url.filename().ok() else {
-                return Err(PylockTomlError::UrlMissingFilename(url.clone()));
+                return Err(PylockTomlErrorKind::UrlMissingFilename(url.clone()));
             };
             let filename = WheelFilename::from_str(&filename).map(Cow::Owned)?;
             Ok(filename)
         } else {
-            Err(PylockTomlError::WheelMissingPathUrl(name.clone()))
+            Err(PylockTomlErrorKind::WheelMissingPathUrl(name.clone()))
         }
     }
 
@@ -1208,17 +1295,17 @@ impl PylockTomlWheel {
         install_path: &Path,
         name: &PackageName,
         index: Option<&Url>,
-    ) -> Result<RegistryBuiltWheel, PylockTomlError> {
+    ) -> Result<RegistryBuiltWheel, PylockTomlErrorKind> {
         let filename = self.filename(name)?.into_owned();
 
         let file_url = if let Some(url) = self.url.as_ref() {
             UrlString::from(url)
         } else if let Some(path) = self.path.as_ref() {
             let path = install_path.join(path);
-            let url = Url::from_file_path(path).map_err(|()| PylockTomlError::PathToUrl)?;
+            let url = Url::from_file_path(path).map_err(|()| PylockTomlErrorKind::PathToUrl)?;
             UrlString::from(url)
         } else {
-            return Err(PylockTomlError::WheelMissingPathUrl(name.clone()));
+            return Err(PylockTomlErrorKind::WheelMissingPathUrl(name.clone()));
         };
 
         let index = if let Some(index) = index {
@@ -1228,7 +1315,7 @@ impl PylockTomlWheel {
             // URL (less the filename) as the index. This isn't correct, but it's the best we can
             // do. In practice, the only effect here should be that we cache the wheel under a hash
             // of this URL (since we cache under the hash of the index).
-            let mut index = file_url.to_url().map_err(PylockTomlError::ToUrl)?;
+            let mut index = file_url.to_url().map_err(PylockTomlErrorKind::ToUrl)?;
             index.path_segments_mut().unwrap().pop();
             IndexUrl::from(VerbatimUrl::from_url(index))
         };
@@ -1258,7 +1345,7 @@ impl PylockTomlDirectory {
         &self,
         install_path: &Path,
         name: &PackageName,
-    ) -> Result<DirectorySourceDist, PylockTomlError> {
+    ) -> Result<DirectorySourceDist, PylockTomlErrorKind> {
         let path = if let Some(subdirectory) = self.subdirectory.as_ref() {
             install_path.join(&self.path).join(subdirectory)
         } else {
@@ -1266,7 +1353,7 @@ impl PylockTomlDirectory {
         };
         let path = uv_fs::normalize_path_buf(path);
         let url =
-            VerbatimUrl::from_normalized_path(&path).map_err(|_| PylockTomlError::PathToUrl)?;
+            VerbatimUrl::from_normalized_path(&path).map_err(|_| PylockTomlErrorKind::PathToUrl)?;
         Ok(DirectorySourceDist {
             name: name.clone(),
             install_path: path.into_boxed_path(),
@@ -1283,7 +1370,7 @@ impl PylockTomlVcs {
         &self,
         install_path: &Path,
         name: &PackageName,
-    ) -> Result<GitSourceDist, PylockTomlError> {
+    ) -> Result<GitSourceDist, PylockTomlErrorKind> {
         let subdirectory = self.subdirectory.clone().map(Box::<Path>::from);
 
         // Reconstruct the `GitUrl` from the individual fields.
@@ -1292,9 +1379,9 @@ impl PylockTomlVcs {
                 url.clone()
             } else if let Some(path) = self.path.as_ref() {
                 Url::from_directory_path(install_path.join(path))
-                    .map_err(|()| PylockTomlError::PathToUrl)?
+                    .map_err(|()| PylockTomlErrorKind::PathToUrl)?
             } else {
-                return Err(PylockTomlError::VcsMissingPathUrl(name.clone()));
+                return Err(PylockTomlErrorKind::VcsMissingPathUrl(name.clone()));
             };
             url.set_fragment(None);
             url.set_query(None);
@@ -1326,23 +1413,23 @@ impl PylockTomlVcs {
 
 impl PylockTomlSdist {
     /// Return the filename for this sdist.
-    fn filename(&self, name: &PackageName) -> Result<Cow<'_, SmallString>, PylockTomlError> {
+    fn filename(&self, name: &PackageName) -> Result<Cow<'_, SmallString>, PylockTomlErrorKind> {
         if let Some(name) = self.name.as_ref() {
             Ok(Cow::Borrowed(name))
         } else if let Some(path) = self.path.as_ref() {
             let Some(filename) = path.as_ref().file_name().and_then(OsStr::to_str) else {
-                return Err(PylockTomlError::PathMissingFilename(Box::<Path>::from(
+                return Err(PylockTomlErrorKind::PathMissingFilename(Box::<Path>::from(
                     path.clone(),
                 )));
             };
             Ok(Cow::Owned(SmallString::from(filename)))
         } else if let Some(url) = self.url.as_ref() {
             let Some(filename) = url.filename().ok() else {
-                return Err(PylockTomlError::UrlMissingFilename(url.clone()));
+                return Err(PylockTomlErrorKind::UrlMissingFilename(url.clone()));
             };
             Ok(Cow::Owned(SmallString::from(filename)))
         } else {
-            Err(PylockTomlError::SdistMissingPathUrl(name.clone()))
+            Err(PylockTomlErrorKind::SdistMissingPathUrl(name.clone()))
         }
     }
 
@@ -1353,7 +1440,7 @@ impl PylockTomlSdist {
         name: &PackageName,
         version: Option<&Version>,
         index: Option<&Url>,
-    ) -> Result<RegistrySourceDist, PylockTomlError> {
+    ) -> Result<RegistrySourceDist, PylockTomlErrorKind> {
         let filename = self.filename(name)?.into_owned();
         let ext = SourceDistExtension::from_path(filename.as_ref())?;
 
@@ -1368,10 +1455,10 @@ impl PylockTomlSdist {
             UrlString::from(url)
         } else if let Some(path) = self.path.as_ref() {
             let path = install_path.join(path);
-            let url = Url::from_file_path(path).map_err(|()| PylockTomlError::PathToUrl)?;
+            let url = Url::from_file_path(path).map_err(|()| PylockTomlErrorKind::PathToUrl)?;
             UrlString::from(url)
         } else {
-            return Err(PylockTomlError::SdistMissingPathUrl(name.clone()));
+            return Err(PylockTomlErrorKind::SdistMissingPathUrl(name.clone()));
         };
 
         let index = if let Some(index) = index {
@@ -1381,7 +1468,7 @@ impl PylockTomlSdist {
             // URL (less the filename) as the index. This isn't correct, but it's the best we can
             // do. In practice, the only effect here should be that we cache the sdist under a hash
             // of this URL (since we cache under the hash of the index).
-            let mut index = file_url.to_url().map_err(PylockTomlError::ToUrl)?;
+            let mut index = file_url.to_url().map_err(PylockTomlErrorKind::ToUrl)?;
             index.path_segments_mut().unwrap().pop();
             IndexUrl::from(VerbatimUrl::from_url(index))
         };
@@ -1414,11 +1501,11 @@ impl PylockTomlArchive {
         install_path: &Path,
         name: &PackageName,
         version: Option<&Version>,
-    ) -> Result<Dist, PylockTomlError> {
+    ) -> Result<Dist, PylockTomlErrorKind> {
         if let Some(url) = self.url.as_ref() {
             let filename = url
                 .filename()
-                .map_err(|_| PylockTomlError::UrlMissingFilename(url.clone()))?;
+                .map_err(|_| PylockTomlErrorKind::UrlMissingFilename(url.clone()))?;
 
             let ext = DistExtension::from_path(filename.as_ref())?;
             match ext {
@@ -1446,7 +1533,7 @@ impl PylockTomlArchive {
                 .file_name()
                 .and_then(OsStr::to_str)
                 .ok_or_else(|| {
-                    PylockTomlError::PathMissingFilename(Box::<Path>::from(path.clone()))
+                    PylockTomlErrorKind::PathMissingFilename(Box::<Path>::from(path.clone()))
                 })?;
 
             let ext = DistExtension::from_path(filename)?;
@@ -1455,7 +1542,7 @@ impl PylockTomlArchive {
                     let filename = WheelFilename::from_str(filename)?;
                     let install_path = install_path.join(path);
                     let url = VerbatimUrl::from_absolute_path(&install_path)
-                        .map_err(|_| PylockTomlError::PathToUrl)?;
+                        .map_err(|_| PylockTomlErrorKind::PathToUrl)?;
                     Ok(Dist::Built(BuiltDist::Path(PathBuiltDist {
                         filename,
                         install_path: install_path.into_boxed_path(),
@@ -1465,7 +1552,7 @@ impl PylockTomlArchive {
                 DistExtension::Source(ext) => {
                     let install_path = install_path.join(path);
                     let url = VerbatimUrl::from_absolute_path(&install_path)
-                        .map_err(|_| PylockTomlError::PathToUrl)?;
+                        .map_err(|_| PylockTomlErrorKind::PathToUrl)?;
                     Ok(Dist::Source(SourceDist::Path(PathSourceDist {
                         name: name.clone(),
                         version: version.cloned(),
@@ -1476,16 +1563,16 @@ impl PylockTomlArchive {
                 }
             }
         } else {
-            return Err(PylockTomlError::ArchiveMissingPathUrl(name.clone()));
+            return Err(PylockTomlErrorKind::ArchiveMissingPathUrl(name.clone()));
         }
     }
 
     /// Returns `true` if the [`PylockTomlArchive`] is a wheel.
-    fn is_wheel(&self, name: &PackageName) -> Result<bool, PylockTomlError> {
+    fn is_wheel(&self, name: &PackageName) -> Result<bool, PylockTomlErrorKind> {
         if let Some(url) = self.url.as_ref() {
             let filename = url
                 .filename()
-                .map_err(|_| PylockTomlError::UrlMissingFilename(url.clone()))?;
+                .map_err(|_| PylockTomlErrorKind::UrlMissingFilename(url.clone()))?;
 
             let ext = DistExtension::from_path(filename.as_ref())?;
             Ok(matches!(ext, DistExtension::Wheel))
@@ -1495,13 +1582,13 @@ impl PylockTomlArchive {
                 .file_name()
                 .and_then(OsStr::to_str)
                 .ok_or_else(|| {
-                    PylockTomlError::PathMissingFilename(Box::<Path>::from(path.clone()))
+                    PylockTomlErrorKind::PathMissingFilename(Box::<Path>::from(path.clone()))
                 })?;
 
             let ext = DistExtension::from_path(filename)?;
             Ok(matches!(ext, DistExtension::Wheel))
         } else {
-            return Err(PylockTomlError::ArchiveMissingPathUrl(name.clone()));
+            return Err(PylockTomlErrorKind::ArchiveMissingPathUrl(name.clone()));
         }
     }
 }

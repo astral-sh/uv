@@ -15,7 +15,7 @@ use uv_pypi_types::ConflictItem;
 
 use crate::graph_ops::{marker_reachability, Reachable};
 pub(crate) use crate::lock::export::pylock_toml::PylockTomlPackage;
-pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError};
+pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
 use crate::universal_marker::resolve_conflicts;
 use crate::{Installable, Package};
