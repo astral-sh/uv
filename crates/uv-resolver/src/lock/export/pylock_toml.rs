@@ -12,7 +12,9 @@ use toml_edit::{value, Array, ArrayOfTables, Item, Table};
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
-use uv_configuration::{DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions};
+use uv_configuration::{
+    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions,
+};
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, SourceDistFilename,
     SourceDistFilenameError, WheelFilename, WheelFilenameError,
@@ -80,6 +82,18 @@ pub enum PylockTomlError {
     PathToUrl,
     #[error("Failed to convert URL to path")]
     UrlToPath,
+    #[error("Package `{0}` can't be installed because it doesn't have a source distribution or wheel for the current platform")]
+    NeitherSourceDistNorWheel(PackageName),
+    #[error("Package `{0}` can't be installed because it is marked as both `--no-binary` and `--no-build`")]
+    NoBinaryNoBuild(PackageName),
+    #[error("Package `{0}` can't be installed because it is marked as `--no-binary` but has no source distribution")]
+    NoBinary(PackageName),
+    #[error("Package `{0}` can't be installed because it is marked as `--no-build` but has no binary distribution")]
+    NoBuild(PackageName),
+    #[error("Package `{0}` can't be installed because the binary distribution is incompatible with the current platform")]
+    IncompatibleWheelOnly(PackageName),
+    #[error("Package `{0}` can't be installed because it is marked as `--no-binary` but is itself a binary distribution")]
+    NoBinaryWheelOnly(PackageName),
     #[error(transparent)]
     WheelFilename(#[from] WheelFilenameError),
     #[error(transparent)]
@@ -857,6 +871,7 @@ impl<'lock> PylockToml {
         install_path: &Path,
         markers: &MarkerEnvironment,
         tags: &Tags,
+        build_options: &BuildOptions,
     ) -> Result<Resolution, PylockTomlError> {
         let mut graph =
             petgraph::graph::DiGraph::with_capacity(self.packages.len(), self.packages.len());
@@ -914,8 +929,19 @@ impl<'lock> PylockToml {
                 _ => {}
             }
 
+            let no_binary = build_options.no_binary_package(&package.name);
+            let no_build = build_options.no_build_package(&package.name);
+            let is_wheel = package
+                .archive
+                .as_ref()
+                .map(|archive| archive.is_wheel(&package.name))
+                .transpose()?
+                .unwrap_or_default();
+
             // Search for a matching wheel.
-            let dist = if let Some(best_wheel) = package.find_best_wheel(tags) {
+            let dist = if let Some(best_wheel) =
+                package.find_best_wheel(tags).filter(|_| !no_binary)
+            {
                 let hashes = HashDigests::from(best_wheel.hashes.clone());
                 let built_dist = Dist::Built(BuiltDist::Registry(RegistryBuiltDist {
                     wheels: vec![best_wheel.to_registry_wheel(
@@ -935,7 +961,7 @@ impl<'lock> PylockToml {
                     hashes,
                     install: true,
                 }
-            } else if let Some(sdist) = package.sdist.as_ref() {
+            } else if let Some(sdist) = package.sdist.as_ref().filter(|_| !no_build) {
                 let hashes = HashDigests::from(sdist.hashes.clone());
                 let sdist = Dist::Source(SourceDist::Registry(sdist.to_sdist(
                     install_path,
@@ -952,7 +978,7 @@ impl<'lock> PylockToml {
                     hashes,
                     install: true,
                 }
-            } else if let Some(sdist) = package.directory.as_ref() {
+            } else if let Some(sdist) = package.directory.as_ref().filter(|_| !no_build) {
                 let hashes = HashDigests::empty();
                 let sdist = Dist::Source(SourceDist::Directory(
                     sdist.to_sdist(install_path, &package.name)?,
@@ -966,7 +992,7 @@ impl<'lock> PylockToml {
                     hashes,
                     install: true,
                 }
-            } else if let Some(sdist) = package.vcs.as_ref() {
+            } else if let Some(sdist) = package.vcs.as_ref().filter(|_| !no_build) {
                 let hashes = HashDigests::empty();
                 let sdist = Dist::Source(SourceDist::Git(
                     sdist.to_sdist(install_path, &package.name)?,
@@ -980,7 +1006,12 @@ impl<'lock> PylockToml {
                     hashes,
                     install: true,
                 }
-            } else if let Some(dist) = package.archive.as_ref() {
+            } else if let Some(dist) =
+                package
+                    .archive
+                    .as_ref()
+                    .filter(|_| if is_wheel { !no_binary } else { !no_build })
+            {
                 let hashes = HashDigests::from(dist.hashes.clone());
                 let dist = dist.to_dist(install_path, &package.name, package.version.as_ref())?;
                 let dist = ResolvedDist::Installable {
@@ -993,13 +1024,20 @@ impl<'lock> PylockToml {
                     install: true,
                 }
             } else {
-                // This is only reachable if the package contains a `wheels` entry (and nothing
-                // else), but there are no wheels available for the current environment. (If the
-                // package doesn't contain _any_ of `wheels`, `sdist`, etc., then we error in the
-                // match above.)
-                //
-                // TODO(charlie): Include a hint, like in `uv.lock`.
-                return Err(PylockTomlError::MissingWheel(package.name.clone()));
+                return match (no_binary, no_build) {
+                    (true, true) => Err(PylockTomlError::NoBinaryNoBuild(package.name.clone())),
+                    (true, false) if is_wheel => {
+                        Err(PylockTomlError::NoBinaryWheelOnly(package.name.clone()))
+                    }
+                    (true, false) => Err(PylockTomlError::NoBinary(package.name.clone())),
+                    (false, true) => Err(PylockTomlError::NoBuild(package.name.clone())),
+                    (false, false) if is_wheel => {
+                        Err(PylockTomlError::IncompatibleWheelOnly(package.name.clone()))
+                    }
+                    (false, false) => Err(PylockTomlError::NeitherSourceDistNorWheel(
+                        package.name.clone(),
+                    )),
+                };
             };
 
             let index = graph.add_node(dist);
@@ -1437,6 +1475,31 @@ impl PylockTomlArchive {
                     })))
                 }
             }
+        } else {
+            return Err(PylockTomlError::ArchiveMissingPathUrl(name.clone()));
+        }
+    }
+
+    /// Returns `true` if the [`PylockTomlArchive`] is a wheel.
+    fn is_wheel(&self, name: &PackageName) -> Result<bool, PylockTomlError> {
+        if let Some(url) = self.url.as_ref() {
+            let filename = url
+                .filename()
+                .map_err(|_| PylockTomlError::UrlMissingFilename(url.clone()))?;
+
+            let ext = DistExtension::from_path(filename.as_ref())?;
+            Ok(matches!(ext, DistExtension::Wheel))
+        } else if let Some(path) = self.path.as_ref() {
+            let filename = path
+                .as_ref()
+                .file_name()
+                .and_then(OsStr::to_str)
+                .ok_or_else(|| {
+                    PylockTomlError::PathMissingFilename(Box::<Path>::from(path.clone()))
+                })?;
+
+            let ext = DistExtension::from_path(filename)?;
+            Ok(matches!(ext, DistExtension::Wheel))
         } else {
             return Err(PylockTomlError::ArchiveMissingPathUrl(name.clone()));
         }
