@@ -62,6 +62,8 @@ pub enum PylockTomlError {
         "Package `{0}` must include one of: `wheels`, `directory`, `archive`, `sdist`, or `vcs`"
     )]
     MissingSource(PackageName),
+    #[error("Package `{0}` does not include a compatible wheel for the current platform")]
+    MissingWheel(PackageName),
     #[error("`packages.wheel` entry for `{0}` must have a `path` or `url`")]
     WheelMissingPathUrl(PackageName),
     #[error("`packages.sdist` entry for `{0}` must have a `path` or `url`")]
@@ -863,6 +865,11 @@ impl<'lock> PylockToml {
         let root = graph.add_node(Node::Root);
 
         for package in self.packages {
+            // Omit packages that aren't relevant to the current environment.
+            if !package.marker.evaluate(markers, &[]) {
+                continue;
+            }
+
             match (
                 package.wheels.is_some(),
                 package.sdist.is_some(),
@@ -901,11 +908,11 @@ impl<'lock> PylockToml {
                 (_, _, _, true, true) => {
                     return Err(PylockTomlError::VcsWithArchive(package.name.clone()));
                 }
+                (false, false, false, false, false) => {
+                    return Err(PylockTomlError::MissingSource(package.name.clone()));
+                }
                 _ => {}
             }
-
-            // Omit packages that aren't relevant to the current environment.
-            let install = package.marker.evaluate(markers, &[]);
 
             // Search for a matching wheel.
             let dist = if let Some(best_wheel) = package.find_best_wheel(tags) {
@@ -926,7 +933,7 @@ impl<'lock> PylockToml {
                 Node::Dist {
                     dist,
                     hashes,
-                    install,
+                    install: true,
                 }
             } else if let Some(sdist) = package.sdist.as_ref() {
                 let hashes = HashDigests::from(sdist.hashes.clone());
@@ -943,7 +950,7 @@ impl<'lock> PylockToml {
                 Node::Dist {
                     dist,
                     hashes,
-                    install,
+                    install: true,
                 }
             } else if let Some(sdist) = package.directory.as_ref() {
                 let hashes = HashDigests::empty();
@@ -957,7 +964,7 @@ impl<'lock> PylockToml {
                 Node::Dist {
                     dist,
                     hashes,
-                    install,
+                    install: true,
                 }
             } else if let Some(sdist) = package.vcs.as_ref() {
                 let hashes = HashDigests::empty();
@@ -971,7 +978,7 @@ impl<'lock> PylockToml {
                 Node::Dist {
                     dist,
                     hashes,
-                    install,
+                    install: true,
                 }
             } else if let Some(dist) = package.archive.as_ref() {
                 let hashes = HashDigests::from(dist.hashes.clone());
@@ -983,10 +990,16 @@ impl<'lock> PylockToml {
                 Node::Dist {
                     dist,
                     hashes,
-                    install,
+                    install: true,
                 }
             } else {
-                return Err(PylockTomlError::MissingSource(package.name.clone()));
+                // This is only reachable if the package contains a `wheels` entry (and nothing
+                // else), but there are no wheels available for the current environment. (If the
+                // package doesn't contain _any_ of `wheels`, `sdist`, etc., then we error in the
+                // match above.)
+                //
+                // TODO(charlie): Include a hint, like in `uv.lock`.
+                return Err(PylockTomlError::MissingWheel(package.name.clone()));
             };
 
             let index = graph.add_node(dist);
