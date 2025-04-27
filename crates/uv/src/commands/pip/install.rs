@@ -441,7 +441,8 @@ pub(crate) async fn pip_install(
         let content = fs_err::tokio::read_to_string(&pylock).await?;
         let lock = toml::from_str::<PylockToml>(&content)?;
 
-        let resolution = lock.to_resolution(install_path, marker_env.markers(), &tags)?;
+        let resolution =
+            lock.to_resolution(install_path, marker_env.markers(), &tags, &build_options)?;
         let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
 
         (resolution, hasher)
