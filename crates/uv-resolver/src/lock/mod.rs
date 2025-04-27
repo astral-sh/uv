@@ -52,7 +52,7 @@ use uv_workspace::WorkspaceMember;
 use crate::fork_strategy::ForkStrategy;
 pub(crate) use crate::lock::export::PylockTomlPackage;
 pub use crate::lock::export::RequirementsTxtExport;
-pub use crate::lock::export::{PylockToml, PylockTomlError};
+pub use crate::lock::export::{PylockToml, PylockTomlErrorKind};
 pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::TreeDisplay;
@@ -2305,78 +2305,19 @@ impl Package {
         }
     }
 
-    /// Generate a [`LockErrorHint`] based on wheel-tag incompatibilities.
-    fn tag_hint(&self, tag_policy: TagPolicy<'_>) -> Option<LockErrorHint> {
-        let incompatibility = self
+    /// Generate a [`WheelTagHint`] based on wheel-tag incompatibilities.
+    fn tag_hint(&self, tag_policy: TagPolicy<'_>) -> Option<WheelTagHint> {
+        let filenames = self
             .wheels
             .iter()
-            .map(|wheel| {
-                tag_policy.tags().compatibility(
-                    wheel.filename.python_tags(),
-                    wheel.filename.abi_tags(),
-                    wheel.filename.platform_tags(),
-                )
-            })
-            .max()?;
-        match incompatibility {
-            TagCompatibility::Incompatible(IncompatibleTag::Python) => {
-                let best = tag_policy.tags().python_tag();
-                let tags = self.python_tags().collect::<BTreeSet<_>>();
-                if tags.is_empty() {
-                    None
-                } else {
-                    Some(LockErrorHint::LanguageTags {
-                        package: self.id.name.clone(),
-                        version: self.id.version.clone(),
-                        tags,
-                        best,
-                    })
-                }
-            }
-            TagCompatibility::Incompatible(IncompatibleTag::Abi) => {
-                let best = tag_policy.tags().abi_tag();
-                let tags = self
-                    .abi_tags()
-                    // Ignore `none`, which is universally compatible.
-                    //
-                    // As an example, `none` can appear here if we're solving for Python 3.13, and
-                    // the distribution includes a wheel for `cp312-none-macosx_11_0_arm64`.
-                    //
-                    // In that case, the wheel isn't compatible, but when solving for Python 3.13,
-                    // the `cp312` Python tag _can_ be compatible (e.g., for `cp312-abi3-macosx_11_0_arm64.whl`),
-                    // so this is considered an ABI incompatibility rather than Python incompatibility.
-                    .filter(|tag| *tag != AbiTag::None)
-                    .collect::<BTreeSet<_>>();
-                if tags.is_empty() {
-                    None
-                } else {
-                    Some(LockErrorHint::AbiTags {
-                        package: self.id.name.clone(),
-                        version: self.id.version.clone(),
-                        tags,
-                        best,
-                    })
-                }
-            }
-            TagCompatibility::Incompatible(IncompatibleTag::Platform) => {
-                let best = tag_policy.tags().platform_tag().cloned();
-                let tags = self
-                    .platform_tags(tag_policy.tags())
-                    .cloned()
-                    .collect::<BTreeSet<_>>();
-                if tags.is_empty() {
-                    None
-                } else {
-                    Some(LockErrorHint::PlatformTags {
-                        package: self.id.name.clone(),
-                        version: self.id.version.clone(),
-                        tags,
-                        best,
-                    })
-                }
-            }
-            _ => None,
-        }
+            .map(|wheel| &wheel.filename)
+            .collect::<Vec<_>>();
+        WheelTagHint::from_wheels(
+            &self.id.name,
+            self.id.version.as_ref(),
+            &filenames,
+            tag_policy.tags(),
+        )
     }
 
     /// Convert the source of this [`Package`] to a [`SourceDist`] that can be used in installation.
@@ -2727,43 +2668,6 @@ impl Package {
         }
 
         Ok(table)
-    }
-
-    /// Returns an iterator over the compatible Python tags of the available wheels.
-    fn python_tags(&self) -> impl Iterator<Item = LanguageTag> + '_ {
-        self.wheels
-            .iter()
-            .flat_map(|wheel| wheel.filename.python_tags())
-            .copied()
-    }
-
-    /// Returns an iterator over the compatible Python tags of the available wheels.
-    fn abi_tags(&self) -> impl Iterator<Item = AbiTag> + '_ {
-        self.wheels
-            .iter()
-            .flat_map(|wheel| wheel.filename.abi_tags())
-            .copied()
-    }
-
-    /// Returns the set of platform tags for the distribution that are ABI-compatible with the given
-    /// tags.
-    pub fn platform_tags<'a>(
-        &'a self,
-        tags: &'a Tags,
-    ) -> impl Iterator<Item = &'a PlatformTag> + 'a {
-        self.wheels.iter().flat_map(move |wheel| {
-            if wheel.filename.python_tags().iter().any(|wheel_py| {
-                wheel
-                    .filename
-                    .abi_tags()
-                    .iter()
-                    .any(|wheel_abi| tags.is_compatible_abi(*wheel_py, *wheel_abi))
-            }) {
-                wheel.filename.platform_tags().iter()
-            } else {
-                [].iter()
-            }
-        })
     }
 
     fn find_best_wheel(&self, tag_policy: TagPolicy<'_>) -> Option<usize> {
@@ -4782,7 +4686,7 @@ fn normalize_requirement(
 #[derive(Debug)]
 pub struct LockError {
     kind: Box<LockErrorKind>,
-    hint: Option<LockErrorHint>,
+    hint: Option<WheelTagHint>,
 }
 
 impl std::error::Error for LockError {
@@ -4822,7 +4726,7 @@ where
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::enum_variant_names)]
-enum LockErrorHint {
+enum WheelTagHint {
     /// None of the available wheels for a package have a compatible Python language tag (e.g.,
     /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
     LanguageTags {
@@ -4849,7 +4753,123 @@ enum LockErrorHint {
     },
 }
 
-impl std::fmt::Display for LockErrorHint {
+impl WheelTagHint {
+    /// Generate a [`WheelTagHint`] from the given (incompatible) wheels.
+    fn from_wheels(
+        name: &PackageName,
+        version: Option<&Version>,
+        filenames: &[&WheelFilename],
+        tags: &Tags,
+    ) -> Option<WheelTagHint> {
+        let incompatibility = filenames
+            .iter()
+            .map(|filename| {
+                tags.compatibility(
+                    filename.python_tags(),
+                    filename.abi_tags(),
+                    filename.platform_tags(),
+                )
+            })
+            .max()?;
+        match incompatibility {
+            TagCompatibility::Incompatible(IncompatibleTag::Python) => {
+                let best = tags.python_tag();
+                let tags = Self::python_tags(filenames.iter().copied()).collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(WheelTagHint::LanguageTags {
+                        package: name.clone(),
+                        version: version.cloned(),
+                        tags,
+                        best,
+                    })
+                }
+            }
+            TagCompatibility::Incompatible(IncompatibleTag::Abi) => {
+                let best = tags.abi_tag();
+                let tags = Self::abi_tags(filenames.iter().copied())
+                    // Ignore `none`, which is universally compatible.
+                    //
+                    // As an example, `none` can appear here if we're solving for Python 3.13, and
+                    // the distribution includes a wheel for `cp312-none-macosx_11_0_arm64`.
+                    //
+                    // In that case, the wheel isn't compatible, but when solving for Python 3.13,
+                    // the `cp312` Python tag _can_ be compatible (e.g., for `cp312-abi3-macosx_11_0_arm64.whl`),
+                    // so this is considered an ABI incompatibility rather than Python incompatibility.
+                    .filter(|tag| *tag != AbiTag::None)
+                    .collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(WheelTagHint::AbiTags {
+                        package: name.clone(),
+                        version: version.cloned(),
+                        tags,
+                        best,
+                    })
+                }
+            }
+            TagCompatibility::Incompatible(IncompatibleTag::Platform) => {
+                let best = tags.platform_tag().cloned();
+                let tags = Self::platform_tags(filenames.iter().copied(), tags)
+                    .cloned()
+                    .collect::<BTreeSet<_>>();
+                if tags.is_empty() {
+                    None
+                } else {
+                    Some(WheelTagHint::PlatformTags {
+                        package: name.clone(),
+                        version: version.cloned(),
+                        tags,
+                        best,
+                    })
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns an iterator over the compatible Python tags of the available wheels.
+    fn python_tags<'a>(
+        filenames: impl Iterator<Item = &'a WheelFilename> + 'a,
+    ) -> impl Iterator<Item = LanguageTag> + 'a {
+        filenames
+            .flat_map(uv_distribution_filename::WheelFilename::python_tags)
+            .copied()
+    }
+
+    /// Returns an iterator over the compatible Python tags of the available wheels.
+    fn abi_tags<'a>(
+        filenames: impl Iterator<Item = &'a WheelFilename> + 'a,
+    ) -> impl Iterator<Item = AbiTag> + 'a {
+        filenames
+            .flat_map(uv_distribution_filename::WheelFilename::abi_tags)
+            .copied()
+    }
+
+    /// Returns the set of platform tags for the distribution that are ABI-compatible with the given
+    /// tags.
+    fn platform_tags<'a>(
+        filenames: impl Iterator<Item = &'a WheelFilename> + 'a,
+        tags: &'a Tags,
+    ) -> impl Iterator<Item = &'a PlatformTag> + 'a {
+        filenames.flat_map(move |filename| {
+            if filename.python_tags().iter().any(|wheel_py| {
+                filename
+                    .abi_tags()
+                    .iter()
+                    .any(|wheel_abi| tags.is_compatible_abi(*wheel_py, *wheel_abi))
+            }) {
+                filename.platform_tags().iter()
+            } else {
+                [].iter()
+            }
+        })
+    }
+}
+
+impl std::fmt::Display for WheelTagHint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::LanguageTags {

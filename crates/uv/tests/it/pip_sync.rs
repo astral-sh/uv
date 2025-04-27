@@ -5892,6 +5892,8 @@ fn pep_751_wheel_only() -> Result<()> {
 
     ----- stderr -----
     error: Package `torch` can't be installed because it doesn't have a source distribution or wheel for the current platform
+
+    hint: You're using CPython 3.8 (`cp38`), but `torch` (v2.2.1) only has wheels with the following Python implementation tag: `cp312`
     "
     );
 
