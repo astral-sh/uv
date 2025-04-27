@@ -5822,3 +5822,78 @@ fn pep_751() -> Result<()> {
 
     Ok(())
 }
+
+/// Avoid erroring for packages that only include wheels, and _don't_ include a wheel for the
+/// current platform, but are omitted by markers anyway.
+///
+/// See: <https://github.com/astral-sh/uv/issues/13127>
+#[test]
+fn pep_751_wheel_only() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+        dependencies = ["torch"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    // If there's no compatible wheel for a package we _don't_ need to install (e.g., anything
+    // CUDA-related), succeed.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--dry-run")
+        .arg("--python-platform")
+        .arg("macos"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Would download 9 packages
+    Would install 9 packages
+     + filelock==3.13.1
+     + fsspec==2024.3.1
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + mpmath==1.3.0
+     + networkx==3.2.1
+     + sympy==1.12
+     + torch==2.2.1
+     + typing-extensions==4.10.0
+    "
+    );
+
+    // However, if there's no compatible wheel for a package that we _do_ need to install, we should
+    // error
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--dry-run")
+        .arg("--python-platform")
+        .arg("macos")
+        .arg("--python-version")
+        .arg("3.8"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `torch` does not include a compatible wheel for the current platform
+    "
+    );
+
+    Ok(())
+}
