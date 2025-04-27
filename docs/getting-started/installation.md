@@ -179,7 +179,7 @@ To enable shell autocompletion for uv commands, run one of the following:
 === "fish"
 
     ```bash
-    echo 'uv generate-shell-completion fish | source' >> ~/.config/fish/completions/uv.fish
+    echo 'uv generate-shell-completion fish | source' > ~/.config/fish/completions/uv.fish
     ```
 
 === "Elvish"
@@ -214,7 +214,7 @@ To enable shell autocompletion for uvx, run one of the following:
 === "fish"
 
     ```bash
-    echo 'uvx --generate-shell-completion fish | source' >> ~/.config/fish/completions/uvx.fish
+    echo 'uvx --generate-shell-completion fish | source' > ~/.config/fish/completions/uvx.fish
     ```
 
 === "Elvish"
