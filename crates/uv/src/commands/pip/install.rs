@@ -32,8 +32,8 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
-    ResolutionMode, ResolverEnvironment,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
+    PythonRequirement, ResolutionMode, ResolverEnvironment,
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
@@ -111,6 +111,7 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
+        pylock,
         source_trees,
         groups,
         index_url,
@@ -129,6 +130,12 @@ pub(crate) async fn pip_install(
         &client_builder,
     )
     .await?;
+
+    if pylock.is_some() {
+        if preview.is_disabled() {
+            warn_user!("The `--pylock` setting is experimental and may change without warning. Pass `--preview` to disable this warning.");
+        }
+    }
 
     let constraints: Vec<NameRequirementSpecification> = constraints
         .iter()
@@ -154,8 +161,7 @@ pub(crate) async fn pip_install(
     let build_constraints: Vec<NameRequirementSpecification> =
         operations::read_constraints(build_constraints, &client_builder)
             .await?
-            .iter()
-            .cloned()
+            .into_iter()
             .chain(
                 build_constraints_from_workspace
                     .iter()
@@ -246,6 +252,7 @@ pub(crate) async fn pip_install(
     if reinstall.is_none()
         && upgrade.is_none()
         && source_trees.is_empty()
+        && pylock.is_none()
         && matches!(modifications, Modifications::Sufficient)
     {
         match site_packages.satisfies_spec(&requirements, &constraints, &overrides, &marker_env)? {
@@ -305,9 +312,6 @@ pub(crate) async fn pip_install(
     } else {
         HashStrategy::None
     };
-
-    // When resolving, don't take any external preferences into account.
-    let preferences = Vec::default();
 
     // Incorporate any index locations from the provided sources.
     let index_locations = index_locations.combine(
@@ -430,51 +434,69 @@ pub(crate) async fn pip_install(
         preview,
     );
 
-    let options = OptionsBuilder::new()
-        .resolution_mode(resolution_mode)
-        .prerelease_mode(prerelease_mode)
-        .dependency_mode(dependency_mode)
-        .exclude_newer(exclude_newer)
-        .index_strategy(index_strategy)
-        .build_options(build_options.clone())
-        .build();
+    let (resolution, hasher) = if let Some(pylock) = pylock {
+        // Read the `pylock.toml` from disk, and deserialize it from TOML.
+        let install_path = std::path::absolute(&pylock)?;
+        let install_path = install_path.parent().unwrap();
+        let content = fs_err::tokio::read_to_string(&pylock).await?;
+        let lock = toml::from_str::<PylockToml>(&content)?;
 
-    // Resolve the requirements.
-    let resolution = match operations::resolve(
-        requirements,
-        constraints,
-        overrides,
-        source_trees,
-        project,
-        BTreeSet::default(),
-        extras,
-        &groups,
-        preferences,
-        site_packages.clone(),
-        &hasher,
-        &reinstall,
-        &upgrade,
-        Some(&tags),
-        ResolverEnvironment::specific(marker_env.clone()),
-        python_requirement,
-        Conflicts::empty(),
-        &client,
-        &flat_index,
-        state.index(),
-        &build_dispatch,
-        concurrency,
-        options,
-        Box::new(DefaultResolveLogger),
-        printer,
-    )
-    .await
-    {
-        Ok(graph) => Resolution::from(graph),
-        Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-        }
+        let resolution = lock.to_resolution(install_path, marker_env.markers(), &tags)?;
+        let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
+
+        (resolution, hasher)
+    } else {
+        // When resolving, don't take any external preferences into account.
+        let preferences = Vec::default();
+
+        let options = OptionsBuilder::new()
+            .resolution_mode(resolution_mode)
+            .prerelease_mode(prerelease_mode)
+            .dependency_mode(dependency_mode)
+            .exclude_newer(exclude_newer)
+            .index_strategy(index_strategy)
+            .build_options(build_options.clone())
+            .build();
+
+        // Resolve the requirements.
+        let resolution = match operations::resolve(
+            requirements,
+            constraints,
+            overrides,
+            source_trees,
+            project,
+            BTreeSet::default(),
+            extras,
+            &groups,
+            preferences,
+            site_packages.clone(),
+            &hasher,
+            &reinstall,
+            &upgrade,
+            Some(&tags),
+            ResolverEnvironment::specific(marker_env.clone()),
+            python_requirement,
+            Conflicts::empty(),
+            &client,
+            &flat_index,
+            state.index(),
+            &build_dispatch,
+            concurrency,
+            options,
+            Box::new(DefaultResolveLogger),
+            printer,
+        )
+        .await
+        {
+            Ok(graph) => Resolution::from(graph),
+            Err(err) => {
+                return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+            }
+        };
+
+        (resolution, hasher)
     };
 
     // Sync the environment.
@@ -503,7 +525,7 @@ pub(crate) async fn pip_install(
     )
     .await
     {
-        Ok(_) => {}
+        Ok(..) => {}
         Err(err) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)

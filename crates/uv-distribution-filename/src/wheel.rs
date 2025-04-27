@@ -243,7 +243,7 @@ impl WheelFilename {
                     // Determine whether any of the tag types contain a period, which would indicate
                     // that at least one of the tag types includes multiple tags (which in turn
                     // necessitates taking the slow path).
-                    memchr(b'.', stem[build_tag_or_python_tag..].as_bytes()).is_none(),
+                    memchr(b'.', &stem.as_bytes()[build_tag_or_python_tag..]).is_none(),
                 )
             };
 
@@ -312,7 +312,7 @@ impl TryFrom<&Url> for WheelFilename {
                     "URL must have a path".to_string(),
                 )
             })?
-            .last()
+            .next_back()
             .ok_or_else(|| {
                 WheelFilenameError::InvalidWheelFileName(
                     url.to_string(),

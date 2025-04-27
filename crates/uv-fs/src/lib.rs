@@ -24,7 +24,7 @@ pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
     // Second, check the files directly.
     if let Ok(value) = same_file::is_same_file(left, right) {
         return Some(value);
-    };
+    }
 
     // Often, one of the directories won't exist yet so perform the comparison up a level.
     if let (Some(left_parent), Some(right_parent), Some(left_name), Some(right_name)) = (
@@ -38,7 +38,7 @@ pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
             Ok(false) => return Some(false),
             _ => (),
         }
-    };
+    }
 
     // We couldn't determine if they're the same.
     None
@@ -106,7 +106,7 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
         },
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
         Err(err) => return Err(err),
-    };
+    }
 
     // Replace it with a new symlink.
     junction::create(
@@ -411,7 +411,7 @@ pub async fn persist_with_retry(
                         to.display(),
                         error_message,
                     );
-                };
+                }
             })
             .await;
 
@@ -485,7 +485,7 @@ pub fn persist_with_retry_sync(
                         to.display(),
                         error_message,
                     );
-                };
+                }
             })
             .call();
 

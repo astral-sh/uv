@@ -115,7 +115,7 @@ space-separated list of URLs as additional indexes when searching for packages.
 
 Equivalent to the `--index-strategy` command-line argument.
 
-For example, if set to `unsafe-any-match`, uv will consider versions of a given package
+For example, if set to `unsafe-best-match`, uv will consider versions of a given package
 available across all index URLs, rather than limiting its search to the first index URL
 that contains the package.
 
@@ -225,6 +225,12 @@ Equivalent to the `--no-config` command-line argument. If set, uv will not read
 any configuration files from the current directory, parent directories, or user configuration
 directories.
 
+### `UV_NO_EDITABLE`
+
+Equivalent to the `--no-editable` command-line argument. If set, uv
+installs any editable dependencies, including the project and any workspace members, as
+non-editable
+
 ### `UV_NO_ENV_FILE`
 
 Ignore `.env` files when executing `uv run` commands.
@@ -273,6 +279,10 @@ Equivalent to the `--prerelease` command-line argument. For example, if set to
 ### `UV_PREVIEW`
 
 Equivalent to the `--preview` argument. Enables preview mode.
+
+### `UV_PROJECT`
+
+Equivalent to the `--project` command-line argument.
 
 ### `UV_PROJECT_ENVIRONMENT`
 
@@ -335,6 +345,15 @@ Equivalent to the
 [`python-downloads`](../reference/settings.md#python-downloads) setting and, when disabled, the
 `--no-python-downloads` option. Whether uv should allow Python downloads.
 
+### `UV_PYTHON_DOWNLOADS_JSON_URL`
+
+Managed Python installations information is hardcoded in the `uv` binary.
+
+This variable can be set to a URL pointing to JSON to use as a list for Python installations.
+This will allow for setting each property of the Python installation, mostly the url part for offline mirror.
+
+Note that currently, only local paths are supported.
+
 ### `UV_PYTHON_INSTALL_DIR`
 
 Specifies the directory for storing managed Python installations.
@@ -366,6 +385,18 @@ uv will require that all dependencies have a hash specified in the requirements 
 
 Equivalent to the `--resolution` command-line argument. For example, if set to
 `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
+
+### `UV_STACK_SIZE`
+
+Use to set the stack size used by uv.
+
+The value is in bytes, and if both `UV_STACK_SIZE` are `RUST_MIN_STACK` unset, uv uses a 4MB
+(4194304) stack. `UV_STACK_SIZE` takes precedence over `RUST_MIN_STACK`.
+
+Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
+stack size, because we actually spawn our own main2 thread to work around
+the fact that Windows' real main thread is only 1MB. That thread has size
+`max(UV_STACK_SIZE, 1MB)`.
 
 ### `UV_SYSTEM_PYTHON`
 
@@ -555,11 +586,16 @@ for more.
 
 Use to set the stack size used by uv.
 
-The value is in bytes, and the default is typically 2MB (2097152).
+The value is in bytes, and if both `UV_STACK_SIZE` are `RUST_MIN_STACK` unset, uv uses a 4MB
+(4194304) stack. `UV_STACK_SIZE` takes precedence over `RUST_MIN_STACK`.
+
+Prefer setting `UV_STACK_SIZE`, since `RUST_MIN_STACK` also affects subprocesses, such as
+build backends that use Rust code.
+
 Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
 stack size, because we actually spawn our own main2 thread to work around
 the fact that Windows' real main thread is only 1MB. That thread has size
-`max(RUST_MIN_STACK, 4MB)`.
+`max(RUST_MIN_STACK, 1MB)`.
 
 ### `SHELL`
 

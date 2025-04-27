@@ -81,10 +81,28 @@ static DEFAULT_VARIABLE_UPDATES: LazyLock<BTreeMap<String, ReplacementEntry>> =
                 },
             ),
             (
+                "CC".to_string(),
+                ReplacementEntry {
+                    mode: ReplacementMode::Partial {
+                        from: "/usr/bin/aarch64-linux-gnu-gcc".to_string(),
+                    },
+                    to: "cc".to_string(),
+                },
+            ),
+            (
                 "CXX".to_string(),
                 ReplacementEntry {
                     mode: ReplacementMode::Partial {
                         from: "clang++".to_string(),
+                    },
+                    to: "c++".to_string(),
+                },
+            ),
+            (
+                "CXX".to_string(),
+                ReplacementEntry {
+                    mode: ReplacementMode::Partial {
+                        from: "/usr/bin/x86_64-linux-gnu-g++".to_string(),
                     },
                     to: "c++".to_string(),
                 },
@@ -224,7 +242,7 @@ fn find_sysconfigdata(
         let metadata = entry.metadata()?;
         if metadata.is_symlink() {
             continue;
-        };
+        }
 
         if metadata.is_file() {
             return Ok(entry.path());
@@ -434,15 +452,36 @@ mod tests {
         let real_prefix = Path::new("/real/prefix");
         let data = patch_sysconfigdata(sysconfigdata, real_prefix);
 
-        insta::assert_snapshot!(data.to_string_pretty()?, @r###"
+        insta::assert_snapshot!(data.to_string_pretty()?, @r##"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "AR": "ar",
-            "CC": "cc -pthread",
-            "CXX": "c++ -pthread",
+            "CC": "clang -pthread",
+            "CXX": "clang++ -pthread",
             "PYTHON_BUILD_STANDALONE": 1
         }
-        "###);
+        "##);
+
+        // Cross-compiles use GNU
+        let sysconfigdata = [
+            ("CC", "/usr/bin/aarch64-linux-gnu-gcc"),
+            ("CXX", "/usr/bin/x86_64-linux-gnu-g++"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), Value::String(v.to_string())))
+        .collect::<SysconfigData>();
+
+        let real_prefix = Path::new("/real/prefix");
+        let data = patch_sysconfigdata(sysconfigdata, real_prefix);
+
+        insta::assert_snapshot!(data.to_string_pretty()?, @r##"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "CC": "cc",
+            "CXX": "c++",
+            "PYTHON_BUILD_STANDALONE": 1
+        }
+        "##);
 
         Ok(())
     }

@@ -1,4 +1,4 @@
-# Python environments
+# Using Python environments
 
 Each Python installation has an environment that is active when Python is used. Packages can be
 installed into an environment to make their modules available from your Python scripts. Generally,

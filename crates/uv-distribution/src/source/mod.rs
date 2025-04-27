@@ -1456,6 +1456,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .uncached_client(resource.git.repository())
                     .clone(),
                 client.unmanaged.disable_ssl(resource.git.repository()),
+                client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()
@@ -1551,58 +1552,84 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Err(Error::HashesNotSupportedGit(source.to_string()));
         }
 
-        // If this is GitHub URL, attempt to resolve to a precise commit using the GitHub API.
-        match self
-            .build_context
-            .git()
-            .github_fast_path(
-                resource.git,
-                client
-                    .unmanaged
-                    .uncached_client(resource.git.repository())
-                    .clone(),
-            )
-            .await
+        // If the reference appears to be a commit, and we've already checked it out, avoid taking
+        // the GitHub fast path.
+        let cache_shard = resource
+            .git
+            .reference()
+            .as_str()
+            .and_then(|reference| GitOid::from_str(reference).ok())
+            .map(|oid| {
+                self.build_context.cache().shard(
+                    CacheBucket::SourceDistributions,
+                    WheelCache::Git(resource.url, oid.as_short_str()).root(),
+                )
+            });
+        if cache_shard
+            .as_ref()
+            .is_some_and(|cache_shard| cache_shard.is_dir())
         {
-            Ok(Some(precise)) => {
-                // There's no need to check the cache, since we can't use cached metadata if there are
-                // sources, and we can't know if there are sources without fetching the
-                // `pyproject.toml`.
-                //
-                // For the same reason, there's no need to write to the cache, since we won't be able to
-                // use it on subsequent runs.
-                match self
-                    .github_metadata(precise, source, resource, client)
-                    .await
-                {
-                    Ok(Some(metadata)) => {
-                        // Validate the metadata, but ignore it if the metadata doesn't match.
-                        match validate_metadata(source, &metadata) {
-                            Ok(()) => {
-                                debug!("Found static metadata via GitHub fast path for: {source}");
-                                return Ok(ArchiveMetadata {
-                                    metadata: Metadata::from_metadata23(metadata),
-                                    hashes: HashDigests::empty(),
-                                });
-                            }
-                            Err(err) => {
-                                debug!("Ignoring `pyproject.toml` from GitHub for {source}: {err}");
+            debug!("Skipping GitHub fast path for: {source} (shard exists)");
+        } else {
+            debug!("Attempting GitHub fast path for: {source}");
+
+            // If this is GitHub URL, attempt to resolve to a precise commit using the GitHub API.
+            match self
+                .build_context
+                .git()
+                .github_fast_path(
+                    resource.git,
+                    client
+                        .unmanaged
+                        .uncached_client(resource.git.repository())
+                        .clone(),
+                )
+                .await
+            {
+                Ok(Some(precise)) => {
+                    // There's no need to check the cache, since we can't use cached metadata if there are
+                    // sources, and we can't know if there are sources without fetching the
+                    // `pyproject.toml`.
+                    //
+                    // For the same reason, there's no need to write to the cache, since we won't be able to
+                    // use it on subsequent runs.
+                    match self
+                        .github_metadata(precise, source, resource, client)
+                        .await
+                    {
+                        Ok(Some(metadata)) => {
+                            // Validate the metadata, but ignore it if the metadata doesn't match.
+                            match validate_metadata(source, &metadata) {
+                                Ok(()) => {
+                                    debug!(
+                                        "Found static metadata via GitHub fast path for: {source}"
+                                    );
+                                    return Ok(ArchiveMetadata {
+                                        metadata: Metadata::from_metadata23(metadata),
+                                        hashes: HashDigests::empty(),
+                                    });
+                                }
+                                Err(err) => {
+                                    debug!(
+                                        "Ignoring `pyproject.toml` from GitHub for {source}: {err}"
+                                    );
+                                }
                             }
                         }
-                    }
-                    Ok(None) => {
-                        // Nothing to do.
-                    }
-                    Err(err) => {
-                        debug!("Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})");
+                        Ok(None) => {
+                            // Nothing to do.
+                        }
+                        Err(err) => {
+                            debug!("Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})");
+                        }
                     }
                 }
-            }
-            Ok(None) => {
-                // Nothing to do.
-            }
-            Err(err) => {
-                debug!("Failed to resolve commit via GitHub fast path for: {source} ({err})");
+                Ok(None) => {
+                    // Nothing to do.
+                }
+                Err(err) => {
+                    debug!("Failed to resolve commit via GitHub fast path for: {source} ({err})");
+                }
             }
         }
 
@@ -1617,6 +1644,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .uncached_client(resource.git.repository())
                     .clone(),
                 client.unmanaged.disable_ssl(resource.git.repository()),
+                client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()
@@ -1851,6 +1879,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 git,
                 client.unmanaged.uncached_client(git.repository()).clone(),
                 client.unmanaged.disable_ssl(git.repository()),
+                client.unmanaged.connectivity() == Connectivity::Offline,
                 self.build_context.cache().bucket(CacheBucket::Git),
                 self.reporter
                     .clone()
@@ -2089,7 +2118,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Download and unzip the source distribution into a temporary directory.
         let span = info_span!("download_source_dist", source_dist = %source);
-        uv_extract::stream::archive(&mut hasher, ext, temp_dir.path()).await?;
+        uv_extract::stream::archive(&mut hasher, ext, temp_dir.path())
+            .await
+            .map_err(|err| Error::Extract(source.to_string(), err))?;
         drop(span);
 
         // If necessary, exhaust the reader to compute the hash.
@@ -2103,7 +2134,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let extracted = match uv_extract::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
             Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.into_path(),
-            Err(err) => return Err(err.into()),
+            Err(err) => {
+                return Err(Error::Extract(
+                    temp_dir.path().to_string_lossy().into_owned(),
+                    err,
+                ))
+            }
         };
 
         // Persist it to the cache.
@@ -2151,7 +2187,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
 
         // Unzip the archive into a temporary directory.
-        uv_extract::stream::archive(&mut hasher, ext, &temp_dir.path()).await?;
+        uv_extract::stream::archive(&mut hasher, ext, &temp_dir.path())
+            .await
+            .map_err(|err| Error::Extract(temp_dir.path().to_string_lossy().into_owned(), err))?;
 
         // If necessary, exhaust the reader to compute the hash.
         if !algorithms.is_empty() {
@@ -2164,7 +2202,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let extracted = match uv_extract::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
             Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.path().to_path_buf(),
-            Err(err) => return Err(err.into()),
+            Err(err) => {
+                return Err(Error::Extract(
+                    temp_dir.path().to_string_lossy().into_owned(),
+                    err,
+                ))
+            }
         };
 
         // Persist it to the cache.
@@ -2406,8 +2449,6 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
                         }
                     }
                 }
-
-                continue;
             }
 
             // If we find a `revision.rev` file, read the pointer, and remove any extraneous
@@ -2431,8 +2472,6 @@ pub fn prune(cache: &Cache) -> Result<Removal, Error> {
                         }
                     }
                 }
-
-                continue;
             }
         }
     }

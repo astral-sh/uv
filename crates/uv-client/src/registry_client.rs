@@ -912,7 +912,7 @@ impl RegistryClient {
                         return Err(err);
                     }
                 }
-            };
+            }
         }
 
         // Create a request to stream the file.

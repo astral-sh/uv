@@ -43,7 +43,7 @@ pub fn confirm(message: &str, term: &Term, default: bool) -> std::io::Result<boo
                 });
             }
             _ => {}
-        };
+        }
     };
 
     let report = format!(

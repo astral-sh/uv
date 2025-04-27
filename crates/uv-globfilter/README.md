@@ -16,7 +16,7 @@ When traversing the directory, you can use
 ## Syntax
 
 This crate supports the cross-language, restricted glob syntax from
-[PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key):
+[PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/):
 
 - Alphanumeric characters, underscores (`_`), hyphens (`-`) and dots (`.`) are matched verbatim.
 - The special glob characters are:

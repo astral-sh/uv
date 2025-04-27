@@ -56,6 +56,11 @@ impl GitResolver {
     ) -> Result<Option<GitOid>, GitResolverError> {
         let reference = RepositoryReference::from(url);
 
+        // If the URL is already precise, return it.
+        if let Some(precise) = url.precise() {
+            return Ok(Some(precise));
+        }
+
         // If we know the precise commit already, return it.
         if let Some(precise) = self.get(&reference) {
             return Ok(Some(*precise));
@@ -72,7 +77,7 @@ impl GitResolver {
 
         let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{rev}");
 
-        debug!("Attempting GitHub fast path for: {url}");
+        debug!("Querying GitHub for commit at: {url}");
         let mut request = client.get(&url);
         request = request.header("Accept", "application/vnd.github.3.sha");
         request = request.header(
@@ -109,6 +114,7 @@ impl GitResolver {
         url: &GitUrl,
         client: ClientWithMiddleware,
         disable_ssl: bool,
+        offline: bool,
         cache: PathBuf,
         reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Fetch, GitResolverError> {
@@ -138,9 +144,9 @@ impl GitResolver {
 
         // Fetch the Git repository.
         let source = if let Some(reporter) = reporter {
-            GitSource::new(url.as_ref().clone(), client, cache).with_reporter(reporter)
+            GitSource::new(url.as_ref().clone(), client, cache, offline).with_reporter(reporter)
         } else {
-            GitSource::new(url.as_ref().clone(), client, cache)
+            GitSource::new(url.as_ref().clone(), client, cache, offline)
         };
 
         // If necessary, disable SSL.

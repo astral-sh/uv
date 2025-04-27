@@ -13,6 +13,7 @@ license.workspace = true
 doctest = false
 
 [dependencies]
+uv-auth = { workspace = true }
 uv-cache = { workspace = true }
 uv-client = { workspace = true }
 uv-configuration = { workspace = true }

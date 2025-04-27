@@ -198,9 +198,9 @@ dependencies = [
 The `tool.uv.sources` table extends the standard dependency tables with alternative dependency
 sources, which are used during development.
 
-Dependency sources add support common patterns that are not supported by the `project.dependencies`
-standard, like editable installations and relative paths. For example, to install `foo` from a
-directory relative to the project root:
+Dependency sources add support for common patterns that are not supported by the
+`project.dependencies` standard, like editable installations and relative paths. For example, to
+install `foo` from a directory relative to the project root:
 
 ```toml title="pyproject.toml" hl_lines="7"
 [project]
@@ -261,7 +261,7 @@ When defining an index, an `explicit` flag can be included to indicate that the 
 be used for packages that explicitly specify it in `tool.uv.sources`. If `explicit` is not set,
 other packages may be resolved from the index, if not found elsewhere.
 
-```toml title="pyproject.toml" hl_lines="3"
+```toml title="pyproject.toml" hl_lines="4"
 [[tool.uv.index]]
 name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
@@ -484,7 +484,7 @@ environment markers.
 
 For example, to pull in different `httpx` tags on macOS vs. Linux:
 
-```toml title="pyproject.toml" hl_lines="8-9 13-14"
+```toml title="pyproject.toml" hl_lines="6-7"
 [project]
 dependencies = ["httpx"]
 
@@ -511,10 +511,12 @@ torch = [
 [[tool.uv.index]]
 name = "torch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [[tool.uv.index]]
 name = "torch-gpu"
 url = "https://download.pytorch.org/whl/cu124"
+explicit = true
 ```
 
 ### Disabling sources

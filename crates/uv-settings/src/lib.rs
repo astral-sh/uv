@@ -64,8 +64,11 @@ impl FilesystemOptions {
         let Some(file) = system_config_file() else {
             return Ok(None);
         };
+
         tracing::debug!("Found system configuration in: `{}`", file.display());
-        Ok(Some(Self(read_file(&file)?)))
+        let options = read_file(&file)?;
+        validate_uv_toml(&file, &options)?;
+        Ok(Some(Self(options)))
     }
 
     /// Find the [`FilesystemOptions`] for the given path.

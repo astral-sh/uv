@@ -17,9 +17,10 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
-    PreviewMode,
+    Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, ExtrasSpecification,
+    InstallOptions, PreviewMode,
 };
+use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
@@ -351,10 +352,28 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .await?
                 .into_environment()?;
 
+                let build_constraints = script
+                    .metadata()
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| {
+                        tool.uv
+                            .as_ref()
+                            .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+                    })
+                    .map(|constraints| {
+                        Constraints::from_requirements(
+                            constraints
+                                .iter()
+                                .map(|constraint| Requirement::from(constraint.clone())),
+                        )
+                    });
+
                 match update_environment(
                     environment,
                     spec,
                     modifications,
+                    build_constraints.unwrap_or_default(),
                     &settings,
                     &network_settings,
                     &sync_state,
@@ -875,11 +894,17 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
         Some(spec) => {
             debug!("Syncing ephemeral requirements");
 
+            // Read the build constraints from the lock file.
+            let build_constraints = lock
+                .as_ref()
+                .map(|(lock, path)| lock.build_constraints(path));
+
             let result = CachedEnvironment::from_spec(
                 EnvironmentSpecification::from(spec).with_lock(
                     lock.as_ref()
                         .map(|(lock, install_path)| (lock, install_path.as_ref())),
                 ),
+                build_constraints.unwrap_or_default(),
                 &base_interpreter,
                 &settings,
                 &network_settings,
@@ -937,13 +962,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
         // If `--system-site-packages` is enabled, add the system site packages to the ephemeral
         // environment.
-        if base_interpreter
-            .is_virtualenv()
-            .then(|| {
-                PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
-                    .is_ok_and(|cfg| cfg.include_system_site_packages())
-            })
-            .unwrap_or(false)
+        if base_interpreter.is_virtualenv()
+            && PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
+                .is_ok_and(|cfg| cfg.include_system_site_packages())
         {
             ephemeral_env.set_system_site_packages()?;
         } else {
@@ -1068,7 +1089,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     // Ensure `VIRTUAL_ENV` is set.
     if interpreter.is_virtualenv() {
         process.env(EnvVars::VIRTUAL_ENV, interpreter.sys_prefix().as_os_str());
-    };
+    }
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited

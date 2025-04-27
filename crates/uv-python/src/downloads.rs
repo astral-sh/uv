@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -7,8 +9,11 @@ use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
 
 use futures::TryStreamExt;
+use itertools::Itertools;
+use once_cell::sync::OnceCell;
 use owo_colors::OwoColorize;
 use reqwest_retry::RetryPolicy;
+use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
@@ -30,6 +35,7 @@ use crate::installation::PythonInstallationKey;
 use crate::libc::LibcDetectionError;
 use crate::managed::ManagedPythonInstallation;
 use crate::platform::{self, Arch, Libc, Os};
+use crate::PythonVariant;
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
 #[derive(Error, Debug)]
@@ -86,9 +92,13 @@ pub enum Error {
     Mirror(&'static str, &'static str),
     #[error(transparent)]
     LibcDetection(#[from] LibcDetectionError),
+    #[error("Remote python downloads JSON is not yet supported, please use a local path (without `file://` prefix)")]
+    RemoteJSONNotSupported(),
+    #[error("The json of the python downloads is invalid: {0}")]
+    InvalidPythonDownloadsJSON(String, #[source] serde_json::Error),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ManagedPythonDownload {
     key: PythonInstallationKey,
     url: &'static str,
@@ -97,15 +107,15 @@ pub struct ManagedPythonDownload {
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct PythonDownloadRequest {
-    version: Option<VersionRequest>,
-    implementation: Option<ImplementationName>,
-    arch: Option<Arch>,
-    os: Option<Os>,
-    libc: Option<Libc>,
+    pub(crate) version: Option<VersionRequest>,
+    pub(crate) implementation: Option<ImplementationName>,
+    pub(crate) arch: Option<Arch>,
+    pub(crate) os: Option<Os>,
+    pub(crate) libc: Option<Libc>,
 
     /// Whether to allow pre-releases or not. If not set, defaults to true if [`Self::version`] is
     /// not None, and false otherwise.
-    prereleases: Option<bool>,
+    pub(crate) prereleases: Option<bool>,
 }
 
 impl PythonDownloadRequest {
@@ -196,10 +206,7 @@ impl PythonDownloadRequest {
     /// Fill empty entries with default values.
     ///
     /// Platform information is pulled from the environment.
-    pub fn fill(mut self) -> Result<Self, Error> {
-        if self.implementation.is_none() {
-            self.implementation = Some(ImplementationName::CPython);
-        }
+    pub fn fill_platform(mut self) -> Result<Self, Error> {
         if self.arch.is_none() {
             self.arch = Some(Arch::from_env());
         }
@@ -209,6 +216,14 @@ impl PythonDownloadRequest {
         if self.libc.is_none() {
             self.libc = Some(Libc::from_env()?);
         }
+        Ok(self)
+    }
+
+    pub fn fill(mut self) -> Result<Self, Error> {
+        if self.implementation.is_none() {
+            self.implementation = Some(ImplementationName::CPython);
+        }
+        self = self.fill_platform()?;
         Ok(self)
     }
 
@@ -245,9 +260,11 @@ impl PythonDownloadRequest {
     }
 
     /// Iterate over all [`PythonDownload`]'s that match this request.
-    pub fn iter_downloads(&self) -> impl Iterator<Item = &'static ManagedPythonDownload> + '_ {
-        ManagedPythonDownload::iter_all()
-            .filter(move |download| self.satisfied_by_download(download))
+    pub fn iter_downloads(
+        &self,
+    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload> + use<'_>, Error> {
+        Ok(ManagedPythonDownload::iter_all()?
+            .filter(move |download| self.satisfied_by_download(download)))
     }
 
     /// Whether this request is satisfied by an installation key.
@@ -407,45 +424,58 @@ impl FromStr for PythonDownloadRequest {
         let mut arch = None;
         let mut libc = None;
 
+        let mut position = 0;
         loop {
             // Consume each part
             let Some(part) = parts.next() else { break };
+            position += 1;
 
-            if implementation.is_none() {
-                implementation = Some(ImplementationName::from_str(part)?);
+            if part.eq_ignore_ascii_case("any") {
                 continue;
             }
 
-            if version.is_none() {
-                version = Some(
-                    VersionRequest::from_str(part)
-                        .map_err(|_| Error::InvalidPythonVersion(part.to_string()))?,
-                );
-                continue;
+            match position {
+                1 => implementation = Some(ImplementationName::from_str(part)?),
+                2 => {
+                    version = Some(
+                        VersionRequest::from_str(part)
+                            .map_err(|_| Error::InvalidPythonVersion(part.to_string()))?,
+                    );
+                }
+                3 => os = Some(Os::from_str(part)?),
+                4 => arch = Some(Arch::from_str(part)?),
+                5 => libc = Some(Libc::from_str(part)?),
+                _ => return Err(Error::TooManyParts(s.to_string())),
             }
-
-            if os.is_none() {
-                os = Some(Os::from_str(part)?);
-                continue;
-            }
-
-            if arch.is_none() {
-                arch = Some(Arch::from_str(part)?);
-                continue;
-            }
-
-            if libc.is_none() {
-                libc = Some(Libc::from_str(part)?);
-                continue;
-            }
-
-            return Err(Error::TooManyParts(s.to_string()));
         }
         Ok(Self::new(version, implementation, arch, os, libc, None))
     }
 }
 
-include!("downloads.inc");
+const BUILTIN_PYTHON_DOWNLOADS_JSON: &str = include_str!("download-metadata-minified.json");
+static PYTHON_DOWNLOADS: OnceCell<std::borrow::Cow<'static, [ManagedPythonDownload]>> =
+    OnceCell::new();
+
+#[derive(Debug, Deserialize, Clone)]
+struct JsonPythonDownload {
+    name: String,
+    arch: JsonArch,
+    os: String,
+    libc: String,
+    major: u8,
+    minor: u8,
+    patch: u8,
+    prerelease: Option<String>,
+    url: String,
+    sha256: Option<String>,
+    variant: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct JsonArch {
+    family: String,
+    variant: Option<String>,
+}
 
 #[derive(Debug, Clone)]
 pub enum DownloadResult {
@@ -455,18 +485,59 @@ pub enum DownloadResult {
 
 impl ManagedPythonDownload {
     /// Return the first [`ManagedPythonDownload`] matching a request, if any.
+    ///
+    /// If there is no stable version matching the request, a compatible pre-release version will
+    /// be searched for — even if a pre-release was not explicitly requested.
     pub fn from_request(
         request: &PythonDownloadRequest,
     ) -> Result<&'static ManagedPythonDownload, Error> {
-        request
-            .iter_downloads()
-            .next()
-            .ok_or(Error::NoDownloadFound(request.clone()))
+        if let Some(download) = request.iter_downloads()?.next() {
+            return Ok(download);
+        }
+
+        if !request.allows_prereleases() {
+            if let Some(download) = request
+                .clone()
+                .with_prereleases(true)
+                .iter_downloads()?
+                .next()
+            {
+                return Ok(download);
+            }
+        }
+
+        Err(Error::NoDownloadFound(request.clone()))
     }
 
     /// Iterate over all [`ManagedPythonDownload`]s.
-    pub fn iter_all() -> impl Iterator<Item = &'static ManagedPythonDownload> {
-        PYTHON_DOWNLOADS.iter()
+    pub fn iter_all() -> Result<impl Iterator<Item = &'static ManagedPythonDownload>, Error> {
+        let runtime_source = std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL);
+
+        let downloads = PYTHON_DOWNLOADS.get_or_try_init(|| {
+            let json_downloads: HashMap<String, JsonPythonDownload> =
+                if let Ok(json_source) = &runtime_source {
+                    if Url::parse(json_source).is_ok() {
+                        return Err(Error::RemoteJSONNotSupported());
+                    }
+
+                    let file = match fs_err::File::open(json_source) {
+                        Ok(file) => file,
+                        Err(e) => { Err(Error::Io(e)) }?,
+                    };
+
+                    serde_json::from_reader(file)
+                        .map_err(|e| Error::InvalidPythonDownloadsJSON(json_source.clone(), e))?
+                } else {
+                    serde_json::from_str(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
+                        Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_string(), e)
+                    })?
+                };
+
+            let result = parse_json_downloads(json_downloads);
+            Ok(Cow::Owned(result))
+        })?;
+
+        Ok(downloads.iter())
     }
 
     pub fn url(&self) -> &'static str {
@@ -555,7 +626,7 @@ impl ManagedPythonDownload {
             return Ok(DownloadResult::AlreadyAvailable(path));
         }
 
-        let filename = url.path_segments().unwrap().last().unwrap();
+        let filename = url.path_segments().unwrap().next_back().unwrap();
         let ext = SourceDistExtension::from_path(filename)
             .map_err(|err| Error::MissingExtension(url.to_string(), err))?;
         let (reader, size) = read_url(&url, client).await?;
@@ -593,7 +664,7 @@ impl ManagedPythonDownload {
                     .await
                     .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
             }
-        };
+        }
 
         hasher.finish().await.map_err(Error::HashExhaustion)?;
 
@@ -700,6 +771,115 @@ impl ManagedPythonDownload {
 
         Ok(Url::parse(self.url)?)
     }
+}
+
+fn parse_json_downloads(
+    json_downloads: HashMap<String, JsonPythonDownload>,
+) -> Vec<ManagedPythonDownload> {
+    json_downloads
+        .into_iter()
+        .filter_map(|(key, entry)| {
+            let implementation = match entry.name.as_str() {
+                "cpython" => LenientImplementationName::Known(ImplementationName::CPython),
+                "pypy" => LenientImplementationName::Known(ImplementationName::PyPy),
+                _ => LenientImplementationName::Unknown(entry.name.clone()),
+            };
+
+            let arch_str = match entry.arch.family.as_str() {
+                "armv5tel" => "armv5te".to_string(),
+                // The `gc` variant of riscv64 is the common base instruction set and
+                // is the target in `python-build-standalone`
+                // See https://github.com/astral-sh/python-build-standalone/issues/504
+                "riscv64" => "riscv64gc".to_string(),
+                value => value.to_string(),
+            };
+
+            let arch_str = if let Some(variant) = entry.arch.variant {
+                format!("{arch_str}_{variant}")
+            } else {
+                arch_str
+            };
+
+            let arch = match Arch::from_str(&arch_str) {
+                Ok(arch) => arch,
+                Err(e) => {
+                    debug!("Skipping entry {key}: Invalid arch '{arch_str}' - {e}");
+                    return None;
+                }
+            };
+
+            let os = match Os::from_str(&entry.os) {
+                Ok(os) => os,
+                Err(e) => {
+                    debug!("Skipping entry {}: Invalid OS '{}' - {}", key, entry.os, e);
+                    return None;
+                }
+            };
+
+            let libc = match Libc::from_str(&entry.libc) {
+                Ok(libc) => libc,
+                Err(e) => {
+                    debug!(
+                        "Skipping entry {}: Invalid libc '{}' - {}",
+                        key, entry.libc, e
+                    );
+                    return None;
+                }
+            };
+
+            let variant = match entry
+                .variant
+                .as_deref()
+                .map(PythonVariant::from_str)
+                .transpose()
+            {
+                Ok(Some(variant)) => variant,
+                Ok(None) => PythonVariant::default(),
+                Err(()) => {
+                    debug!(
+                        "Skipping entry {key}: Unknown python variant - {}",
+                        entry.variant.unwrap_or_default()
+                    );
+                    return None;
+                }
+            };
+
+            let version_str = format!(
+                "{}.{}.{}{}",
+                entry.major,
+                entry.minor,
+                entry.patch,
+                entry.prerelease.as_deref().unwrap_or_default()
+            );
+
+            let version = match PythonVersion::from_str(&version_str) {
+                Ok(version) => version,
+                Err(e) => {
+                    debug!("Skipping entry {key}: Invalid version '{version_str}' - {e}");
+                    return None;
+                }
+            };
+
+            let url = Box::leak(entry.url.into_boxed_str()) as &'static str;
+            let sha256 = entry
+                .sha256
+                .map(|s| Box::leak(s.into_boxed_str()) as &'static str);
+
+            Some(ManagedPythonDownload {
+                key: PythonInstallationKey::new_from_version(
+                    implementation,
+                    &version,
+                    os,
+                    arch,
+                    libc,
+                    variant,
+                ),
+                url,
+                sha256,
+            })
+        })
+        .sorted_by(|a, b| Ord::cmp(&b.key, &a.key))
+        .collect()
 }
 
 impl Error {

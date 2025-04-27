@@ -844,6 +844,28 @@ impl Name for Dist {
     }
 }
 
+impl Name for CompatibleDist<'_> {
+    fn name(&self) -> &PackageName {
+        match self {
+            CompatibleDist::InstalledDist(dist) => dist.name(),
+            CompatibleDist::SourceDist {
+                sdist,
+                prioritized: _,
+            } => sdist.name(),
+            CompatibleDist::CompatibleWheel {
+                wheel,
+                priority: _,
+                prioritized: _,
+            } => wheel.name(),
+            CompatibleDist::IncompatibleWheel {
+                sdist,
+                wheel: _,
+                prioritized: _,
+            } => sdist.name(),
+        }
+    }
+}
+
 impl DistributionMetadata for RegistryBuiltWheel {
     fn version_or_url(&self) -> VersionOrUrlRef {
         VersionOrUrlRef::Version(&self.filename.version)
@@ -942,12 +964,14 @@ impl RemoteSource for File {
 impl RemoteSource for Url {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // Identify the last segment of the URL as the filename.
-        let path_segments = self
+        let mut path_segments = self
             .path_segments()
             .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
 
         // This is guaranteed by the contract of `Url::path_segments`.
-        let last = path_segments.last().expect("path segments is non-empty");
+        let last = path_segments
+            .next_back()
+            .expect("path segments is non-empty");
 
         // Decode the filename, which may be percent-encoded.
         let filename = percent_encoding::percent_decode_str(last).decode_utf8()?;
@@ -966,7 +990,7 @@ impl RemoteSource for UrlString {
         let last = self
             .base_str()
             .split('/')
-            .last()
+            .next_back()
             .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
 
         // Decode the filename, which may be percent-encoded.

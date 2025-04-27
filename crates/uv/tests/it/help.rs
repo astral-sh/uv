@@ -42,10 +42,9 @@ fn help() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads  Disable automatic downloads of Python. [env:
-                                 "UV_PYTHON_DOWNLOADS=never"]
+      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -66,7 +65,7 @@ fn help() {
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
           --project <PROJECT>
-              Run the command within the given project directory
+              Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -121,10 +120,9 @@ fn help_flag() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads  Disable automatic downloads of Python. [env:
-                                 "UV_PYTHON_DOWNLOADS=never"]
+      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -145,7 +143,7 @@ fn help_flag() {
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
           --project <PROJECT>
-              Run the command within the given project directory
+              Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -199,10 +197,9 @@ fn help_short_flag() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads  Disable automatic downloads of Python. [env:
-                                 "UV_PYTHON_DOWNLOADS=never"]
+      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -223,7 +220,7 @@ fn help_short_flag() {
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
           --project <PROJECT>
-              Run the command within the given project directory
+              Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -315,7 +312,7 @@ fn help_subcommand() {
               [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python
+      --managed-python
               Require use of uv-managed Python versions.
               
               By default, uv prefers using Python versions it manages. However, it will use system
@@ -324,14 +321,14 @@ fn help_subcommand() {
               
               [env: UV_MANAGED_PYTHON=]
 
-          --no-managed-python
+      --no-managed-python
               Disable use of uv-managed Python versions.
               
               Instead, uv will search for a suitable Python version on the system.
               
               [env: UV_NO_MANAGED_PYTHON=]
 
-          --no-python-downloads
+      --no-python-downloads
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
@@ -419,6 +416,8 @@ fn help_subcommand() {
               See `--directory` to change the working directory entirely.
               
               This setting has no effect when used in the `uv pip` interface.
+              
+              [env: UV_PROJECT=]
 
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration.
@@ -566,7 +565,7 @@ fn help_subsubcommand() {
               [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python
+      --managed-python
               Require use of uv-managed Python versions.
               
               By default, uv prefers using Python versions it manages. However, it will use system
@@ -575,14 +574,14 @@ fn help_subsubcommand() {
               
               [env: UV_MANAGED_PYTHON=]
 
-          --no-managed-python
+      --no-managed-python
               Disable use of uv-managed Python versions.
               
               Instead, uv will search for a suitable Python version on the system.
               
               [env: UV_NO_MANAGED_PYTHON=]
 
-          --no-python-downloads
+      --no-python-downloads
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
@@ -670,6 +669,8 @@ fn help_subsubcommand() {
               See `--directory` to change the working directory entirely.
               
               This setting has no effect when used in the `uv pip` interface.
+              
+              [env: UV_PROJECT=]
 
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration.
@@ -724,10 +725,9 @@ fn help_flag_subcommand() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads  Disable automatic downloads of Python. [env:
-                                 "UV_PYTHON_DOWNLOADS=never"]
+      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -748,7 +748,7 @@ fn help_flag_subcommand() {
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
           --project <PROJECT>
-              Run the command within the given project directory
+              Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -796,10 +796,9 @@ fn help_flag_subsubcommand() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads  Disable automatic downloads of Python. [env:
-                                 "UV_PYTHON_DOWNLOADS=never"]
+      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -820,7 +819,7 @@ fn help_flag_subsubcommand() {
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
           --project <PROJECT>
-              Run the command within the given project directory
+              Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -952,10 +951,9 @@ fn help_with_global_option() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads  Disable automatic downloads of Python. [env:
-                                 "UV_PYTHON_DOWNLOADS=never"]
+      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -976,7 +974,7 @@ fn help_with_global_option() {
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
           --project <PROJECT>
-              Run the command within the given project directory
+              Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -1067,10 +1065,9 @@ fn help_with_no_pager() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
-          --no-python-downloads  Disable automatic downloads of Python. [env:
-                                 "UV_PYTHON_DOWNLOADS=never"]
+      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -1091,7 +1088,7 @@ fn help_with_no_pager() {
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
           --project <PROJECT>
-              Run the command within the given project directory
+              Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config

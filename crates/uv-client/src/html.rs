@@ -130,7 +130,7 @@ impl SimpleHtml {
         // the final path component of the URL.
         let filename = path
             .split('/')
-            .last()
+            .next_back()
             .ok_or_else(|| Error::MissingFilename(href.to_string()))?;
 
         // Strip any query string from the filename.

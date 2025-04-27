@@ -42,7 +42,7 @@ To use uv with this application, inside the `project` directory run:
 $ uv init --app
 ```
 
-This creates an [project with an application layout](../../concepts/projects/init.md#applications)
+This creates a [project with an application layout](../../concepts/projects/init.md#applications)
 and a `pyproject.toml` file.
 
 Then, add a dependency on FastAPI:

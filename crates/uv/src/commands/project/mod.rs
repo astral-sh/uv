@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 use uv_auth::UrlAuthPolicies;
 use uv_cache::{Cache, CacheBucket};
@@ -72,7 +72,7 @@ pub(crate) mod tree;
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
     #[error("The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.")]
-    LockMismatch,
+    LockMismatch(Box<Lock>),
 
     #[error(
         "Unable to find lockfile at `uv.lock`. To create a lockfile, run `uv lock` or `uv sync`."
@@ -340,7 +340,11 @@ impl std::fmt::Display for ConflictError {
                                 }
                                 ConflictPackage::Group(ref group) => format!("group `{group}`"),
                             };
-                            (i == 0).then(|| capitalize(&conflict)).unwrap_or(conflict)
+                            if i == 0 {
+                                capitalize(&conflict)
+                            } else {
+                                conflict
+                            }
                         })
                         .collect()
                 )
@@ -561,12 +565,12 @@ impl ScriptInterpreter {
 
             if value.is_empty() {
                 return None;
-            };
+            }
 
             let path = PathBuf::from(value);
             if path.is_absolute() {
                 return Some(path);
-            };
+            }
 
             // Resolve the path relative to current directory.
             Some(CWD.join(path))
@@ -657,7 +661,6 @@ impl ScriptInterpreter {
         } = ScriptPython::from_request(python_request, workspace, script, no_config).await?;
 
         let root = Self::root(script, active, cache);
-
         match PythonEnvironment::from_root(&root, cache) {
             Ok(venv) => {
                 if python_request.as_ref().is_none_or(|request| {
@@ -689,7 +692,7 @@ impl ScriptInterpreter {
             }
             Err(uv_python::Error::MissingEnvironment(_)) => {}
             Err(err) => warn!("Ignoring existing script environment: {err}"),
-        };
+        }
 
         let client_builder = BaseClientBuilder::new()
             .connectivity(network_settings.connectivity)
@@ -763,6 +766,43 @@ impl ScriptInterpreter {
     }
 }
 
+/// Whether an environment is usable for the project, i.e., if it matches the requirements.
+fn environment_is_usable(
+    environment: &PythonEnvironment,
+    python_request: Option<&PythonRequest>,
+    requires_python: Option<&RequiresPython>,
+    cache: &Cache,
+) -> bool {
+    if let Some((cfg_version, int_version)) = environment.get_pyvenv_version_conflict() {
+        debug!("The interpreter in the virtual environment has different version ({int_version}) than it was created with ({cfg_version})");
+        return false;
+    }
+
+    if let Some(request) = python_request {
+        if request.satisfied(environment.interpreter(), cache) {
+            debug!("The virtual environment's Python version satisfies the request: `{request}`");
+        } else {
+            debug!("The virtual environment's Python version does not satisfy the request: `{request}`");
+            return false;
+        }
+    }
+
+    if let Some(requires_python) = requires_python.as_ref() {
+        if requires_python.contains(environment.interpreter().python_version()) {
+            trace!(
+                "The virtual environment's Python version meets the Python requirement: `{requires_python}`"
+            );
+        } else {
+            debug!(
+                "The virtual environment's Python version does not meet the Python requirement: `{requires_python}`"
+            );
+            return false;
+        }
+    }
+
+    true
+}
+
 /// An interpreter suitable for the project.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
@@ -800,31 +840,13 @@ impl ProjectInterpreter {
         let venv = workspace.venv(active);
         match PythonEnvironment::from_root(&venv, cache) {
             Ok(venv) => {
-                if python_request.as_ref().is_none_or(|request| {
-                    if request.satisfied(venv.interpreter(), cache) {
-                        debug!(
-                            "The virtual environment's Python version satisfies `{}`",
-                            request.to_canonical_string()
-                        );
-                        true
-                    } else {
-                        debug!(
-                            "The virtual environment's Python version does not satisfy `{}`",
-                            request.to_canonical_string()
-                        );
-                        false
-                    }
-                }) {
-                    if let Some(requires_python) = requires_python.as_ref() {
-                        if requires_python.contains(venv.interpreter().python_version()) {
-                            return Ok(Self::Environment(venv));
-                        }
-                        debug!(
-                            "The virtual environment's Python version does not meet the project's Python requirement: `{requires_python}`"
-                        );
-                    } else {
-                        return Ok(Self::Environment(venv));
-                    }
+                if environment_is_usable(
+                    &venv,
+                    python_request.as_ref(),
+                    requires_python.as_ref(),
+                    cache,
+                ) {
+                    return Ok(Self::Environment(venv));
                 }
             }
             Err(uv_python::Error::MissingEnvironment(_)) => {}
@@ -849,7 +871,7 @@ impl ProjectInterpreter {
                     }
                     // If the environment is an empty directory, it's fine to use
                     InvalidEnvironmentKind::Empty => {}
-                };
+                }
             }
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(path))) => {
                 if path.is_symlink() {
@@ -862,7 +884,7 @@ impl ProjectInterpreter {
                 }
             }
             Err(err) => return Err(err.into()),
-        };
+        }
 
         let client_builder = BaseClientBuilder::default()
             .connectivity(network_settings.connectivity)
@@ -1033,7 +1055,7 @@ impl WorkspacePython {
                 "Using Python request `{}` from {source}",
                 python_request.to_canonical_string()
             );
-        };
+        }
 
         Ok(Self {
             source,
@@ -1098,7 +1120,7 @@ impl ScriptPython {
 
         if let Some(python_request) = python_request.as_ref() {
             debug!("Using Python request {python_request} from {source}");
-        };
+        }
 
         Ok(Self {
             source,
@@ -1820,6 +1842,7 @@ pub(crate) async fn sync_environment(
     venv: PythonEnvironment,
     resolution: &Resolution,
     modifications: Modifications,
+    build_constraints: Constraints,
     settings: InstallerSettingsRef<'_>,
     network_settings: &NetworkSettings,
     state: &PlatformState,
@@ -1887,7 +1910,6 @@ pub(crate) async fn sync_environment(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let dry_run = DryRun::default();
     let hasher = HashStrategy::default();
@@ -1978,6 +2000,7 @@ pub(crate) async fn update_environment(
     venv: PythonEnvironment,
     spec: RequirementsSpecification,
     modifications: Modifications,
+    build_constraints: Constraints,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
     state: &SharedState,
@@ -2109,7 +2132,6 @@ pub(crate) async fn update_environment(
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
     // optional on the downstream APIs.
-    let build_constraints = Constraints::default();
     let build_hasher = HashStrategy::default();
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::new();

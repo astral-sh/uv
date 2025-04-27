@@ -459,6 +459,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) with_editable: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
     pub(crate) python: Option<String>,
@@ -486,6 +487,7 @@ impl ToolRunSettings {
             with_requirements,
             constraints,
             overrides,
+            build_constraints,
             isolated,
             env_file,
             no_env_file,
@@ -553,6 +555,10 @@ impl ToolRunSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_constraints: build_constraints
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             isolated,
             show_resolution,
             python: python.and_then(Maybe::into_option),
@@ -577,6 +583,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) with_editable: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
@@ -599,6 +606,7 @@ impl ToolInstallSettings {
             with_requirements,
             constraints,
             overrides,
+            build_constraints,
             installer,
             force,
             build,
@@ -641,6 +649,10 @@ impl ToolInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             overrides: overrides
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
@@ -972,6 +984,7 @@ impl PythonUninstallSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct PythonFindSettings {
     pub(crate) request: Option<String>,
+    pub(crate) show_version: bool,
     pub(crate) no_project: bool,
     pub(crate) system: bool,
 }
@@ -982,6 +995,7 @@ impl PythonFindSettings {
     pub(crate) fn resolve(args: PythonFindArgs, _filesystem: Option<FilesystemOptions>) -> Self {
         let PythonFindArgs {
             request,
+            show_version,
             no_project,
             system,
             no_system,
@@ -990,6 +1004,7 @@ impl PythonFindSettings {
 
         Self {
             request,
+            show_version,
             no_project,
             system: flag(system, no_system).unwrap_or_default(),
         }
@@ -1276,6 +1291,7 @@ impl AddSettings {
                     .index
                     .clone()
                     .into_iter()
+                    .flat_map(|v| v.clone())
                     .flatten()
                     .filter_map(Maybe::into_option),
             )
@@ -1511,7 +1527,7 @@ impl TreeSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct ExportSettings {
-    pub(crate) format: ExportFormat,
+    pub(crate) format: Option<ExportFormat>,
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) prune: Vec<PackageName>,
@@ -1622,6 +1638,7 @@ impl ExportSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipCompileSettings {
+    pub(crate) format: Option<ExportFormat>,
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
@@ -1650,6 +1667,7 @@ impl PipCompileSettings {
             deps,
             group,
             output_file,
+            format,
             no_strip_extras,
             strip_extras,
             no_strip_markers,
@@ -1738,6 +1756,7 @@ impl PipCompileSettings {
         };
 
         Self {
+            format,
             src_file,
             constraints: constraints
                 .into_iter()

@@ -54,6 +54,7 @@ pub struct Interpreter {
     prefix: Option<Prefix>,
     pointer_size: PointerSize,
     gil_disabled: bool,
+    real_executable: PathBuf,
 }
 
 impl Interpreter {
@@ -86,6 +87,7 @@ impl Interpreter {
             tags: OnceLock::new(),
             target: None,
             prefix: None,
+            real_executable: executable.as_ref().to_path_buf(),
         })
     }
 
@@ -316,31 +318,37 @@ impl Interpreter {
         &self.markers.python_full_version().version
     }
 
-    /// Returns the full minor Python version.
+    /// Returns the Python version up to the minor component.
     #[inline]
     pub fn python_minor_version(&self) -> Version {
         Version::new(self.python_version().release().iter().take(2).copied())
     }
 
-    /// Return the major version of this Python version.
+    /// Returns the Python version up to the patch component.
+    #[inline]
+    pub fn python_patch_version(&self) -> Version {
+        Version::new(self.python_version().release().iter().take(3).copied())
+    }
+
+    /// Return the major version component of this Python version.
     pub fn python_major(&self) -> u8 {
         let major = self.markers.python_full_version().version.release()[0];
         u8::try_from(major).expect("invalid major version")
     }
 
-    /// Return the minor version of this Python version.
+    /// Return the minor version component of this Python version.
     pub fn python_minor(&self) -> u8 {
         let minor = self.markers.python_full_version().version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
     }
 
-    /// Return the patch version of this Python version.
+    /// Return the patch version component of this Python version.
     pub fn python_patch(&self) -> u8 {
         let minor = self.markers.python_full_version().version.release()[2];
         u8::try_from(minor).expect("invalid patch version")
     }
 
-    /// Returns the Python version as a simple tuple.
+    /// Returns the Python version as a simple tuple, e.g., `(3, 12)`.
     pub fn python_tuple(&self) -> (u8, u8) {
         (self.python_major(), self.python_minor())
     }
@@ -391,6 +399,11 @@ impl Interpreter {
     /// Return the `sys.executable` path for this Python interpreter.
     pub fn sys_executable(&self) -> &Path {
         &self.sys_executable
+    }
+
+    /// Return the "real" queried executable path for this Python interpreter.
+    pub fn real_executable(&self) -> &Path {
+        &self.real_executable
     }
 
     /// Return the `sys.path` for this Python interpreter.

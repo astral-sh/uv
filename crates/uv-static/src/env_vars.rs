@@ -87,7 +87,7 @@ impl EnvVars {
 
     /// Equivalent to the `--index-strategy` command-line argument.
     ///
-    /// For example, if set to `unsafe-any-match`, uv will consider versions of a given package
+    /// For example, if set to `unsafe-best-match`, uv will consider versions of a given package
     /// available across all index URLs, rather than limiting its search to the first index URL
     /// that contains the package.
     pub const UV_INDEX_STRATEGY: &'static str = "UV_INDEX_STRATEGY";
@@ -157,6 +157,11 @@ impl EnvVars {
     /// Equivalent to the `--compile-bytecode` command-line argument. If set, uv
     /// will compile Python source files to bytecode after installation.
     pub const UV_COMPILE_BYTECODE: &'static str = "UV_COMPILE_BYTECODE";
+
+    /// Equivalent to the `--no-editable` command-line argument. If set, uv
+    /// installs any editable dependencies, including the project and any workspace members, as
+    /// non-editable
+    pub const UV_NO_EDITABLE: &'static str = "UV_NO_EDITABLE";
 
     /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
     /// all packages from source. The resolver will still use pre-built wheels to
@@ -256,6 +261,14 @@ impl EnvVars {
 
     /// Specifies the directory for storing managed Python installations.
     pub const UV_PYTHON_INSTALL_DIR: &'static str = "UV_PYTHON_INSTALL_DIR";
+
+    /// Managed Python installations information is hardcoded in the `uv` binary.
+    ///
+    /// This variable can be set to a URL pointing to JSON to use as a list for Python installations.
+    /// This will allow for setting each property of the Python installation, mostly the url part for offline mirror.
+    ///
+    /// Note that currently, only local paths are supported.
+    pub const UV_PYTHON_DOWNLOADS_JSON_URL: &'static str = "UV_PYTHON_DOWNLOADS_JSON_URL";
 
     /// Managed Python installations are downloaded from the Astral
     /// [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project.
@@ -492,6 +505,12 @@ impl EnvVars {
     #[attr_hidden]
     pub const GIT_SSL_NO_VERIFY: &'static str = "GIT_SSL_NO_VERIFY";
 
+    /// Sets allowed protocols for git operations.
+    ///
+    /// When uv is in "offline" mode, only the "file" protocol is allowed.
+    #[attr_hidden]
+    pub const GIT_ALLOW_PROTOCOL: &'static str = "GIT_ALLOW_PROTOCOL";
+
     /// Disable interactive git prompts in terminals, e.g., for credentials. Does not disable
     /// GUI prompts.
     #[attr_hidden]
@@ -579,11 +598,27 @@ impl EnvVars {
 
     /// Use to set the stack size used by uv.
     ///
-    /// The value is in bytes, and the default is typically 2MB (2097152).
+    /// The value is in bytes, and if both `UV_STACK_SIZE` are `RUST_MIN_STACK` unset, uv uses a 4MB
+    /// (4194304) stack. `UV_STACK_SIZE` takes precedence over `RUST_MIN_STACK`.
+    ///
     /// Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
     /// stack size, because we actually spawn our own main2 thread to work around
     /// the fact that Windows' real main thread is only 1MB. That thread has size
-    /// `max(RUST_MIN_STACK, 4MB)`.
+    /// `max(UV_STACK_SIZE, 1MB)`.
+    pub const UV_STACK_SIZE: &'static str = "UV_STACK_SIZE";
+
+    /// Use to set the stack size used by uv.
+    ///
+    /// The value is in bytes, and if both `UV_STACK_SIZE` are `RUST_MIN_STACK` unset, uv uses a 4MB
+    /// (4194304) stack. `UV_STACK_SIZE` takes precedence over `RUST_MIN_STACK`.
+    ///
+    /// Prefer setting `UV_STACK_SIZE`, since `RUST_MIN_STACK` also affects subprocesses, such as
+    /// build backends that use Rust code.
+    ///
+    /// Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
+    /// stack size, because we actually spawn our own main2 thread to work around
+    /// the fact that Windows' real main thread is only 1MB. That thread has size
+    /// `max(RUST_MIN_STACK, 1MB)`.
     pub const RUST_MIN_STACK: &'static str = "RUST_MIN_STACK";
 
     /// The directory containing the `Cargo.toml` manifest for a package.
@@ -685,4 +720,7 @@ impl EnvVars {
 
     /// Equivalent to the `--torch-backend` command-line argument (e.g., `cpu`, `cu126`, or `auto`).
     pub const UV_TORCH_BACKEND: &'static str = "UV_TORCH_BACKEND";
+
+    /// Equivalent to the `--project` command-line argument.
+    pub const UV_PROJECT: &'static str = "UV_PROJECT";
 }

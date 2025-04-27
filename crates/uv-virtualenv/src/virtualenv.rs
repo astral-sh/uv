@@ -605,7 +605,7 @@ fn copy_launcher_windows(
                 Err(err) => {
                     return Err(err.into());
                 }
-            };
+            }
 
             return Ok(());
         }

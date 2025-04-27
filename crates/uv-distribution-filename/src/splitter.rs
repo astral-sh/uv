@@ -43,7 +43,7 @@ impl<'a> Iterator for MemchrSplitter<'a> {
         let min = usize::from(self.offset < self.haystack.len());
 
         // Maximum possible splits is remaining length divided by 2 (minimum one char between delimiters).
-        let max = (self.haystack.len() - self.offset + 1) / 2 + min;
+        let max = (self.haystack.len() - self.offset).div_ceil(2) + min;
 
         (min, Some(max))
     }

@@ -287,7 +287,7 @@ impl<'a> Planner<'a> {
                         }
                         if entry.dist.filename.version != sdist.version {
                             return None;
-                        };
+                        }
                         if entry.built && no_build {
                             return None;
                         }

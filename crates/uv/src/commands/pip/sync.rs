@@ -27,8 +27,8 @@ use uv_python::{
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
-    ResolutionMode, ResolverEnvironment,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
+    PythonRequirement, ResolutionMode, ResolverEnvironment,
 };
 use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
@@ -103,6 +103,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
+        pylock,
         source_trees,
         groups,
         index_url,
@@ -122,13 +123,20 @@ pub(crate) async fn pip_sync(
     )
     .await?;
 
+    if pylock.is_some() {
+        if preview.is_disabled() {
+            warn_user!("The `--pylock` setting is experimental and may change without warning. Pass `--preview` to disable this warning.");
+        }
+    }
+
     // Read build constraints.
     let build_constraints =
         operations::read_constraints(build_constraints, &client_builder).await?;
 
     // Validate that the requirements are non-empty.
     if !allow_empty_requirements {
-        let num_requirements = requirements.len() + source_trees.len();
+        let num_requirements =
+            requirements.len() + source_trees.len() + usize::from(pylock.is_some());
         if num_requirements == 0 {
             writeln!(printer.stderr(), "No requirements found (hint: use `--allow-empty-requirements` to clear the environment)")?;
             return Ok(ExitStatus::Success);
@@ -335,9 +343,6 @@ pub(crate) async fn pip_sync(
     // Initialize any shared state.
     let state = SharedState::default();
 
-    // When resolving, don't take any external preferences into account.
-    let preferences = Vec::default();
-
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
         &client,
@@ -364,50 +369,68 @@ pub(crate) async fn pip_sync(
     // Determine the set of installed packages.
     let site_packages = SitePackages::from_environment(&environment)?;
 
-    let options = OptionsBuilder::new()
-        .resolution_mode(resolution_mode)
-        .prerelease_mode(prerelease_mode)
-        .dependency_mode(dependency_mode)
-        .exclude_newer(exclude_newer)
-        .index_strategy(index_strategy)
-        .build_options(build_options.clone())
-        .build();
+    let (resolution, hasher) = if let Some(pylock) = pylock {
+        // Read the `pylock.toml` from disk, and deserialize it from TOML.
+        let install_path = std::path::absolute(&pylock)?;
+        let install_path = install_path.parent().unwrap();
+        let content = fs_err::tokio::read_to_string(&pylock).await?;
+        let lock = toml::from_str::<PylockToml>(&content)?;
 
-    let resolution = match operations::resolve(
-        requirements,
-        constraints,
-        overrides,
-        source_trees,
-        project,
-        BTreeSet::default(),
-        &extras,
-        &groups,
-        preferences,
-        site_packages.clone(),
-        &hasher,
-        &reinstall,
-        &upgrade,
-        Some(&tags),
-        ResolverEnvironment::specific(marker_env.clone()),
-        python_requirement,
-        Conflicts::empty(),
-        &client,
-        &flat_index,
-        state.index(),
-        &build_dispatch,
-        concurrency,
-        options,
-        Box::new(DefaultResolveLogger),
-        printer,
-    )
-    .await
-    {
-        Ok(resolution) => Resolution::from(resolution),
-        Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-        }
+        let resolution = lock.to_resolution(install_path, marker_env.markers(), &tags)?;
+        let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
+
+        (resolution, hasher)
+    } else {
+        // When resolving, don't take any external preferences into account.
+        let preferences = Vec::default();
+
+        let options = OptionsBuilder::new()
+            .resolution_mode(resolution_mode)
+            .prerelease_mode(prerelease_mode)
+            .dependency_mode(dependency_mode)
+            .exclude_newer(exclude_newer)
+            .index_strategy(index_strategy)
+            .build_options(build_options.clone())
+            .build();
+
+        let resolution = match operations::resolve(
+            requirements,
+            constraints,
+            overrides,
+            source_trees,
+            project,
+            BTreeSet::default(),
+            &extras,
+            &groups,
+            preferences,
+            site_packages.clone(),
+            &hasher,
+            &reinstall,
+            &upgrade,
+            Some(&tags),
+            ResolverEnvironment::specific(marker_env.clone()),
+            python_requirement,
+            Conflicts::empty(),
+            &client,
+            &flat_index,
+            state.index(),
+            &build_dispatch,
+            concurrency,
+            options,
+            Box::new(DefaultResolveLogger),
+            printer,
+        )
+        .await
+        {
+            Ok(resolution) => Resolution::from(resolution),
+            Err(err) => {
+                return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+            }
+        };
+
+        (resolution, hasher)
     };
 
     // Sync the environment.

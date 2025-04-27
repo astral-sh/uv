@@ -9,6 +9,7 @@ use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
 use itertools::Itertools;
+use jiff::Timestamp;
 use owo_colors::OwoColorize;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
@@ -41,16 +42,19 @@ use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
 use uv_pypi_types::{
-    ConflictPackage, Conflicts, HashDigest, HashDigests, ParsedArchiveUrl, ParsedGitUrl,
+    ConflictPackage, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
+    ParsedGitUrl,
 };
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::WorkspaceMember;
 
 use crate::fork_strategy::ForkStrategy;
+pub(crate) use crate::lock::export::PylockTomlPackage;
+pub use crate::lock::export::RequirementsTxtExport;
+pub use crate::lock::export::{PylockToml, PylockTomlError};
 pub use crate::lock::installable::Installable;
 pub use crate::lock::map::PackageMap;
-pub use crate::lock::requirements_txt::RequirementsTxtExport;
 pub use crate::lock::tree::TreeDisplay;
 use crate::requires_python::SimplifiedMarkerTree;
 use crate::resolution::{AnnotatedDist, ResolutionGraphNode};
@@ -60,16 +64,16 @@ use crate::{
     ResolverOutput,
 };
 
+mod export;
 mod installable;
 mod map;
-mod requirements_txt;
 mod tree;
 
 /// The current version of the lockfile format.
 pub const VERSION: u32 = 1;
 
 /// The current revision of the lockfile format.
-const REVISION: u32 = 1;
+const REVISION: u32 = 2;
 
 static LINUX_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let pep508 = MarkerTree::from_str("os_name == 'posix' and sys_platform == 'linux'").unwrap();
@@ -1459,7 +1463,7 @@ impl Lock {
                             return Ok(SatisfiesResult::MissingLocalIndex(name, version, path));
                         }
                     }
-                };
+                }
             }
 
             // If the package is immutable, we don't need to validate it (or its dependencies).
@@ -2199,7 +2203,7 @@ impl Package {
                         let wheels = self
                             .wheels
                             .iter()
-                            .map(|wheel| wheel.to_registry_dist(source, workspace_root))
+                            .map(|wheel| wheel.to_registry_wheel(source, workspace_root))
                             .collect::<Result<_, LockError>>()?;
                         let reg_built_dist = RegistryBuiltDist {
                             wheels,
@@ -2257,7 +2261,7 @@ impl Package {
                     }
                     .into()),
                 };
-            };
+            }
         }
 
         if let Some(sdist) = self.to_source_dist(workspace_root)? {
@@ -2507,7 +2511,7 @@ impl Package {
                     }),
                     requires_python: None,
                     size: sdist.size(),
-                    upload_time_utc_ms: None,
+                    upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
@@ -2558,7 +2562,7 @@ impl Package {
                     }),
                     requires_python: None,
                     size: sdist.size(),
-                    upload_time_utc_ms: None,
+                    upload_time_utc_ms: sdist.upload_time().map(Timestamp::as_millisecond),
                     url: FileLocation::AbsoluteUrl(UrlString::from(file_url)),
                     yanked: None,
                 });
@@ -3599,8 +3603,8 @@ impl GitSource {
                 "branch" => kind = GitSourceKind::Branch(val.into_owned()),
                 "rev" => kind = GitSourceKind::Rev(val.into_owned()),
                 "subdirectory" => subdirectory = Some(PortablePathBuf::from(val.as_ref()).into()),
-                _ => continue,
-            };
+                _ => {}
+            }
         }
         let precise = GitOid::from_str(url.fragment().ok_or(GitSourceError::MissingSha)?)
             .map_err(|_| GitSourceError::InvalidSha)?;
@@ -3630,6 +3634,8 @@ struct SourceDistMetadata {
     ///
     /// This is only present for source distributions that come from registries.
     size: Option<u64>,
+    /// The upload time of the source distribution.
+    upload_time: Option<Timestamp>,
 }
 
 /// A URL or file path where the source dist that was
@@ -3682,7 +3688,7 @@ impl SourceDist {
         }
     }
 
-    fn hash(&self) -> Option<&Hash> {
+    pub(crate) fn hash(&self) -> Option<&Hash> {
         match &self {
             SourceDist::Metadata { metadata } => metadata.hash.as_ref(),
             SourceDist::Url { metadata, .. } => metadata.hash.as_ref(),
@@ -3690,11 +3696,19 @@ impl SourceDist {
         }
     }
 
-    fn size(&self) -> Option<u64> {
+    pub(crate) fn size(&self) -> Option<u64> {
         match &self {
             SourceDist::Metadata { metadata } => metadata.size,
             SourceDist::Url { metadata, .. } => metadata.size,
             SourceDist::Path { metadata, .. } => metadata.size,
+        }
+    }
+
+    pub(crate) fn upload_time(&self) -> Option<Timestamp> {
+        match &self {
+            SourceDist::Metadata { metadata } => metadata.upload_time,
+            SourceDist::Url { metadata, .. } => metadata.upload_time,
+            SourceDist::Path { metadata, .. } => metadata.upload_time,
         }
     }
 }
@@ -3777,9 +3791,19 @@ impl SourceDist {
                     .map_err(LockError::from)?;
                 let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = reg_dist.file.size;
+                let upload_time = reg_dist
+                    .file
+                    .upload_time_utc_ms
+                    .map(Timestamp::from_millisecond)
+                    .transpose()
+                    .map_err(LockErrorKind::InvalidTimestamp)?;
                 Ok(Some(SourceDist::Url {
                     url,
-                    metadata: SourceDistMetadata { hash, size },
+                    metadata: SourceDistMetadata {
+                        hash,
+                        size,
+                        upload_time,
+                    },
                 }))
             }
             IndexUrl::Path(path) => {
@@ -3797,9 +3821,19 @@ impl SourceDist {
                     .into_boxed_path();
                 let hash = reg_dist.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = reg_dist.file.size;
+                let upload_time = reg_dist
+                    .file
+                    .upload_time_utc_ms
+                    .map(Timestamp::from_millisecond)
+                    .transpose()
+                    .map_err(LockErrorKind::InvalidTimestamp)?;
                 Ok(Some(SourceDist::Path {
                     path,
-                    metadata: SourceDistMetadata { hash, size },
+                    metadata: SourceDistMetadata {
+                        hash,
+                        size,
+                        upload_time,
+                    },
                 }))
             }
         }
@@ -3818,6 +3852,7 @@ impl SourceDist {
             metadata: SourceDistMetadata {
                 hash: Some(hash),
                 size: None,
+                upload_time: None,
             },
         })
     }
@@ -3835,6 +3870,7 @@ impl SourceDist {
             metadata: SourceDistMetadata {
                 hash: Some(hash),
                 size: None,
+                upload_time: None,
             },
         })
     }
@@ -3880,6 +3916,9 @@ impl SourceDist {
                 "size",
                 toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
             );
+        }
+        if let Some(upload_time) = self.upload_time() {
+            table.insert("upload_time", Value::from(upload_time.to_string()));
         }
         Ok(table)
     }
@@ -3995,6 +4034,10 @@ struct Wheel {
     ///
     /// This is only present for wheels that come from registries.
     size: Option<u64>,
+    /// The upload time of the built distribution.
+    ///
+    /// This is only present for wheels that come from registries.
+    upload_time: Option<Timestamp>,
     /// The filename of the wheel.
     ///
     /// This isn't part of the wire format since it's redundant with the
@@ -4079,11 +4122,18 @@ impl Wheel {
                     .map_err(LockError::from)?;
                 let hash = wheel.file.hashes.iter().max().cloned().map(Hash::from);
                 let size = wheel.file.size;
+                let upload_time = wheel
+                    .file
+                    .upload_time_utc_ms
+                    .map(Timestamp::from_millisecond)
+                    .transpose()
+                    .map_err(LockErrorKind::InvalidTimestamp)?;
                 Ok(Wheel {
                     url: WheelWireSource::Url { url },
                     hash,
                     size,
                     filename,
+                    upload_time,
                 })
             }
             IndexUrl::Path(path) => {
@@ -4103,6 +4153,7 @@ impl Wheel {
                     url: WheelWireSource::Path { path },
                     hash: None,
                     size: None,
+                    upload_time: None,
                     filename,
                 })
             }
@@ -4116,6 +4167,7 @@ impl Wheel {
             },
             hash: hashes.iter().max().cloned().map(Hash::from),
             size: None,
+            upload_time: None,
             filename: direct_dist.filename.clone(),
         }
     }
@@ -4127,11 +4179,12 @@ impl Wheel {
             },
             hash: hashes.iter().max().cloned().map(Hash::from),
             size: None,
+            upload_time: None,
             filename: path_dist.filename.clone(),
         }
     }
 
-    fn to_registry_dist(
+    pub(crate) fn to_registry_wheel(
         &self,
         source: &RegistrySource,
         root: &Path,
@@ -4156,7 +4209,7 @@ impl Wheel {
                     hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
                     requires_python: None,
                     size: self.size,
-                    upload_time_utc_ms: None,
+                    upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: FileLocation::AbsoluteUrl(file_url.clone()),
                     yanked: None,
                 });
@@ -4188,7 +4241,7 @@ impl Wheel {
                     hashes: self.hash.iter().map(|h| h.0.clone()).collect(),
                     requires_python: None,
                     size: self.size,
-                    upload_time_utc_ms: None,
+                    upload_time_utc_ms: self.upload_time.map(Timestamp::as_millisecond),
                     url: FileLocation::AbsoluteUrl(UrlString::from(file_url)),
                     yanked: None,
                 });
@@ -4220,6 +4273,10 @@ struct WheelWire {
     ///
     /// This is only present for wheels that come from registries.
     size: Option<u64>,
+    /// The upload time of the built distribution.
+    ///
+    /// This is only present for wheels that come from registries.
+    upload_time: Option<Timestamp>,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
@@ -4272,6 +4329,9 @@ impl Wheel {
                 toml_edit::ser::ValueSerializer::new().serialize_u64(size)?,
             );
         }
+        if let Some(upload_time) = self.upload_time {
+            table.insert("upload_time", Value::from(upload_time.to_string()));
+        }
         Ok(table)
     }
 }
@@ -4305,6 +4365,7 @@ impl TryFrom<WheelWire> for Wheel {
             url: wire.url,
             hash: wire.hash,
             size: wire.size,
+            upload_time: wire.upload_time,
             filename,
         })
     }
@@ -4504,6 +4565,37 @@ impl<'de> serde::Deserialize<'de> for Hash {
         }
 
         deserializer.deserialize_str(Visitor)
+    }
+}
+
+impl From<Hash> for Hashes {
+    fn from(value: Hash) -> Self {
+        match value.0.algorithm {
+            HashAlgorithm::Md5 => Hashes {
+                md5: Some(value.0.digest),
+                sha256: None,
+                sha384: None,
+                sha512: None,
+            },
+            HashAlgorithm::Sha256 => Hashes {
+                md5: None,
+                sha256: Some(value.0.digest),
+                sha384: None,
+                sha512: None,
+            },
+            HashAlgorithm::Sha384 => Hashes {
+                md5: None,
+                sha256: None,
+                sha384: Some(value.0.digest),
+                sha512: None,
+            },
+            HashAlgorithm::Sha512 => Hashes {
+                md5: None,
+                sha256: None,
+                sha384: None,
+                sha512: Some(value.0.digest),
+            },
+        }
     }
 }
 
@@ -5035,6 +5127,13 @@ enum LockErrorKind {
         /// errant URL in the message.
         #[source]
         SourceParseError,
+    ),
+    #[error("Failed to parse timestamp")]
+    InvalidTimestamp(
+        /// The underlying error that occurred. This includes the
+        /// errant timestamp in the message.
+        #[source]
+        jiff::Error,
     ),
     /// An error that occurs when there's an unrecognized dependency.
     ///

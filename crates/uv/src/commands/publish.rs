@@ -9,7 +9,7 @@ use owo_colors::OwoColorize;
 use tokio::sync::Semaphore;
 use tracing::{debug, info};
 use url::Url;
-
+use uv_auth::Credentials;
 use uv_cache::Cache;
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
@@ -74,7 +74,7 @@ pub(crate) async fn publish(
     // We're only checking a single URL and one at a time, so 1 permit is sufficient
     let download_concurrency = Arc::new(Semaphore::new(1));
 
-    let (publish_url, username, password) = gather_credentials(
+    let (publish_url, credentials) = gather_credentials(
         publish_url,
         username,
         password,
@@ -137,8 +137,7 @@ pub(crate) async fn publish(
             &filename,
             &publish_url,
             &upload_client,
-            username.as_deref(),
-            password.as_deref(),
+            &credentials,
             check_url_client.as_ref(),
             &download_concurrency,
             // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
@@ -207,7 +206,7 @@ async fn gather_credentials(
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
     printer: Printer,
-) -> Result<(Url, Option<String>, Option<String>)> {
+) -> Result<(Url, Credentials)> {
     // Support reading username and password from the URL, for symmetry with the index API.
     if let Some(url_password) = publish_url.password() {
         if password.is_some_and(|password| password != url_password) {
@@ -318,7 +317,10 @@ async fn gather_credentials(
             // We may be using the keyring for the simple index.
         }
     }
-    Ok((publish_url, username, password))
+
+    let credentials = Credentials::basic(username, password);
+
+    Ok((publish_url, credentials))
 }
 
 fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
@@ -343,11 +345,11 @@ mod tests {
     use insta::assert_snapshot;
     use url::Url;
 
-    async fn credentials(
+    async fn get_credentials(
         url: Url,
         username: Option<String>,
         password: Option<String>,
-    ) -> Result<(Url, Option<String>, Option<String>)> {
+    ) -> Result<(Url, Credentials)> {
         let client = BaseClientBuilder::new().build();
         gather_credentials(
             url,
@@ -370,30 +372,30 @@ mod tests {
         let example_url_username_password =
             Url::from_str("https://ferris:f3rr1s@example.com").unwrap();
 
-        let (publish_url, username, password) =
-            credentials(example_url.clone(), None, None).await.unwrap();
+        let (publish_url, credentials) = get_credentials(example_url.clone(), None, None)
+            .await
+            .unwrap();
         assert_eq!(publish_url, example_url);
-        assert_eq!(username, None);
-        assert_eq!(password, None);
+        assert_eq!(credentials.username(), None);
+        assert_eq!(credentials.password(), None);
 
-        let (publish_url, username, password) =
-            credentials(example_url_username.clone(), None, None)
+        let (publish_url, credentials) = get_credentials(example_url_username.clone(), None, None)
+            .await
+            .unwrap();
+        assert_eq!(publish_url, example_url);
+        assert_eq!(credentials.username(), Some("ferris"));
+        assert_eq!(credentials.password(), None);
+
+        let (publish_url, credentials) =
+            get_credentials(example_url_username_password.clone(), None, None)
                 .await
                 .unwrap();
         assert_eq!(publish_url, example_url);
-        assert_eq!(username.as_deref(), Some("ferris"));
-        assert_eq!(password, None);
-
-        let (publish_url, username, password) =
-            credentials(example_url_username_password.clone(), None, None)
-                .await
-                .unwrap();
-        assert_eq!(publish_url, example_url);
-        assert_eq!(username.as_deref(), Some("ferris"));
-        assert_eq!(password.as_deref(), Some("f3rr1s"));
+        assert_eq!(credentials.username(), Some("ferris"));
+        assert_eq!(credentials.password(), Some("f3rr1s"));
 
         // Ok: The username is the same between CLI/env vars and URL
-        let (publish_url, username, password) = credentials(
+        let (publish_url, credentials) = get_credentials(
             example_url_username_password.clone(),
             Some("ferris".to_string()),
             None,
@@ -401,11 +403,11 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(publish_url, example_url);
-        assert_eq!(username.as_deref(), Some("ferris"));
-        assert_eq!(password.as_deref(), Some("f3rr1s"));
+        assert_eq!(credentials.username(), Some("ferris"));
+        assert_eq!(credentials.password(), Some("f3rr1s"));
 
         // Err: There are two different usernames between CLI/env vars and URL
-        let err = credentials(
+        let err = get_credentials(
             example_url_username_password.clone(),
             Some("packaging-platypus".to_string()),
             None,
@@ -418,7 +420,7 @@ mod tests {
         );
 
         // Ok: The username and password are the same between CLI/env vars and URL
-        let (publish_url, username, password) = credentials(
+        let (publish_url, credentials) = get_credentials(
             example_url_username_password.clone(),
             Some("ferris".to_string()),
             Some("f3rr1s".to_string()),
@@ -426,11 +428,11 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(publish_url, example_url);
-        assert_eq!(username.as_deref(), Some("ferris"));
-        assert_eq!(password.as_deref(), Some("f3rr1s"));
+        assert_eq!(credentials.username(), Some("ferris"));
+        assert_eq!(credentials.password(), Some("f3rr1s"));
 
         // Err: There are two different passwords between CLI/env vars and URL
-        let err = credentials(
+        let err = get_credentials(
             example_url_username_password.clone(),
             Some("ferris".to_string()),
             Some("secret".to_string()),

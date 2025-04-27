@@ -82,6 +82,16 @@ fn python_find() {
     ----- stderr -----
     "###);
 
+    // Request Python 3.12 via partial key syntax with placeholders
+    uv_snapshot!(context.filters(), context.python_find().arg("any-3.12-any"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    "###);
+
     // Request CPython 3.12 for the current platform
     let os = Os::from_env();
     let arch = Arch::from_env();
@@ -842,5 +852,51 @@ fn python_find_script_no_such_version() {
 
     ----- stderr -----
     No interpreter found for Python >=3.14 in [PYTHON SOURCES]
+    ");
+}
+
+#[test]
+fn python_find_show_version() {
+    let context: TestContext =
+        TestContext::new_with_versions(&["3.11", "3.12"]).with_filtered_python_sources();
+
+    // No interpreters found
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_TEST_PYTHON_PATH, "").arg("--show-version"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found in [PYTHON SOURCES]
+    ");
+
+    // Show the first version found
+    uv_snapshot!(context.filters(), context.python_find().arg("--show-version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11.[X]
+
+    ----- stderr -----
+    ");
+
+    // Request Python 3.12
+    uv_snapshot!(context.filters(), context.python_find().arg("--show-version").arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.12.[X]
+
+    ----- stderr -----
+    ");
+
+    // Request Python 3.11
+    uv_snapshot!(context.filters(), context.python_find().arg("--show-version").arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    3.11.[X]
+
+    ----- stderr -----
     ");
 }

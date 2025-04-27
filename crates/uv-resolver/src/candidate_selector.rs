@@ -522,7 +522,7 @@ impl CandidateSelector {
                 }
                 if !range.contains(version) {
                     continue;
-                };
+                }
                 let Some(dist) = maybe_dist.prioritized_dist() else {
                     continue;
                 };

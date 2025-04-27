@@ -361,7 +361,7 @@ impl AuthMiddleware {
         {
             trace!("Updating cached credentials for {url} to {credentials:?}");
             self.cache().insert(&url, credentials);
-        };
+        }
 
         result
     }
@@ -397,7 +397,7 @@ impl AuthMiddleware {
             None
         } else if let Some(credentials) = self
             .cache()
-            .get_url(request.url(), credentials.as_username())
+            .get_url(request.url(), credentials.as_username().as_ref())
         {
             request = credentials.authenticate(request);
             // Do not insert already-cached credentials
@@ -449,7 +449,7 @@ impl AuthMiddleware {
                 trace!("Using credentials from previous fetch for {url}");
             } else {
                 trace!("Skipping fetch of credentials for {url}, previous attempt failed");
-            };
+            }
 
             return credentials;
         }
@@ -506,31 +506,30 @@ impl AuthMiddleware {
 }
 
 fn tracing_url(request: &Request, credentials: Option<&Credentials>) -> String {
-    if tracing::enabled!(tracing::Level::DEBUG) {
-        let mut url = request.url().clone();
-        if let Some(username) = credentials
-            .as_ref()
-            .and_then(|credentials| credentials.username())
-        {
-            let _ = url.set_username(username);
-        };
-        if credentials
-            .as_ref()
-            .and_then(|credentials| credentials.password())
-            .is_some()
-        {
-            let _ = url.set_password(Some("****"));
-        };
-        url.to_string()
-    } else {
-        request.url().to_string()
+    if !tracing::enabled!(tracing::Level::DEBUG) {
+        return request.url().to_string();
     }
+
+    let mut url = request.url().clone();
+    if let Some(creds) = credentials {
+        if creds.password().is_some() {
+            if let Some(username) = creds.username() {
+                let _ = url.set_username(username);
+            }
+            let _ = url.set_password(Some("****"));
+        // A username on its own might be a secret token.
+        } else if creds.username().is_some() {
+            let _ = url.set_username("****");
+        }
+    }
+    url.to_string()
 }
 
 #[cfg(test)]
 mod tests {
     use std::io::Write;
 
+    use http::Method;
     use reqwest::Client;
     use tempfile::NamedTempFile;
     use test_log::test;
@@ -538,6 +537,8 @@ mod tests {
     use url::Url;
     use wiremock::matchers::{basic_auth, method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use crate::credentials::Password;
 
     use super::*;
 
@@ -653,7 +654,7 @@ mod tests {
         let cache = CredentialsCache::new();
         cache.insert(
             &base_url,
-            Arc::new(Credentials::new(
+            Arc::new(Credentials::basic(
                 Some(username.to_string()),
                 Some(password.to_string()),
             )),
@@ -707,7 +708,7 @@ mod tests {
         let cache = CredentialsCache::new();
         cache.insert(
             &base_url,
-            Arc::new(Credentials::new(Some(username.to_string()), None)),
+            Arc::new(Credentials::basic(Some(username.to_string()), None)),
         );
 
         let client = test_client_builder()
@@ -1097,7 +1098,7 @@ mod tests {
         // URL.
         cache.insert(
             &base_url,
-            Arc::new(Credentials::new(Some(username.to_string()), None)),
+            Arc::new(Credentials::basic(Some(username.to_string()), None)),
         );
         let client = test_client_builder()
             .with(AuthMiddleware::new().with_cache(cache).with_keyring(Some(
@@ -1146,14 +1147,14 @@ mod tests {
         // Seed the cache with our credentials
         cache.insert(
             &base_url_1,
-            Arc::new(Credentials::new(
+            Arc::new(Credentials::basic(
                 Some(username_1.to_string()),
                 Some(password_1.to_string()),
             )),
         );
         cache.insert(
             &base_url_2,
-            Arc::new(Credentials::new(
+            Arc::new(Credentials::basic(
                 Some(username_2.to_string()),
                 Some(password_2.to_string()),
             )),
@@ -1341,14 +1342,14 @@ mod tests {
         // Seed the cache with our credentials
         cache.insert(
             &base_url_1,
-            Arc::new(Credentials::new(
+            Arc::new(Credentials::basic(
                 Some(username_1.to_string()),
                 Some(password_1.to_string()),
             )),
         );
         cache.insert(
             &base_url_2,
-            Arc::new(Credentials::new(
+            Arc::new(Credentials::basic(
                 Some(username_2.to_string()),
                 Some(password_2.to_string()),
             )),
@@ -1843,5 +1844,42 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    #[tracing_test::traced_test(level = "debug")]
+    fn test_tracing_url() {
+        // No credentials
+        let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
+        assert_eq!(
+            tracing_url(&req, None),
+            "https://pypi-proxy.fly.dev/basic-auth/simple"
+        );
+
+        // Mask username if there is a username but no password
+        let creds = Credentials::Basic {
+            username: Username::new(Some(String::from("user"))),
+            password: None,
+        };
+        let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
+        assert_eq!(
+            tracing_url(&req, Some(&creds)),
+            "https://****@pypi-proxy.fly.dev/basic-auth/simple"
+        );
+
+        // Log username but mask password if a password is present
+        let creds = Credentials::Basic {
+            username: Username::new(Some(String::from("user"))),
+            password: Some(Password::new(String::from("password"))),
+        };
+        let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
+        assert_eq!(
+            tracing_url(&req, Some(&creds)),
+            "https://user:****@pypi-proxy.fly.dev/basic-auth/simple"
+        );
+    }
+
+    fn create_request(url: &str) -> Request {
+        Request::new(Method::GET, Url::parse(url).unwrap())
     }
 }

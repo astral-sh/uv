@@ -79,16 +79,16 @@ pub(crate) async fn list(
             PythonListKinds::Downloads => Some(if all_platforms {
                 base_download_request
             } else {
-                base_download_request.fill()?
+                base_download_request.fill_platform()?
             }),
             PythonListKinds::Default => {
                 if python_downloads.is_automatic() {
                     Some(if all_platforms {
                         base_download_request
                     } else if all_arches {
-                        base_download_request.fill()?.with_any_arch()
+                        base_download_request.fill_platform()?.with_any_arch()
                     } else {
-                        base_download_request.fill()?
+                        base_download_request.fill_platform()?
                     })
                 } else {
                     // If fetching is not automatic, then don't show downloads as available by default
@@ -102,6 +102,7 @@ pub(crate) async fn list(
         let downloads = download_request
             .as_ref()
             .map(PythonDownloadRequest::iter_downloads)
+            .transpose()?
             .into_iter()
             .flatten();
 
@@ -112,7 +113,7 @@ pub(crate) async fn list(
                 Either::Right(download.url()),
             ));
         }
-    };
+    }
 
     let installed =
         match kinds {
@@ -148,7 +149,7 @@ pub(crate) async fn list(
             output.insert((
                 installation.key(),
                 kind,
-                Either::Left(installation.interpreter().sys_executable().to_path_buf()),
+                Either::Left(installation.interpreter().real_executable().to_path_buf()),
             ));
         }
     }
@@ -223,7 +224,7 @@ pub(crate) async fn list(
                         Either::Right(url) => {
                             url_or_none = Some((*url).to_string());
                         }
-                    };
+                    }
                     let version = key.version();
                     let release = version.release();
 

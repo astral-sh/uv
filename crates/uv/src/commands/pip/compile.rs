@@ -14,8 +14,8 @@ use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, IndexStrategy,
-    NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, ExportFormat, ExtrasSpecification,
+    IndexStrategy, NoBinary, NoBuild, PreviewMode, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
@@ -23,7 +23,8 @@ use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
     Origin, Requirement, UnresolvedRequirementSpecification, Verbatim,
 };
-use uv_fs::Simplified;
+use uv_fs::{Simplified, CWD};
+use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
 use uv_normalize::{GroupName, PackageName};
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
@@ -31,12 +32,13 @@ use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersion, VersionRequest,
 };
+use uv_requirements::upgrade::{read_pylock_toml_requirements, LockedRequirements};
 use uv_requirements::{
     upgrade::read_requirements_txt, RequirementsSource, RequirementsSpecification,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
-    InMemoryIndex, OptionsBuilder, PrereleaseMode, PythonRequirement, RequiresPython,
+    InMemoryIndex, OptionsBuilder, PrereleaseMode, PylockToml, PythonRequirement, RequiresPython,
     ResolutionMode, ResolverEnvironment,
 };
 use uv_torch::{TorchMode, TorchStrategy};
@@ -64,6 +66,7 @@ pub(crate) async fn pip_compile(
     extras: ExtrasSpecification,
     groups: BTreeMap<PathBuf, Vec<GroupName>>,
     output_file: Option<&Path>,
+    format: Option<ExportFormat>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
     fork_strategy: ForkStrategy,
@@ -107,6 +110,30 @@ pub(crate) async fn pip_compile(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    // If the user provides a `pyproject.toml` or other TOML file as the output file, raise an
+    // error.
+    if output_file
+        .and_then(Path::file_name)
+        .is_some_and(|name| name.eq_ignore_ascii_case("pyproject.toml"))
+    {
+        return Err(anyhow!(
+            "`pyproject.toml` is not a supported output format for `{}` (only `requirements.txt`-style output is supported)",
+            "uv pip compile".green()
+        ));
+    }
+
+    // Determine the output format.
+    let format = format.unwrap_or_else(|| {
+        let extension = output_file.and_then(Path::extension);
+        if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("txt")) {
+            ExportFormat::RequirementsTxt
+        } else if extension.is_some_and(|ext| ext.eq_ignore_ascii_case("toml")) {
+            ExportFormat::PylockToml
+        } else {
+            ExportFormat::RequirementsTxt
+        }
+    });
+
     // Respect `UV_PYTHON`
     if python.is_none() && python_version.is_none() {
         if let Ok(request) = std::env::var("UV_PYTHON") {
@@ -150,6 +177,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        pylock,
         source_trees,
         groups,
         extras: used_extras,
@@ -167,6 +195,13 @@ pub(crate) async fn pip_compile(
         &client_builder,
     )
     .await?;
+
+    // Reject `pylock.toml` files, which are valid outputs but not inputs.
+    if pylock.is_some() {
+        return Err(anyhow!(
+            "`pylock.toml` is not a supported input format for `uv pip compile`"
+        ));
+    }
 
     let constraints = constraints
         .iter()
@@ -192,8 +227,7 @@ pub(crate) async fn pip_compile(
     let build_constraints: Vec<NameRequirementSpecification> =
         operations::read_constraints(build_constraints, &client_builder)
             .await?
-            .iter()
-            .cloned()
+            .into_iter()
             .chain(
                 build_constraints_from_workspace
                     .into_iter()
@@ -306,8 +340,9 @@ pub(crate) async fn pip_compile(
         (Some(tags), ResolverEnvironment::specific(marker_env))
     };
 
-    // Generate, but don't enforce hashes for the requirements.
-    let hasher = if generate_hashes {
+    // Generate, but don't enforce hashes for the requirements. PEP 751 _requires_ a hash to be
+    // present, but otherwise, we omit them by default.
+    let hasher = if generate_hashes || matches!(format, ExportFormat::PylockToml) {
         HashStrategy::Generate(HashGeneration::All)
     } else {
         HashStrategy::None
@@ -368,7 +403,25 @@ pub(crate) async fn pip_compile(
         .build();
 
     // Read the lockfile, if present.
-    let preferences = read_requirements_txt(output_file, &upgrade).await?;
+    let LockedRequirements { preferences, git } =
+        if let Some(output_file) = output_file.filter(|output_file| output_file.exists()) {
+            match format {
+                ExportFormat::RequirementsTxt => LockedRequirements::from_preferences(
+                    read_requirements_txt(output_file, &upgrade).await?,
+                ),
+                ExportFormat::PylockToml => {
+                    read_pylock_toml_requirements(output_file, &upgrade).await?
+                }
+            }
+        } else {
+            LockedRequirements::default()
+        };
+
+    // Populate the Git resolver.
+    for ResolvedRepositoryReference { reference, sha } in git {
+        debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
+        state.git().insert(reference, sha);
+    }
 
     // Combine the `--no-binary` and `--no-build` flags from the requirements files.
     let build_options = build_options.combine(no_binary, no_build);
@@ -496,95 +549,134 @@ pub(crate) async fn pip_compile(
         )?;
     }
 
-    if include_marker_expression {
-        if let Some(marker_env) = resolver_env.marker_environment() {
-            let relevant_markers = resolution.marker_tree(&top_level_index, marker_env)?;
-            if let Some(relevant_markers) = relevant_markers.contents() {
-                writeln!(
-                    writer,
-                    "{}",
-                    "# Pinned dependencies known to be valid for:".green()
-                )?;
-                writeln!(writer, "{}", format!("#    {relevant_markers}").green())?;
+    match format {
+        ExportFormat::RequirementsTxt => {
+            if include_marker_expression {
+                if let Some(marker_env) = resolver_env.marker_environment() {
+                    let relevant_markers = resolution.marker_tree(&top_level_index, marker_env)?;
+                    if let Some(relevant_markers) = relevant_markers.contents() {
+                        writeln!(
+                            writer,
+                            "{}",
+                            "# Pinned dependencies known to be valid for:".green()
+                        )?;
+                        writeln!(writer, "{}", format!("#    {relevant_markers}").green())?;
+                    }
+                }
             }
-        }
-    }
 
-    let mut wrote_preamble = false;
+            let mut wrote_preamble = false;
 
-    // If necessary, include the `--index-url` and `--extra-index-url` locations.
-    if include_index_url {
-        if let Some(index) = index_locations.default_index() {
-            writeln!(writer, "--index-url {}", index.url().verbatim())?;
-            wrote_preamble = true;
-        }
-        let mut seen = FxHashSet::default();
-        for extra_index in index_locations.implicit_indexes() {
-            if seen.insert(extra_index.url()) {
-                writeln!(writer, "--extra-index-url {}", extra_index.url().verbatim())?;
-                wrote_preamble = true;
+            // If necessary, include the `--index-url` and `--extra-index-url` locations.
+            if include_index_url {
+                if let Some(index) = index_locations.default_index() {
+                    writeln!(writer, "--index-url {}", index.url().verbatim())?;
+                    wrote_preamble = true;
+                }
+                let mut seen = FxHashSet::default();
+                for extra_index in index_locations.implicit_indexes() {
+                    if seen.insert(extra_index.url()) {
+                        writeln!(writer, "--extra-index-url {}", extra_index.url().verbatim())?;
+                        wrote_preamble = true;
+                    }
+                }
             }
-        }
-    }
 
-    // If necessary, include the `--find-links` locations.
-    if include_find_links {
-        for flat_index in index_locations.flat_indexes() {
-            writeln!(writer, "--find-links {}", flat_index.url().verbatim())?;
-            wrote_preamble = true;
-        }
-    }
-
-    // If necessary, include the `--no-binary` and `--only-binary` options.
-    if include_build_options {
-        match build_options.no_binary() {
-            NoBinary::None => {}
-            NoBinary::All => {
-                writeln!(writer, "--no-binary :all:")?;
-                wrote_preamble = true;
-            }
-            NoBinary::Packages(packages) => {
-                for package in packages {
-                    writeln!(writer, "--no-binary {package}")?;
+            // If necessary, include the `--find-links` locations.
+            if include_find_links {
+                for flat_index in index_locations.flat_indexes() {
+                    writeln!(writer, "--find-links {}", flat_index.url().verbatim())?;
                     wrote_preamble = true;
                 }
             }
-        }
-        match build_options.no_build() {
-            NoBuild::None => {}
-            NoBuild::All => {
-                writeln!(writer, "--only-binary :all:")?;
-                wrote_preamble = true;
-            }
-            NoBuild::Packages(packages) => {
-                for package in packages {
-                    writeln!(writer, "--only-binary {package}")?;
-                    wrote_preamble = true;
+
+            // If necessary, include the `--no-binary` and `--only-binary` options.
+            if include_build_options {
+                match build_options.no_binary() {
+                    NoBinary::None => {}
+                    NoBinary::All => {
+                        writeln!(writer, "--no-binary :all:")?;
+                        wrote_preamble = true;
+                    }
+                    NoBinary::Packages(packages) => {
+                        for package in packages {
+                            writeln!(writer, "--no-binary {package}")?;
+                            wrote_preamble = true;
+                        }
+                    }
+                }
+                match build_options.no_build() {
+                    NoBuild::None => {}
+                    NoBuild::All => {
+                        writeln!(writer, "--only-binary :all:")?;
+                        wrote_preamble = true;
+                    }
+                    NoBuild::Packages(packages) => {
+                        for package in packages {
+                            writeln!(writer, "--only-binary {package}")?;
+                            wrote_preamble = true;
+                        }
+                    }
                 }
             }
+
+            // If we wrote an index, add a newline to separate it from the requirements
+            if wrote_preamble {
+                writeln!(writer)?;
+            }
+
+            write!(
+                writer,
+                "{}",
+                DisplayResolutionGraph::new(
+                    &resolution,
+                    &resolver_env,
+                    &no_emit_packages,
+                    generate_hashes,
+                    include_extras,
+                    include_markers || universal,
+                    include_annotations,
+                    include_index_annotation,
+                    annotation_style,
+                )
+            )?;
+        }
+        ExportFormat::PylockToml => {
+            if include_marker_expression {
+                warn_user!("The `--emit-marker-expression` option is not supported for `pylock.toml` output");
+            }
+            if include_index_url {
+                warn_user!(
+                    "The `--emit-index-url` option is not supported for `pylock.toml` output"
+                );
+            }
+            if include_find_links {
+                warn_user!(
+                    "The `--emit-find-links` option is not supported for `pylock.toml` output"
+                );
+            }
+            if include_build_options {
+                warn_user!(
+                    "The `--emit-build-options` option is not supported for `pylock.toml` output"
+                );
+            }
+            if include_index_annotation {
+                warn_user!("The `--emit-index-annotation` option is not supported for `pylock.toml` output");
+            }
+
+            // Determine the directory relative to which the output file should be written.
+            let output_file = output_file.map(std::path::absolute).transpose()?;
+            let install_path = if let Some(output_file) = output_file.as_deref() {
+                output_file.parent().unwrap()
+            } else {
+                &*CWD
+            };
+
+            // Convert the resolution to a `pylock.toml` file.
+            let export = PylockToml::from_resolution(&resolution, &no_emit_packages, install_path)?;
+            write!(writer, "{}", export.to_toml()?)?;
         }
     }
-
-    // If we wrote an index, add a newline to separate it from the requirements
-    if wrote_preamble {
-        writeln!(writer)?;
-    }
-
-    write!(
-        writer,
-        "{}",
-        DisplayResolutionGraph::new(
-            &resolution,
-            &resolver_env,
-            &no_emit_packages,
-            generate_hashes,
-            include_extras,
-            include_markers || universal,
-            include_annotations,
-            include_index_annotation,
-            annotation_style,
-        )
-    )?;
 
     // If any "unsafe" packages were excluded, notify the user.
     let excluded = no_emit_packages

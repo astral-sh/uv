@@ -84,6 +84,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -244,6 +245,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -405,6 +407,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -598,6 +601,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -760,6 +764,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -858,6 +863,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         version = "0.0.0"
 
         [tool.uv.pip]
+        python-platform = "x86_64-unknown-linux-gnu"
         resolution = "lowest-direct"
         generate-hashes = true
         index-url = "https://pypi.org/simple"
@@ -899,6 +905,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -997,7 +1004,9 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 {},
             ),
             python_version: None,
-            python_platform: None,
+            python_platform: Some(
+                X8664UnknownLinuxGnu,
+            ),
             universal: false,
             exclude_newer: None,
             no_emit_package: [],
@@ -1084,6 +1093,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -1277,6 +1287,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -1526,6 +1537,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -1710,6 +1722,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -1855,6 +1868,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -2046,6 +2060,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -2260,6 +2275,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -2395,6 +2411,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -2530,6 +2547,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -2667,6 +2685,7 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -2830,6 +2849,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         with_editable: [],
         constraints: [],
         overrides: [],
+        build_constraints: [],
         python: None,
         refresh: None(
             Timestamp(
@@ -2986,6 +3006,7 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -3149,6 +3170,7 @@ fn resolve_both() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -3434,6 +3456,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -3695,6 +3718,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -3833,6 +3857,7 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -3990,6 +4015,7 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -4139,6 +4165,7 @@ fn index_priority() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -4332,6 +4359,7 @@ fn index_priority() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -4531,6 +4559,7 @@ fn index_priority() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -4725,6 +4754,7 @@ fn index_priority() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -4926,6 +4956,7 @@ fn index_priority() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],
@@ -5120,6 +5151,7 @@ fn index_priority() -> anyhow::Result<()> {
         ),
     }
     PipCompileSettings {
+        format: None,
         src_file: [
             "requirements.in",
         ],

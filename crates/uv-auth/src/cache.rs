@@ -245,19 +245,19 @@ mod tests {
 
     #[test]
     fn test_trie() {
-        let credentials1 = Arc::new(Credentials::new(
+        let credentials1 = Arc::new(Credentials::basic(
             Some("username1".to_string()),
             Some("password1".to_string()),
         ));
-        let credentials2 = Arc::new(Credentials::new(
+        let credentials2 = Arc::new(Credentials::basic(
             Some("username2".to_string()),
             Some("password2".to_string()),
         ));
-        let credentials3 = Arc::new(Credentials::new(
+        let credentials3 = Arc::new(Credentials::basic(
             Some("username3".to_string()),
             Some("password3".to_string()),
         ));
-        let credentials4 = Arc::new(Credentials::new(
+        let credentials4 = Arc::new(Credentials::basic(
             Some("username4".to_string()),
             Some("password4".to_string()),
         ));
