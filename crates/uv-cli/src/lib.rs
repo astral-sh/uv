@@ -4063,6 +4063,7 @@ pub enum ToolCommand {
         about = "Run a command provided by a Python package.",
         after_help = "Use `uv help tool run` for more details.",
         after_long_help = "",
+        display_name = "uvx",
         long_version = crate::version::uv_self_version()
     )]
     Uvx(UvxArgs),
