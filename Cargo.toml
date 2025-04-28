@@ -146,7 +146,7 @@ rkyv = { version = "0.8.8", features = ["bytecheck"] }
 rmp-serde = { version = "1.3.0" }
 rust-netrc = { version = "0.1.2" }
 rustc-hash = { version = "2.0.0" }
-rustix = { version = "0.38.37", default-features = false, features = ["fs", "std"] }
+rustix = { version = "1.0.0", default-features = false, features = ["fs", "std"] }
 same-file = { version = "1.0.6" }
 schemars = { version = "0.8.21", features = ["url"] }
 seahash = { version = "4.1.0" }

@@ -5200,7 +5200,7 @@ dependencies = [
  "junction",
  "path-slash",
  "percent-encoding",
- "rustix 0.38.44",
+ "rustix 1.0.1",
  "same-file",
  "schemars",
  "serde",
