@@ -1116,19 +1116,7 @@ impl CacheBucket {
                 let root = cache.bucket(self);
                 summary += rm_rf(root)?;
             }
-            Self::Git => {
-                // Nothing to do.
-            }
-            Self::Interpreter => {
-                // Nothing to do.
-            }
-            Self::Archive => {
-                // Nothing to do.
-            }
-            Self::Builds => {
-                // Nothing to do.
-            }
-            Self::Environments => {
+            Self::Git | Self::Interpreter | Self::Archive | Self::Builds | Self::Environments => {
                 // Nothing to do.
             }
         }

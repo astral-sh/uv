@@ -218,7 +218,7 @@ pub(crate) async fn install(
             for installation in matching_installations {
                 changelog.existing.insert(installation.key().clone());
                 if matches!(&request.request, &PythonRequest::Any) {
-                    // Construct a install request matching the existing installation
+                    // Construct an install request matching the existing installation
                     match InstallRequest::new(PythonRequest::Key(installation.into())) {
                         Ok(request) => {
                             debug!("Will reinstall `{}`", installation.key().green());
