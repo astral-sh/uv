@@ -481,8 +481,6 @@ uv run [OPTIONS] [COMMAND]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-run--version"><a href="#uv-run--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd><dt id="uv-run--with"><a href="#uv-run--with"><code>--with</code></a> <i>with</i></dt><dd><p>Run with the given packages installed.</p>
 
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
@@ -730,8 +728,6 @@ uv init [OPTIONS] [PATH]
 </dd><dt id="uv-init--verbose"><a href="#uv-init--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-init--version"><a href="#uv-init--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -1114,8 +1110,6 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-add--version"><a href="#uv-add--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ## uv remove
@@ -1461,8 +1455,6 @@ uv remove [OPTIONS] <PACKAGES>...
 </dd><dt id="uv-remove--verbose"><a href="#uv-remove--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-remove--version"><a href="#uv-remove--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -1888,8 +1880,6 @@ uv sync [OPTIONS]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-sync--version"><a href="#uv-sync--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ## uv lock
@@ -2205,8 +2195,6 @@ uv lock [OPTIONS]
 </dd><dt id="uv-lock--verbose"><a href="#uv-lock--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-lock--version"><a href="#uv-lock--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -2614,8 +2602,6 @@ uv export [OPTIONS]
 </dd><dt id="uv-export--verbose"><a href="#uv-export--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-export--version"><a href="#uv-export--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -3059,8 +3045,6 @@ uv tree [OPTIONS]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-tree--version"><a href="#uv-tree--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ## uv tool
@@ -3433,8 +3417,6 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-tool-run--version"><a href="#uv-tool-run--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd><dt id="uv-tool-run--with"><a href="#uv-tool-run--with"><code>--with</code></a> <i>with</i></dt><dd><p>Run with the given packages installed</p>
 
 </dd><dt id="uv-tool-run--with-editable"><a href="#uv-tool-run--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode</p>
@@ -3775,8 +3757,6 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-tool-install--version"><a href="#uv-tool-install--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd><dt id="uv-tool-install--with"><a href="#uv-tool-install--with"><code>--with</code></a> <i>with</i></dt><dd><p>Include the following extra requirements</p>
 
 </dd><dt id="uv-tool-install--with-editable"><a href="#uv-tool-install--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Include the given packages in editable mode</p>
@@ -4084,8 +4064,6 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-tool-upgrade--version"><a href="#uv-tool-upgrade--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv tool list
@@ -4199,8 +4177,6 @@ uv tool list [OPTIONS]
 </dd><dt id="uv-tool-list--verbose"><a href="#uv-tool-list--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-tool-list--version"><a href="#uv-tool-list--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -4322,8 +4298,6 @@ uv tool uninstall [OPTIONS] <NAME>...
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-tool-uninstall--version"><a href="#uv-tool-uninstall--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv tool update-shell
@@ -4441,8 +4415,6 @@ uv tool update-shell [OPTIONS]
 </dd><dt id="uv-tool-update-shell--verbose"><a href="#uv-tool-update-shell--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-tool-update-shell--version"><a href="#uv-tool-update-shell--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -4579,8 +4551,6 @@ uv tool dir [OPTIONS]
 </dd><dt id="uv-tool-dir--verbose"><a href="#uv-tool-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-tool-dir--version"><a href="#uv-tool-dir--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -4810,8 +4780,6 @@ uv python list [OPTIONS] [REQUEST]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-python-list--version"><a href="#uv-python-list--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv python install
@@ -4983,8 +4951,6 @@ uv python install [OPTIONS] [TARGETS]...
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-python-install--version"><a href="#uv-python-install--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv python find
@@ -5123,8 +5089,6 @@ uv python find [OPTIONS] [REQUEST]
 </dd><dt id="uv-python-find--verbose"><a href="#uv-python-find--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-python-find--version"><a href="#uv-python-find--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -5274,8 +5238,6 @@ uv python pin [OPTIONS] [REQUEST]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-python-pin--version"><a href="#uv-python-pin--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv python dir
@@ -5410,8 +5372,6 @@ uv python dir [OPTIONS]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-python-dir--version"><a href="#uv-python-dir--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv python uninstall
@@ -5536,8 +5496,6 @@ uv python uninstall [OPTIONS] <TARGETS>...
 </dd><dt id="uv-python-uninstall--verbose"><a href="#uv-python-uninstall--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-python-uninstall--version"><a href="#uv-python-uninstall--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -6135,8 +6093,6 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-pip-compile--version"><a href="#uv-pip-compile--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv pip sync
@@ -6601,8 +6557,6 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 </dd><dt id="uv-pip-sync--verbose"><a href="#uv-pip-sync--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-pip-sync--version"><a href="#uv-pip-sync--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -7155,8 +7109,6 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-pip-install--version"><a href="#uv-pip-install--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv pip uninstall
@@ -7316,8 +7268,6 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-pip-uninstall--version"><a href="#uv-pip-uninstall--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv pip freeze
@@ -7449,8 +7399,6 @@ uv pip freeze [OPTIONS]
 </dd><dt id="uv-pip-freeze--verbose"><a href="#uv-pip-freeze--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-pip-freeze--version"><a href="#uv-pip-freeze--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -7672,8 +7620,6 @@ uv pip list [OPTIONS]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-pip-list--version"><a href="#uv-pip-list--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv pip show
@@ -7809,8 +7755,6 @@ uv pip show [OPTIONS] [PACKAGE]...
 </dd><dt id="uv-pip-show--verbose"><a href="#uv-pip-show--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-pip-show--version"><a href="#uv-pip-show--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -8025,8 +7969,6 @@ uv pip tree [OPTIONS]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-pip-tree--version"><a href="#uv-pip-tree--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv pip check
@@ -8152,8 +8094,6 @@ uv pip check [OPTIONS]
 </dd><dt id="uv-pip-check--verbose"><a href="#uv-pip-check--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-pip-check--version"><a href="#uv-pip-check--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -8416,8 +8356,6 @@ uv venv [OPTIONS] [PATH]
 </dd><dt id="uv-venv--verbose"><a href="#uv-venv--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-venv--version"><a href="#uv-venv--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -8772,8 +8710,6 @@ uv build [OPTIONS] [SRC]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-build--version"><a href="#uv-build--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd><dt id="uv-build--wheel"><a href="#uv-build--wheel"><code>--wheel</code></a></dt><dd><p>Build a binary distribution (&quot;wheel&quot;) from the given directory</p>
 
 </dd></dl>
@@ -8969,8 +8905,6 @@ uv publish --publish-url https://upload.pypi.org/legacy/ --check-url https://pyp
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-publish--version"><a href="#uv-publish--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ## uv cache
@@ -9109,8 +9043,6 @@ uv cache clean [OPTIONS] [PACKAGE]...
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-cache-clean--version"><a href="#uv-cache-clean--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv cache prune
@@ -9228,8 +9160,6 @@ uv cache prune [OPTIONS]
 </dd><dt id="uv-cache-prune--verbose"><a href="#uv-cache-prune--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-cache-prune--version"><a href="#uv-cache-prune--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -9350,8 +9280,6 @@ uv cache dir [OPTIONS]
 </dd><dt id="uv-cache-dir--verbose"><a href="#uv-cache-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-cache-dir--version"><a href="#uv-cache-dir--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -9492,8 +9420,6 @@ uv self update [OPTIONS] [TARGET_VERSION]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-self-update--version"><a href="#uv-self-update--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv self version
@@ -9607,8 +9533,6 @@ uv self version [OPTIONS]
 </dd><dt id="uv-self-version--verbose"><a href="#uv-self-version--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-self-version--version"><a href="#uv-self-version--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -9748,8 +9672,6 @@ uv version [OPTIONS] [VALUE]
 </dd><dt id="uv-version--verbose"><a href="#uv-version--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-version--version"><a href="#uv-version--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -9924,8 +9846,6 @@ uv help [OPTIONS] [COMMAND]...
 </dd><dt id="uv-help--verbose"><a href="#uv-help--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-help--version"><a href="#uv-help--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
