@@ -1067,7 +1067,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: run_variant @ (ToolCommand::Uvx(_) | ToolCommand::Run(_)),
         }) => {
             let (args, invocation_source) = match run_variant {
-                ToolCommand::Uvx(args) => (args, ToolRunCommand::Uvx),
+                ToolCommand::Uvx(args) => (args.tool_run, ToolRunCommand::Uvx),
                 ToolCommand::Run(args) => (args, ToolRunCommand::ToolRun),
                 // OK guarded by the outer match statement
                 _ => unreachable!(),
@@ -1081,15 +1081,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .find_subcommand("uvx")
                     .unwrap()
                     .clone()
-                    // Avoid duplicating the `--help` and `--version` flags from the top-level arguments.
+                    // Avoid duplicating the `--help` and `--version` flags from the top-level
+                    // arguments.
                     .disable_help_flag(true)
-                    .disable_version_flag(true)
-                    .version(env!("CARGO_PKG_VERSION"));
+                    .disable_version_flag(true);
 
-                // Copy the top-level arguments into the `uvx` command. (Like `Args::augment_args`, but
-                // expanded to skip collisions.)
+                // Copy the top-level arguments into the `uvx` command, as in `Args::augment_args`,
+                // but expanded to skip collisions.
                 for arg in TopLevelArgs::command().get_arguments() {
-                    if arg.get_id() != "isolated" {
+                    if arg.get_id() != "isolated" && arg.get_id() != "version" {
                         uvx = uvx.arg(arg);
                     }
                 }

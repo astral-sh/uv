@@ -438,9 +438,6 @@ fn help_subcommand() {
       -h, --help
               Display the concise help for this command
 
-      -V, --version
-              Display the uv version
-
     Use `uv help python <command>` for more information on a specific command.
 
 
@@ -691,9 +688,6 @@ fn help_subsubcommand() {
       -h, --help
               Display the concise help for this command
 
-      -V, --version
-              Display the uv version
-
 
     ----- stderr -----
     "#);
@@ -755,8 +749,6 @@ fn help_flag_subcommand() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     Use `uv help python` for more details.
 
@@ -826,8 +818,6 @@ fn help_flag_subsubcommand() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     ----- stderr -----
     "#);
@@ -896,7 +886,7 @@ fn help_unknown_subcommand() {
 fn help_unknown_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("foobar"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("python").arg("foobar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -909,7 +899,7 @@ fn help_unknown_subsubcommand() {
         pin
         dir
         uninstall
-    "###);
+    ");
 }
 
 #[test]
@@ -1014,14 +1004,20 @@ fn help_with_help() {
 fn help_with_version() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("--version"), @r###"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.help().arg("--version"), @r"
+    success: false
+    exit_code: 2
     ----- stdout -----
-    uv [VERSION] ([COMMIT] DATE)
 
     ----- stderr -----
-    "###);
+    error: unexpected argument '--version' found
+
+      tip: a similar argument exists: '--verbose'
+
+    Usage: uv help --verbose... [COMMAND]...
+
+    For more information, try '--help'.
+    ");
 }
 
 #[test]
