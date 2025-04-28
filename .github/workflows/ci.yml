@@ -985,7 +985,7 @@ jobs:
       - name: "Install free-threaded Python via uv"
         run: |
           ./uv python install -v 3.13t
-          ./uv venv -p 3.13t --python-preference only-managed
+          ./uv venv -p 3.13t --managed-python
 
       - name: "Check version"
         run: |
@@ -1025,7 +1025,7 @@ jobs:
 
       - name: "Create a virtual environment (uv)"
         run: |
-          ./uv venv -p 3.13t --python-preference only-managed
+          ./uv venv -p 3.13t --managed-python
 
       - name: "Check version (uv)"
         run: |
@@ -1065,7 +1065,7 @@ jobs:
 
       - name: "Create a virtual environment"
         run: |
-          ./uv venv -p pypy3.9 --python-preference only-managed
+          ./uv venv -p pypy3.9 --managed-python
 
       - name: "Check for executables"
         run: |
@@ -1125,7 +1125,7 @@ jobs:
 
       - name: "Create a virtual environment"
         run: |
-          .\uv.exe venv -p pypy3.9 --python-preference only-managed
+          .\uv.exe venv -p pypy3.9 --managed-python
 
       - name: "Check for executables"
         shell: python
@@ -1189,7 +1189,7 @@ jobs:
 
       - name: "Create a virtual environment"
         run: |
-          ./uv venv -p graalpy --python-preference only-managed
+          ./uv venv -p graalpy --managed-python
 
       - name: "Check for executables"
         run: |
@@ -1249,7 +1249,7 @@ jobs:
 
       - name: "Create a virtual environment"
         run: |
-          .\uv.exe venv -p graalpy --python-preference only-managed
+          .\uv.exe venv -p graalpy --managed-python
 
       - name: "Check for executables"
         shell: python
