@@ -3051,7 +3051,7 @@ fn init_backend_implies_package() {
 /// Run `uv init --build-backend poetry` to create a project with poetry-core build backend
 #[test]
 fn init_library_poetry() -> Result<()> {
-    let context = TestContext::new("3.12").with_exclude_newer("2025-04-28T00:00Z");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-04-28T00:00:00Z");
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
