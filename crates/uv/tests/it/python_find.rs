@@ -94,7 +94,7 @@ fn python_find() {
 
     // Request CPython 3.12 for the current platform
     let os = Os::from_env();
-    let arch = Arch::from_env();
+    let arch = Arch::from_env().without_variant();
 
     uv_snapshot!(context.filters(), context.python_find()
     .arg(format!("cpython-3.12-{os}-{arch}"))

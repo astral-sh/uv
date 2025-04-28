@@ -90,10 +90,12 @@ class Arch:
         return (self.family + "_" + self.variant) if self.variant else self.family
 
     def __gt__(self, other) -> bool:
-        return (self.family, self.variant or "") > (other.family, other.variant or "")
+        # Note this is inverted to prefer newer variants
+        return (self.family, self.variant or "") < (other.family, other.variant or "")
 
     def __lt__(self, other) -> bool:
-        return (self.family, self.variant or "") < (other.family, other.variant or "")
+        # Note this is inverted to prefer newer variants
+        return (self.family, self.variant or "") > (other.family, other.variant or "")
 
 
 type PlatformTripleKey = tuple[str, str, str]

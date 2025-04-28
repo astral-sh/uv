@@ -17,7 +17,11 @@ pub enum Error {
     UnsupportedVariant(String, String),
 }
 
-/// Architecture variants, e.g., with support for different instruction sets
+/// Architecture variants supplementing the [`target_lexicon::Architecture`].
+///
+/// Currently these are only used for `x86_64` microarchitecture levels.
+///
+/// See the specification at <https://gitlab.com/x86-psABIs/x86-64-ABI>
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub enum ArchVariant {
     /// Targets 64-bit Intel/AMD CPUs newer than Nehalem (2008).
@@ -99,7 +103,7 @@ impl Arch {
     pub fn from_env() -> Self {
         Self {
             family: target_lexicon::HOST.architecture,
-            variant: None,
+            variant: ArchVariant::from_env(),
         }
     }
 
@@ -113,7 +117,12 @@ impl Arch {
             return true;
         }
 
-        // TODO: Implement `variant` support checks
+        if self
+            .variant
+            .is_some_and(|variant| variant.supports(other.variant))
+        {
+            return true;
+        }
 
         // Windows ARM64 runs emulated x86_64 binaries transparently
         if cfg!(windows) && matches!(self.family, target_lexicon::Architecture::Aarch64(_)) {
@@ -129,6 +138,75 @@ impl Arch {
 
     pub fn is_arm(&self) -> bool {
         matches!(self.family, target_lexicon::Architecture::Arm(_))
+    }
+
+    #[must_use]
+    pub fn without_variant(self) -> Self {
+        Self {
+            family: self.family,
+            variant: None,
+        }
+    }
+}
+
+impl ArchVariant {
+    /// Only Linux `x86_64` variants are published upstream at this time.
+    #[cfg(all(unix, target_arch = "x86_64"))]
+    pub fn from_env() -> Option<Self> {
+        if is_x86_feature_detected!("avx512f")
+            && is_x86_feature_detected!("avx512bw")
+            && is_x86_feature_detected!("avx512cd")
+            && is_x86_feature_detected!("avx512dq")
+            && is_x86_feature_detected!("avx512vl")
+        {
+            Some(Self::V4)
+        } else if is_x86_feature_detected!("avx")
+            && is_x86_feature_detected!("avx2")
+            && is_x86_feature_detected!("bmi1")
+            && is_x86_feature_detected!("bmi2")
+            && is_x86_feature_detected!("f16c")
+            && is_x86_feature_detected!("fma")
+            && is_x86_feature_detected!("lzcnt")
+            && is_x86_feature_detected!("movbe")
+        {
+            Some(Self::V3)
+        } else if is_x86_feature_detected!("cmpxchg16b")
+            && is_x86_feature_detected!("popcnt")
+            && is_x86_feature_detected!("sse3")
+            && is_x86_feature_detected!("sse4.1")
+            && is_x86_feature_detected!("sse4.2")
+            && is_x86_feature_detected!("ssse3")
+        {
+            Some(Self::V2)
+        } else {
+            None
+        }
+    }
+
+    #[cfg(not(all(unix, target_arch = "x86_64")))]
+    pub fn from_env() -> Option<Self> {
+        None
+    }
+
+    /// Does the current variant support running the other?
+    ///
+    /// When the variants are equal, this is always true. Otherwise, this is true if the given
+    /// variant is a subset of the current one.
+    pub(crate) fn supports(self, other: Option<Self>) -> bool {
+        // `None` can be used on any architecture
+        let Some(other) = other else {
+            return true;
+        };
+        // Equal variants are always supported
+        if self == other {
+            return true;
+        }
+        // Check for variant subsets
+        match self {
+            Self::V2 => false, // We already tested for equality and `None`
+            Self::V3 => matches!(other, Self::V2),
+            Self::V4 => matches!(other, Self::V2 | Self::V3),
+        }
     }
 }
 
