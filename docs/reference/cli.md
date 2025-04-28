@@ -576,6 +576,8 @@ uv init [OPTIONS] [PATH]
 
 <li><code>pdm</code>:  Use <a href='https://pypi.org/project/pdm-backend'>pdm-backend</a> as the project build backend</li>
 
+<li><code>poetry</code>:  Use <a href='https://pypi.org/project/poetry-core'>poetry-core</a> as the project build backend</li>
+
 <li><code>setuptools</code>:  Use <a href='https://pypi.org/project/setuptools'>setuptools</a> as the project build backend</li>
 
 <li><code>maturin</code>:  Use <a href='https://pypi.org/project/maturin'>maturin</a> as the project build backend</li>
