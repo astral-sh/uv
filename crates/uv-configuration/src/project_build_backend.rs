@@ -24,6 +24,10 @@ pub enum ProjectBuildBackend {
     #[serde(alias = "pdm-backend")]
     #[cfg_attr(feature = "clap", value(alias = "pdm-backend"))]
     PDM,
+    /// Use [poetry-core](https://pypi.org/project/poetry-core) as the project build backend.
+    #[serde(alias = "poetry-core")]
+    #[cfg_attr(feature = "clap", value(alias = "poetry-core", alias = "poetry_core"))]
+    Poetry,
     /// Use [setuptools](https://pypi.org/project/setuptools) as the project build backend.
     Setuptools,
     /// Use [maturin](https://pypi.org/project/maturin) as the project build backend.

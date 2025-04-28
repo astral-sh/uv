@@ -966,6 +966,12 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 build-backend = "setuptools.build_meta"
             "#}
         .to_string(),
+        ProjectBuildBackend::Poetry => indoc::indoc! {r#"
+                [build-system]
+                requires = ["poetry-core>=2,<3"]
+                build-backend = "poetry.core.masonry.api"
+            "#}
+        .to_string(),
         // Binary build backends
         ProjectBuildBackend::Maturin => indoc::formatdoc! {r#"
                 [tool.maturin]

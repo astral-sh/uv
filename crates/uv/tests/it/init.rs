@@ -3048,6 +3048,87 @@ fn init_backend_implies_package() {
     });
 }
 
+/// Run `uv init --build-backend poetry` to create a project with poetry-core build backend
+#[test]
+fn init_library_poetry() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-04-28T00:00Z");
+
+    let child = context.temp_dir.child("foo");
+    child.create_dir_all()?;
+
+    let pyproject_toml = child.join("pyproject.toml");
+    let init_py = child.join("src").join("foo").join("__init__.py");
+    let py_typed = child.join("src").join("foo").join("py.typed");
+
+    uv_snapshot!(context.filters(), context.init().current_dir(&child).arg("--lib").arg("--build-backend").arg("poetry"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Initialized project `foo`
+    "###);
+
+    let pyproject = fs_err::read_to_string(&pyproject_toml)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject, @r###"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        description = "Add your description here"
+        readme = "README.md"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [build-system]
+        requires = ["poetry-core>=2,<3"]
+        build-backend = "poetry.core.masonry.api"
+        "###
+        );
+    });
+
+    let init = fs_err::read_to_string(init_py)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            init, @r###"
+        def hello() -> str:
+            return "Hello from foo!"
+        "###
+        );
+    });
+
+    let py_typed = fs_err::read_to_string(py_typed)?;
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            py_typed, @""
+        );
+    });
+
+    uv_snapshot!(context.filters(), context.run().current_dir(&child).env_remove(EnvVars::VIRTUAL_ENV).arg("python").arg("-c").arg("import foo; print(foo.hello())"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello from foo!
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + foo==0.1.0 (from file://[TEMP_DIR]/foo)
+    "###);
+
+    Ok(())
+}
+
 /// Run `uv init --app --package --build-backend maturin` to create a packaged application project
 #[test]
 #[cfg(feature = "crates-io")]
