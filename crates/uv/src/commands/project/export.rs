@@ -11,7 +11,7 @@ use uv_configuration::{
     Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
     PreviewMode,
 };
-use uv_normalize::{DefaultGroups, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_requirements::is_pylock_toml;
 use uv_resolver::{PylockToml, RequirementsTxtExport};
@@ -111,11 +111,19 @@ pub(crate) async fn export(
     };
 
     // Determine the default groups to include.
-    let defaults = match &target {
+    let default_groups = match &target {
         ExportTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
         ExportTarget::Script(_) => DefaultGroups::default(),
     };
-    let dev = dev.with_defaults(defaults);
+
+    // Determine the default extras to include.
+    let default_extras = match &target {
+        ExportTarget::Project(_project) => DefaultExtras::default(),
+        ExportTarget::Script(_) => DefaultExtras::default(),
+    };
+
+    let dev = dev.with_defaults(default_groups);
+    let extras = extras.with_defaults(default_extras);
 
     // Find an interpreter for the project, unless `--frozen` is set.
     let interpreter = if frozen {

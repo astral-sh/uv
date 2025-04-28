@@ -8,7 +8,9 @@ use petgraph::visit::IntoNodeReferences;
 use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions};
+use uv_configuration::{
+    DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults, InstallOptions,
+};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItem;
@@ -43,7 +45,7 @@ impl<'lock> ExportableRequirements<'lock> {
     fn from_lock(
         target: &impl Installable<'lock>,
         prune: &[PackageName],
-        extras: &ExtrasSpecification,
+        extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
         annotate: bool,
         install_options: &'lock InstallOptions,

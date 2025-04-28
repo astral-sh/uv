@@ -13,7 +13,7 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
-    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions,
+    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults, InstallOptions,
 };
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, SourceDistFilename,
@@ -584,7 +584,7 @@ impl<'lock> PylockToml {
     pub fn from_lock(
         target: &impl Installable<'lock>,
         prune: &[PackageName],
-        extras: &ExtrasSpecification,
+        extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
         annotate: bool,
         install_options: &'lock InstallOptions,

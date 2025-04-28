@@ -149,7 +149,25 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -310,7 +328,25 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -472,7 +508,25 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -666,7 +720,25 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -797,7 +869,25 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -970,7 +1060,25 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -1189,7 +1297,25 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -1416,7 +1542,25 @@ fn resolve_index_url() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -1602,7 +1746,25 @@ fn resolve_find_links() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -1755,7 +1917,25 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -1964,7 +2144,25 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -2156,7 +2354,25 @@ fn resolve_top_level() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -2308,7 +2524,25 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -2444,7 +2678,25 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -2580,7 +2832,25 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -2718,7 +2988,25 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -3039,7 +3327,25 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -3235,7 +3541,25 @@ fn resolve_both() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -3521,7 +3845,25 @@ fn resolve_config_file() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -3751,7 +4093,25 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -3890,7 +4250,25 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -4048,7 +4426,25 @@ fn allow_insecure_host() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -4263,7 +4659,25 @@ fn index_priority() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -4457,7 +4871,25 @@ fn index_priority() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -4657,7 +5089,25 @@ fn index_priority() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -4852,7 +5302,25 @@ fn index_priority() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -5054,7 +5522,25 @@ fn index_priority() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -5249,7 +5735,25 @@ fn index_priority() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -5392,7 +5896,25 @@ fn verify_hashes() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -5521,7 +6043,25 @@ fn verify_hashes() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -5648,7 +6188,25 @@ fn verify_hashes() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -5777,7 +6335,25 @@ fn verify_hashes() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -5904,7 +6480,25 @@ fn verify_hashes() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,
@@ -6032,7 +6626,25 @@ fn verify_hashes() -> anyhow::Result<()> {
                 pypy_install_mirror: None,
             },
             system: false,
-            extras: None,
+            extras: ExtrasSpecification(
+                ExtrasSpecificationInner {
+                    include: Some(
+                        [],
+                    ),
+                    exclude: [],
+                    only_extras: false,
+                    history: ExtrasSpecificationHistory {
+                        extra: [],
+                        only_extra: [],
+                        no_extra: [],
+                        all_extras: false,
+                        no_default_extras: false,
+                        defaults: List(
+                            [],
+                        ),
+                    },
+                },
+            ),
             groups: [],
             break_system_packages: false,
             target: None,

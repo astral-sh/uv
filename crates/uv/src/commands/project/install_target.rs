@@ -243,22 +243,9 @@ impl<'lock> InstallTarget<'lock> {
     /// Validate the extras requested by the [`ExtrasSpecification`].
     #[allow(clippy::result_large_err)]
     pub(crate) fn validate_extras(self, extras: &ExtrasSpecification) -> Result<(), ProjectError> {
-        let extras = match extras {
-            ExtrasSpecification::Some(extras) => {
-                if extras.is_empty() {
-                    return Ok(());
-                }
-                Either::Left(extras.iter())
-            }
-            ExtrasSpecification::Exclude(extras) => {
-                if extras.is_empty() {
-                    return Ok(());
-                }
-                Either::Right(extras.iter())
-            }
-            _ => return Ok(()),
-        };
-
+        if extras.is_empty() {
+            return Ok(());
+        }
         match self {
             Self::Project { lock, .. }
             | Self::Workspace { lock, .. }
@@ -280,7 +267,7 @@ impl<'lock> InstallTarget<'lock> {
                     .flat_map(|package| package.provides_extras().iter())
                     .collect::<FxHashSet<_>>();
 
-                for extra in extras {
+                for extra in extras.explicit_names() {
                     if !known_extras.contains(extra) {
                         return match self {
                             Self::Project { .. } => {
@@ -293,7 +280,11 @@ impl<'lock> InstallTarget<'lock> {
             }
             Self::Script { .. } => {
                 // We shouldn't get here if the list is empty so we can assume it isn't
-                let extra = extras.into_iter().next().expect("non-empty extras").clone();
+                let extra = extras
+                    .explicit_names()
+                    .next()
+                    .expect("non-empty extras")
+                    .clone();
                 return Err(ProjectError::MissingExtraScript(extra));
             }
         }
