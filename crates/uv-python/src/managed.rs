@@ -349,9 +349,7 @@ impl ManagedPythonInstallation {
         let implementation = match self.implementation() {
             ImplementationName::CPython => "python",
             ImplementationName::PyPy => "pypy",
-            ImplementationName::GraalPy => {
-                unreachable!("Managed installations of GraalPy are not supported")
-            }
+            ImplementationName::GraalPy => "graalpy",
         };
 
         let version = match self.implementation() {
@@ -364,13 +362,14 @@ impl ManagedPythonInstallation {
             }
             // PyPy uses a full version number, even on Windows.
             ImplementationName::PyPy => format!("{}.{}", self.key.major, self.key.minor),
-            ImplementationName::GraalPy => {
-                unreachable!("Managed installations of GraalPy are not supported")
-            }
+            ImplementationName::GraalPy => String::new(),
         };
 
         // On Windows, the executable is just `python.exe` even for alternative variants
-        let variant = if cfg!(unix) {
+        // GraalPy always uses `graalpy.exe` as the main executable
+        let variant = if *self.implementation() == ImplementationName::GraalPy {
+            ""
+        } else if cfg!(unix) {
             self.key.variant.suffix()
         } else if cfg!(windows) && windowed {
             // Use windowed Python that doesn't open a terminal.
@@ -384,10 +383,10 @@ impl ManagedPythonInstallation {
             exe = std::env::consts::EXE_SUFFIX
         );
 
-        let executable = if cfg!(windows) {
-            self.python_dir().join(name)
-        } else if cfg!(unix) {
+        let executable = if cfg!(unix) || *self.implementation() == ImplementationName::GraalPy {
             self.python_dir().join("bin").join(name)
+        } else if cfg!(windows) {
+            self.python_dir().join(name)
         } else {
             unimplemented!("Only Windows and Unix systems are supported.")
         };

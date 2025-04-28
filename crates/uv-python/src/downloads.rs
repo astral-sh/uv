@@ -933,6 +933,7 @@ fn parse_json_downloads(
             let implementation = match entry.name.as_str() {
                 "cpython" => LenientImplementationName::Known(ImplementationName::CPython),
                 "pypy" => LenientImplementationName::Known(ImplementationName::PyPy),
+                "graalpy" => LenientImplementationName::Known(ImplementationName::GraalPy),
                 _ => LenientImplementationName::Unknown(entry.name.clone()),
             };
 
