@@ -298,7 +298,7 @@ impl TestContext {
         // Filter platform keys
         let platform_re = r"(?x)
   (                         # We capture the group before the platform
-    (?:cpython|pypy)        # Python implementation
+    (?:cpython|pypy|graalpy)# Python implementation
     -
     \d+\.\d+                # Major and minor version
     (?:                     # The patch version is handled separately
