@@ -41,6 +41,7 @@ use std::str::FromStr;
 use std::sync::LazyLock;
 
 use either::Either;
+use url::Url;
 
 use uv_distribution_types::IndexUrl;
 use uv_normalize::PackageName;
@@ -230,7 +231,7 @@ impl TorchStrategy {
 }
 
 /// The available backends for PyTorch.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum TorchBackend {
     Cpu,
     Cu128,
@@ -261,7 +262,7 @@ pub enum TorchBackend {
 
 impl TorchBackend {
     /// Return the appropriate index URL for the given [`TorchBackend`].
-    fn index_url(&self) -> &'static IndexUrl {
+    fn index_url(self) -> &'static IndexUrl {
         match self {
             Self::Cpu => &CPU_INDEX_URL,
             Self::Cu128 => &CU128_INDEX_URL,
@@ -288,6 +289,87 @@ impl TorchBackend {
             Self::Cu91 => &CU91_INDEX_URL,
             Self::Cu90 => &CU90_INDEX_URL,
             Self::Cu80 => &CU80_INDEX_URL,
+        }
+    }
+
+    /// Extract a [`TorchBackend`] from an index URL.
+    pub fn from_index(index: &Url) -> Option<Self> {
+        let backend_identifier = if index.host_str() == Some("download.pytorch.org") {
+            // E.g., `https://download.pytorch.org/whl/cu124`
+            let mut path_segments = index.path_segments()?;
+            if path_segments.next() != Some("whl") {
+                return None;
+            }
+            path_segments.next()?
+        } else {
+            return None;
+        };
+        Self::from_str(backend_identifier).ok()
+    }
+
+    /// Returns the CUDA [`Version`] for the given [`TorchBackend`].
+    pub fn cuda_version(&self) -> Option<Version> {
+        match self {
+            TorchBackend::Cpu => None,
+            TorchBackend::Cu128 => Some(Version::new([12, 8])),
+            TorchBackend::Cu126 => Some(Version::new([12, 6])),
+            TorchBackend::Cu125 => Some(Version::new([12, 5])),
+            TorchBackend::Cu124 => Some(Version::new([12, 4])),
+            TorchBackend::Cu123 => Some(Version::new([12, 3])),
+            TorchBackend::Cu122 => Some(Version::new([12, 2])),
+            TorchBackend::Cu121 => Some(Version::new([12, 1])),
+            TorchBackend::Cu120 => Some(Version::new([12, 0])),
+            TorchBackend::Cu118 => Some(Version::new([11, 8])),
+            TorchBackend::Cu117 => Some(Version::new([11, 7])),
+            TorchBackend::Cu116 => Some(Version::new([11, 6])),
+            TorchBackend::Cu115 => Some(Version::new([11, 5])),
+            TorchBackend::Cu114 => Some(Version::new([11, 4])),
+            TorchBackend::Cu113 => Some(Version::new([11, 3])),
+            TorchBackend::Cu112 => Some(Version::new([11, 2])),
+            TorchBackend::Cu111 => Some(Version::new([11, 1])),
+            TorchBackend::Cu110 => Some(Version::new([11, 0])),
+            TorchBackend::Cu102 => Some(Version::new([10, 2])),
+            TorchBackend::Cu101 => Some(Version::new([10, 1])),
+            TorchBackend::Cu100 => Some(Version::new([10, 0])),
+            TorchBackend::Cu92 => Some(Version::new([9, 2])),
+            TorchBackend::Cu91 => Some(Version::new([9, 1])),
+            TorchBackend::Cu90 => Some(Version::new([9, 0])),
+            TorchBackend::Cu80 => Some(Version::new([8, 0])),
+        }
+    }
+}
+
+impl FromStr for TorchBackend {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "cpu" => Ok(TorchBackend::Cpu),
+            "cu128" => Ok(TorchBackend::Cu128),
+            "cu126" => Ok(TorchBackend::Cu126),
+            "cu125" => Ok(TorchBackend::Cu125),
+            "cu124" => Ok(TorchBackend::Cu124),
+            "cu123" => Ok(TorchBackend::Cu123),
+            "cu122" => Ok(TorchBackend::Cu122),
+            "cu121" => Ok(TorchBackend::Cu121),
+            "cu120" => Ok(TorchBackend::Cu120),
+            "cu118" => Ok(TorchBackend::Cu118),
+            "cu117" => Ok(TorchBackend::Cu117),
+            "cu116" => Ok(TorchBackend::Cu116),
+            "cu115" => Ok(TorchBackend::Cu115),
+            "cu114" => Ok(TorchBackend::Cu114),
+            "cu113" => Ok(TorchBackend::Cu113),
+            "cu112" => Ok(TorchBackend::Cu112),
+            "cu111" => Ok(TorchBackend::Cu111),
+            "cu110" => Ok(TorchBackend::Cu110),
+            "cu102" => Ok(TorchBackend::Cu102),
+            "cu101" => Ok(TorchBackend::Cu101),
+            "cu100" => Ok(TorchBackend::Cu100),
+            "cu92" => Ok(TorchBackend::Cu92),
+            "cu91" => Ok(TorchBackend::Cu91),
+            "cu90" => Ok(TorchBackend::Cu90),
+            "cu80" => Ok(TorchBackend::Cu80),
+            _ => Err(format!("Unknown PyTorch backend: {s}")),
         }
     }
 }
