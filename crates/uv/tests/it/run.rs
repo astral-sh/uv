@@ -4313,6 +4313,237 @@ fn run_with_group_conflict() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn run_default_groups() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo = ["anyio"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Only the main dependencies and `dev` group should be installed.
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("-c").arg("import typing_extensions"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // If we set a different default group, it should be synced instead.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo = ["anyio"]
+        bar = ["iniconfig"]
+        dev = ["sniffio"]
+
+        [tool.uv]
+        default-groups = ["foo"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--exact")
+        .arg("python")
+        .arg("-c")
+        .arg("import typing_extensions"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+    ");
+
+    // `--no-group` should remove from the defaults.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--exact")
+        .arg("--no-group")
+        .arg("foo")
+        .arg("python")
+        .arg("-c")
+        .arg("import typing_extensions"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - sniffio==1.3.1
+    ");
+
+    // Using `--group` should include the defaults
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--exact")
+        .arg("--group")
+        .arg("bar")
+        .arg("python")
+        .arg("-c")
+        .arg("import iniconfig"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    ");
+
+    // Using `--all-groups` should include the defaults
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--exact")
+        .arg("--all-groups")
+        .arg("python")
+        .arg("-c")
+        .arg("import iniconfig"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 5 packages in [TIME]
+    ");
+
+    // Using `--only-group` should exclude the defaults
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--exact")
+        .arg("--only-group")
+        .arg("bar")
+        .arg("python")
+        .arg("-c")
+        .arg("import iniconfig"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Uninstalled 4 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - sniffio==1.3.1
+     - typing-extensions==4.10.0
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--exact")
+        .arg("--all-groups")
+        .arg("python")
+        .arg("-c")
+        .arg("import iniconfig"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // Using `--no-default-groups` should exclude all groups.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--exact")
+        .arg("--no-default-groups")
+        .arg("python")
+        .arg("-c")
+        .arg("import typing_extensions"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Uninstalled 4 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - iniconfig==2.0.0
+     - sniffio==1.3.1
+    ");
+
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--all-groups")
+        .arg("python")
+        .arg("-c")
+        .arg("import iniconfig"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    ");
+
+    // Using `--no-default-groups` with `--group foo` and `--group bar` should include those
+    // groups.
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--exact")
+        .arg("--no-default-groups")
+        .arg("--group")
+        .arg("foo")
+        .arg("--group")
+        .arg("bar")
+        .arg("python")
+        .arg("-c")
+        .arg("import typing_extensions"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    Audited 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
 /// Test that a signal n makes the process exit with code 128+n.
 #[cfg(unix)]
 #[test]
