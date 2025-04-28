@@ -22,14 +22,6 @@ const PLATFORM_TAGS: &[(&str, &str, &str)] = include!("../inputs/platform_tags.r
 /// indicates whether the tags in the wheel filename are expected to be
 /// compatible with the tags in `PLATFORM_TAGS`.
 const WHEEL_NAMES: &[(&str, &str, bool)] = &[
-    // This tests a case with a very short name that is *not* compatible
-    // with PLATFORM_TAGS. It only uses one tag for each component (one
-    // Python version, one ABI and one platform).
-    (
-        "flyte-short-incompatible",
-        "hypothesis-4.24.5-py2-none-any.whl",
-        false,
-    ),
     // This tests a case with a very short name that *is* compatible with
     // PLATFORM_TAGS. It only uses one tag for each component (one Python
     // version, one ABI and one platform).
