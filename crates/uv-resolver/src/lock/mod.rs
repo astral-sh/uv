@@ -1988,6 +1988,7 @@ impl TryFrom<LockWire> for Lock {
 /// to the version field, we can verify compatibility for lockfiles that may otherwise be
 /// unparsable.
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct LockVersion {
     version: u32,
 }
@@ -2893,6 +2894,7 @@ impl PackageWire {
 /// Inside the lockfile, we match a dependency entry to a package entry through a key made up
 /// of the name, the version and the source url.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) struct PackageId {
     pub(crate) name: PackageName,
     pub(crate) version: Option<Version>,
@@ -2954,6 +2956,7 @@ impl Display for PackageId {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct PackageIdForDependency {
     name: PackageName,
     version: Option<Version>,
@@ -3327,7 +3330,7 @@ impl Source {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
-#[serde(untagged)]
+#[serde(untagged, rename_all = "kebab-case")]
 enum SourceWire {
     Registry {
         registry: RegistrySourceWire,
@@ -3473,6 +3476,7 @@ impl From<RegistrySourceWire> for RegistrySource {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct DirectSource {
     subdirectory: Option<Box<Path>>,
 }
@@ -3522,6 +3526,7 @@ impl GitSource {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 enum GitSourceKind {
     Tag(String),
     Branch(String),
@@ -3531,6 +3536,7 @@ enum GitSourceKind {
 
 /// Inspired by: <https://discuss.python.org/t/lock-files-again-but-this-time-w-sdists/46593>
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 struct SourceDistMetadata {
     /// A hash of the source distribution.
     hash: Option<Hash>,
@@ -3539,6 +3545,7 @@ struct SourceDistMetadata {
     /// This is only present for source distributions that come from registries.
     size: Option<u64>,
     /// The upload time of the source distribution.
+    #[serde(alias = "upload_time")]
     upload_time: Option<Timestamp>,
 }
 
@@ -3781,7 +3788,7 @@ impl SourceDist {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
-#[serde(untagged)]
+#[serde(untagged, rename_all = "kebab-case")]
 enum SourceDistWire {
     Url {
         url: UrlString,
@@ -3822,7 +3829,7 @@ impl SourceDist {
             );
         }
         if let Some(upload_time) = self.upload_time() {
-            table.insert("upload_time", Value::from(upload_time.to_string()));
+            table.insert("upload-time", Value::from(upload_time.to_string()));
         }
         Ok(table)
     }
@@ -4164,6 +4171,7 @@ impl Wheel {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct WheelWire {
     #[serde(flatten)]
     url: WheelWireSource,
@@ -4180,11 +4188,12 @@ struct WheelWire {
     /// The upload time of the built distribution.
     ///
     /// This is only present for wheels that come from registries.
+    #[serde(alias = "upload_time")]
     upload_time: Option<Timestamp>,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, PartialEq, Eq)]
-#[serde(untagged)]
+#[serde(untagged, rename_all = "kebab-case")]
 enum WheelWireSource {
     /// Used for all wheels that come from remote sources.
     Url {
@@ -4234,7 +4243,7 @@ impl Wheel {
             );
         }
         if let Some(upload_time) = self.upload_time {
-            table.insert("upload_time", Value::from(upload_time.to_string()));
+            table.insert("upload-time", Value::from(upload_time.to_string()));
         }
         Ok(table)
     }
@@ -4388,6 +4397,7 @@ impl Display for Dependency {
 
 /// A single dependency of a package in a lockfile.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct DependencyWire {
     #[serde(flatten)]
     package_id: PackageIdForDependency,
