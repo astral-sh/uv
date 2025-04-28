@@ -76,7 +76,6 @@ const STYLES: Styles = Styles::styled()
 #[derive(Parser)]
 #[command(name = "uv", author, long_version = crate::version::uv_self_version())]
 #[command(about = "An extremely fast Python package manager.")]
-#[command(propagate_version = true)]
 #[command(
     after_help = "Use `uv help` for more details.",
     after_long_help = "",
@@ -127,7 +126,7 @@ pub struct TopLevelArgs {
     help: Option<bool>,
 
     /// Display the uv version.
-    #[arg(global = true, short = 'V', long, action = clap::ArgAction::Version, help_heading = "Global options")]
+    #[arg(short = 'V', long, action = clap::ArgAction::Version)]
     version: Option<bool>,
 }
 
@@ -4063,9 +4062,10 @@ pub enum ToolCommand {
         override_usage = "uvx [OPTIONS] [COMMAND]",
         about = "Run a command provided by a Python package.",
         after_help = "Use `uv help tool run` for more details.",
-        after_long_help = ""
+        after_long_help = "",
+        long_version = crate::version::uv_self_version()
     )]
-    Uvx(ToolRunArgs),
+    Uvx(UvxArgs),
     /// Install commands provided by a Python package.
     ///
     /// Packages are installed into an isolated virtual environment in the uv tools directory. The
@@ -4221,6 +4221,16 @@ pub struct ToolRunArgs {
 
     #[arg(long, hide = true)]
     pub generate_shell_completion: Option<clap_complete_command::Shell>,
+}
+
+#[derive(Args)]
+pub struct UvxArgs {
+    #[command(flatten)]
+    pub tool_run: ToolRunArgs,
+
+    /// Display the uvx version.
+    #[arg(short = 'V', long, action = clap::ArgAction::Version)]
+    pub version: Option<bool>,
 }
 
 #[derive(Args)]
