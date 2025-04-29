@@ -38,9 +38,9 @@ Authentication can come from the following sources, in order of precedence:
 - A [`.netrc`](https://everything.curl.dev/usingcurl/netrc) configuration file
 - A [keyring](https://github.com/jaraco/keyring) provider (requires opt-in)
 
-If authentication is found for a single net location (scheme, host, and port), it will be cached for
-the duration of the command and used for other queries to that net location. Authentication is not
-cached across invocations of uv.
+If authentication is found for a single index URL or net location (scheme, host, and port), it will
+be cached for the duration of the command and used for other queries to that index or net location.
+Authentication is not cached across invocations of uv.
 
 `.netrc` authentication is enabled by default, and will respect the `NETRC` environment variable if
 defined, falling back to `~/.netrc` if not.

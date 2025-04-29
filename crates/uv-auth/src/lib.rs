@@ -5,16 +5,16 @@ use url::Url;
 
 use cache::CredentialsCache;
 pub use credentials::Credentials;
+pub use index::{AuthPolicy, Index, Indexes};
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
-pub use policy::{AuthPolicy, UrlAuthPolicies};
 use realm::Realm;
 
 mod cache;
 mod credentials;
+mod index;
 mod keyring;
 mod middleware;
-mod policy;
 mod realm;
 
 // TODO(zanieb): Consider passing a cache explicitly throughout
