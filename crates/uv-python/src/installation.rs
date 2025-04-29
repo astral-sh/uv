@@ -1,4 +1,5 @@
 use std::fmt;
+use std::path::Path;
 use std::str::FromStr;
 
 use tracing::{debug, info};
@@ -54,8 +55,10 @@ impl PythonInstallation {
         environments: EnvironmentPreference,
         preference: PythonPreference,
         cache: &Cache,
+        discovery_root: &Path,
     ) -> Result<Self, Error> {
-        let installation = find_python_installation(request, environments, preference, cache)??;
+        let installation =
+            find_python_installation(request, environments, preference, cache, discovery_root)??;
         Ok(installation)
     }
 
@@ -66,12 +69,14 @@ impl PythonInstallation {
         environments: EnvironmentPreference,
         preference: PythonPreference,
         cache: &Cache,
+        discovery_root: &Path,
     ) -> Result<Self, Error> {
         Ok(find_best_python_installation(
             request,
             environments,
             preference,
             cache,
+            discovery_root,
         )??)
     }
 
@@ -88,11 +93,12 @@ impl PythonInstallation {
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
+        discovery_root: &Path,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
 
         // Search for the installation
-        let err = match Self::find(request, environments, preference, cache) {
+        let err = match Self::find(request, environments, preference, cache, discovery_root) {
             Ok(installation) => return Ok(installation),
             Err(err) => err,
         };

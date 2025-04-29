@@ -129,6 +129,48 @@ fn build_basic() -> Result<()> {
 }
 
 #[test]
+fn build_python_discovery_respects_project_dir() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    project
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+    project.child("README").touch()?;
+    context
+        .venv()
+        .arg("--project")
+        .arg("project")
+        .arg("-q")
+        .assert()
+        .success();
+    // Build specifying --project
+    context
+        .build()
+        .arg("--project")
+        .arg("project")
+        .arg("-v")
+        .assert()
+        .stderr(predicate::str::contains("project/.venv/bin/python3"));
+    Ok(())
+}
+
+#[test]
 fn build_sdist() -> Result<()> {
     let context = TestContext::new("3.12");
     let filters = context

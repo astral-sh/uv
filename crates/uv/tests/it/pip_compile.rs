@@ -6,6 +6,7 @@ use std::io::Cursor;
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use flate2::write::GzEncoder;
 use fs_err::File;
@@ -19,6 +20,36 @@ use uv_static::EnvVars;
 
 use crate::common::{download_to_disk, packse_index_url, uv_snapshot, TestContext};
 
+#[test]
+fn compile_python_discovery_starts_project_root() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.12"]);
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    context.venv().assert().success();
+    context
+        .pip_compile()
+        .arg("project/pyproject.toml")
+        .arg("--project")
+        .arg("project")
+        .arg("-v")
+        .assert()
+        .success()
+        .stderr(predicates::str::contains("at .venv/bin/python3 for builds"));
+    Ok(())
+}
 #[test]
 fn compile_requirements_in() -> Result<()> {
     let context = TestContext::new("3.12");
