@@ -301,7 +301,7 @@ fn rename_module() -> Result<()> {
         module-name = "bar"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.7"]
+        requires = ["uv_build>=0.5,<0.8"]
         build-backend = "uv_build"
     "#})?;
 
@@ -387,7 +387,7 @@ fn rename_module_editable_build() -> Result<()> {
         module-name = "bar"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.7"]
+        requires = ["uv_build>=0.5,<0.8"]
         build-backend = "uv_build"
     "#})?;
 
@@ -449,7 +449,7 @@ fn build_module_name_normalization() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.7"]
+        requires = ["uv_build>=0.5,<0.8"]
         build-backend = "uv_build"
     "#})?;
     fs_err::create_dir_all(context.temp_dir.join("src"))?;
@@ -562,7 +562,7 @@ fn build_sdist_with_long_path() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.6,<0.7"]
+        requires = ["uv_build>=0.7,<0.8"]
         build-backend = "uv_build"
     "#})?;
     context
@@ -606,7 +606,7 @@ fn sdist_error_without_module() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.6,<0.7"]
+        requires = ["uv_build>=0.7,<0.8"]
         build-backend = "uv_build"
     "#})?;
 
