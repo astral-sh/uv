@@ -3440,14 +3440,14 @@ fn require_hashes_unknown_algorithm() -> Result<()> {
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, or `sha512`) on: `foo`
-    "###
+    error: Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, `sha512`, or `blake2b`) on: `foo`
+    "
     );
 
     Ok(())

@@ -4490,24 +4490,35 @@ impl From<Hash> for Hashes {
                 sha256: None,
                 sha384: None,
                 sha512: None,
+                blake2b: None,
             },
             HashAlgorithm::Sha256 => Hashes {
                 md5: None,
                 sha256: Some(value.0.digest),
                 sha384: None,
                 sha512: None,
+                blake2b: None,
             },
             HashAlgorithm::Sha384 => Hashes {
                 md5: None,
                 sha256: None,
                 sha384: Some(value.0.digest),
                 sha512: None,
+                blake2b: None,
             },
             HashAlgorithm::Sha512 => Hashes {
                 md5: None,
                 sha256: None,
                 sha384: None,
                 sha512: Some(value.0.digest),
+                blake2b: None,
+            },
+            HashAlgorithm::Blake2b => Hashes {
+                md5: None,
+                sha256: None,
+                sha384: None,
+                sha512: None,
+                blake2b: Some(value.0.digest),
             },
         }
     }
