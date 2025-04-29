@@ -45,8 +45,8 @@ name = "project"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-  "torch>=2.6.0",
-  "torchvision>=0.21.0",
+  "torch>=2.7.0",
+  "torchvision>=0.22.0",
 ]
 ```
 
@@ -260,18 +260,18 @@ name = "project"
 version = "0.1.0"
 requires-python = ">=3.12.0"
 dependencies = [
-  "torch>=2.6.0",
-  "torchvision>=0.21.0",
+  "torch>=2.7.0",
+  "torchvision>=0.22.0",
 ]
 
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
-  { index = "pytorch-cu124", marker = "sys_platform == 'linux'" },
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
 ]
 torchvision = [
   { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
-  { index = "pytorch-cu124", marker = "sys_platform == 'linux'" },
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
 ]
 
 [[tool.uv.index]]
@@ -280,8 +280,8 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [[tool.uv.index]]
-name = "pytorch-cu124"
-url = "https://download.pytorch.org/whl/cu124"
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 ```
 
@@ -294,9 +294,9 @@ name = "project"
 version = "0.1.0"
 requires-python = ">=3.12.0"
 dependencies = [
-  "torch>=2.6.0",
-  "torchvision>=0.21.0",
-  "pytorch-triton-xpu>=3.2.0 ; sys_platform == 'linux'",
+  "torch>=2.7.0",
+  "torchvision>=0.22.0",
+  "pytorch-triton-xpu>=3.3.0 ; sys_platform == 'linux'",
 ]
 
 [tool.uv.sources]
@@ -335,30 +335,30 @@ dependencies = []
 
 [project.optional-dependencies]
 cpu = [
-  "torch>=2.6.0",
-  "torchvision>=0.21.0",
+  "torch>=2.7.0",
+  "torchvision>=0.22.0",
 ]
-cu124 = [
-  "torch>=2.6.0",
-  "torchvision>=0.21.0",
+cu128 = [
+  "torch>=2.7.0",
+  "torchvision>=0.22.0",
 ]
 
 [tool.uv]
 conflicts = [
   [
     { extra = "cpu" },
-    { extra = "cu124" },
+    { extra = "cu128" },
   ],
 ]
 
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu124", extra = "cu124" },
+  { index = "pytorch-cu128", extra = "cu128" },
 ]
 torchvision = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu124", extra = "cu124" },
+  { index = "pytorch-cu128", extra = "cu128" },
 ]
 
 [[tool.uv.index]]
@@ -367,8 +367,8 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [[tool.uv.index]]
-name = "pytorch-cu124"
-url = "https://download.pytorch.org/whl/cu124"
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 ```
 
