@@ -840,9 +840,7 @@ fn version_get_fallback_unmanaged() -> Result<()> {
     uv [VERSION] ([COMMIT] DATE)
 
     ----- stderr -----
-    warning: failed to read project: The project is marked as unmanaged: `[TEMP_DIR]/`
-      running `uv self version` for compatibility with old `uv version` command.
-      this fallback will be removed soon, pass `--preview` to make this an error.
+    warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -893,9 +891,7 @@ fn version_get_fallback_unmanaged_short() -> Result<()> {
     [VERSION] ([COMMIT] DATE)
 
     ----- stderr -----
-    warning: failed to read project: The project is marked as unmanaged: `[TEMP_DIR]/`
-      running `uv self version` for compatibility with old `uv version` command.
-      this fallback will be removed soon, pass `--preview` to make this an error.
+    warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -966,9 +962,7 @@ fn version_get_fallback_unmanaged_json() -> Result<()> {
     }
 
     ----- stderr -----
-    warning: failed to read project: The project is marked as unmanaged: `[TEMP_DIR]/`
-      running `uv self version` for compatibility with old `uv version` command.
-      this fallback will be removed soon, pass `--preview` to make this an error.
+    warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
     "#);
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
