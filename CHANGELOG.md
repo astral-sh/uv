@@ -64,7 +64,7 @@
 
 - **Use index URL instead of package URL for keyring credential lookups ([#12651](https://github.com/astral-sh/uv/pull/12651))**
 
-  When determining credentials for querying a package URL, uv previously sent the full URL to the `keyring` command. However, some keyring plugins only work if given the _index URL_ (which is usually a parent of the package URL). Now, uv requests credentials for the index URL instead. This behavior matches `pip`.
+  When determining credentials for querying a package URL, uv previously sent the full URL to the `keyring` command. However, some keyring plugins expect to receive the _index URL_ (which is usually a parent of the package URL). Now, uv requests credentials for the index URL instead. This behavior matches `pip`.
 
 - **Remove `--version` from subcommands ([#13108](https://github.com/astral-sh/uv/pull/13108))**
 
