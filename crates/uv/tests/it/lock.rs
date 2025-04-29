@@ -7517,7 +7517,7 @@ fn lock_index_workspace_member() -> Result<()> {
     )?;
 
     // Locking without the necessary credentials should fail.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7526,7 +7526,7 @@ fn lock_index_workspace_member() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because iniconfig was not found in the package registry and child depends on iniconfig>=2, we can conclude that child's requirements are unsatisfiable.
           And because your workspace requires child, we can conclude that your workspace's requirements are unsatisfiable.
-    "###);
+    ");
 
     uv_snapshot!(context.filters(), context.lock()
         .env("UV_INDEX_MY_INDEX_USERNAME", "public")
@@ -8459,7 +8459,7 @@ fn lock_env_credentials() -> Result<()> {
     )?;
 
     // Without credentials, the resolution should fail.
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -8469,7 +8469,7 @@ fn lock_env_credentials() -> Result<()> {
       ╰─▶ Because iniconfig was not found in the package registry and your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
           hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-    "###);
+    ");
 
     // Provide credentials via environment variables.
     uv_snapshot!(context.filters(), context.lock()

@@ -4,6 +4,7 @@ use http::{Extensions, StatusCode};
 use url::Url;
 
 use crate::{
+    cache::FetchUrl,
     credentials::{Credentials, Username},
     index::{AuthPolicy, Indexes},
     realm::Realm,
@@ -182,7 +183,7 @@ impl Middleware for AuthMiddleware {
         // to the headers so for display purposes we restore some information
         let url = tracing_url(&request, request_credentials.as_ref());
         let maybe_index_url = self.indexes.index_url_for(request.url());
-        let auth_policy = self.indexes.policy_for(request.url());
+        let auth_policy = self.indexes.auth_policy_for(request.url());
         trace!("Handling request for {url} with authentication policy {auth_policy}");
 
         let credentials: Option<Arc<Credentials>> = if matches!(auth_policy, AuthPolicy::Never) {
@@ -384,7 +385,7 @@ impl AuthMiddleware {
         extensions: &mut Extensions,
         next: Next<'_>,
         url: &str,
-        maybe_index_url: Option<&Url>,
+        index_url: Option<&Url>,
         auth_policy: AuthPolicy,
     ) -> reqwest_middleware::Result<Response> {
         let credentials = Arc::new(credentials);
@@ -402,7 +403,7 @@ impl AuthMiddleware {
         // There's just a username, try to find a password.
         // If we have an index URL, check the cache for that URL. Otherwise,
         // check for the realm.
-        let maybe_cached_credentials = if let Some(index_url) = maybe_index_url {
+        let maybe_cached_credentials = if let Some(index_url) = index_url {
             self.cache()
                 .get_url(index_url, credentials.as_username().as_ref())
         } else {
@@ -426,17 +427,12 @@ impl AuthMiddleware {
             // Do not insert already-cached credentials
             None
         } else if let Some(credentials) = self
-            .fetch_credentials(
-                Some(&credentials),
-                request.url(),
-                maybe_index_url,
-                auth_policy,
-            )
+            .fetch_credentials(Some(&credentials), request.url(), index_url, auth_policy)
             .await
         {
             request = credentials.authenticate(request);
             Some(credentials)
-        } else if maybe_index_url.is_some() {
+        } else if index_url.is_some() {
             // If this is a known index, we fall back to checking for the realm.
             self.cache()
                 .get_realm(Realm::from(request.url()), credentials.to_username())
@@ -468,9 +464,9 @@ impl AuthMiddleware {
         // Fetches can be expensive, so we will only run them _once_ per realm or index URL and username combination
         // All other requests for the same realm or index URL will wait until the first one completes
         let key = if let Some(index_url) = maybe_index_url {
-            (index_url.to_string(), username)
+            (FetchUrl::Index(index_url.clone()), username)
         } else {
-            (Realm::from(url).to_string(), username)
+            (FetchUrl::Realm(Realm::from(url)), username)
         };
         if !self.cache().fetches.register(key.clone()) {
             let credentials = self
@@ -520,7 +516,7 @@ impl AuthMiddleware {
                         debug!("Checking keyring for credentials for index URL {}@{}", username, index_url);
                         keyring.fetch(index_url, Some(username)).await
                     } else {
-                        debug!("Checking keyring for credentials for full URL {}@{}", username, *url);
+                        debug!("Checking keyring for credentials for full URL {}@{}", username, url);
                         keyring.fetch(url, Some(username)).await
                     }
                 } else if matches!(auth_policy, AuthPolicy::Always) {
@@ -530,10 +526,7 @@ impl AuthMiddleware {
                         );
                         keyring.fetch(index_url, None).await
                     } else {
-                        debug!(
-                            "Checking keyring for credentials for full URL {url} without username due to `authenticate = always`"
-                        );
-                        keyring.fetch(url, None).await
+                        None
                     }
                 } else {
                     debug!("Skipping keyring fetch for {url} without username; use `authenticate = always` to force");

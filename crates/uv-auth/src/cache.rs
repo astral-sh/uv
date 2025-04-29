@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::fmt::Formatter;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
@@ -14,11 +15,28 @@ use crate::Realm;
 
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) enum FetchUrl {
+    /// A full index URL
+    Index(Url),
+    /// A realm URL
+    Realm(Realm),
+}
+
+impl Display for FetchUrl {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::Index(index) => Display::fmt(index, f),
+            Self::Realm(realm) => Display::fmt(realm, f),
+        }
+    }
+}
+
 pub struct CredentialsCache {
     /// A cache per realm and username
     realms: RwLock<FxHashMap<(Realm, Username), Arc<Credentials>>>,
     /// A cache tracking the result of realm or index URL fetches from external services
-    pub(crate) fetches: FxOnceMap<(String, Username), Option<Arc<Credentials>>>,
+    pub(crate) fetches: FxOnceMap<(FetchUrl, Username), Option<Arc<Credentials>>>,
     /// A cache per URL, uses a trie for efficient prefix queries.
     urls: RwLock<UrlTrie>,
 }

@@ -5133,6 +5133,7 @@ dependencies = [
  "arcstr",
  "bitflags 2.9.0",
  "fs-err 3.1.0",
+ "http",
  "itertools 0.14.0",
  "jiff",
  "owo-colors",
