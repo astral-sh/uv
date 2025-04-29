@@ -18,7 +18,8 @@ use uv_cli::{
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonListFormat, PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs,
-    ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
+    SyncFormat, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs,
+    TreeArgs, VenvArgs,
 };
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -1066,6 +1067,7 @@ pub(crate) struct SyncSettings {
     pub(crate) install_mirrors: PythonInstallMirrors,
     pub(crate) refresh: Refresh,
     pub(crate) settings: ResolverInstallerSettings,
+    pub(crate) format: SyncFormat,
 }
 
 impl SyncSettings {
@@ -1105,6 +1107,7 @@ impl SyncSettings {
             python,
             check,
             no_check,
+            format,
         } = args;
         let install_mirrors = filesystem
             .clone()
@@ -1124,6 +1127,7 @@ impl SyncSettings {
         };
 
         Self {
+            format,
             locked,
             frozen,
             dry_run,
