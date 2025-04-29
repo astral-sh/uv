@@ -72,7 +72,7 @@
 
 - **Omit Python 3.7 downloads from managed versions ([#13022](https://github.com/astral-sh/uv/pull/13022))**
 
-  Python 3.7 is EOL and not formally supported by uv, however, Python 3.7 was previously available for download on a subset of platforms. Now, Python 3.7 cannot be installed by uv.
+  Python 3.7 is EOL and not formally supported by uv; however, Python 3.7 was previously available for download on a subset of platforms.
 
 - **Reject non-PEP 751 TOML files in install, compile, and export commands ([#13120](https://github.com/astral-sh/uv/pull/13120), [#13119](https://github.com/astral-sh/uv/pull/13119))**
 
