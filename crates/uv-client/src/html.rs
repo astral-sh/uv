@@ -305,6 +305,7 @@ mod tests {
                         ),
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -361,6 +362,7 @@ mod tests {
                         sha256: None,
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -420,6 +422,7 @@ mod tests {
                         ),
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -476,6 +479,7 @@ mod tests {
                         ),
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -532,6 +536,7 @@ mod tests {
                         ),
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -558,7 +563,7 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
                 Url {
@@ -586,6 +591,7 @@ mod tests {
                         sha256: None,
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -595,7 +601,7 @@ mod tests {
                 },
             ],
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -612,7 +618,7 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
                 Url {
@@ -640,6 +646,7 @@ mod tests {
                         sha256: None,
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -649,7 +656,7 @@ mod tests {
                 },
             ],
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -770,6 +777,7 @@ mod tests {
                         sha256: None,
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -796,7 +804,7 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
                 Url {
@@ -824,6 +832,7 @@ mod tests {
                         sha256: None,
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -833,7 +842,7 @@ mod tests {
                 },
             ],
         }
-        "###);
+        "#);
     }
 
     #[test]
@@ -879,6 +888,7 @@ mod tests {
                             sha256: None,
                             sha384: None,
                             sha512: None,
+                            blake2b: None,
                         },
                         requires_python: None,
                         size: None,
@@ -935,6 +945,7 @@ mod tests {
                             sha256: None,
                             sha384: None,
                             sha512: None,
+                            blake2b: None,
                         },
                         requires_python: None,
                         size: None,
@@ -962,7 +973,7 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_snapshot!(result, @"Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, or `sha512`) on: `blake2=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61`");
+        insta::assert_snapshot!(result, @"Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, `sha512`, or `blake2b`) on: `blake2=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61`");
     }
 
     #[test]
@@ -980,7 +991,7 @@ mod tests {
         let base = Url::parse("https://storage.googleapis.com/jax-releases/jax_cuda_releases.html")
             .unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
                 Url {
@@ -1008,6 +1019,7 @@ mod tests {
                         sha256: None,
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -1023,6 +1035,7 @@ mod tests {
                         sha256: None,
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -1032,7 +1045,7 @@ mod tests {
                 },
             ],
         }
-        "###);
+        "#);
     }
 
     /// Test for AWS Code Artifact
@@ -1090,6 +1103,7 @@ mod tests {
                         ),
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -1107,6 +1121,7 @@ mod tests {
                         ),
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -1124,6 +1139,7 @@ mod tests {
                         ),
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: Some(
                         Ok(
@@ -1190,6 +1206,7 @@ mod tests {
                         ),
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: Some(
                         Ok(
@@ -1232,7 +1249,7 @@ mod tests {
         let base = Url::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/")
             .unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
                 Url {
@@ -1264,6 +1281,7 @@ mod tests {
                         sha256: None,
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -1283,6 +1301,7 @@ mod tests {
                         sha256: None,
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -1302,6 +1321,7 @@ mod tests {
                         sha256: None,
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -1321,6 +1341,7 @@ mod tests {
                         sha256: None,
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -1340,6 +1361,7 @@ mod tests {
                         sha256: None,
                         sha384: None,
                         sha512: None,
+                        blake2b: None,
                     },
                     requires_python: None,
                     size: None,
@@ -1349,6 +1371,6 @@ mod tests {
                 },
             ],
         }
-        "###);
+        "#);
     }
 }
