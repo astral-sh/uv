@@ -10659,10 +10659,8 @@ fn add_index_url_in_keyring() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.11, <4"
         dependencies = []
-
         [tool.uv]
         keyring-provider = "subprocess"
-
         [[tool.uv.index]]
         name = "proxy"
         url = "https://pypi-proxy.fly.dev/basic-auth/simple"
@@ -10719,10 +10717,8 @@ fn add_full_url_in_keyring() -> Result<()> {
         version = "1.0.0"
         requires-python = ">=3.11, <4"
         dependencies = []
-
         [tool.uv]
         keyring-provider = "subprocess"
-
         [[tool.uv.index]]
         name = "proxy"
         url = "https://pypi-proxy.fly.dev/basic-auth/simple"
@@ -10748,6 +10744,244 @@ fn add_full_url_in_keyring() -> Result<()> {
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
+    Ok(())
+}
+
+/// If uv receives an authentication failure from a configured index, it
+/// should not fall back to the default index.
+#[test]
+fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("anyio"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+    Ok(())
+}
+
+/// uv should continue searching the default index if it receives an
+/// authentication failure that is specified in `ignore-error-codes`.
+#[test]
+fn add_ignore_error_codes() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        ignore-error-codes = [401, 403]
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("anyio"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    context.assert_command("import anyio").success();
+    Ok(())
+}
+
+/// uv should only fall through on 404s if an empty list is specified
+/// in `ignore-error-codes`, even for pytorch.
+#[test]
+fn add_empty_ignore_error_codes() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
+
+        [[tool.uv.index]]
+        name = "pytorch"
+        url = "https://download.pytorch.org/whl/cpu"
+        ignore-error-codes = []
+        "#
+    })?;
+
+    // The default behavior of ignoring pytorch 403s has been overridden
+    // by the empty ignore-error-codes list.
+    uv_snapshot!(context.add().arg("flask"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because flask was not found in the package registry and your project depends on flask, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (https://download.pytorch.org/whl/cpu) could not be queried due to a lack of valid authentication credentials (403 Forbidden).
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+    Ok(())
+}
+
+/// uv should not report a credential error on a missing package for pytorch since
+/// pytorch returns 403s to indicate not found.
+#[test]
+fn add_missing_package_on_pytorch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+
+        [tool.uv.sources]
+        fakepkg = { index = "pytorch" }
+
+        [[tool.uv.index]]
+        name = "pytorch"
+        url = "https://download.pytorch.org/whl/cpu"
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("fakepkg"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because fakepkg was not found in the package registry and your project depends on fakepkg, we can conclude that your project's requirements are unsatisfiable.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+    Ok(())
+}
+
+/// Test HTTP errors other than 401s and 403s.
+#[tokio::test]
+async fn add_unexpected_error_code() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"127\.0\.0\.1(?::\d+)?", "[LOCALHOST]")])
+        .collect::<Vec<_>>();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(503))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+        "#
+    })?;
+
+    uv_snapshot!(filters, context.add().arg("anyio").arg("--index").arg(server.uri()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch: `http://[LOCALHOST]/anyio/`
+      Caused by: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
+    "
+    );
+    Ok(())
+}
+
+/// uv should fail to parse `pyproject.toml` if `ignore-error-codes`
+/// contains an invalid status code number.
+#[test]
+fn add_invalid_ignore_error_code() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        ignore-error-codes = [401, 403, 1234]
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("anyio"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 9, column 22
+        |
+      9 | ignore-error-codes = [401, 403, 1234]
+        |                      ^^^^^^^^^^^^^^^^
+      1234 is not a valid HTTP status code
+
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 9, column 22
+      |
+    9 | ignore-error-codes = [401, 403, 1234]
+      |                      ^^^^^^^^^^^^^^^^
+    1234 is not a valid HTTP status code
+    "
+    );
+
     Ok(())
 }
 
@@ -11103,10 +11337,10 @@ async fn add_redirect_with_keyring() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Request for public@http://[LOCALHOST]
-    Request for public@[LOCALHOST]
-    Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
-    Request for public@pypi-proxy.fly.dev
+    Keyring request for public@http://[LOCALHOST]
+    Keyring request for public@[LOCALHOST]
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
+    Keyring request for public@pypi-proxy.fly.dev
     Resolved 4 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]

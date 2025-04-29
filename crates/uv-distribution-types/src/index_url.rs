@@ -12,7 +12,7 @@ use url::{ParseError, Url};
 
 use uv_pep508::{split_scheme, Scheme, VerbatimUrl, VerbatimUrlError};
 
-use crate::{Index, Verbatim};
+use crate::{Index, IndexStatusCodeStrategy, Verbatim};
 
 static PYPI_URL: LazyLock<Url> = LazyLock::new(|| Url::parse("https://pypi.org/simple").unwrap());
 
@@ -535,6 +535,16 @@ impl<'a> IndexUrls {
     /// Return the `--no-index` flag.
     pub fn no_index(&self) -> bool {
         self.no_index
+    }
+
+    /// Return the [`IndexStatusCodeStrategy`] for an [`IndexUrl`].
+    pub fn status_code_strategy_for(&self, url: &IndexUrl) -> IndexStatusCodeStrategy {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.status_code_strategy();
+            }
+        }
+        IndexStatusCodeStrategy::Default
     }
 }
 

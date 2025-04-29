@@ -870,6 +870,17 @@
             }
           ]
         },
+        "ignore-error-codes": {
+          "description": "Status codes that uv should ignore when deciding whether to continue searching in the next index after a failure.\n\n```toml [[tool.uv.index]] name = \"my-index\" url = \"https://<omitted>/simple\" ignore-error-codes = [401, 403] ```",
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/StatusCode"
+          }
+        },
         "name": {
           "description": "The name of the index.\n\nIndex names can be used to reference indexes elsewhere in the configuration. For example, you can pin a package to a specific index by name:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\"\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```",
           "anyOf": [
@@ -2004,6 +2015,13 @@
           ]
         }
       }
+    },
+    "StatusCode": {
+      "description": "HTTP status code (100-599)",
+      "type": "integer",
+      "format": "uint16",
+      "maximum": 599.0,
+      "minimum": 100.0
     },
     "String": {
       "type": "string"
