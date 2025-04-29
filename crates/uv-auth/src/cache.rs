@@ -17,15 +17,17 @@ type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum FetchUrl {
+    /// A full index URL
     Index(Url),
+    /// A realm URL
     Realm(Realm),
 }
 
 impl Display for FetchUrl {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            FetchUrl::Index(index) => Display::fmt(index, f),
-            FetchUrl::Realm(realm) => Display::fmt(realm, f),
+            Self::Index(index) => Display::fmt(index, f),
+            Self::Realm(realm) => Display::fmt(realm, f),
         }
     }
 }
