@@ -9,7 +9,7 @@
 
 - **Update `uv version` to be an interface for project version reads and edits ([#12349](https://github.com/astral-sh/uv/pull/12349))**
 
-  Previously, `uv version` displayed uv's version. Now, `uv version` is used for viewing or updating project versions. This interface was [heavily requested](https://github.com/astral-sh/uv/issues/6298), and after much consideration we decided that transitioning the top-level command was the best option.
+  Previously, `uv version` displayed uv's version. Now, `uv version` will display or update the project's version. This interface was [heavily requested](https://github.com/astral-sh/uv/issues/6298) and, after much consideration, we decided that transitioning the top-level command was the best option.
 
   Here's a brief example:
 
