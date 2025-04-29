@@ -2617,7 +2617,7 @@ fn init_git() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            gitignore, @r###"
+            gitignore, @r"
         # Python-generated files
         __pycache__/
         *.py[oc]
@@ -2628,7 +2628,10 @@ fn init_git() -> Result<()> {
 
         # Virtual environments
         .venv
-        "###
+
+        # Environment variables
+        .env
+        "
         );
     });
 
