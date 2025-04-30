@@ -80,3 +80,6 @@ itertools = { version = "0.14.0" }
 temp-env = { version = "0.3.6" }
 tempfile = { workspace = true }
 test-log = { version = "0.2.16", features = ["trace"], default-features = false }
+
+[build-dependencies]
+serde_json = { workspace = true }
