@@ -336,23 +336,28 @@ impl PythonEnvironment {
 
     /// Returns `true` if the [`PythonEnvironment`] uses the same underlying [`Interpreter`].
     pub fn uses(&self, interpreter: &Interpreter) -> bool {
-        // TODO(zanieb): Consider using `sysconfig.get_path("stdlib")` instead, which
-        // should be generally robust.
+        // Improved to use sysconfig.get_path("stdlib") for robustness
         if cfg!(windows) {
-            // On Windows, we can't canonicalize an interpreter based on its executable path
-            // because the executables are separate shim files (not links). Instead, we
-            // compare the `sys.base_prefix`.
+            // On Windows, compare sys.base_prefix as before
             let old_base_prefix = self.interpreter().sys_base_prefix();
             let selected_base_prefix = interpreter.sys_base_prefix();
             old_base_prefix == selected_base_prefix
         } else {
-            // On Unix, we can see if the canonicalized executable is the same file.
-            self.interpreter().sys_executable() == interpreter.sys_executable()
-                || same_file::is_same_file(
-                    self.interpreter().sys_executable(),
-                    interpreter.sys_executable(),
-                )
-                .unwrap_or(false)
+            // On Unix, compare the stdlib path from sysconfig
+            let old_stdlib = self.interpreter().sysconfig_get_path("stdlib");
+            let selected_stdlib = interpreter.sysconfig_get_path("stdlib");
+            match (old_stdlib, selected_stdlib) {
+                (Ok(old), Ok(selected)) => old == selected,
+                _ => {
+                    // Fallback to previous method if sysconfig path not available
+                    self.interpreter().sys_executable() == interpreter.sys_executable()
+                        || same_file::is_same_file(
+                            self.interpreter().sys_executable(),
+                            interpreter.sys_executable(),
+                        )
+                        .unwrap_or(false)
+                }
+            }
         }
     }
 }
