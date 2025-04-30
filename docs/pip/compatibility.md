@@ -479,3 +479,31 @@ is.
 For example, `uv pip install foo bar` prioritizes newer versions of `foo` over `bar` and could
 result in a different resolution than `uv pip install bar foo`. Similarly, this behavior applies to
 the ordering of requirements in input files for `uv pip compile`.
+
+## Package names in `pip list`
+
+In `uv pip list`, uv outputs [normalized package
+names](https://packaging.python.org/en/latest/specifications/name-normalization/#name-normalization).
+This differs from `pip list`, which displays the original [distribution package
+names](https://packaging.python.org/en/latest/discussions/distribution-package-vs-import-package/#what-s-a-distribution-package)
+without normalization. `uv pip list` uses normalized packages names to maintain
+consistency with how packages are referenced across the rest of uv.
+
+This is something to be aware of if scripts or code are parsing the output of `pip list`.
+
+For example:
+
+```shell
+(venv) $ diff --side-by-side  <(pip list) <(uv pip list)
+Package          Version					Package          Version
+---------------- -------					---------------- -------
+docstring_parser 0.16					      |	docstring-parser 0.16
+jaraco.classes   3.4.0					      |	jaraco-classes   3.4.0
+more-itertools   10.7.0				    		more-itertools   10.7.0
+pip              25.1					    	pip              25.1
+PyMuPDFb         1.24.10				      |	pymupdfb         1.24.10
+PyPDF2           3.0.1					      |	pypdf2           3.0.1
+```
+
+`uv pip list` outputs `docstring-parser` with a hyphen instead of an underscore,
+`pymupdfb` is lowercased, etc.
