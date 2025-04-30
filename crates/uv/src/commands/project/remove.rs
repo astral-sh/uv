@@ -13,7 +13,7 @@ use uv_configuration::{
     PreviewMode,
 };
 use uv_fs::Simplified;
-use uv_normalize::{DefaultExtras, DEV_DEPENDENCIES};
+use uv_normalize::DEV_DEPENDENCIES;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
@@ -30,8 +30,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, ProjectEnvironment, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState,
+    default_dependency_groups, default_extras, ProjectEnvironment, ProjectError,
+    ProjectInterpreter, ScriptInterpreter, UniversalState,
 };
 use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
@@ -318,7 +318,7 @@ pub(crate) async fn remove(
     let default_groups = default_dependency_groups(project.pyproject_toml())?;
 
     // Determine the default extras to include.
-    let default_extras = DefaultExtras::default();
+    let default_extras = default_extras(project.pyproject_toml())?;
 
     // Identify the installation target.
     let target = match &project {

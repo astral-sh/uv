@@ -129,6 +129,17 @@
         "type": "string"
       }
     },
+    "default-extras": {
+      "description": "The list of `optional-dependencies` extras to install by default.\n\nCan also be the literal \"all\" to default enable all extras.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/DefaultExtras"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "default-groups": {
       "description": "The list of `dependency-groups` to install by default.\n\nCan also be the literal `\"all\"` to default enable all groups.",
       "anyOf": [
@@ -743,6 +754,34 @@
       "additionalProperties": {
         "$ref": "#/definitions/ConfigSettingValue"
       }
+    },
+    "DefaultExtras": {
+      "description": "Either the literal \"all\" or a list of extras",
+      "oneOf": [
+        {
+          "description": "All extras are defaulted",
+          "type": "string",
+          "enum": [
+            "All"
+          ]
+        },
+        {
+          "description": "A list of extras",
+          "type": "object",
+          "required": [
+            "List"
+          ],
+          "properties": {
+            "List": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ExtraName"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     },
     "DefaultGroups": {
       "description": "Either the literal \"all\" or a list of groups",

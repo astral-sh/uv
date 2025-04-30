@@ -24,7 +24,7 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, detect_conflicts, ProjectError, ProjectInterpreter,
+    default_dependency_groups, default_extras, detect_conflicts, ProjectError, ProjectInterpreter,
     ScriptInterpreter, UniversalState,
 };
 use crate::commands::{diagnostics, ExitStatus, OutputWriter};
@@ -118,10 +118,9 @@ pub(crate) async fn export(
 
     // Determine the default extras to include.
     let default_extras = match &target {
-        ExportTarget::Project(_project) => DefaultExtras::default(),
+        ExportTarget::Project(project) => default_extras(project.pyproject_toml())?,
         ExportTarget::Script(_) => DefaultExtras::default(),
     };
-
     let dev = dev.with_defaults(default_groups);
     let extras = extras.with_defaults(default_extras);
 
