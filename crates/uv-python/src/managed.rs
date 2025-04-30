@@ -251,9 +251,11 @@ impl ManagedPythonInstallations {
             .filter(move |installation| {
                 installation.key.os == os
                     && (arch.supports(installation.key.arch)
-                        // TODO(zanieb): Allow inequal variants, as `Arch::supports` does not
+                        // Allow inequal variants, as `Arch::supports` does not
                         // implement this yet. See https://github.com/astral-sh/uv/pull/9788
-                        || arch.family == installation.key.arch.family)
+                        || arch.family == installation.key.arch.family
+                        // Additional check for inequal variants: allow if major architecture matches
+                        || arch.major == installation.key.arch.major)
                     && installation.key.libc == libc
             });
 
