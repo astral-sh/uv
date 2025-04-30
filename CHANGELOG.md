@@ -9,7 +9,7 @@
 
 - Add support for BLAKE2b-256 ([#13204](https://github.com/astral-sh/uv/pull/13204))
 
-## Bugfix
+### Bugfix
 
 - Revert fix handling of authentication when encountering redirects ([#13215](https://github.com/astral-sh/uv/pull/13215))
 
