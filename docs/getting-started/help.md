@@ -38,16 +38,19 @@ problem is already solved in a newer version.
 To check the installed version:
 
 ```console
-$ uv version
+$ uv self version
 ```
 
 The following are also valid:
 
 ```console
-$ uv --version      # Same output as `uv version`
+$ uv --version      # Same output as `uv self version`
 $ uv -V             # Will not include the build commit and date
-$ uv pip --version  # Can be used with a subcommand
 ```
+
+!!! note
+
+    Before uv 0.7.0, `uv version` was used instead of `uv self version`.
 
 ## Troubleshooting issues
 
