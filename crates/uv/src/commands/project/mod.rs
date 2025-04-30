@@ -1547,6 +1547,12 @@ pub(crate) async fn resolve_names(
         reinstall: _,
     } = settings;
 
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .keyring(*keyring_provider)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
@@ -1559,13 +1565,10 @@ pub(crate) async fn resolve_names(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
         .index_locations(index_locations)
         .index_strategy(*index_strategy)
-        .keyring(*keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -1694,6 +1697,12 @@ pub(crate) async fn resolve_environment(
         ..
     } = spec.requirements;
 
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .keyring(*keyring_provider)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+
     // Determine the tags, markers, and interpreter to use for resolution.
     let tags = interpreter.tags()?;
     let marker_env = interpreter.resolver_marker_environment();
@@ -1711,13 +1720,10 @@ pub(crate) async fn resolve_environment(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
         .index_locations(index_locations)
         .index_strategy(*index_strategy)
-        .keyring(*keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -1866,6 +1872,12 @@ pub(crate) async fn sync_environment(
         sources,
     } = settings;
 
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .keyring(keyring_provider)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+
     let site_packages = SitePackages::from_environment(&venv)?;
 
     // Determine the markers tags to use for resolution.
@@ -1884,13 +1896,10 @@ pub(crate) async fn sync_environment(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
         .index_locations(index_locations)
         .index_strategy(index_strategy)
-        .keyring(keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -2035,6 +2044,12 @@ pub(crate) async fn update_environment(
         reinstall,
     } = settings;
 
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .keyring(*keyring_provider)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+
     // Respect all requirements from the provided sources.
     let RequirementsSpecification {
         project,
@@ -2096,13 +2111,10 @@ pub(crate) async fn update_environment(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
         .index_locations(index_locations)
         .index_strategy(*index_strategy)
-        .keyring(*keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
