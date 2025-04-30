@@ -480,7 +480,18 @@ impl RetryableStrategy for UvRetryableStrategy {
 ///
 /// These cases should be safe to retry with [`Retryable::Transient`].
 pub fn is_extended_transient_error(err: &dyn Error) -> bool {
-    trace!("Considering retry of error: {err:?}");
+    // First, try to show a nice trace log
+    if let Some((Some(status), Some(url))) = find_source::<reqwest::Error>(&err)
+        .map(|request_err| (request_err.status(), request_err.url()))
+    {
+        let status = status
+            .canonical_reason()
+            .map(|reason| format!(" HTTP {status} {reason} "))
+            .unwrap_or_else(|| format!(" HTTP {status} "));
+        trace!("Considering retry of {status} for {url}");
+    } else {
+        trace!("Considering retry of error: {err:?}");
+    }
 
     if let Some(io) = find_source::<std::io::Error>(&err) {
         if io.kind() == std::io::ErrorKind::ConnectionReset
