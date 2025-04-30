@@ -13,7 +13,7 @@ use uv_warnings::warn_user;
 use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
     pyproject_mut::{DependencyTarget, PyProjectTomlMut},
-    DiscoveryOptions, Workspace, WorkspaceCache,
+    DiscoveryOptions, ProjectWorkspace, WorkspaceCache,
 };
 
 use crate::{commands::ExitStatus, printer::Printer};
@@ -43,8 +43,12 @@ pub(crate) async fn project_version(
     printer: Printer,
 ) -> Result<ExitStatus> {
     // Read the metadata
-    let workspace = match Workspace::discover(project_dir, &DiscoveryOptions::default(), cache)
-        .await
+    let workspace = match ProjectWorkspace::discover(
+        project_dir,
+        &DiscoveryOptions::default(),
+        cache,
+    )
+    .await
     {
         Ok(workspace) => workspace,
         Err(err) => {
@@ -59,11 +63,12 @@ pub(crate) async fn project_version(
     };
 
     let mut pyproject = PyProjectTomlMut::from_toml(
-        &workspace.pyproject_toml().raw,
+        &workspace.current_project().pyproject_toml().raw,
         DependencyTarget::PyProjectToml,
     )?;
-    let pyproject_path = workspace.install_path().join("pyproject.toml");
+    let pyproject_path = workspace.current_project().root().join("pyproject.toml");
     let name = workspace
+        .current_project()
         .pyproject_toml()
         .project
         .as_ref()

@@ -1,4 +1,5 @@
 use anyhow::{Ok, Result};
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
@@ -827,7 +828,7 @@ fn version_get_fallback_unmanaged() -> Result<()> {
         [project]
         name = "myapp"
         version = "0.1.2"
-        
+
         [tool.uv]
         managed = false
         "#,
@@ -869,7 +870,7 @@ fn version_get_fallback_unmanaged_short() -> Result<()> {
         [project]
         name = "myapp"
         version = "0.1.2"
-        
+
         [tool.uv]
         managed = false
         "#,
@@ -920,7 +921,7 @@ fn version_get_fallback_unmanaged_json() -> Result<()> {
         [project]
         name = "myapp"
         version = "0.1.2"
-        
+
         [tool.uv]
         managed = false
         "#,
@@ -992,7 +993,7 @@ fn version_get_fallback_unmanaged_strict() -> Result<()> {
         [project]
         name = "myapp"
         version = "0.1.2"
-        
+
         [tool.uv]
         managed = false
         "#,
@@ -1204,5 +1205,67 @@ fn self_version_json() -> Result<()> {
     version = "0.1.2"
     "#
     );
+    Ok(())
+}
+
+// Ensure that the global `--project` option is respected.
+#[test]
+fn version_get_workspace() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "1.10.31"
+        requires-python = ">=3.12"
+        "#,
+    )?;
+
+    context
+        .init()
+        .arg("--lib")
+        .arg("workspace-member")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.version().arg("--project").arg(context.temp_dir.as_ref()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    myproject 1.10.31
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.version().arg("--project").arg(context.temp_dir.join("workspace-member")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    workspace-member 0.1.0
+
+    ----- stderr -----
+    ");
+
+    pyproject_toml.write_str(
+        r#"
+        [tool.uv.workspace]
+        members = ["workspace-member"]
+        "#,
+    )?;
+
+    // A virtual project root has a no version.
+    // TODO(konsti): Show a dedicated error message for virtual workspace roots (generally, not
+    // only for `uv version`)
+    uv_snapshot!(context.filters(), context.version().arg("--project").arg(context.temp_dir.as_ref()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    ");
+
     Ok(())
 }
