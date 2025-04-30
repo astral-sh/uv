@@ -519,6 +519,13 @@ fn help_subsubcommand() {
               
               [env: UV_PYPY_INSTALL_MIRROR=]
 
+          --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
+              URL pointing to JSON of custom Python installations.
+              
+              Note that currently, only local paths are supported.
+              
+              [env: UV_PYTHON_DOWNLOADS_JSON_URL=]
+
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed.
               
@@ -772,15 +779,22 @@ fn help_flag_subsubcommand() {
       [TARGETS]...  The Python version(s) to install [env: UV_PYTHON=]
 
     Options:
-      -i, --install-dir <INSTALL_DIR>  The directory to store the Python installation in [env:
-                                       UV_PYTHON_INSTALL_DIR=]
-          --mirror <MIRROR>            Set the URL to use as the source for downloading Python
-                                       installations [env: UV_PYTHON_INSTALL_MIRROR=]
-          --pypy-mirror <PYPY_MIRROR>  Set the URL to use as the source for downloading PyPy
-                                       installations [env: UV_PYPY_INSTALL_MIRROR=]
-      -r, --reinstall                  Reinstall the requested Python version, if it's already installed
-      -f, --force                      Replace existing Python executables during installation
-          --default                    Use as the default Python version
+      -i, --install-dir <INSTALL_DIR>
+              The directory to store the Python installation in [env: UV_PYTHON_INSTALL_DIR=]
+          --mirror <MIRROR>
+              Set the URL to use as the source for downloading Python installations [env:
+              UV_PYTHON_INSTALL_MIRROR=]
+          --pypy-mirror <PYPY_MIRROR>
+              Set the URL to use as the source for downloading PyPy installations [env:
+              UV_PYPY_INSTALL_MIRROR=]
+          --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
+              URL pointing to JSON of custom Python installations [env: UV_PYTHON_DOWNLOADS_JSON_URL=]
+      -r, --reinstall
+              Reinstall the requested Python version, if it's already installed
+      -f, --force
+              Replace existing Python executables during installation
+          --default
+              Use as the default Python version
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
