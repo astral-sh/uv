@@ -3,6 +3,16 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.1
+
+### Enhancement
+
+- Add support for BLAKE2b-256 ([#13204](https://github.com/astral-sh/uv/pull/13204))
+
+## Bugfix
+
+- Revert fix handling of authentication when encountering redirects ([#13215](https://github.com/astral-sh/uv/pull/13215))
+
 ## 0.7.0
 
 This release contains various changes that improve correctness and user experience, but could break some workflows; many changes have been marked as breaking out of an abundance of caution. We expect most users to be able to upgrade without making changes.
