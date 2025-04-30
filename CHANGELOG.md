@@ -134,8 +134,8 @@ This release contains various changes that improve correctness and user experien
 
 - Changed `fish` completions append `>>` to overwrite `>` ([#13130](https://github.com/astral-sh/uv/pull/13130))
 - Add `pylock.toml` mentions where relevant ([#13115](https://github.com/astral-sh/uv/pull/13115))
-- Add ROCm example to the PyTorch guide ([#13200](https://github.com/astral-sh/uv/pull13200))
-- Upgrade PyTorch guide to CUDA 12.8 and PyTorch 2.7 ([#13199](https://github.com/astral-sh/uv/pull13199))
+- Add ROCm example to the PyTorch guide ([#13200](https://github.com/astral-sh/uv/pull/13200))
+- Upgrade PyTorch guide to CUDA 12.8 and PyTorch 2.7 ([#13199](https://github.com/astral-sh/uv/pull/13199))
 
 
 ## 0.6.x
