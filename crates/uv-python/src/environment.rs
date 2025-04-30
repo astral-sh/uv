@@ -366,11 +366,13 @@ impl PythonEnvironment {
         let cfg = self.cfg().ok()?;
         let cfg_version = cfg.version?.into_version();
 
-        // Determine if we should be checking for patch-level equality
+        // Determine if we should be checking for patch or pre-release equality
         let exe_version = if cfg_version.release().get(2).is_none() {
             self.interpreter().python_minor_version()
-        } else {
+        } else if cfg_version.pre().is_none() {
             self.interpreter().python_patch_version()
+        } else {
+            self.interpreter().python_version().clone()
         };
 
         (cfg_version != exe_version).then_some((cfg_version, exe_version))
