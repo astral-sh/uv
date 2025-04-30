@@ -519,6 +519,9 @@ impl ManagedPythonDownload {
     //noinspection RsUnresolvedPath - RustRover can't see through the `include!`
 
     /// Iterate over all [`ManagedPythonDownload`]s.
+    ///
+    /// Note: The list is generated on the first call to this function.
+    /// so `python_downloads_json_url` is only used in the first call to this function.
     pub fn iter_all(
         python_downloads_json_url: Option<&str>,
     ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload>, Error> {
