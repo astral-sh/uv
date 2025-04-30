@@ -1878,6 +1878,43 @@ fn install_extra_index_url_has_priority() {
     context.assert_command("import flask").failure();
 }
 
+/// Ensure that the index is fetched only once when duplicate indices are specified
+#[tokio::test]
+async fn install_deduplicated_indices() {
+    let context = TestContext::new("3.12");
+
+    let redirect_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(
+            ResponseTemplate::new(302).insert_header("Location", "https://pypi.org/simple/sniffio"),
+        )
+        .expect(1)
+        .mount(&redirect_server)
+        .await;
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("sniffio")  // Use a zero-dependency package
+        .arg("--index")
+        .arg(redirect_server.uri())
+        .arg("--default-index")
+        .arg(redirect_server.uri())
+        .arg("--index-strategy")
+        .arg("unsafe-first-match"),  // Anything but "first-index"
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+}
+
 /// Install a package from a public GitHub repository
 #[test]
 #[cfg(feature = "git")]
