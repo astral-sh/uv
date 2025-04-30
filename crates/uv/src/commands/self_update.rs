@@ -38,7 +38,7 @@ pub(crate) async fn self_update(
                     "\n",
                     "If you installed uv with pip, brew, or another package manager, update uv with `pip install --upgrade`, `brew upgrade`, or similar."
                 ),
-                "warning".yellow().bold(),
+                "error".red().bold(),
                 ":".bold()
             )
         )?;
@@ -62,7 +62,7 @@ pub(crate) async fn self_update(
                     "\n",
                     "The current executable is at `{}` but the standalone installer was used to install uv to `{}`. Are multiple copies of uv installed?"
                 ),
-                "warning".yellow().bold(),
+                "error".red().bold(),
                 ":".bold(),
                 current_exe.simplified_display().bold().cyan(),
                 receipt_prefix.simplified_display().bold().cyan()
