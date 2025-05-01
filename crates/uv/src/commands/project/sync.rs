@@ -8,7 +8,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 
 use uv_cache::Cache;
-use uv_client::{FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions,
@@ -598,6 +598,12 @@ pub(super) async fn do_sync(
         sources,
     } = settings;
 
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .keyring(keyring_provider)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+
     // Validate that the Python version is supported by the lockfile.
     if !target
         .lock()
@@ -678,13 +684,10 @@ pub(super) async fn do_sync(
     store_credentials_from_target(target);
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
         .index_locations(index_locations)
         .index_strategy(index_strategy)
-        .keyring(keyring_provider)
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
         .build();

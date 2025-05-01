@@ -30,6 +30,9 @@ pub enum Error {
 
     #[error(transparent)]
     WheelFilename(#[from] uv_distribution_filename::WheelFilenameError),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 impl Error {
