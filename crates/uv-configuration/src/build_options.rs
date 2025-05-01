@@ -327,7 +327,7 @@ pub enum IndexStrategy {
     /// but ignore any authentication failures.
     ///
     /// This is more secure than pip's behavior but is still vulnerable to dependency confusion
-    /// if we encounter an authentication failure at an earlier index.
+    /// if we encounter an authentication failure at a higher-priority index.
     #[cfg_attr(feature = "clap", clap(alias = "unsafe-first-index"))]
     UnsafeFirstIndex,
     /// Search for every package name across all indexes, exhausting the versions from the first

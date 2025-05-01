@@ -949,7 +949,7 @@
           ]
         },
         {
-          "description": "Only use results from the first index that returns a match for a given package name, but ignore any authentication failures.\n\nThis is more secure than pip's behavior but is still vulnerable to dependency confusion if we encounter an authentication failure at an earlier index.",
+          "description": "Only use results from the first index that returns a match for a given package name, but ignore any authentication failures.\n\nThis is more secure than pip's behavior but is still vulnerable to dependency confusion if we encounter an authentication failure at a higher-priority index.",
           "type": "string",
           "enum": [
             "unsafe-first-index"
