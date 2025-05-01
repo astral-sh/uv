@@ -1114,6 +1114,7 @@ same name to an alternate index.
 **Possible values**:
 
 - `"first-index"`: Only use results from the first index that returns a match for a given package name
+- `"unsafe-first-index"`: Only use results from the first index that returns a match for a given package name, but ignore any authentication failures
 - `"unsafe-first-match"`: Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next
 - `"unsafe-best-match"`: Search for every package name across all indexes, preferring the "best" version found. If a package version is in multiple indexes, only look at the entry for the first index
 
@@ -2551,6 +2552,7 @@ same name to an alternate index.
 **Possible values**:
 
 - `"first-index"`: Only use results from the first index that returns a match for a given package name
+- `"unsafe-first-index"`: Only use results from the first index that returns a match for a given package name, but ignore any authentication failures
 - `"unsafe-first-match"`: Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next
 - `"unsafe-best-match"`: Search for every package name across all indexes, preferring the "best" version found. If a package version is in multiple indexes, only look at the entry for the first index
 

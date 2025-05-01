@@ -230,6 +230,8 @@ uv run [OPTIONS] [COMMAND]
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
 
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
+
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
@@ -905,6 +907,8 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
 
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
+
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
@@ -1266,6 +1270,8 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
 
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
@@ -1638,6 +1644,8 @@ uv sync [OPTIONS]
 
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
 
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
@@ -2017,6 +2025,8 @@ uv lock [OPTIONS]
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
 
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
+
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
@@ -2358,6 +2368,8 @@ uv export [OPTIONS]
 
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
 
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
@@ -2735,6 +2747,8 @@ uv tree [OPTIONS]
 
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
 
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
@@ -3232,6 +3246,8 @@ uv tool run [OPTIONS] [COMMAND]
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
 
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
+
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
@@ -3577,6 +3593,8 @@ uv tool install [OPTIONS] <PACKAGE>
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
 
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
+
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
@@ -3898,6 +3916,8 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
 
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
@@ -5733,6 +5753,8 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
 
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
+
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
@@ -6248,6 +6270,8 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
 
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
+
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
@@ -6738,6 +6762,8 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
 
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
@@ -7529,6 +7555,8 @@ uv pip list [OPTIONS]
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
 
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
+
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
@@ -7869,6 +7897,8 @@ uv pip tree [OPTIONS]
 
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
 
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
@@ -8230,6 +8260,8 @@ uv venv [OPTIONS] [PATH]
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
 
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
+
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 
 <li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
@@ -8514,6 +8546,8 @@ uv build [OPTIONS] [SRC]
 
 <ul>
 <li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-index</code>:  Only use results from the first index that returns a match for a given package name, but ignore any authentication failures</li>
 
 <li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
 

@@ -111,6 +111,10 @@ supports the following values:
 - `first-index` (default): Search for each package across all indexes, limiting the candidate
   versions to those present in the first index that contains the package, prioritizing the
   `--extra-index-url` indexes over the default index URL.
+- `unsafe-first-index`: Search for each package across all indexes, limiting the candidate versions
+  to those present in the first index that contains the package, prioritizing the
+  `--extra-index-url` indexes over the default index URL. But treat authentication failures as
+  package not found.
 - `unsafe-first-match`: Search for each package across all indexes, but prefer the first index with
   a compatible version, even if newer versions are available on other indexes.
 - `unsafe-best-match`: Search for each package across all indexes, and select the best version from

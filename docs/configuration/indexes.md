@@ -127,6 +127,9 @@ To opt in to alternate index behaviors, use the`--index-strategy` command-line o
 
 - `first-index` (default): Search for each package across all indexes, limiting the candidate
   versions to those present in the first index that contains the package.
+- `unsafe-first-index`: Search for each package across all indexes, limiting the candidate versions
+  to those present in the first index that contains the package. But treat authentication failures
+  as package not found.
 - `unsafe-first-match`: Search for each package across all indexes, but prefer the first index with
   a compatible version, even if newer versions are available on other indexes.
 - `unsafe-best-match`: Search for each package across all indexes, and select the best version from
@@ -231,6 +234,9 @@ ignore-error-codes = [403]
 
 uv will always continue searching across indexes when it encounters a `404 Not Found`. This cannot
 be overridden.
+
+It is also possible to use the [unsafe-first-index strategy](#searching-across-multiple-indexes).
+But because this approach is less fine-grained, it is more vulnerable to dependency confusion.
 
 ### Disabling authentication
 

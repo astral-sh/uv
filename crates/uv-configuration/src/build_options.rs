@@ -323,6 +323,13 @@ pub enum IndexStrategy {
     #[default]
     #[cfg_attr(feature = "clap", clap(alias = "first-match"))]
     FirstIndex,
+    /// Only use results from the first index that returns a match for a given package name,
+    /// but ignore any authentication failures.
+    ///
+    /// This is more secure than pip's behavior but is still vulnerable to dependency confusion
+    /// if we encounter an authentication failure at an earlier index.
+    #[cfg_attr(feature = "clap", clap(alias = "unsafe-first-index"))]
+    UnsafeFirstIndex,
     /// Search for every package name across all indexes, exhausting the versions from the first
     /// index before moving on to the next.
     ///

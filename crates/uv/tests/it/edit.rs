@@ -10820,6 +10820,44 @@ fn add_ignore_error_codes() -> Result<()> {
     Ok(())
 }
 
+/// uv should continue searching the default index if it receives an
+/// authentication failure on unsafe-first-index strategy.
+#[test]
+fn add_unsafe_first_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("anyio").arg("--index-strategy").arg("unsafe-first-index"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    context.assert_command("import anyio").success();
+    Ok(())
+}
+
 /// uv should only fall through on 404s if an empty list is specified
 /// in `ignore-error-codes`, even for pytorch.
 #[test]
@@ -10893,6 +10931,8 @@ fn add_missing_package_on_pytorch() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because fakepkg was not found in the package registry and your project depends on fakepkg, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (https://download.pytorch.org/whl/cpu) could not be queried due to a lack of valid authentication credentials (403 Forbidden).
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
