@@ -40,7 +40,7 @@ zip = { workspace = true }
 
 [features]
 default = []
-performance = ["xz2/static"]
+static = ["xz2/static"]
 
 [package.metadata.cargo-shear]
 ignored = ["xz2"]
