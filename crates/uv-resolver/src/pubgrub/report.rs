@@ -535,6 +535,7 @@ impl PubGrubReportFormatter<'_> {
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
+        mismatched_names: &FxHashMap<PackageName, FxHashMap<IndexUrl, BTreeSet<PackageName>>>,
         fork_urls: &ForkUrls,
         fork_indexes: &ForkIndexes,
         env: &ResolverEnvironment,
@@ -580,6 +581,7 @@ impl PubGrubReportFormatter<'_> {
                         available_indexes,
                         unavailable_packages,
                         incomplete_packages,
+                        mismatched_names,
                         output_hints,
                     );
 
@@ -638,6 +640,7 @@ impl PubGrubReportFormatter<'_> {
                         available_indexes,
                         unavailable_packages,
                         incomplete_packages,
+                        mismatched_names,
                         output_hints,
                     );
 
@@ -717,6 +720,7 @@ impl PubGrubReportFormatter<'_> {
                     available_indexes,
                     unavailable_packages,
                     incomplete_packages,
+                    mismatched_names,
                     fork_urls,
                     fork_indexes,
                     env,
@@ -735,6 +739,7 @@ impl PubGrubReportFormatter<'_> {
                     available_indexes,
                     unavailable_packages,
                     incomplete_packages,
+                    mismatched_names,
                     fork_urls,
                     fork_indexes,
                     env,
@@ -855,6 +860,7 @@ impl PubGrubReportFormatter<'_> {
         available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         unavailable_packages: &FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: &FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
+        mismatched_names: &FxHashMap<PackageName, FxHashMap<IndexUrl, BTreeSet<PackageName>>>,
         hints: &mut IndexSet<PubGrubHint>,
     ) {
         let no_find_links = index_locations.flat_indexes().peekable().peek().is_none();
@@ -883,6 +889,17 @@ impl PubGrubReportFormatter<'_> {
             }
             Some(UnavailablePackage::NotFound) => {}
             None => {}
+        }
+
+        // Add hints due to distributions with the wrong package name on the index page.
+        if let Some(mismatched_indexes) = mismatched_names.get(name) {
+            for (index_url, mismatched_names) in mismatched_indexes {
+                hints.insert(PubGrubHint::IndexPackageNameMismatch {
+                    package: name.clone(),
+                    index_url: index_url.clone(),
+                    mismatched_names: mismatched_names.clone(),
+                });
+            }
         }
 
         // Add hints due to the package being unavailable at specific versions.
@@ -1252,6 +1269,12 @@ pub(crate) enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         exclude_newer: ExcludeNewerValue,
     },
+    /// Distributions for a different package were found on the index page.
+    IndexPackageNameMismatch {
+        package: PackageName,
+        index_url: IndexUrl,
+        mismatched_names: BTreeSet<PackageName>,
+    },
     /// The resolution failed for a Python version that is different from the current Python version.
     DisjointPythonVersion {
         // excluded from `PartialEq` and `Hash`
@@ -1339,6 +1362,9 @@ enum PubGrubHintCore {
         package: PackageName,
         per_package: bool,
     },
+    PackageNameMismatch {
+        package: PackageName,
+    },
     DisjointPythonVersion,
     DisjointEnvironment,
 }
@@ -1415,6 +1441,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
                 package,
                 per_package,
             },
+            PubGrubHint::IndexPackageNameMismatch { package, .. } => {
+                Self::PackageNameMismatch { package }
+            }
             PubGrubHint::DisjointPythonVersion { .. } => Self::DisjointPythonVersion,
             PubGrubHint::DisjointEnvironment => Self::DisjointEnvironment,
         }
@@ -1876,6 +1905,25 @@ impl std::fmt::Display for PubGrubHint {
                         "exclude-newer-package".green(),
                     )
                 }
+            }
+            Self::IndexPackageNameMismatch {
+                package,
+                index_url,
+                mismatched_names,
+            } => {
+                let names = mismatched_names
+                    .iter()
+                    .map(|name| format!("`{}`", name.cyan()))
+                    .join(", ");
+                write!(
+                    f,
+                    "{}{} The index `{}` returned a malformed response, the index page for `{}` returned information for {}",
+                    "hint".bold().cyan(),
+                    ":".bold(),
+                    index_url,
+                    package.cyan(),
+                    names
+                )
             }
             Self::DisjointPythonVersion { python_version } => {
                 write!(

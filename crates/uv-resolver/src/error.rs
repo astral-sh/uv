@@ -170,6 +170,8 @@ pub struct NoSolutionError {
     index_capabilities: IndexCapabilities,
     unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
     incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
+    /// Package names from distributions on index pages that don't match the expected package name.
+    index_mismatched_names: FxHashMap<PackageName, FxHashMap<IndexUrl, BTreeSet<PackageName>>>,
     fork_urls: ForkUrls,
     fork_indexes: ForkIndexes,
     env: ResolverEnvironment,
@@ -192,6 +194,7 @@ impl NoSolutionError {
         index_capabilities: IndexCapabilities,
         unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
+        index_mismatched_names: FxHashMap<PackageName, FxHashMap<IndexUrl, BTreeSet<PackageName>>>,
         fork_urls: ForkUrls,
         fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
@@ -211,6 +214,7 @@ impl NoSolutionError {
             index_capabilities,
             unavailable_packages,
             incomplete_packages,
+            index_mismatched_names,
             fork_urls,
             fork_indexes,
             env,
@@ -402,6 +406,7 @@ impl std::fmt::Debug for NoSolutionError {
             current_environment,
             tags,
             workspace_members,
+            index_mismatched_names,
             options,
         } = self;
         f.debug_struct("NoSolutionError")
@@ -420,6 +425,7 @@ impl std::fmt::Debug for NoSolutionError {
             .field("current_environment", current_environment)
             .field("tags", tags)
             .field("workspace_members", workspace_members)
+            .field("index_mismatched_names", index_mismatched_names)
             .field("options", options)
             .finish()
     }
@@ -490,6 +496,7 @@ impl std::fmt::Display for NoSolutionError {
             &self.available_indexes,
             &self.unavailable_packages,
             &self.incomplete_packages,
+            &self.index_mismatched_names,
             &self.fork_urls,
             &self.fork_indexes,
             &self.env,
