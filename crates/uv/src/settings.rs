@@ -790,7 +790,7 @@ impl ToolListSettings {
         Self {
             show_paths,
             show_version_specifiers,
-            show_extras
+            show_extras,
         }
     }
 }
