@@ -63,4 +63,4 @@ insta = { version = "1.40.0", features = ["filters", "json", "redactions"] }
 
 [features]
 default = []
-performance = ["uv-extract/performance"]
+static = ["uv-extract/static"]

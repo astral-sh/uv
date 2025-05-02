@@ -40,7 +40,8 @@ zip = { workspace = true }
 
 [features]
 default = []
-performance = ["xz2/static"]
+# Avoid a liblzma.so dependency
+static = ["xz2/static"]
 
 [package.metadata.cargo-shear]
 ignored = ["xz2"]
