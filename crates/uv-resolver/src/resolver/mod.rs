@@ -1523,7 +1523,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             candidate.choice_kind(),
             filename,
         );
-        self.visit_candidate(&candidate, dist, package, name, pins, requests)?;
+        if let Some(incompatibility) =
+            self.visit_candidate(&candidate, dist, package, name, pins, requests)?
+        {
+            return Ok(Some(incompatibility));
+        }
 
         let version = candidate.version().clone();
         Ok(Some(ResolverVersion::Unforked(version)))
@@ -1746,7 +1750,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 base_candidate.choice_kind(),
                 filename,
             );
-            self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)?;
+
+            if let Some(incompatibility) = self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)? {
+                return Ok(Some(incompatibility));
+            }
 
             return Ok(Some(ResolverVersion::Unforked(
                 base_candidate.version().clone(),
@@ -1791,8 +1798,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .collect::<Vec<_>>()
                 .join(", ")
         );
-        self.visit_candidate(candidate, dist, package, name, pins, requests)?;
-        self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)?;
+        if let Some(incompatibility) =
+            self.visit_candidate(candidate, dist, package, name, pins, requests)?
+        {
+            return Ok(Some(incompatibility));
+        }
+        if let Some(incompatibility) = self.visit_candidate(&base_candidate, base_dist, package, name, pins, requests)? {
+            return Ok(Some(incompatibility));
+        }
 
         let forks = vec![
             VersionFork {
@@ -1810,6 +1823,8 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     }
 
     /// Visit a selected candidate.
+    ///
+    /// Returns an unavailability if the version can't be used.
     fn visit_candidate<'index>(
         &self,
         candidate: &Candidate,
@@ -1818,7 +1833,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         name: &PackageName,
         pins: &mut FilePins<'index>,
         requests: &'index MetadataRequests,
-    ) -> Result<(), ResolveError> {
+    ) -> Result<Option<ResolverVersion>, ResolveError> {
+        // Defense in depth, this shouldn't be reachable.
+        if dist.name() != name {
+            return Ok(Some(ResolverVersion::Unavailable(
+                candidate.version().clone(),
+                UnavailableVersion::PackageNameMismatch {
+                    dist_name: dist.name().clone(),
+                },
+            )));
+        }
+
         let index = match dist {
             CompatibleDist::InstalledDist(_) => None,
             CompatibleDist::SourceDist { sdist, .. }
@@ -1859,7 +1884,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         {
                             return Err(ResolveError::UnhashedPackage(candidate.name().clone()));
                         }
-                        Ok(())
+                        Ok(None)
                     },
                 )
             })
@@ -2507,6 +2532,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Ok(None);
                 }
 
+                // Defense in depth, this shouldn't be reachable.
+                if dist.name() != &package_name {
+                    warn!(
+                        "Expected package name {} and distribution name {} do not match, skipping prefetch",
+                        dist.name(),
+                        package_name
+                    );
+                    return Ok(None);
+                }
+
                 // Emit a request to fetch the metadata for this version.
                 let dist = dist.for_resolution();
                 if self.index.distributions().register(dist.distribution_id()) {
@@ -2592,6 +2627,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         let mut available_indexes = FxHashMap::default();
         let mut included_versions = FxHashMap::default();
         let mut available_versions = FxHashMap::default();
+        let mut index_mismatched_names: FxHashMap<
+            PackageName,
+            FxHashMap<IndexUrl, BTreeSet<PackageName>>,
+        > = FxHashMap::default();
 
         let available_version_cutoff: Option<jiff::Timestamp> =
             std::env::var(EnvVars::UV_INTERNAL__TEST_AVAILABLE_VERSION_CUTOFF)
@@ -2673,6 +2712,18 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 package_available_versions.insert(version.clone());
                             }
                         }
+
+                        let names = version_map.mismatched_names();
+                        if !names.is_empty() {
+                            for (packages, index_url) in names {
+                                index_mismatched_names
+                                    .entry(name.clone())
+                                    .or_default()
+                                    .entry(index_url.clone())
+                                    .or_default()
+                                    .insert(packages);
+                            }
+                        }
                     }
 
                     // Track the indexes in which the package is available.
@@ -2700,6 +2751,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             self.capabilities.clone(),
             unavailable_packages,
             incomplete_packages,
+            index_mismatched_names,
             fork_urls,
             fork_indexes,
             env,

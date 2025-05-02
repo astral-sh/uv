@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::collections::Bound;
 use std::ops::RangeBounds;
 use std::sync::OnceLock;
@@ -104,6 +104,7 @@ impl VersionMap {
                 map,
                 local,
                 simple_metadata,
+                mismatched_names: std::sync::Mutex::new(BTreeSet::new()),
                 no_binary: build_options.no_binary_package(package_name),
                 no_build: build_options.no_build_package(package_name),
                 index,
@@ -292,6 +293,20 @@ impl VersionMap {
         match self.inner {
             VersionMapInner::Eager(ref map) => map.local,
             VersionMapInner::Lazy(ref map) => map.local,
+        }
+    }
+
+    /// Returns the set of package names that were found on this index page but didn't match
+    /// the expected package name.
+    pub(crate) fn mismatched_names(&self) -> BTreeSet<(PackageName, IndexUrl)> {
+        match self.inner {
+            // Only used for flat indexes, which can't have mismatches.
+            VersionMapInner::Eager(_) => BTreeSet::new(),
+            VersionMapInner::Lazy(ref lazy) => lazy
+                .mismatched_names
+                .lock()
+                .expect("mismatched_names lock is not poisoned")
+                .clone(),
         }
     }
 }
@@ -489,6 +504,8 @@ struct VersionMapLazy {
     /// The raw simple metadata from which `PrioritizedDist`s should
     /// be constructed.
     simple_metadata: OwnedArchive<SimpleDetailMetadata>,
+    /// Package names from distributions on this index page that don't match the expected name.
+    mismatched_names: std::sync::Mutex<BTreeSet<(PackageName, IndexUrl)>>,
     /// When true, wheels aren't allowed.
     no_binary: bool,
     /// When true, source dists aren't allowed.
@@ -653,6 +670,15 @@ impl VersionMapLazy {
                         continue;
                     }
                 };
+                // Skip files with a different package name than the index page.
+                if filename.name() != &self.package_name {
+                    self.mismatched_names
+                        .lock()
+                        .expect("mismatched_names lock is not poisoned")
+                        .insert((filename.name().clone(), self.index.clone()));
+                    continue;
+                }
+
                 // Support resolving as if it were an earlier timestamp, at least as long files have
                 // upload time information.
                 let (excluded, upload_time) = if let Some(included_version_cutoff) =
