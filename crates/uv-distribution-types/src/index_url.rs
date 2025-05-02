@@ -489,9 +489,11 @@ impl<'a> IndexUrls {
     /// If `no_index` was enabled, then this always returns an empty
     /// iterator.
     pub fn indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        let mut seen = FxHashSet::default();
         self.implicit_indexes()
             .chain(self.default_index())
             .filter(|index| !index.explicit)
+            .filter(move |index| seen.insert(index.raw_url())) // Filter out redundant raw URLs
     }
 
     /// Return an iterator over all user-defined [`Index`] entries in order.
