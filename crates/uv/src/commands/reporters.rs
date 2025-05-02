@@ -44,7 +44,7 @@ enum ProgressMode {
     },
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 struct BarState {
     /// The number of bars that precede any download bars (i.e. build/checkout status).
     headers: usize,
@@ -56,6 +56,21 @@ struct BarState {
     size: FxHashMap<usize, Option<u64>>,
     /// A monotonic counter for bar IDs.
     id: usize,
+    /// The maximum length of all bar names encountered.
+    max_len: usize,
+}
+
+impl Default for BarState {
+    fn default() -> Self {
+        Self {
+            headers: 0,
+            sizes: Vec::default(),
+            bars: FxHashMap::default(),
+            size: FxHashMap::default(),
+            id: 0,
+            max_len: 20,
+        }
+    }
 }
 
 impl BarState {
@@ -186,6 +201,22 @@ impl ProgressReporter {
         // Preserve ascending order.
         let position = size.map_or(0, |size| state.sizes.partition_point(|&len| len < size));
         state.sizes.insert(position, size.unwrap_or(0));
+        state.max_len = std::cmp::max(state.max_len, name.len());
+
+        let max_len = state.max_len;
+        for id in 0..state.id {
+            if let Some(progress) = state.bars.get_mut(&id) {
+                progress.set_style(
+                ProgressStyle::with_template(
+                    &format!(
+                        "{{msg:{max_len}.dim}} {{bar:30.green/dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}"
+                    ),
+                )
+                .unwrap()
+                .progress_chars("--"),
+            );
+            }
+        }
 
         let progress = multi_progress.insert(
             // Make sure not to reorder the initial "Preparing..." bar, or any previous bars.
@@ -197,7 +228,9 @@ impl ProgressReporter {
             // We're using binary bytes to match `human_readable_bytes`.
             progress.set_style(
                 ProgressStyle::with_template(
-                    "{msg:10.dim} {bar:30.green/dim} {binary_bytes:>7}/{binary_total_bytes:7}",
+                    &format!(
+                        "{{msg:{}.dim}} {{bar:30.green/dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}", state.max_len
+                    ),
                 )
                 .unwrap()
                 .progress_chars("--"),
