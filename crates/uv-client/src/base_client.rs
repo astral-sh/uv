@@ -4,7 +4,7 @@ use std::fmt::Write;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
-use std::{env, iter};
+use std::{env, io, iter};
 
 use itertools::Itertools;
 use reqwest::{Client, ClientBuilder, Proxy, Response};
@@ -493,18 +493,18 @@ pub fn is_extended_transient_error(err: &dyn Error) -> bool {
         trace!("Considering retry of error: {err:?}");
     }
 
-    if let Some(io) = find_source::<std::io::Error>(&err) {
-        if io.kind() == std::io::ErrorKind::ConnectionReset
-            || io.kind() == std::io::ErrorKind::UnexpectedEof
+    // IO Errors may be nested through custom IO errors.
+    for io_err in find_sources::<io::Error>(&err) {
+        if io_err.kind() == io::ErrorKind::ConnectionReset
+            || io_err.kind() == io::ErrorKind::UnexpectedEof
         {
             trace!("Retrying error: `ConnectionReset` or `UnexpectedEof`");
             return true;
         }
-        trace!("Cannot retry error: not one of `ConnectionReset` or `UnexpectedEof`");
-    } else {
-        trace!("Cannot retry error: not an IO error");
+        trace!("Cannot retry IO error: not one of `ConnectionReset` or `UnexpectedEof`");
     }
 
+    trace!("Cannot retry error: not an IO error");
     false
 }
 
@@ -520,4 +520,13 @@ fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
         cause = err.source();
     }
     None
+}
+
+/// Return all errors in the chain of a specific type.
+///
+/// This handles cases such as nested `io::Error`s.
+///
+/// See <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
+fn find_sources<E: Error + 'static>(orig: &dyn Error) -> impl Iterator<Item = &E> {
+    iter::successors(find_source::<E>(orig), |&err| find_source(err))
 }
