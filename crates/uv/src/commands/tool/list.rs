@@ -87,12 +87,11 @@ pub(crate) async fn list(
                 .iter()
                 .filter(|req| req.name != name)
                 .map(|req| {
-                    let spec = if !req.source.to_string().is_empty() {
+                    if !req.source.to_string().is_empty() {
                         format!("{}{}", req.name, req.source)
                     } else {
                         req.name.to_string()
-                    };
-                    spec
+                    }
                 })
                 .filter(|s| !s.is_empty())
                 .join(", ");
