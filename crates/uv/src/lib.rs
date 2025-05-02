@@ -1258,6 +1258,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::tool_list(
                 args.show_paths,
                 args.show_version_specifiers,
+                args.show_extras,
                 &cache,
                 printer,
             )

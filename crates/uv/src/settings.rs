@@ -772,6 +772,7 @@ impl ToolUpgradeSettings {
 pub(crate) struct ToolListSettings {
     pub(crate) show_paths: bool,
     pub(crate) show_version_specifiers: bool,
+    pub(crate) show_extras: bool,
 }
 
 impl ToolListSettings {
@@ -781,6 +782,7 @@ impl ToolListSettings {
         let ToolListArgs {
             show_paths,
             show_version_specifiers,
+            show_extras,
             python_preference: _,
             no_python_downloads: _,
         } = args;
@@ -788,6 +790,7 @@ impl ToolListSettings {
         Self {
             show_paths,
             show_version_specifiers,
+            show_extras
         }
     }
 }

@@ -337,3 +337,99 @@ fn tool_list_show_version_specifiers() {
     ----- stderr -----
     "###);
 }
+
+#[test]
+fn tool_list_show_extras() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `flask` with extras
+    context
+        .tool_install()
+        .arg("flask")
+        .arg("--with")
+        .arg("requests")
+        .arg("--with")
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Install `black` without extras
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Test with --show-extras
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-extras")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0
+    - black
+    - blackd
+    flask v3.0.2 [extras: requests, black==24.2.0]
+    - flask
+
+    ----- stderr -----
+    "###);
+
+    // Test with both --show-extras and --show-paths
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-extras").arg("--show-paths")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 ([TEMP_DIR]/tools/black)
+    - black ([TEMP_DIR]/bin/black)
+    - blackd ([TEMP_DIR]/bin/blackd)
+    flask v3.0.2 [extras: requests, black==24.2.0] ([TEMP_DIR]/tools/flask)
+    - flask ([TEMP_DIR]/bin/flask)
+
+    ----- stderr -----
+    "###);
+
+    // Test with both --show-extras and --show-version-specifiers
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-extras").arg("--show-version-specifiers")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 [required: ==24.2.0]
+    - black
+    - blackd
+    flask v3.0.2 [extras: requests, black==24.2.0]
+    - flask
+
+    ----- stderr -----
+    "###);
+
+    // Test with all flags
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--show-extras")
+    .arg("--show-version-specifiers")
+    .arg("--show-paths")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 [required: ==24.2.0] ([TEMP_DIR]/tools/black)
+    - black ([TEMP_DIR]/bin/black)
+    - blackd ([TEMP_DIR]/bin/blackd)
+    flask v3.0.2 [extras: requests, black==24.2.0] ([TEMP_DIR]/tools/flask)
+    - flask ([TEMP_DIR]/bin/flask)
+
+    ----- stderr -----
+    "###);
+}
