@@ -21,7 +21,8 @@ fn process_json(data: &serde_json::Value) -> serde_json::Value {
 }
 
 fn main() {
-    let version_metadata = Path::new("download-metadata.json");
+    let version_metadata = "download-metadata.json";
+    println!("cargo::rerun-if-changed={version_metadata}");
     let target = Path::new("src/download-metadata-minified.json");
 
     let json_data: serde_json::Value = serde_json::from_str(
