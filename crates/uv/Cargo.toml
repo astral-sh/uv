@@ -160,15 +160,15 @@ default-tests = [
 ]
 # Introduces a testing dependency on crates.io.
 crates-io = []
-# Introduces a dependency on Git.
+# Introduces a testing dependency on Git.
 git = []
-# Introduces a dependency on PyPI.
+# Introduces a testing dependency on PyPI.
 pypi = []
-# Introduces a dependency on a local Python installation.
+# Introduces a testing dependency on a local Python installation.
 python = []
-# Introduces a dependency on a local Python installation with specific patch versions.
+# Introduces a testing dependency on a local Python installation with specific patch versions.
 python-patch = []
-# Introduces a dependency on managed Python installations.
+# Introduces a testing dependency on managed Python installations.
 python-managed = []
 # Include "slow" test cases.
 slow-tests = []
