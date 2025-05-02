@@ -7641,7 +7641,7 @@ fn add_warn_index_url() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--extra-index-url").arg("https://test.pypi.org/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--extra-index-url").arg("https://test.pypi.org/simple"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7649,11 +7649,11 @@ fn add_warn_index_url() -> Result<()> {
     ----- stderr -----
     warning: Indexes specified via `--extra-index-url` will not be persisted to the `pyproject.toml` file; use `--index` instead.
       × No solution found when resolving dependencies:
-      ╰─▶ Because only idna==2.7 is available and your project depends on idna>=3.6, we can conclude that your project's requirements are unsatisfiable.
+      ╰─▶ Because only idna<3.6 is available and your project depends on idna>=3.6, we can conclude that your project's requirements are unsatisfiable.
 
           hint: `idna` was found on https://test.pypi.org/simple, but not at the requested version (idna>=3.6). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-    "###);
+    ");
 
     Ok(())
 }
