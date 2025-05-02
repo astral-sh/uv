@@ -158,7 +158,7 @@ default-tests = [
     "slow-tests",
     "test-ecosystem"
 ]
-# Introduces a dependency on crates.io.
+# Introduces a testing dependency on crates.io.
 crates-io = []
 # Introduces a dependency on Git.
 git = []
