@@ -136,6 +136,7 @@ fn write_wheel(
 
     let mut files_visited = 0;
     for entry in WalkDir::new(module_root)
+        .sort_by_file_name()
         .into_iter()
         .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
     {
@@ -482,16 +483,20 @@ fn wheel_subdir_from_globs(
 
     wheel_writer.write_directory(target)?;
 
-    for entry in WalkDir::new(src).into_iter().filter_entry(|entry| {
-        // TODO(konsti): This should be prettier.
-        let relative = entry
-            .path()
-            .strip_prefix(src)
-            .expect("walkdir starts with root");
+    for entry in WalkDir::new(src)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_entry(|entry| {
+            // TODO(konsti): This should be prettier.
+            let relative = entry
+                .path()
+                .strip_prefix(src)
+                .expect("walkdir starts with root");
 
-        // Fast path: Don't descend into a directory that can't be included.
-        matcher.match_directory(relative)
-    }) {
+            // Fast path: Don't descend into a directory that can't be included.
+            matcher.match_directory(relative)
+        })
+    {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: src.to_path_buf(),
             err,
@@ -823,6 +828,7 @@ mod test {
         metadata(built_by_uv, metadata_dir.path(), "1.0.0+test").unwrap();
 
         let mut files: Vec<_> = WalkDir::new(metadata_dir.path())
+            .sort_by_file_name()
             .into_iter()
             .map(|entry| {
                 entry

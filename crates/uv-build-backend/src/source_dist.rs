@@ -206,21 +206,25 @@ fn write_source_dist(
     let (include_matcher, exclude_matcher) = source_dist_matcher(&pyproject_toml, settings)?;
 
     let mut files_visited = 0;
-    for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
-        // TODO(konsti): This should be prettier.
-        let relative = entry
-            .path()
-            .strip_prefix(source_tree)
-            .expect("walkdir starts with root");
+    for entry in WalkDir::new(source_tree)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_entry(|entry| {
+            // TODO(konsti): This should be prettier.
+            let relative = entry
+                .path()
+                .strip_prefix(source_tree)
+                .expect("walkdir starts with root");
 
-        // Fast path: Don't descend into a directory that can't be included. This is the most
-        // important performance optimization, it avoids descending into directories such as
-        // `.venv`. While walkdir is generally cheap, we still avoid traversing large data
-        // directories that often exist on the top level of a project. This is especially noticeable
-        // on network file systems with high latencies per operation (while contiguous reading may
-        // still be fast).
-        include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
-    }) {
+            // Fast path: Don't descend into a directory that can't be included. This is the most
+            // important performance optimization, it avoids descending into directories such as
+            // `.venv`. While walkdir is generally cheap, we still avoid traversing large data
+            // directories that often exist on the top level of a project. This is especially noticeable
+            // on network file systems with high latencies per operation (while contiguous reading may
+            // still be fast).
+            include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
+        })
+    {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: source_tree.to_path_buf(),
             err,

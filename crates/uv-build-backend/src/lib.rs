@@ -346,7 +346,6 @@ mod tests {
 
         // Build a wheel from the source dist
         let sdist_tree = TempDir::new().unwrap();
-        let source_dist_path = source_dist_dir.path().join("built_by_uv-0.1.0.tar.gz");
         let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
         let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
         let mut source_dist_contents: Vec<_> = source_dist
@@ -497,7 +496,7 @@ mod tests {
         );
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(&index_wheel_contents)),
-            @"9f662b985a348d5f1561b82b79359d013906955c28b377b41b2f7a7cafb208ee"
+            @"ad9bc0dad97ef3174366e1bd808817a8a89d09695473f309ee835c110f34e8b4"
         );
     }
 

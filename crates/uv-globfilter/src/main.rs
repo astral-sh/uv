@@ -33,6 +33,7 @@ fn main() {
 
     let walkdir_root = args().next().unwrap();
     for entry in WalkDir::new(&walkdir_root)
+        .sort_by_file_name()
         .into_iter()
         .filter_entry(|entry| {
             // TODO(konsti): This should be prettier.
