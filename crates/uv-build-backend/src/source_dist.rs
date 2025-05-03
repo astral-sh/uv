@@ -54,8 +54,6 @@ pub fn list_source_dist(
     let mut files = FileList::new();
     let writer = ListWriter::new(&mut files);
     write_source_dist(source_tree, writer, uv_version)?;
-    // Ensure a deterministic order even when file walking changes
-    files.sort_unstable();
     Ok((filename, files))
 }
 

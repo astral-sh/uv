@@ -87,8 +87,6 @@ pub fn list_wheel(
     let mut files = FileList::new();
     let writer = ListWriter::new(&mut files);
     write_wheel(source_tree, &pyproject_toml, &filename, uv_version, writer)?;
-    // Ensure a deterministic order even when file walking changes
-    files.sort_unstable();
     Ok((filename, files))
 }
 
