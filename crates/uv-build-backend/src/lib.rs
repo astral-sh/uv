@@ -283,8 +283,13 @@ mod tests {
     use tempfile::TempDir;
     use uv_fs::{copy_dir_all, relative_to};
 
-    /// Test that source tree -> source dist -> wheel includes the right files and is stable and
-    /// deterministic in dependent of the build path.
+    /// Tests that builds are stable and include the right files and.
+    ///
+    /// Tests that both source tree -> source dist -> wheel and source tree -> wheel include the
+    /// right files. Also checks that the resulting archives are byte-by-byte identical
+    /// independent of the build path or platform, with the caveat that we cannot serialize an
+    /// executable bit on Window. This ensures reproducible builds and best-effort
+    /// platform-independent deterministic builds.
     #[test]
     fn built_by_uv_building() {
         let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
@@ -308,6 +313,20 @@ mod tests {
             "LICENSE-MIT",
         ] {
             fs_err::copy(built_by_uv.join(dir), src.path().join(dir)).unwrap();
+        }
+
+        // Clear executable bit on Unix to build the same archive between Unix and Windows.
+        // This is a caveat to the determinism of the uv build backend: When a file has the
+        // executable in the source repository, it only has the executable bit on Unix, as Windows
+        // does not have the concept of the executable bit.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let path = src.path().join("scripts").join("whoami.sh");
+            let metadata = fs_err::metadata(&path).unwrap();
+            let mut perms = metadata.permissions();
+            perms.set_mode(perms.mode() & !0o111);
+            fs_err::set_permissions(&path, perms).unwrap();
         }
 
         // Add some files to be excluded
@@ -496,7 +515,7 @@ mod tests {
         );
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(&index_wheel_contents)),
-            @"ad9bc0dad97ef3174366e1bd808817a8a89d09695473f309ee835c110f34e8b4"
+            @"ac3f68ac448023bca26de689d80401bff57f764396ae802bf4666234740ffbe3"
         );
     }
 

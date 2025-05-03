@@ -309,15 +309,22 @@ impl DirectoryWriter for TarGzWriter {
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         let metadata = fs_err::metadata(file)?;
         let mut header = Header::new_gnu();
+        // Preserve the executable bit, especially for scripts
         #[cfg(unix)]
-        {
-            // Preserve for example an executable bit.
-            header.set_mode(std::os::unix::fs::MetadataExt::mode(&metadata));
-        }
+        let executable_bit = {
+            use std::os::unix::fs::PermissionsExt;
+            file.metadata()?.permissions().mode() & 0o111 != 0
+        };
+        // Windows has no executable bit
         #[cfg(not(unix))]
-        {
-            // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
-            // unpacking.
+        let executable_bit = false;
+
+        // Set reasonable defaults to avoid 0o000 permissions, while avoiding adding the exact
+        // filesystem permissions to the archive for reproducibility. Where applicable, the
+        // operating system filters the stored permission by the user's umask when unpacking.
+        if executable_bit {
+            header.set_mode(0o755);
+        } else {
             header.set_mode(0o644);
         }
         header.set_size(metadata.len());
