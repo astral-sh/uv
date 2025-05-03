@@ -278,6 +278,7 @@ mod tests {
     use indoc::indoc;
     use insta::assert_snapshot;
     use itertools::Itertools;
+    use sha2::Digest;
     use std::io::{BufReader, Read};
     use tempfile::TempDir;
     use uv_fs::{copy_dir_all, relative_to};
@@ -336,6 +337,12 @@ mod tests {
         let source_dist_dir = TempDir::new().unwrap();
         let (_name, source_dist_list_files) = list_source_dist(src.path(), "1.0.0+test").unwrap();
         build_source_dist(src.path(), source_dist_dir.path(), "1.0.0+test").unwrap();
+        let source_dist_path = source_dist_dir.path().join("built_by_uv-0.1.0.tar.gz");
+        // Check that the source dist is reproducible across platforms.
+        assert_snapshot!(
+            format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
+            @"dab46bcc4d66960a11cfdc19604512a8e1a3241a67536f7e962166760e9c575c"
+        );
 
         // Build a wheel from the source dist
         let sdist_tree = TempDir::new().unwrap();
@@ -480,11 +487,17 @@ mod tests {
         built_by_uv/cli.py (src/built_by_uv/cli.py)
         "###);
 
-        // Check that we write deterministic wheels.
+        // Check that the wheel is the same for both build paths and reproducible across platforms.
         let wheel_filename = "built_by_uv-0.1.0-py3-none-any.whl";
+        let index_wheel_contents =
+            fs_err::read(indirect_output_dir.path().join(wheel_filename)).unwrap();
         assert_eq!(
             fs_err::read(direct_output_dir.path().join(wheel_filename)).unwrap(),
-            fs_err::read(indirect_output_dir.path().join(wheel_filename)).unwrap()
+            index_wheel_contents
+        );
+        assert_snapshot!(
+            format!("{:x}", sha2::Sha256::digest(&index_wheel_contents)),
+            @"9f662b985a348d5f1561b82b79359d013906955c28b377b41b2f7a7cafb208ee"
         );
     }
 
