@@ -497,6 +497,7 @@ pub fn is_extended_transient_error(err: &dyn Error) -> bool {
     for io_err in find_sources::<io::Error>(&err) {
         if io_err.kind() == io::ErrorKind::ConnectionReset
             || io_err.kind() == io::ErrorKind::UnexpectedEof
+            || io_err.kind() == io::ErrorKind::BrokenPipe
         {
             trace!("Retrying error: `ConnectionReset` or `UnexpectedEof`");
             return true;
