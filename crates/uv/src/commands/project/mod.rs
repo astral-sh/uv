@@ -35,8 +35,8 @@ use uv_python::{
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
-    FlatIndex, Lock, OptionsBuilder, PythonRequirement, RequiresPython, ResolverEnvironment,
-    ResolverOutput,
+    FlatIndex, Lock, OptionsBuilder, Preference, PythonRequirement, RequiresPython,
+    ResolverEnvironment, ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;
@@ -1633,26 +1633,41 @@ pub(crate) async fn resolve_names(
 }
 
 #[derive(Debug, Clone)]
+pub(crate) enum PreferenceSource<'lock> {
+    /// The preferences should be extracted from a lockfile.
+    Lock {
+        lock: &'lock Lock,
+        install_path: &'lock Path,
+    },
+    /// The preferences will be provided directly as [`Preference`] entries.
+    Entries(Vec<Preference>),
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct EnvironmentSpecification<'lock> {
     /// The requirements to include in the environment.
     requirements: RequirementsSpecification,
-    /// The lockfile from which to extract preferences, along with the install path.
-    lock: Option<(&'lock Lock, &'lock Path)>,
+    /// The preferences to respect when resolving.
+    preferences: Option<PreferenceSource<'lock>>,
 }
 
 impl From<RequirementsSpecification> for EnvironmentSpecification<'_> {
     fn from(requirements: RequirementsSpecification) -> Self {
         Self {
             requirements,
-            lock: None,
+            preferences: None,
         }
     }
 }
 
 impl<'lock> EnvironmentSpecification<'lock> {
+    /// Set the [`PreferenceSource`] for the specification.
     #[must_use]
-    pub(crate) fn with_lock(self, lock: Option<(&'lock Lock, &'lock Path)>) -> Self {
-        Self { lock, ..self }
+    pub(crate) fn with_preferences(self, preferences: PreferenceSource<'lock>) -> Self {
+        Self {
+            preferences: Some(preferences),
+            ..self
+        }
     }
 }
 
@@ -1765,17 +1780,22 @@ pub(crate) async fn resolve_environment(
     let upgrade = Upgrade::default();
 
     // If an existing lockfile exists, build up a set of preferences.
-    let LockedRequirements { preferences, git } = spec
-        .lock
-        .map(|(lock, install_path)| read_lock_requirements(lock, install_path, &upgrade))
-        .transpose()?
-        .unwrap_or_default();
+    let preferences = match spec.preferences {
+        Some(PreferenceSource::Lock { lock, install_path }) => {
+            let LockedRequirements { preferences, git } =
+                read_lock_requirements(lock, install_path, &upgrade)?;
 
-    // Populate the Git resolver.
-    for ResolvedRepositoryReference { reference, sha } in git {
-        debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
-        state.git().insert(reference, sha);
-    }
+            // Populate the Git resolver.
+            for ResolvedRepositoryReference { reference, sha } in git {
+                debug!("Inserting Git reference into resolver: `{reference:?}` at `{sha}`");
+                state.git().insert(reference, sha);
+            }
+
+            preferences
+        }
+        Some(PreferenceSource::Entries(entries)) => entries,
+        None => vec![],
+    };
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
