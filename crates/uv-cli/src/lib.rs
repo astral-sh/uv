@@ -591,8 +591,6 @@ pub struct SelfUpdateArgs {
     pub token: Option<String>,
 
     /// Run without performing the update.
-    ///
-    /// uv will report if it would upgrade or not.
     #[arg(long)]
     pub dry_run: bool,
 }

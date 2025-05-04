@@ -91,9 +91,9 @@ pub(crate) async fn self_update(
     updater.configure_version_specifier(update_request.clone());
 
     if dry_run {
-        // TODO: `updater.fetch_release` is not public, we can't say what the latest version is
+        // TODO(charlie): `updater.fetch_release` isn't public, so we can't say what the latest
+        // version is.
         if updater.is_update_needed().await? {
-            // TODO: `updater.version_specifier` is not public
             let version = match update_request {
                 UpdateRequest::Latest | UpdateRequest::LatestMaybePrerelease => {
                     "the latest version".to_string()
@@ -113,7 +113,7 @@ pub(crate) async fn self_update(
                 printer.stderr(),
                 "{}",
                 format_args!(
-                    "Nothing to do. You're on the latest version of uv ({})",
+                    "You're on the latest version of uv ({})",
                     format!("v{}", env!("CARGO_PKG_VERSION")).bold().white()
                 )
             )?;

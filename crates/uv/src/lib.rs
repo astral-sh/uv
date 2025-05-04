@@ -1021,13 +1021,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     dry_run,
                 }),
         }) => commands::self_update(target_version, token, dry_run, printer).await,
-        #[cfg(not(feature = "self-update"))]
-        Commands::Self_(_) => {
-            anyhow::bail!(
-                "uv was installed through an external package manager, and self-update \
-                is not available. Please use your package manager to update uv."
-            );
-        }
         Commands::Self_(SelfNamespace {
             command:
                 SelfCommand::Version {
@@ -1037,6 +1030,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }) => {
             commands::self_version(short, output_format, printer)?;
             Ok(ExitStatus::Success)
+        }
+        #[cfg(not(feature = "self-update"))]
+        Commands::Self_(_) => {
+            anyhow::bail!(
+                "uv was installed through an external package manager, and self-update \
+                is not available. Please use your package manager to update uv."
+            );
         }
         Commands::Version(VersionArgs {
             value,
