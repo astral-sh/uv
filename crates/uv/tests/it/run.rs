@@ -5078,3 +5078,59 @@ fn run_pep723_script_with_constraints_lock() -> Result<()> {
 
     Ok(())
 }
+
+/// If a `--with` requirement overlaps with a non-locked script requirement, respect the environment
+/// site-packages as preferences.
+///
+/// See: <https://github.com/astral-sh/uv/issues/13173>
+#[test]
+fn run_pep723_script_with_constraints() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "iniconfig<2",
+        # ]
+        # ///
+
+        import iniconfig
+
+        print("Hello, world!")
+       "#
+    })?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.10"
+        dependencies = [
+          "iniconfig",
+        ]
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg(".").arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==1.1.1
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + iniconfig==1.1.1
+    ");
+
+    Ok(())
+}
