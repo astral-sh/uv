@@ -1018,8 +1018,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 SelfCommand::Update(SelfUpdateArgs {
                     target_version,
                     token,
+                    dry_run,
                 }),
-        }) => commands::self_update(target_version, token, printer).await,
+        }) => commands::self_update(target_version, token, dry_run, printer).await,
         Commands::Self_(SelfNamespace {
             command:
                 SelfCommand::Version {

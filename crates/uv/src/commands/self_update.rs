@@ -15,6 +15,7 @@ use crate::printer::Printer;
 pub(crate) async fn self_update(
     version: Option<String>,
     token: Option<String>,
+    dry_run: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let mut updater = AxoUpdater::new_for("uv");
@@ -87,7 +88,38 @@ pub(crate) async fn self_update(
         UpdateRequest::Latest
     };
 
-    updater.configure_version_specifier(update_request);
+    updater.configure_version_specifier(update_request.clone());
+
+    if dry_run {
+        // TODO(charlie): `updater.fetch_release` isn't public, so we can't say what the latest
+        // version is.
+        if updater.is_update_needed().await? {
+            let version = match update_request {
+                UpdateRequest::Latest | UpdateRequest::LatestMaybePrerelease => {
+                    "the latest version".to_string()
+                }
+                UpdateRequest::SpecificTag(version) | UpdateRequest::SpecificVersion(version) => {
+                    format!("v{version}")
+                }
+            };
+            writeln!(
+                printer.stderr(),
+                "Would update uv from {} to {}",
+                format!("v{}", env!("CARGO_PKG_VERSION")).bold().white(),
+                version.bold().white(),
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "{}",
+                format_args!(
+                    "You're on the latest version of uv ({})",
+                    format!("v{}", env!("CARGO_PKG_VERSION")).bold().white()
+                )
+            )?;
+        }
+        return Ok(ExitStatus::Success);
+    }
 
     // Run the updater. This involves a network request, since we need to determine the latest
     // available version of uv.

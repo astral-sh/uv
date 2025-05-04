@@ -9371,6 +9371,8 @@ uv self update [OPTIONS] [TARGET_VERSION]
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
+</dd><dt id="uv-self-update--dry-run"><a href="#uv-self-update--dry-run"><code>--dry-run</code></a></dt><dd><p>Run without performing the update</p>
+
 </dd><dt id="uv-self-update--help"><a href="#uv-self-update--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt id="uv-self-update--managed-python"><a href="#uv-self-update--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
