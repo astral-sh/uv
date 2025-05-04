@@ -31,7 +31,7 @@ use uv_python::{
     VersionFileDiscoveryOptions,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_resolver::Lock;
+use uv_resolver::{Installable, Lock};
 use uv_scripts::Pep723Item;
 use uv_settings::PythonInstallMirrors;
 use uv_shell::runnable::WindowsRunnable;
@@ -187,6 +187,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     // Initialize any output reporters.
     let download_reporter = PythonDownloadReporter::single(printer);
 
+    // The lockfile used for the base environment.
+    let mut base_lock: Option<(Lock, PathBuf)> = None;
+
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
     let script_interpreter = if let Some(script) = script {
@@ -318,6 +321,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 Err(err) => return Err(err.into()),
             }
 
+            // Respect any locked preferences when resolving `--with` dependencies downstream.
+            let install_path = target.install_path().to_path_buf();
+            base_lock = Some((lock, install_path));
+
             Some(environment.into_interpreter())
         } else {
             // If no lockfile is found, warn against `--locked` and `--frozen`.
@@ -442,9 +449,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     } else {
         None
     };
-
-    // The lockfile used for the base environment.
-    let mut lock: Option<(Lock, PathBuf)> = None;
 
     // Discover and sync the base environment.
     let workspace_cache = WorkspaceCache::default();
@@ -659,7 +663,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // If we're not syncing, we should still attempt to respect the locked preferences
                 // in any `--with` requirements.
                 if !isolated && !requirements.is_empty() {
-                    lock = LockTarget::from(project.workspace())
+                    base_lock = LockTarget::from(project.workspace())
                         .read()
                         .await
                         .ok()
@@ -802,7 +806,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Err(err) => return Err(err.into()),
                 }
 
-                lock = Some((
+                base_lock = Some((
                     result.into_lock(),
                     project.workspace().install_path().to_owned(),
                 ));
@@ -901,13 +905,14 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             debug!("Syncing ephemeral requirements");
 
             // Read the build constraints from the lock file.
-            let build_constraints = lock
+            let build_constraints = base_lock
                 .as_ref()
                 .map(|(lock, path)| lock.build_constraints(path));
 
             let result = CachedEnvironment::from_spec(
                 EnvironmentSpecification::from(spec).with_lock(
-                    lock.as_ref()
+                    base_lock
+                        .as_ref()
                         .map(|(lock, install_path)| (lock, install_path.as_ref())),
                 ),
                 build_constraints.unwrap_or_default(),
