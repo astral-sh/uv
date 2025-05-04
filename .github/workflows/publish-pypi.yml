@@ -12,8 +12,8 @@ on:
         type: string
 
 jobs:
-  pypi-publish:
-    name: Upload to PyPI
+  pypi-publish-uv:
+    name: Upload uv to PyPI
     runs-on: ubuntu-latest
     environment:
       name: release
@@ -22,11 +22,30 @@ jobs:
       id-token: write
     steps:
       - name: "Install uv"
-        uses: astral-sh/setup-uv@v4
-      - uses: actions/download-artifact@v4
+        uses: astral-sh/setup-uv@c7f87aa956e4c323abf06d5dec078e358f6b4d04 # v6.0.0
+      - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
-          pattern: wheels-*
-          path: wheels
+          pattern: wheels_uv-*
+          path: wheels_uv
           merge-multiple: true
-      - name: Publish to PyPi
-        run: uv publish -v wheels/*
+      - name: Publish to PyPI
+        run: uv publish -v wheels_uv/*
+
+  pypi-publish-uv-build:
+    name: Upload uv-build to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+    permissions:
+      # For PyPI's trusted publishing.
+      id-token: write
+    steps:
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@c7f87aa956e4c323abf06d5dec078e358f6b4d04 # v6.0.0
+      - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          pattern: wheels_uv_build-*
+          path: wheels_uv_build
+          merge-multiple: true
+      - name: Publish to PyPI
+        run: uv publish -v wheels_uv_build/*

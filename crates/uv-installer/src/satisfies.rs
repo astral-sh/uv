@@ -6,24 +6,23 @@ use url::Url;
 
 use uv_cache_info::CacheInfo;
 use uv_cache_key::{CanonicalUrl, RepositoryUrl};
-use uv_distribution_types::{InstalledDirectUrlDist, InstalledDist};
-use uv_pypi_types::{DirInfo, DirectUrl, RequirementSource, VcsInfo, VcsKind};
+use uv_distribution_types::{InstalledDirectUrlDist, InstalledDist, RequirementSource};
+use uv_git_types::GitOid;
+use uv_pypi_types::{DirInfo, DirectUrl, VcsInfo, VcsKind};
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum RequirementSatisfaction {
     Mismatch,
     Satisfied,
     OutOfDate,
+    CacheInvalid,
 }
 
 impl RequirementSatisfaction {
     /// Returns true if a requirement is satisfied by an installed distribution.
     ///
     /// Returns an error if IO fails during a freshness check for a local path.
-    pub(crate) fn check(
-        distribution: &InstalledDist,
-        source: &RequirementSource,
-    ) -> anyhow::Result<Self> {
+    pub(crate) fn check(distribution: &InstalledDist, source: &RequirementSource) -> Self {
         trace!(
             "Comparing installed with source: {:?} {:?}",
             distribution,
@@ -34,9 +33,9 @@ impl RequirementSatisfaction {
             // If the requirement comes from a registry, check by name.
             RequirementSource::Registry { specifier, .. } => {
                 if specifier.contains(distribution.version()) {
-                    return Ok(Self::Satisfied);
+                    return Self::Satisfied;
                 }
-                Ok(Self::Mismatch)
+                Self::Mismatch
             }
             RequirementSource::Url {
                 // We use the location since `direct_url.json` also stores this URL, e.g.
@@ -54,7 +53,7 @@ impl RequirementSatisfaction {
                     ..
                 }) = &distribution
                 else {
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 };
                 let DirectUrl::ArchiveUrl {
                     url: installed_url,
@@ -62,61 +61,69 @@ impl RequirementSatisfaction {
                     subdirectory: installed_subdirectory,
                 } = direct_url.as_ref()
                 else {
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 };
 
                 if *editable {
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 }
 
                 if requested_subdirectory != installed_subdirectory {
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 }
 
                 if !CanonicalUrl::parse(installed_url)
                     .is_ok_and(|installed_url| installed_url == CanonicalUrl::new(requested_url))
                 {
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 }
 
                 // If the requirement came from a local path, check freshness.
                 if requested_url.scheme() == "file" {
                     if let Ok(archive) = requested_url.to_file_path() {
                         let Some(cache_info) = cache_info.as_ref() else {
-                            return Ok(Self::OutOfDate);
+                            return Self::OutOfDate;
                         };
-                        if *cache_info != CacheInfo::from_path(&archive)? {
-                            return Ok(Self::OutOfDate);
+                        match CacheInfo::from_path(&archive) {
+                            Ok(read_cache_info) => {
+                                if *cache_info != read_cache_info {
+                                    return Self::OutOfDate;
+                                }
+                            }
+                            Err(err) => {
+                                debug!(
+                                    "Failed to read cached requirement for: {distribution} ({err})"
+                                );
+                                return Self::CacheInvalid;
+                            }
                         }
                     }
                 }
 
                 // Otherwise, assume the requirement is up-to-date.
-                Ok(Self::Satisfied)
+                Self::Satisfied
             }
             RequirementSource::Git {
                 url: _,
-                repository: requested_repository,
-                reference: requested_reference,
-                precise: requested_precise,
+                git: requested_git,
                 subdirectory: requested_subdirectory,
             } => {
                 let InstalledDist::Url(InstalledDirectUrlDist { direct_url, .. }) = &distribution
                 else {
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 };
                 let DirectUrl::VcsUrl {
                     url: installed_url,
                     vcs_info:
                         VcsInfo {
                             vcs: VcsKind::Git,
-                            requested_revision: installed_reference,
-                            commit_id: _,
+                            requested_revision: _,
+                            commit_id: installed_precise,
                         },
                     subdirectory: installed_subdirectory,
                 } = direct_url.as_ref()
                 else {
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 };
 
                 if requested_subdirectory != installed_subdirectory {
@@ -124,30 +131,34 @@ impl RequirementSatisfaction {
                         "Subdirectory mismatch: {:?} vs. {:?}",
                         installed_subdirectory, requested_subdirectory
                     );
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 }
 
                 if !RepositoryUrl::parse(installed_url).is_ok_and(|installed_url| {
-                    installed_url == RepositoryUrl::new(requested_repository)
+                    installed_url == RepositoryUrl::new(requested_git.repository())
                 }) {
                     debug!(
                         "Repository mismatch: {:?} vs. {:?}",
-                        installed_url, requested_repository
+                        installed_url,
+                        requested_git.repository()
                     );
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 }
 
-                if installed_reference.as_deref() != requested_reference.as_str()
-                    && installed_reference != &requested_precise.map(|git_sha| git_sha.to_string())
+                // TODO(charlie): It would be more consistent for us to compare the requested
+                // revisions here.
+                if installed_precise.as_deref()
+                    != requested_git.precise().as_ref().map(GitOid::as_str)
                 {
                     debug!(
-                        "Reference mismatch: {:?} vs. {:?} and {:?}",
-                        installed_reference, requested_reference, requested_precise
+                        "Precise mismatch: {:?} vs. {:?}",
+                        installed_precise,
+                        requested_git.precise()
                     );
-                    return Ok(Self::OutOfDate);
+                    return Self::OutOfDate;
                 }
 
-                Ok(Self::Satisfied)
+                Self::Satisfied
             }
             RequirementSource::Path {
                 install_path: requested_path,
@@ -160,7 +171,7 @@ impl RequirementSatisfaction {
                     ..
                 }) = &distribution
                 else {
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 };
                 let DirectUrl::ArchiveUrl {
                     url: installed_url,
@@ -168,17 +179,17 @@ impl RequirementSatisfaction {
                     subdirectory: None,
                 } = direct_url.as_ref()
                 else {
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 };
 
                 let Some(installed_path) = Url::parse(installed_url)
                     .ok()
                     .and_then(|url| url.to_file_path().ok())
                 else {
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 };
 
-                if !(*requested_path == installed_path
+                if !(**requested_path == installed_path
                     || is_same_file(requested_path, &installed_path).unwrap_or(false))
                 {
                     trace!(
@@ -186,17 +197,25 @@ impl RequirementSatisfaction {
                         requested_path,
                         installed_path,
                     );
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 }
 
                 let Some(cache_info) = cache_info.as_ref() else {
-                    return Ok(Self::OutOfDate);
+                    return Self::OutOfDate;
                 };
-                if *cache_info != CacheInfo::from_path(requested_path)? {
-                    return Ok(Self::OutOfDate);
+                match CacheInfo::from_path(requested_path) {
+                    Ok(read_cache_info) => {
+                        if *cache_info != read_cache_info {
+                            return Self::OutOfDate;
+                        }
+                    }
+                    Err(err) => {
+                        debug!("Failed to read cached requirement for: {distribution} ({err})");
+                        return Self::CacheInvalid;
+                    }
                 }
 
-                Ok(Self::Satisfied)
+                Self::Satisfied
             }
             RequirementSource::Directory {
                 install_path: requested_path,
@@ -210,7 +229,7 @@ impl RequirementSatisfaction {
                     ..
                 }) = &distribution
                 else {
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 };
                 let DirectUrl::LocalDirectory {
                     url: installed_url,
@@ -218,9 +237,10 @@ impl RequirementSatisfaction {
                         DirInfo {
                             editable: installed_editable,
                         },
+                    subdirectory: None,
                 } = direct_url.as_ref()
                 else {
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 };
 
                 if *requested_editable != installed_editable.unwrap_or_default() {
@@ -229,17 +249,17 @@ impl RequirementSatisfaction {
                         *requested_editable,
                         installed_editable.unwrap_or_default()
                     );
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 }
 
                 let Some(installed_path) = Url::parse(installed_url)
                     .ok()
                     .and_then(|url| url.to_file_path().ok())
                 else {
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 };
 
-                if !(*requested_path == installed_path
+                if !(**requested_path == installed_path
                     || is_same_file(requested_path, &installed_path).unwrap_or(false))
                 {
                     trace!(
@@ -247,17 +267,25 @@ impl RequirementSatisfaction {
                         requested_path,
                         installed_path,
                     );
-                    return Ok(Self::Mismatch);
+                    return Self::Mismatch;
                 }
 
                 let Some(cache_info) = cache_info.as_ref() else {
-                    return Ok(Self::OutOfDate);
+                    return Self::OutOfDate;
                 };
-                if *cache_info != CacheInfo::from_path(requested_path)? {
-                    return Ok(Self::OutOfDate);
+                match CacheInfo::from_path(requested_path) {
+                    Ok(read_cache_info) => {
+                        if *cache_info != read_cache_info {
+                            return Self::OutOfDate;
+                        }
+                    }
+                    Err(err) => {
+                        debug!("Failed to read cached requirement for: {distribution} ({err})");
+                        return Self::CacheInvalid;
+                    }
                 }
 
-                Ok(Self::Satisfied)
+                Self::Satisfied
             }
         }
     }

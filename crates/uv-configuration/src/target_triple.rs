@@ -24,168 +24,207 @@ pub enum TargetTriple {
 
     /// A 64-bit x86 Windows target.
     #[cfg_attr(feature = "clap", value(name = "x86_64-pc-windows-msvc"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-pc-windows-msvc"))]
+    #[serde(rename = "x86_64-pc-windows-msvc")]
+    #[serde(alias = "x8664-pc-windows-msvc")]
     X8664PcWindowsMsvc,
 
     /// A 32-bit x86 Windows target.
     #[cfg_attr(feature = "clap", value(name = "i686-pc-windows-msvc"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "i686-pc-windows-msvc"))]
+    #[serde(rename = "i686-pc-windows-msvc")]
     I686PcWindowsMsvc,
 
     /// An x86 Linux target. Equivalent to `x86_64-manylinux_2_17`.
     #[cfg_attr(feature = "clap", value(name = "x86_64-unknown-linux-gnu"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-unknown-linux-gnu"))]
+    #[serde(rename = "x86_64-unknown-linux-gnu")]
+    #[serde(alias = "x8664-unknown-linux-gnu")]
     X8664UnknownLinuxGnu,
 
     /// An ARM-based macOS target, as seen on Apple Silicon devices
     ///
-    /// By default, assumes the least-recent, non-EOL macOS version (12.0), but respects
+    /// By default, assumes the least-recent, non-EOL macOS version (13.0), but respects
     /// the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.
     #[cfg_attr(feature = "clap", value(name = "aarch64-apple-darwin"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-apple-darwin"))]
+    #[serde(rename = "aarch64-apple-darwin")]
     Aarch64AppleDarwin,
 
     /// An x86 macOS target.
     ///
-    /// By default, assumes the least-recent, non-EOL macOS version (12.0), but respects
+    /// By default, assumes the least-recent, non-EOL macOS version (13.0), but respects
     /// the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.
     #[cfg_attr(feature = "clap", value(name = "x86_64-apple-darwin"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-apple-darwin"))]
+    #[serde(rename = "x86_64-apple-darwin")]
+    #[serde(alias = "x8664-apple-darwin")]
     X8664AppleDarwin,
 
     /// An ARM64 Linux target. Equivalent to `aarch64-manylinux_2_17`.
     #[cfg_attr(feature = "clap", value(name = "aarch64-unknown-linux-gnu"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-unknown-linux-gnu"))]
+    #[serde(rename = "aarch64-unknown-linux-gnu")]
     Aarch64UnknownLinuxGnu,
 
     /// An ARM64 Linux target.
     #[cfg_attr(feature = "clap", value(name = "aarch64-unknown-linux-musl"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-unknown-linux-musl"))]
+    #[serde(rename = "aarch64-unknown-linux-musl")]
     Aarch64UnknownLinuxMusl,
 
     /// An `x86_64` Linux target.
     #[cfg_attr(feature = "clap", value(name = "x86_64-unknown-linux-musl"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-unknown-linux-musl"))]
+    #[serde(rename = "x86_64-unknown-linux-musl")]
+    #[serde(alias = "x8664-unknown-linux-musl")]
     X8664UnknownLinuxMusl,
+
+    /// An `x86_64` target for the `manylinux2014` platform. Equivalent to `x86_64-manylinux_2_17`.
+    #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux2014"))]
+    #[serde(rename = "x86_64-manylinux2014")]
+    #[serde(alias = "x8664-manylinux2014")]
+    X8664Manylinux2014,
 
     /// An `x86_64` target for the `manylinux_2_17` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_17"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_17"))]
+    #[serde(rename = "x86_64-manylinux_2_17")]
+    #[serde(alias = "x8664-manylinux217")]
     X8664Manylinux217,
 
     /// An `x86_64` target for the `manylinux_2_28` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_28"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_28"))]
+    #[serde(rename = "x86_64-manylinux_2_28")]
+    #[serde(alias = "x8664-manylinux228")]
     X8664Manylinux228,
 
     /// An `x86_64` target for the `manylinux_2_31` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_31"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_31"))]
+    #[serde(rename = "x86_64-manylinux_2_31")]
+    #[serde(alias = "x8664-manylinux231")]
     X8664Manylinux231,
 
     /// An `x86_64` target for the `manylinux_2_32` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_32"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_32"))]
+    #[serde(rename = "x86_64-manylinux_2_32")]
+    #[serde(alias = "x8664-manylinux232")]
     X8664Manylinux232,
 
     /// An `x86_64` target for the `manylinux_2_33` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_33"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_33"))]
+    #[serde(rename = "x86_64-manylinux_2_33")]
+    #[serde(alias = "x8664-manylinux233")]
     X8664Manylinux233,
 
     /// An `x86_64` target for the `manylinux_2_34` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_34"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_34"))]
+    #[serde(rename = "x86_64-manylinux_2_34")]
+    #[serde(alias = "x8664-manylinux234")]
     X8664Manylinux234,
 
     /// An `x86_64` target for the `manylinux_2_35` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_35"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_35"))]
+    #[serde(rename = "x86_64-manylinux_2_35")]
+    #[serde(alias = "x8664-manylinux235")]
     X8664Manylinux235,
 
     /// An `x86_64` target for the `manylinux_2_36` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_36"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_36"))]
+    #[serde(rename = "x86_64-manylinux_2_36")]
+    #[serde(alias = "x8664-manylinux236")]
     X8664Manylinux236,
 
     /// An `x86_64` target for the `manylinux_2_37` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_37"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_37"))]
+    #[serde(rename = "x86_64-manylinux_2_37")]
+    #[serde(alias = "x8664-manylinux237")]
     X8664Manylinux237,
 
     /// An `x86_64` target for the `manylinux_2_38` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_38"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_38"))]
+    #[serde(rename = "x86_64-manylinux_2_38")]
+    #[serde(alias = "x8664-manylinux238")]
     X8664Manylinux238,
 
     /// An `x86_64` target for the `manylinux_2_39` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_39"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_39"))]
+    #[serde(rename = "x86_64-manylinux_2_39")]
+    #[serde(alias = "x8664-manylinux239")]
     X8664Manylinux239,
 
     /// An `x86_64` target for the `manylinux_2_40` platform.
     #[cfg_attr(feature = "clap", value(name = "x86_64-manylinux_2_40"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "x86_64-manylinux_2_40"))]
+    #[serde(rename = "x86_64-manylinux_2_40")]
+    #[serde(alias = "x8664-manylinux240")]
     X8664Manylinux240,
+
+    /// An ARM64 target for the `manylinux2014` platform. Equivalent to `aarch64-manylinux_2_17`.
+    #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux2014"))]
+    #[serde(rename = "aarch64-manylinux2014")]
+    Aarch64Manylinux2014,
 
     /// An ARM64 target for the `manylinux_2_17` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_17"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_17"))]
+    #[serde(rename = "aarch64-manylinux_2_17")]
+    #[serde(alias = "aarch64-manylinux217")]
     Aarch64Manylinux217,
 
     /// An ARM64 target for the `manylinux_2_28` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_28"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_28"))]
+    #[serde(rename = "aarch64-manylinux_2_28")]
+    #[serde(alias = "aarch64-manylinux228")]
     Aarch64Manylinux228,
 
     /// An ARM64 target for the `manylinux_2_31` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_31"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_31"))]
+    #[serde(rename = "aarch64-manylinux_2_31")]
+    #[serde(alias = "aarch64-manylinux231")]
     Aarch64Manylinux231,
 
     /// An ARM64 target for the `manylinux_2_32` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_32"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_32"))]
+    #[serde(rename = "aarch64-manylinux_2_32")]
+    #[serde(alias = "aarch64-manylinux232")]
     Aarch64Manylinux232,
 
     /// An ARM64 target for the `manylinux_2_33` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_33"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_33"))]
+    #[serde(rename = "aarch64-manylinux_2_33")]
+    #[serde(alias = "aarch64-manylinux233")]
     Aarch64Manylinux233,
 
     /// An ARM64 target for the `manylinux_2_34` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_34"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_34"))]
+    #[serde(rename = "aarch64-manylinux_2_34")]
+    #[serde(alias = "aarch64-manylinux234")]
     Aarch64Manylinux234,
 
     /// An ARM64 target for the `manylinux_2_35` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_35"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_35"))]
+    #[serde(rename = "aarch64-manylinux_2_35")]
+    #[serde(alias = "aarch64-manylinux235")]
     Aarch64Manylinux235,
 
     /// An ARM64 target for the `manylinux_2_36` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_36"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_36"))]
+    #[serde(rename = "aarch64-manylinux_2_36")]
+    #[serde(alias = "aarch64-manylinux236")]
     Aarch64Manylinux236,
 
     /// An ARM64 target for the `manylinux_2_37` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_37"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_37"))]
+    #[serde(rename = "aarch64-manylinux_2_37")]
+    #[serde(alias = "aarch64-manylinux237")]
     Aarch64Manylinux237,
 
     /// An ARM64 target for the `manylinux_2_38` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_38"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_38"))]
+    #[serde(rename = "aarch64-manylinux_2_38")]
+    #[serde(alias = "aarch64-manylinux238")]
     Aarch64Manylinux238,
 
     /// An ARM64 target for the `manylinux_2_39` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_39"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_39"))]
+    #[serde(rename = "aarch64-manylinux_2_39")]
+    #[serde(alias = "aarch64-manylinux239")]
     Aarch64Manylinux239,
 
     /// An ARM64 target for the `manylinux_2_40` platform.
     #[cfg_attr(feature = "clap", value(name = "aarch64-manylinux_2_40"))]
-    #[cfg_attr(feature = "schemars", schemars(rename = "aarch64-manylinux_2_40"))]
+    #[serde(rename = "aarch64-manylinux_2_40")]
+    #[serde(alias = "aarch64-manylinux240")]
     Aarch64Manylinux240,
 }
 
@@ -202,7 +241,7 @@ impl TargetTriple {
                 Arch::X86_64,
             ),
             Self::Macos | Self::Aarch64AppleDarwin => {
-                let (major, minor) = macos_deployment_target().map_or((12, 0), |(major, minor)| {
+                let (major, minor) = macos_deployment_target().map_or((13, 0), |(major, minor)| {
                     debug!("Found macOS deployment target: {}.{}", major, minor);
                     (major, minor)
                 });
@@ -210,7 +249,7 @@ impl TargetTriple {
             }
             Self::I686PcWindowsMsvc => Platform::new(Os::Windows, Arch::X86),
             Self::X8664AppleDarwin => {
-                let (major, minor) = macos_deployment_target().map_or((12, 0), |(major, minor)| {
+                let (major, minor) = macos_deployment_target().map_or((13, 0), |(major, minor)| {
                     debug!("Found macOS deployment target: {}.{}", major, minor);
                     (major, minor)
                 });
@@ -229,6 +268,13 @@ impl TargetTriple {
             Self::X8664UnknownLinuxMusl => {
                 Platform::new(Os::Musllinux { major: 1, minor: 2 }, Arch::X86_64)
             }
+            Self::X8664Manylinux2014 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 17,
+                },
+                Arch::X86_64,
+            ),
             Self::X8664Manylinux217 => Platform::new(
                 Os::Manylinux {
                     major: 2,
@@ -312,6 +358,13 @@ impl TargetTriple {
                     minor: 40,
                 },
                 Arch::X86_64,
+            ),
+            Self::Aarch64Manylinux2014 => Platform::new(
+                Os::Manylinux {
+                    major: 2,
+                    minor: 17,
+                },
+                Arch::Aarch64,
             ),
             Self::Aarch64Manylinux217 => Platform::new(
                 Os::Manylinux {
@@ -411,6 +464,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => "aarch64",
             Self::Aarch64UnknownLinuxMusl => "aarch64",
             Self::X8664UnknownLinuxMusl => "x86_64",
+            Self::X8664Manylinux2014 => "x86_64",
             Self::X8664Manylinux217 => "x86_64",
             Self::X8664Manylinux228 => "x86_64",
             Self::X8664Manylinux231 => "x86_64",
@@ -423,6 +477,7 @@ impl TargetTriple {
             Self::X8664Manylinux238 => "x86_64",
             Self::X8664Manylinux239 => "x86_64",
             Self::X8664Manylinux240 => "x86_64",
+            Self::Aarch64Manylinux2014 => "aarch64",
             Self::Aarch64Manylinux217 => "aarch64",
             Self::Aarch64Manylinux228 => "aarch64",
             Self::Aarch64Manylinux231 => "aarch64",
@@ -449,6 +504,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => "Linux",
             Self::Aarch64UnknownLinuxMusl => "Linux",
             Self::X8664UnknownLinuxMusl => "Linux",
+            Self::X8664Manylinux2014 => "Linux",
             Self::X8664Manylinux217 => "Linux",
             Self::X8664Manylinux228 => "Linux",
             Self::X8664Manylinux231 => "Linux",
@@ -461,6 +517,7 @@ impl TargetTriple {
             Self::X8664Manylinux238 => "Linux",
             Self::X8664Manylinux239 => "Linux",
             Self::X8664Manylinux240 => "Linux",
+            Self::Aarch64Manylinux2014 => "Linux",
             Self::Aarch64Manylinux217 => "Linux",
             Self::Aarch64Manylinux228 => "Linux",
             Self::Aarch64Manylinux231 => "Linux",
@@ -487,6 +544,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => "",
             Self::Aarch64UnknownLinuxMusl => "",
             Self::X8664UnknownLinuxMusl => "",
+            Self::X8664Manylinux2014 => "",
             Self::X8664Manylinux217 => "",
             Self::X8664Manylinux228 => "",
             Self::X8664Manylinux231 => "",
@@ -499,6 +557,7 @@ impl TargetTriple {
             Self::X8664Manylinux238 => "",
             Self::X8664Manylinux239 => "",
             Self::X8664Manylinux240 => "",
+            Self::Aarch64Manylinux2014 => "",
             Self::Aarch64Manylinux217 => "",
             Self::Aarch64Manylinux228 => "",
             Self::Aarch64Manylinux231 => "",
@@ -525,6 +584,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => "",
             Self::Aarch64UnknownLinuxMusl => "",
             Self::X8664UnknownLinuxMusl => "",
+            Self::X8664Manylinux2014 => "",
             Self::X8664Manylinux217 => "",
             Self::X8664Manylinux228 => "",
             Self::X8664Manylinux231 => "",
@@ -537,6 +597,7 @@ impl TargetTriple {
             Self::X8664Manylinux238 => "",
             Self::X8664Manylinux239 => "",
             Self::X8664Manylinux240 => "",
+            Self::Aarch64Manylinux2014 => "",
             Self::Aarch64Manylinux217 => "",
             Self::Aarch64Manylinux228 => "",
             Self::Aarch64Manylinux231 => "",
@@ -563,6 +624,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => "posix",
             Self::Aarch64UnknownLinuxMusl => "posix",
             Self::X8664UnknownLinuxMusl => "posix",
+            Self::X8664Manylinux2014 => "posix",
             Self::X8664Manylinux217 => "posix",
             Self::X8664Manylinux228 => "posix",
             Self::X8664Manylinux231 => "posix",
@@ -575,6 +637,7 @@ impl TargetTriple {
             Self::X8664Manylinux238 => "posix",
             Self::X8664Manylinux239 => "posix",
             Self::X8664Manylinux240 => "posix",
+            Self::Aarch64Manylinux2014 => "posix",
             Self::Aarch64Manylinux217 => "posix",
             Self::Aarch64Manylinux228 => "posix",
             Self::Aarch64Manylinux231 => "posix",
@@ -601,6 +664,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => "linux",
             Self::Aarch64UnknownLinuxMusl => "linux",
             Self::X8664UnknownLinuxMusl => "linux",
+            Self::X8664Manylinux2014 => "linux",
             Self::X8664Manylinux217 => "linux",
             Self::X8664Manylinux228 => "linux",
             Self::X8664Manylinux231 => "linux",
@@ -613,6 +677,7 @@ impl TargetTriple {
             Self::X8664Manylinux238 => "linux",
             Self::X8664Manylinux239 => "linux",
             Self::X8664Manylinux240 => "linux",
+            Self::Aarch64Manylinux2014 => "linux",
             Self::Aarch64Manylinux217 => "linux",
             Self::Aarch64Manylinux228 => "linux",
             Self::Aarch64Manylinux231 => "linux",
@@ -639,6 +704,7 @@ impl TargetTriple {
             Self::Aarch64UnknownLinuxGnu => true,
             Self::Aarch64UnknownLinuxMusl => true,
             Self::X8664UnknownLinuxMusl => true,
+            Self::X8664Manylinux2014 => true,
             Self::X8664Manylinux217 => true,
             Self::X8664Manylinux228 => true,
             Self::X8664Manylinux231 => true,
@@ -651,6 +717,7 @@ impl TargetTriple {
             Self::X8664Manylinux238 => true,
             Self::X8664Manylinux239 => true,
             Self::X8664Manylinux240 => true,
+            Self::Aarch64Manylinux2014 => true,
             Self::Aarch64Manylinux217 => true,
             Self::Aarch64Manylinux228 => true,
             Self::Aarch64Manylinux231 => true,

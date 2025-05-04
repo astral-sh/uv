@@ -22,7 +22,7 @@ Applications are the default target for `uv init`, but can also be specified wit
 $ uv init example-app
 ```
 
-The project includes a `pyproject.toml`, a sample file (`hello.py`), a readme, and a Python version
+The project includes a `pyproject.toml`, a sample file (`main.py`), a readme, and a Python version
 pin file (`.python-version`).
 
 ```console
@@ -30,9 +30,13 @@ $ tree example-app
 example-app
 ├── .python-version
 ├── README.md
-├── hello.py
+├── main.py
 └── pyproject.toml
 ```
+
+!!! note
+
+    Prior to v0.6.0, uv created a file named `hello.py` instead of `main.py`.
 
 The `pyproject.toml` includes basic metadata. It does not include a build system, it is not a
 [package](./config.md#project-packaging) and will not be installed into the environment:
@@ -49,7 +53,7 @@ dependencies = []
 
 The sample file defines a `main` function with some standard boilerplate:
 
-```python title="hello.py"
+```python title="main.py"
 def main():
     print("Hello from example-app!")
 
@@ -61,7 +65,8 @@ if __name__ == "__main__":
 Python files can be executed with `uv run`:
 
 ```console
-$ uv run hello.py
+$ cd example-app
+$ uv run main.py
 Hello from example-project!
 ```
 
@@ -86,7 +91,7 @@ example-pkg
 ├── README.md
 ├── pyproject.toml
 └── src
-    └── example_packaged_app
+    └── example_pkg
         └── __init__.py
 ```
 
@@ -103,7 +108,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-example-pkg = "example_packaged_app:main"
+example-pkg = "example_pkg:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -126,7 +131,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-example-pkg = "example_packaged_app:main"
+example-pkg = "example_pkg:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -136,7 +141,8 @@ build-backend = "hatchling.build"
 The command can be executed with `uv run`:
 
 ```console
-$ uv run --directory example-pkg example-pkg
+$ cd example-pkg
+$ uv run example-pkg
 Hello from example-pkg!
 ```
 
@@ -209,7 +215,8 @@ def hello() -> str:
 And you can import and execute it using `uv run`:
 
 ```console
-$ uv run --directory example-lib python -c "import example_lib; print(example_lib.hello())"
+$ cd example-lib
+$ uv run python -c "import example_lib; print(example_lib.hello())"
 Hello from example-lib!
 ```
 
@@ -279,6 +286,7 @@ And the Python module imports it:
 ```python title="src/example_ext/__init__.py"
 from example_ext._core import hello_from_bin
 
+
 def main() -> None:
     print(hello_from_bin())
 ```
@@ -286,7 +294,8 @@ def main() -> None:
 The command can be executed with `uv run`:
 
 ```console
-$ uv run --directory example-ext example-ext
+$ cd example-ext
+$ uv run example-ext
 Hello from example-ext!
 ```
 
@@ -294,3 +303,39 @@ Hello from example-ext!
 
     Changes to the extension code in `lib.rs` or `main.cpp` will require running `--reinstall` to
     rebuild them.
+
+## Creating a minimal project
+
+If you only want to create a `pyproject.toml`, use the `--bare` option:
+
+```console
+$ uv init example --bare
+```
+
+uv will skip creating a Python version pin file, a README, and any source directories or files.
+Additionally, uv will not initialize a version control system (i.e., `git`).
+
+```console
+$ tree example-bare
+example-bare
+└── pyproject.toml
+```
+
+uv will also not add extra metadata to the `pyproject.toml`, such as the `description` or `authors`.
+
+```toml
+[project]
+name = "example"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+```
+
+The `--bare` option can be used with other options like `--lib` or `--build-backend` — in these
+cases uv will still configure a build system but will not create the expected file structure.
+
+When `--bare` is used, additional features can still be used opt-in:
+
+```console
+$ uv init example --bare --description "Hello world" --author-from git --vcs git --python-pin
+```

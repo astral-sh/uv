@@ -11,5 +11,4 @@ doctest = false
 workspace = true
 
 [dependencies]
-ctrlc = { workspace = true }
 console = { workspace = true }

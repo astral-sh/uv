@@ -3,19 +3,20 @@
 use std::io;
 use std::path::PathBuf;
 
-use platform_info::PlatformInfoError;
 use thiserror::Error;
-use zip::result::ZipError;
 
-pub use uninstall::{uninstall_egg, uninstall_legacy_editable, uninstall_wheel, Uninstall};
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_platform_tags::{Arch, Os};
 use uv_pypi_types::Scheme;
+
+pub use install::install_wheel;
+pub use linker::{LinkMode, Locks};
+pub use uninstall::{uninstall_egg, uninstall_legacy_editable, uninstall_wheel, Uninstall};
 pub use wheel::{parse_wheel_file, read_record_file, LibKind};
 
-pub mod linker;
+mod install;
+mod linker;
 mod record;
 mod script;
 mod uninstall;
@@ -47,20 +48,10 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
-    /// Tags/metadata didn't match platform
-    #[error("The wheel is incompatible with the current platform {os} {arch}")]
-    IncompatibleWheel { os: Os, arch: Arch },
     /// The wheel is broken
     #[error("The wheel is invalid: {0}")]
     InvalidWheel(String),
     /// Doesn't follow file name schema
-    #[error(transparent)]
-    InvalidWheelFileName(#[from] uv_distribution_filename::WheelFilenameError),
-    /// The caller must add the name of the zip file (See note on type).
-    #[error("Failed to read {0} from zip file")]
-    Zip(String, #[source] ZipError),
-    #[error("Failed to run Python subcommand")]
-    PythonSubcommand(#[source] io::Error),
     #[error("Failed to move data files")]
     WalkDir(#[from] walkdir::Error),
     #[error("RECORD file doesn't match wheel contents: {0}")]
@@ -75,20 +66,12 @@ pub enum Error {
     UnsupportedWindowsArch(&'static str),
     #[error("Unable to create Windows launcher on non-Windows platform")]
     NotWindows,
-    #[error("Failed to detect the current platform")]
-    PlatformInfo(#[source] PlatformInfoError),
-    #[error("Invalid version specification, only none or == is supported")]
-    Pep440,
-    #[error("Invalid direct_url.json")]
+    #[error("Invalid `direct_url.json`")]
     DirectUrlJson(#[from] serde_json::Error),
     #[error("Cannot uninstall package; `RECORD` file not found at: {}", _0.user_display())]
     MissingRecord(PathBuf),
     #[error("Cannot uninstall package; `top_level.txt` file not found at: {}", _0.user_display())]
     MissingTopLevel(PathBuf),
-    #[error("Invalid wheel size")]
-    InvalidSize,
-    #[error("Invalid package name")]
-    InvalidName(#[from] uv_normalize::InvalidNameError),
     #[error("Invalid package version")]
     InvalidVersion(#[from] uv_pep440::VersionParseError),
     #[error("Wheel package name does not match filename: {0} != {1}")]
@@ -99,4 +82,6 @@ pub enum Error {
     InvalidEggLink(PathBuf),
     #[error(transparent)]
     LauncherError(#[from] uv_trampoline_builder::Error),
+    #[error("Scripts must not use the reserved name {0}")]
+    ReservedScriptName(String),
 }

@@ -23,6 +23,7 @@ uv-configuration = { workspace = true }
 uv-distribution = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true }
+uv-git-types = { workspace = true }
 uv-install-wheel = { workspace = true, default-features = false }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }

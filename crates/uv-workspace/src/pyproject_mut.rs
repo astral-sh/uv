@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
@@ -13,7 +14,7 @@ use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Index;
 use uv_fs::PortablePath;
 use uv_normalize::GroupName;
-use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 
 use crate::pyproject::{DependencyType, Source};
@@ -43,8 +44,13 @@ pub enum Error {
     MalformedWorkspace,
     #[error("Expected a dependency at index {0}")]
     MissingDependency(usize),
-    #[error("Cannot perform ambiguous update; found multiple entries with matching package names")]
-    Ambiguous,
+    #[error("Failed to parse `version` field of `pyproject.toml`")]
+    VersionParse(#[from] VersionParseError),
+    #[error("Cannot perform ambiguous update; found multiple entries for `{}`:\n{}", package_name, requirements.iter().map(|requirement| format!("- `{requirement}`")).join("\n"))]
+    Ambiguous {
+        package_name: PackageName,
+        requirements: Vec<Requirement>,
+    },
 }
 
 /// The result of editing an array in a TOML document.
@@ -121,6 +127,8 @@ impl PyProjectTomlMut {
         // Add the path to the workspace.
         members.push(PortablePath::from(path.as_ref()).to_string());
 
+        reformat_array_multiline(members);
+
         Ok(())
     }
 
@@ -173,11 +181,10 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let name = req.name.clone();
         let edit = add_dependency(req, dependencies, source.is_some())?;
 
         if let Some(source) = source {
-            self.add_source(&name, source)?;
+            self.add_source(&req.name, source)?;
         }
 
         Ok(edit)
@@ -207,11 +214,10 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let name = req.name.clone();
         let edit = add_dependency(req, dev_dependencies, source.is_some())?;
 
         if let Some(source) = source {
-            self.add_source(&name, source)?;
+            self.add_source(&req.name, source)?;
         }
 
         Ok(edit)
@@ -302,7 +308,7 @@ impl PyProjectTomlMut {
             .and_then(|url| Url::parse(url).ok())
             .is_none_or(|url| CanonicalUrl::new(&url) != CanonicalUrl::new(index.url.url()))
         {
-            let mut formatted = Formatted::new(index.url.to_string());
+            let mut formatted = Formatted::new(index.url.redacted().to_string());
             if let Some(value) = table.get("url").and_then(Item::as_value) {
                 if let Some(prefix) = value.decor().prefix() {
                     formatted.decor_mut().set_prefix(prefix.clone());
@@ -318,7 +324,7 @@ impl PyProjectTomlMut {
         if index.default {
             if !table
                 .get("default")
-                .and_then(toml_edit::Item::as_bool)
+                .and_then(Item::as_bool)
                 .is_some_and(|default| default)
             {
                 let mut formatted = Formatted::new(true);
@@ -370,7 +376,7 @@ impl PyProjectTomlMut {
         });
 
         // Set the position to the minimum, if it's not already the first element.
-        if let Some(min) = existing.iter().filter_map(toml_edit::Table::position).min() {
+        if let Some(min) = existing.iter().filter_map(Table::position).min() {
             table.set_position(min);
 
             // Increment the position of all existing elements.
@@ -404,13 +410,25 @@ impl PyProjectTomlMut {
             .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let group = optional_dependencies
-            .entry(group.as_ref())
-            .or_insert(Item::Value(Value::Array(Array::new())))
-            .as_array_mut()
-            .ok_or(Error::MalformedDependencies)?;
+        // Try to find the existing group.
+        let existing_group = optional_dependencies.iter_mut().find_map(|(key, value)| {
+            if ExtraName::from_str(key.get()).is_ok_and(|g| g == *group) {
+                Some(value)
+            } else {
+                None
+            }
+        });
 
-        let name = req.name.clone();
+        // If the group doesn't exist, create it.
+        let group = match existing_group {
+            Some(value) => value,
+            None => optional_dependencies
+                .entry(group.as_ref())
+                .or_insert(Item::Value(Value::Array(Array::new()))),
+        }
+        .as_array_mut()
+        .ok_or(Error::MalformedDependencies)?;
+
         let added = add_dependency(req, group, source.is_some())?;
 
         // If `project.optional-dependencies` is an inline table, reformat it.
@@ -426,7 +444,7 @@ impl PyProjectTomlMut {
         }
 
         if let Some(source) = source {
-            self.add_source(&name, source)?;
+            self.add_source(&req.name, source)?;
         }
 
         Ok(added)
@@ -449,14 +467,39 @@ impl PyProjectTomlMut {
             .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let group = dependency_groups
-            .entry(group.as_ref())
-            .or_insert(Item::Value(Value::Array(Array::new())))
-            .as_array_mut()
-            .ok_or(Error::MalformedDependencies)?;
+        let was_sorted = dependency_groups
+            .get_values()
+            .iter()
+            .filter_map(|(dotted_ks, _)| dotted_ks.first())
+            .map(|k| k.get())
+            .is_sorted();
 
-        let name = req.name.clone();
+        // Try to find the existing group.
+        let existing_group = dependency_groups.iter_mut().find_map(|(key, value)| {
+            if GroupName::from_str(key.get()).is_ok_and(|g| g == *group) {
+                Some(value)
+            } else {
+                None
+            }
+        });
+
+        // If the group doesn't exist, create it.
+        let group = match existing_group {
+            Some(value) => value,
+            None => dependency_groups
+                .entry(group.as_ref())
+                .or_insert(Item::Value(Value::Array(Array::new()))),
+        }
+        .as_array_mut()
+        .ok_or(Error::MalformedDependencies)?;
+
         let added = add_dependency(req, group, source.is_some())?;
+
+        // To avoid churn in pyproject.toml, we only sort new group keys if the
+        // existing keys were sorted.
+        if was_sorted {
+            dependency_groups.sort_values();
+        }
 
         // If `dependency-groups` is an inline table, reformat it.
         //
@@ -471,27 +514,31 @@ impl PyProjectTomlMut {
         }
 
         if let Some(source) = source {
-            self.add_source(&name, source)?;
+            self.add_source(&req.name, source)?;
         }
 
         Ok(added)
     }
 
-    /// Set the minimum version for an existing dependency in `project.dependencies`.
+    /// Set the minimum version for an existing dependency.
     pub fn set_dependency_minimum_version(
         &mut self,
+        dependency_type: &DependencyType,
         index: usize,
         version: Version,
     ) -> Result<(), Error> {
-        // Get or create `project.dependencies`.
-        let dependencies = self
-            .project()?
-            .entry("dependencies")
-            .or_insert(Item::Value(Value::Array(Array::new())))
-            .as_array_mut()
-            .ok_or(Error::MalformedDependencies)?;
+        let group = match dependency_type {
+            DependencyType::Production => self.set_project_dependency_minimum_version()?,
+            DependencyType::Dev => self.set_dev_dependency_minimum_version()?,
+            DependencyType::Optional(ref extra) => {
+                self.set_optional_dependency_minimum_version(extra)?
+            }
+            DependencyType::Group(ref group) => {
+                self.set_dependency_group_requirement_minimum_version(group)?
+            }
+        };
 
-        let Some(req) = dependencies.get(index) else {
+        let Some(req) = group.get(index) else {
             return Err(Error::MissingDependency(index));
         };
 
@@ -502,17 +549,26 @@ impl PyProjectTomlMut {
         req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
             VersionSpecifier::greater_than_equal_version(version),
         )));
-        dependencies.replace(index, req.to_string());
+        group.replace(index, req.to_string());
 
         Ok(())
     }
 
+    /// Set the minimum version for an existing dependency in `project.dependencies`.
+    fn set_project_dependency_minimum_version(&mut self) -> Result<&mut Array, Error> {
+        // Get or create `project.dependencies`.
+        let dependencies = self
+            .project()?
+            .entry("dependencies")
+            .or_insert(Item::Value(Value::Array(Array::new())))
+            .as_array_mut()
+            .ok_or(Error::MalformedDependencies)?;
+
+        Ok(dependencies)
+    }
+
     /// Set the minimum version for an existing dependency in `tool.uv.dev-dependencies`.
-    pub fn set_dev_dependency_minimum_version(
-        &mut self,
-        index: usize,
-        version: Version,
-    ) -> Result<(), Error> {
+    fn set_dev_dependency_minimum_version(&mut self) -> Result<&mut Array, Error> {
         // Get or create `tool.uv.dev-dependencies`.
         let dev_dependencies = self
             .doc
@@ -529,29 +585,14 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let Some(req) = dev_dependencies.get(index) else {
-            return Err(Error::MissingDependency(index));
-        };
-
-        let mut req = req
-            .as_str()
-            .and_then(try_parse_requirement)
-            .ok_or(Error::MalformedDependencies)?;
-        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-            VersionSpecifier::greater_than_equal_version(version),
-        )));
-        dev_dependencies.replace(index, req.to_string());
-
-        Ok(())
+        Ok(dev_dependencies)
     }
 
     /// Set the minimum version for an existing dependency in `project.optional-dependencies`.
-    pub fn set_optional_dependency_minimum_version(
+    fn set_optional_dependency_minimum_version(
         &mut self,
         group: &ExtraName,
-        index: usize,
-        version: Version,
-    ) -> Result<(), Error> {
+    ) -> Result<&mut Array, Error> {
         // Get or create `project.optional-dependencies`.
         let optional_dependencies = self
             .project()?
@@ -560,35 +601,30 @@ impl PyProjectTomlMut {
             .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
+        // Try to find the existing extra.
+        let existing_key = optional_dependencies.iter().find_map(|(key, _value)| {
+            if ExtraName::from_str(key).is_ok_and(|g| g == *group) {
+                Some(key.to_string())
+            } else {
+                None
+            }
+        });
+
+        // If the group doesn't exist, create it.
         let group = optional_dependencies
-            .entry(group.as_ref())
+            .entry(existing_key.as_deref().unwrap_or(group.as_ref()))
             .or_insert(Item::Value(Value::Array(Array::new())))
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let Some(req) = group.get(index) else {
-            return Err(Error::MissingDependency(index));
-        };
-
-        let mut req = req
-            .as_str()
-            .and_then(try_parse_requirement)
-            .ok_or(Error::MalformedDependencies)?;
-        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-            VersionSpecifier::greater_than_equal_version(version),
-        )));
-        group.replace(index, req.to_string());
-
-        Ok(())
+        Ok(group)
     }
 
     /// Set the minimum version for an existing dependency in `dependency-groups`.
-    pub fn set_dependency_group_requirement_minimum_version(
+    fn set_dependency_group_requirement_minimum_version(
         &mut self,
         group: &GroupName,
-        index: usize,
-        version: Version,
-    ) -> Result<(), Error> {
+    ) -> Result<&mut Array, Error> {
         // Get or create `dependency-groups`.
         let dependency_groups = self
             .doc
@@ -597,26 +633,23 @@ impl PyProjectTomlMut {
             .as_table_like_mut()
             .ok_or(Error::MalformedDependencies)?;
 
+        // Try to find the existing group.
+        let existing_key = dependency_groups.iter().find_map(|(key, _value)| {
+            if GroupName::from_str(key).is_ok_and(|g| g == *group) {
+                Some(key.to_string())
+            } else {
+                None
+            }
+        });
+
+        // If the group doesn't exist, create it.
         let group = dependency_groups
-            .entry(group.as_ref())
+            .entry(existing_key.as_deref().unwrap_or(group.as_ref()))
             .or_insert(Item::Value(Value::Array(Array::new())))
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let Some(req) = group.get(index) else {
-            return Err(Error::MissingDependency(index));
-        };
-
-        let mut req = req
-            .as_str()
-            .and_then(try_parse_requirement)
-            .ok_or(Error::MalformedDependencies)?;
-        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-            VersionSpecifier::greater_than_equal_version(version),
-        )));
-        group.replace(index, req.to_string());
-
-        Ok(())
+        Ok(group)
     }
 
     /// Adds a source to `tool.uv.sources`.
@@ -711,7 +744,15 @@ impl PyProjectTomlMut {
                     .ok_or(Error::MalformedDependencies)
             })
             .transpose()?
-            .and_then(|extras| extras.get_mut(group.as_ref()))
+            .and_then(|extras| {
+                extras.iter_mut().find_map(|(key, value)| {
+                    if ExtraName::from_str(key.get()).is_ok_and(|g| g == *group) {
+                        Some(value)
+                    } else {
+                        None
+                    }
+                })
+            })
             .map(|dependencies| {
                 dependencies
                     .as_array_mut()
@@ -744,7 +785,15 @@ impl PyProjectTomlMut {
                     .ok_or(Error::MalformedDependencies)
             })
             .transpose()?
-            .and_then(|groups| groups.get_mut(group.as_ref()))
+            .and_then(|groups| {
+                groups.iter_mut().find_map(|(key, value)| {
+                    if GroupName::from_str(key.get()).is_ok_and(|g| g == *group) {
+                        Some(value)
+                    } else {
+                        None
+                    }
+                })
+            })
             .map(|dependencies| {
                 dependencies
                     .as_array_mut()
@@ -851,7 +900,7 @@ impl PyProjectTomlMut {
                     let Some(dependencies) = dependencies.as_array() else {
                         continue;
                     };
-                    let Ok(extra) = ExtraName::new(extra.to_string()) else {
+                    let Ok(extra) = ExtraName::from_str(extra) else {
                         continue;
                     };
 
@@ -868,7 +917,7 @@ impl PyProjectTomlMut {
                 let Some(dependencies) = dependencies.as_array() else {
                     continue;
                 };
-                let Ok(group) = GroupName::new(group.to_string()) else {
+                let Ok(group) = GroupName::from_str(group) else {
                     continue;
                 };
 
@@ -895,6 +944,46 @@ impl PyProjectTomlMut {
 
         types
     }
+
+    pub fn version(&mut self) -> Result<Version, Error> {
+        let version = self
+            .doc
+            .get("project")
+            .and_then(Item::as_table)
+            .and_then(|project| project.get("version"))
+            .and_then(Item::as_str)
+            .ok_or(Error::MalformedWorkspace)?;
+
+        Ok(Version::from_str(version)?)
+    }
+
+    pub fn has_dynamic_version(&mut self) -> bool {
+        let Some(dynamic) = self
+            .doc
+            .get("project")
+            .and_then(Item::as_table)
+            .and_then(|project| project.get("dynamic"))
+            .and_then(Item::as_array)
+        else {
+            return false;
+        };
+
+        dynamic.iter().any(|val| val.as_str() == Some("version"))
+    }
+
+    pub fn set_version(&mut self, version: &Version) -> Result<(), Error> {
+        let project = self
+            .doc
+            .get_mut("project")
+            .and_then(Item::as_table_mut)
+            .ok_or(Error::MalformedWorkspace)?;
+        project.insert(
+            "version",
+            Item::Value(Value::String(Formatted::new(version.to_string()))),
+        );
+
+        Ok(())
+    }
 }
 
 /// Returns an implicit table.
@@ -918,12 +1007,33 @@ pub fn add_dependency(
         [] => {
             #[derive(Debug, Copy, Clone)]
             enum Sort {
-                /// The list is sorted in a case-sensitive manner.
-                CaseSensitive,
                 /// The list is sorted in a case-insensitive manner.
                 CaseInsensitive,
+                /// The list is sorted in a case-sensitive manner.
+                CaseSensitive,
                 /// The list is unsorted.
                 Unsorted,
+            }
+
+            /// Compare two [`Value`] requirements case-insensitively.
+            fn case_insensitive(a: &Value, b: &Value) -> Ordering {
+                a.as_str()
+                    .map(str::to_lowercase)
+                    .as_deref()
+                    .map(split_specifiers)
+                    .cmp(
+                        &b.as_str()
+                            .map(str::to_lowercase)
+                            .as_deref()
+                            .map(split_specifiers),
+                    )
+            }
+
+            /// Compare two [`Value`] requirements case-sensitively.
+            fn case_sensitive(a: &Value, b: &Value) -> Ordering {
+                a.as_str()
+                    .map(split_specifiers)
+                    .cmp(&b.as_str().map(split_specifiers))
             }
 
             // Determine if the dependency list is sorted prior to
@@ -940,18 +1050,11 @@ pub fn add_dependency(
                 .all(Value::is_str)
                 .then(|| {
                     if deps.iter().tuple_windows().all(|(a, b)| {
-                        a.as_str()
-                            .map(str::to_lowercase)
-                            .as_deref()
-                            .map(split_specifiers)
-                            <= b.as_str()
-                                .map(str::to_lowercase)
-                                .as_deref()
-                                .map(split_specifiers)
+                        matches!(case_insensitive(a, b), Ordering::Less | Ordering::Equal)
                     }) {
                         Some(Sort::CaseInsensitive)
                     } else if deps.iter().tuple_windows().all(|(a, b)| {
-                        a.as_str().map(split_specifiers) <= b.as_str().map(split_specifiers)
+                        matches!(case_sensitive(a, b), Ordering::Less | Ordering::Equal)
                     }) {
                         Some(Sort::CaseSensitive)
                     } else {
@@ -963,11 +1066,11 @@ pub fn add_dependency(
 
             let req_string = req.to_string();
             let index = match sort {
-                Sort::CaseSensitive => deps
-                    .iter()
-                    .position(|d| d.as_str() > Some(req_string.as_str())),
                 Sort::CaseInsensitive => deps.iter().position(|d| {
-                    d.as_str().map(str::to_lowercase) > Some(req_string.as_str().to_lowercase())
+                    case_insensitive(d, &Value::from(req_string.as_str())) == Ordering::Greater
+                }),
+                Sort::CaseSensitive => deps.iter().position(|d| {
+                    case_sensitive(d, &Value::from(req_string.as_str())) == Ordering::Greater
                 }),
                 Sort::Unsorted => None,
             };
@@ -977,26 +1080,55 @@ pub fn add_dependency(
 
             let decor = value.decor_mut();
 
-            // If we're adding to the end of the list, treat trailing comments as leading comments
-            // on the added dependency.
-            //
-            // For example, given:
-            // ```toml
-            // dependencies = [
-            //     "anyio", # trailing comment
-            // ]
-            // ```
-            //
-            // If we add `flask` to the end, we want to retain the comment on `anyio`:
-            // ```toml
-            // dependencies = [
-            //     "anyio", # trailing comment
-            //     "flask",
-            // ]
-            // ```
-            if index == deps.len() {
-                decor.set_prefix(deps.trailing().clone());
-                deps.set_trailing("");
+            // Ensure comments remain on the correct line, post-insertion
+            match index {
+                val if val == deps.len() => {
+                    // If we're adding to the end of the list, treat trailing comments as leading comments
+                    // on the added dependency.
+                    //
+                    // For example, given:
+                    // ```toml
+                    // dependencies = [
+                    //     "anyio", # trailing comment
+                    // ]
+                    // ```
+                    //
+                    // If we add `flask` to the end, we want to retain the comment on `anyio`:
+                    // ```toml
+                    // dependencies = [
+                    //     "anyio", # trailing comment
+                    //     "flask",
+                    // ]
+                    // ```
+                    decor.set_prefix(deps.trailing().clone());
+                    deps.set_trailing("");
+                }
+                0 => {
+                    // If the dependency is prepended to a non-empty list, do nothing
+                }
+                val => {
+                    // Retain position of end-of-line comments when a dependency is inserted right below it.
+                    //
+                    // For example, given:
+                    // ```toml
+                    // dependencies = [
+                    //     "anyio", # end-of-line comment
+                    //     "flask",
+                    // ]
+                    // ```
+                    //
+                    // If we add `pydantic` (between `anyio` and `flask`), we want to retain the comment on `anyio`:
+                    // ```toml
+                    // dependencies = [
+                    //     "anyio", # end-of-line comment
+                    //     "pydantic",
+                    //     "flask",
+                    // ]
+                    // ```
+                    let targeted_decor = deps.get_mut(val).unwrap().decor_mut();
+                    decor.set_prefix(targeted_decor.prefix().unwrap().clone());
+                    targeted_decor.set_prefix(""); // Re-formatted later by `reformat_array_multiline`
+                }
             }
 
             deps.insert_formatted(index, value);
@@ -1100,16 +1232,24 @@ pub fn add_dependency(
             Ok(ArrayEdit::Update(i))
         }
         // Cannot perform ambiguous updates.
-        _ => Err(Error::Ambiguous),
+        _ => Err(Error::Ambiguous {
+            package_name: req.name.clone(),
+            requirements: to_replace
+                .into_iter()
+                .map(|(_, requirement)| requirement)
+                .collect(),
+        }),
     }
 }
 
 /// Update an existing requirement.
 fn update_requirement(old: &mut Requirement, new: &Requirement, has_source: bool) {
     // Add any new extras.
-    old.extras.extend(new.extras.iter().cloned());
-    old.extras.sort_unstable();
-    old.extras.dedup();
+    let mut extras = old.extras.to_vec();
+    extras.extend(new.extras.iter().cloned());
+    extras.sort_unstable();
+    extras.dedup();
+    old.extras = extras.into_boxed_slice();
 
     // Clear the requirement source if we are going to add to `tool.uv.sources`.
     if has_source {
@@ -1159,7 +1299,7 @@ fn find_dependencies(
     let mut to_replace = Vec::new();
     for (i, dep) in deps.iter().enumerate() {
         if let Some(req) = dep.as_str().and_then(try_parse_requirement) {
-            if marker.map_or(true, |m| *m == req.marker) && *name == req.name {
+            if marker.is_none_or(|m| *m == req.marker) && *name == req.name {
                 to_replace.push((i, req));
             }
         }
@@ -1257,15 +1397,11 @@ fn reformat_array_multiline(deps: &mut Array) {
                 .map(|(s, _)| s)
                 .unwrap_or(decor_prefix);
 
-            // If there is no indentation, use four-space.
-            indentation_prefix = Some(if decor_prefix.is_empty() {
-                "    ".to_string()
-            } else {
-                decor_prefix.to_string()
-            });
+            indentation_prefix = (!decor_prefix.is_empty()).then_some(decor_prefix.to_string());
         }
 
-        let indentation_prefix_str = format!("\n{}", indentation_prefix.as_ref().unwrap());
+        let indentation_prefix_str =
+            format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
 
         for comment in find_comments(decor.prefix()).chain(find_comments(decor.suffix())) {
             match comment.comment_type {
@@ -1291,7 +1427,7 @@ fn reformat_array_multiline(deps: &mut Array) {
                 match comment.comment_type {
                     CommentType::OwnLine => {
                         let indentation_prefix_str =
-                            format!("\n{}", indentation_prefix.as_ref().unwrap());
+                            format!("\n{}", indentation_prefix.as_deref().unwrap_or("    "));
                         rv.push_str(&indentation_prefix_str);
                     }
                     CommentType::EndOfLine => {
@@ -1337,7 +1473,7 @@ mod test {
             split_specifiers("flask[dotenv]>=1.0"),
             ("flask[dotenv]", ">=1.0")
         );
-        assert_eq!(split_specifiers("flask[dotenv]",), ("flask[dotenv]", ""));
+        assert_eq!(split_specifiers("flask[dotenv]"), ("flask[dotenv]", ""));
         assert_eq!(split_specifiers("flask @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"), ("flask", "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"));
     }
 }

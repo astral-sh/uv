@@ -1,8 +1,10 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{Bound, Deref};
 use std::str::FromStr;
 
+use arcstr::ArcStr;
 use itertools::Itertools;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use version_ranges::Ranges;
@@ -53,7 +55,7 @@ pub enum MarkerValueVersion {
 }
 
 impl Display for MarkerValueVersion {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::ImplementationVersion => f.write_str("implementation_version"),
             Self::PythonFullVersion => f.write_str("python_full_version"),
@@ -97,7 +99,7 @@ pub enum MarkerValueString {
 
 impl Display for MarkerValueString {
     /// Normalizes deprecated names to the proper ones
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::ImplementationName => f.write_str("implementation_name"),
             Self::OsName | Self::OsNameDeprecated => f.write_str("os_name"),
@@ -129,7 +131,7 @@ pub enum MarkerValue {
     /// `extra`. This one is special because it's a list and not env but user given
     Extra,
     /// Not a constant, but a user given quoted string with a value inside such as '3.8' or "windows"
-    QuotedString(String),
+    QuotedString(ArcStr),
 }
 
 impl FromStr for MarkerValue {
@@ -175,7 +177,7 @@ impl FromStr for MarkerValue {
 }
 
 impl Display for MarkerValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::MarkerEnvVersion(marker_value_version) => marker_value_version.fmt(f),
             Self::MarkerEnvString(marker_value_string) => marker_value_string.fmt(f),
@@ -272,8 +274,8 @@ impl MarkerOperator {
 
     /// Returns the marker operator and value whose union represents the given range.
     pub fn from_bounds(
-        bounds: (&Bound<String>, &Bound<String>),
-    ) -> impl Iterator<Item = (MarkerOperator, String)> {
+        bounds: (&Bound<ArcStr>, &Bound<ArcStr>),
+    ) -> impl Iterator<Item = (MarkerOperator, ArcStr)> {
         let (b1, b2) = match bounds {
             (Bound::Included(v1), Bound::Included(v2)) if v1 == v2 => {
                 (Some((MarkerOperator::Equal, v1.clone())), None)
@@ -291,7 +293,7 @@ impl MarkerOperator {
     }
 
     /// Returns a value specifier representing the given lower bound.
-    pub fn from_lower_bound(bound: &Bound<String>) -> Option<(MarkerOperator, String)> {
+    pub fn from_lower_bound(bound: &Bound<ArcStr>) -> Option<(MarkerOperator, ArcStr)> {
         match bound {
             Bound::Included(value) => Some((MarkerOperator::GreaterEqual, value.clone())),
             Bound::Excluded(value) => Some((MarkerOperator::GreaterThan, value.clone())),
@@ -300,7 +302,7 @@ impl MarkerOperator {
     }
 
     /// Returns a value specifier representing the given upper bound.
-    pub fn from_upper_bound(bound: &Bound<String>) -> Option<(MarkerOperator, String)> {
+    pub fn from_upper_bound(bound: &Bound<ArcStr>) -> Option<(MarkerOperator, ArcStr)> {
         match bound {
             Bound::Included(value) => Some((MarkerOperator::LessEqual, value.clone())),
             Bound::Excluded(value) => Some((MarkerOperator::LessThan, value.clone())),
@@ -341,7 +343,7 @@ impl FromStr for MarkerOperator {
 }
 
 impl Display for MarkerOperator {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::Equal => "==",
             Self::NotEqual => "!=",
@@ -386,7 +388,7 @@ impl FromStr for StringVersion {
 }
 
 impl Display for StringVersion {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.string.fmt(f)
     }
 }
@@ -405,8 +407,21 @@ impl<'de> Deserialize<'de> for StringVersion {
     where
         D: Deserializer<'de>,
     {
-        let string = String::deserialize(deserializer)?;
-        Self::from_str(&string).map_err(de::Error::custom)
+        struct Visitor;
+
+        impl de::Visitor<'_> for Visitor {
+            type Value = StringVersion;
+
+            fn expecting(&self, f: &mut Formatter) -> fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                StringVersion::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
@@ -446,7 +461,7 @@ impl MarkerValueExtra {
 }
 
 impl Display for MarkerValueExtra {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Extra(extra) => extra.fmt(f),
             Self::Arbitrary(string) => string.fmt(f),
@@ -485,7 +500,7 @@ pub enum MarkerExpression {
     String {
         key: MarkerValueString,
         operator: MarkerOperator,
-        value: String,
+        value: ArcStr,
     },
     /// `extra <extra op> '...'` or `'...' <extra op> extra`.
     Extra {
@@ -538,7 +553,7 @@ impl ExtraOperator {
 }
 
 impl Display for ExtraOperator {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::Equal => "==",
             Self::NotEqual => "!=",
@@ -590,7 +605,7 @@ impl MarkerExpression {
 }
 
 impl Display for MarkerExpression {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             MarkerExpression::Version { key, specifier } => {
                 let (op, version) = (specifier.operator(), specifier.version());
@@ -649,8 +664,21 @@ impl<'de> Deserialize<'de> for MarkerTree {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
+        struct Visitor;
+
+        impl de::Visitor<'_> for Visitor {
+            type Value = MarkerTree;
+
+            fn expecting(&self, f: &mut Formatter) -> fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                MarkerTree::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
@@ -771,7 +799,7 @@ impl MarkerTree {
     }
 
     /// Returns the underlying [`MarkerTreeKind`] of the root node.
-    pub fn kind(&self) -> MarkerTreeKind<'_> {
+    pub fn kind(self) -> MarkerTreeKind<'static> {
         if self.is_true() {
             return MarkerTreeKind::True;
         }
@@ -903,14 +931,14 @@ impl MarkerTree {
                                     MarkerWarningKind::LexicographicComparison,
                                     format!("Comparing {l_string} and {value} lexicographically"),
                                 );
-                            };
+                            }
 
                             if let Bound::Included(value) | Bound::Excluded(value) = end {
                                 reporter.report(
                                     MarkerWarningKind::LexicographicComparison,
                                     format!("Comparing {l_string} and {value} lexicographically"),
                                 );
-                            };
+                            }
                         }
                     }
 
@@ -1001,11 +1029,19 @@ impl MarkerTree {
     ///
     /// ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part of the
     /// main conjunction.
-    pub fn top_level_extra_name(self) -> Option<ExtraName> {
+    pub fn top_level_extra_name(self) -> Option<Cow<'static, ExtraName>> {
+        // Fast path: The marker is only a `extra == "..."`.
+        if let MarkerTreeKind::Extra(marker) = self.kind() {
+            if marker.edge(true).is_true() {
+                let CanonicalMarkerValueExtra::Extra(extra) = marker.name;
+                return Some(Cow::Borrowed(extra));
+            }
+        }
+
         let extra_expression = self.top_level_extra()?;
 
         match extra_expression {
-            MarkerExpression::Extra { name, .. } => name.into_extra(),
+            MarkerExpression::Extra { name, .. } => name.into_extra().map(Cow::Owned),
             _ => unreachable!(),
         }
     }
@@ -1152,6 +1188,49 @@ impl MarkerTree {
         MarkerTree(INTERNER.lock().only_extras(self.0))
     }
 
+    /// Calls the provided function on every `extra` in this tree.
+    ///
+    /// The operator provided to the function is guaranteed to be
+    /// `MarkerOperator::Equal` or `MarkerOperator::NotEqual`.
+    pub fn visit_extras(self, mut f: impl FnMut(MarkerOperator, &ExtraName)) {
+        fn imp(tree: MarkerTree, f: &mut impl FnMut(MarkerOperator, &ExtraName)) {
+            match tree.kind() {
+                MarkerTreeKind::True | MarkerTreeKind::False => {}
+                MarkerTreeKind::Version(kind) => {
+                    for (tree, _) in simplify::collect_edges(kind.edges()) {
+                        imp(tree, f);
+                    }
+                }
+                MarkerTreeKind::String(kind) => {
+                    for (tree, _) in simplify::collect_edges(kind.children()) {
+                        imp(tree, f);
+                    }
+                }
+                MarkerTreeKind::In(kind) => {
+                    for (_, tree) in kind.children() {
+                        imp(tree, f);
+                    }
+                }
+                MarkerTreeKind::Contains(kind) => {
+                    for (_, tree) in kind.children() {
+                        imp(tree, f);
+                    }
+                }
+                MarkerTreeKind::Extra(kind) => {
+                    if kind.low.is_false() {
+                        f(MarkerOperator::Equal, kind.name().extra());
+                    } else {
+                        f(MarkerOperator::NotEqual, kind.name().extra());
+                    }
+                    for (_, tree) in kind.children() {
+                        imp(tree, f);
+                    }
+                }
+            }
+        }
+        imp(self, &mut f);
+    }
+
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> MarkerTree {
         MarkerTree(INTERNER.lock().restrict(self.0, &|var| match var {
             Variable::Extra(name) => is_extra(name.extra()).then_some(true),
@@ -1198,7 +1277,7 @@ impl MarkerTree {
         MarkerTreeDebugRaw { marker: self }
     }
 
-    fn fmt_graph(self, f: &mut fmt::Formatter<'_>, level: usize) -> fmt::Result {
+    fn fmt_graph(self, f: &mut Formatter<'_>, level: usize) -> fmt::Result {
         match self.kind() {
             MarkerTreeKind::True => return write!(f, "true"),
             MarkerTreeKind::False => return write!(f, "false"),
@@ -1296,7 +1375,7 @@ pub struct MarkerTreeDebugGraph<'a> {
 }
 
 impl fmt::Debug for MarkerTreeDebugGraph<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.marker.fmt_graph(f, 0)
     }
 }
@@ -1313,7 +1392,7 @@ pub struct MarkerTreeDebugRaw<'a> {
 }
 
 impl fmt::Debug for MarkerTreeDebugRaw<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let node = INTERNER.shared.node(self.marker.0);
         f.debug_tuple("MarkerTreeDebugRaw").field(node).finish()
     }
@@ -1383,7 +1462,7 @@ impl Ord for VersionMarkerTree<'_> {
 pub struct StringMarkerTree<'a> {
     id: NodeId,
     key: CanonicalMarkerValueString,
-    map: &'a [(Ranges<String>, NodeId)],
+    map: &'a [(Ranges<ArcStr>, NodeId)],
 }
 
 impl StringMarkerTree<'_> {
@@ -1393,7 +1472,7 @@ impl StringMarkerTree<'_> {
     }
 
     /// The edges of this node, corresponding to possible output ranges of the given variable.
-    pub fn children(&self) -> impl ExactSizeIterator<Item = (&Ranges<String>, MarkerTree)> {
+    pub fn children(&self) -> impl ExactSizeIterator<Item = (&Ranges<ArcStr>, MarkerTree)> {
         self.map
             .iter()
             .map(|(range, node)| (range, MarkerTree(node.negate(self.id))))
@@ -1418,7 +1497,7 @@ impl Ord for StringMarkerTree<'_> {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct InMarkerTree<'a> {
     key: CanonicalMarkerValueString,
-    value: &'a str,
+    value: &'a ArcStr,
     high: NodeId,
     low: NodeId,
 }
@@ -1430,7 +1509,7 @@ impl InMarkerTree<'_> {
     }
 
     /// The value (RHS) for this expression.
-    pub fn value(&self) -> &str {
+    pub fn value(&self) -> &ArcStr {
         self.value
     }
 
@@ -1632,7 +1711,7 @@ impl schemars::JsonSchema for MarkerTree {
         "MarkerTree".to_string()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
             metadata: Some(Box::new(schemars::schema::Metadata {
@@ -1654,6 +1733,7 @@ mod test {
     use std::str::FromStr;
 
     use insta::assert_snapshot;
+
     use uv_normalize::ExtraName;
     use uv_pep440::Version;
 
@@ -2041,7 +2121,7 @@ mod test {
             MarkerExpression::String {
                 key: MarkerValueString::OsName,
                 operator: MarkerOperator::Equal,
-                value: "nt".to_string(),
+                value: arcstr::literal!("nt")
             }
         );
     }
@@ -2888,7 +2968,7 @@ mod test {
     fn test_is_false() {
         assert!(m("python_version < '3.10' and python_version >= '3.10'").is_false());
         assert!(m("(python_version < '3.10' and python_version >= '3.10') \
-              or (python_version < '3.9' and python_version >= '3.9')",)
+              or (python_version < '3.9' and python_version >= '3.9')")
         .is_false());
 
         assert!(!m("python_version < '3.10'").is_false());
@@ -3148,7 +3228,7 @@ mod test {
 
         assert!(m("
                 (os_name == 'Linux' and extra == 'foo')
-                or (os_name != 'Linux' and extra == 'bar')",)
+                or (os_name != 'Linux' and extra == 'bar')")
         .without_extras()
         .is_true());
 
@@ -3181,7 +3261,7 @@ mod test {
         );
         assert!(m("
                 (os_name == 'foo' and extra == 'foo')
-                or (os_name == 'bar' and extra != 'foo')",)
+                or (os_name == 'bar' and extra != 'foo')")
         .only_extras()
         .is_true());
         assert_eq!(
@@ -3198,6 +3278,52 @@ mod test {
                 or (os_name == 'nt' and sys_platform == 'win32')")
             .only_extras(),
             m("os_name == 'Linux' or os_name != 'Linux'"),
+        );
+    }
+
+    #[test]
+    fn visit_extras() {
+        let collect = |m: MarkerTree| -> Vec<(&'static str, String)> {
+            let mut collected = vec![];
+            m.visit_extras(|op, extra| {
+                let op = match op {
+                    MarkerOperator::Equal => "==",
+                    MarkerOperator::NotEqual => "!=",
+                    _ => unreachable!(),
+                };
+                collected.push((op, extra.as_str().to_string()));
+            });
+            collected
+        };
+        assert_eq!(collect(m("os_name == 'Linux'")), vec![]);
+        assert_eq!(
+            collect(m("extra == 'foo'")),
+            vec![("==", "foo".to_string())]
+        );
+        assert_eq!(
+            collect(m("extra == 'Linux' and extra == 'foo'")),
+            vec![("==", "foo".to_string()), ("==", "linux".to_string())]
+        );
+        assert_eq!(
+            collect(m("os_name == 'Linux' and extra == 'foo'")),
+            vec![("==", "foo".to_string())]
+        );
+
+        let marker = "
+            python_full_version >= '3.12'
+            and sys_platform == 'darwin'
+            and extra == 'extra-27-resolution-markers-for-days-cpu'
+            and extra != 'extra-27-resolution-markers-for-days-cu124'
+        ";
+        assert_eq!(
+            collect(m(marker)),
+            vec![
+                ("==", "extra-27-resolution-markers-for-days-cpu".to_string()),
+                (
+                    "!=",
+                    "extra-27-resolution-markers-for-days-cu124".to_string()
+                ),
+            ]
         );
     }
 }

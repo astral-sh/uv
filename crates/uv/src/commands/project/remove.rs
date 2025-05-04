@@ -1,34 +1,41 @@
-use anyhow::{Context, Result};
 use std::fmt::Write;
+use std::io;
 use std::path::Path;
-use uv_settings::PythonInstallMirrors;
+use std::str::FromStr;
 
+use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
+use tracing::debug;
+
 use uv_cache::Cache;
-use uv_client::Connectivity;
 use uv_configuration::{
-    Concurrency, DevGroupsManifest, EditableMode, ExtrasSpecification, InstallOptions, LowerBound,
-    PreviewMode, TrustedHost,
+    Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
+    PreviewMode,
 };
-use uv_dispatch::SharedState;
 use uv_fs::Simplified;
-use uv_normalize::DEV_DEPENDENCIES;
+use uv_normalize::{DefaultExtras, DEV_DEPENDENCIES};
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::InstallTarget;
-use uv_scripts::Pep723Script;
-use uv_warnings::{warn_user, warn_user_once};
+use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
+use uv_settings::PythonInstallMirrors;
+use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace};
+use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::Modifications;
+use crate::commands::project::add::{AddTarget, PythonTarget};
+use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
-use crate::commands::project::{default_dependency_groups, ProjectError};
+use crate::commands::project::lock_target::LockTarget;
+use crate::commands::project::{
+    default_dependency_groups, ProjectEnvironment, ProjectError, ProjectInterpreter,
+    ScriptInterpreter, UniversalState,
+};
 use crate::commands::{diagnostics, project, ExitStatus};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
 /// Remove one or more packages from the project requirements.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -36,6 +43,7 @@ pub(crate) async fn remove(
     project_dir: &Path,
     locked: bool,
     frozen: bool,
+    active: Option<bool>,
     no_sync: bool,
     packages: Vec<PackageName>,
     dependency_type: DependencyType,
@@ -43,14 +51,12 @@ pub(crate) async fn remove(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
+    network_settings: NetworkSettings,
     script: Option<Pep723Script>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     cache: &Cache,
     printer: Printer,
@@ -78,28 +84,38 @@ pub(crate) async fn remove(
                 "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        Target::Script(script)
+        RemoveTarget::Script(script)
     } else {
         // Find the project in the workspace.
+        // No workspace caching since `uv remove` changes the workspace definition.
         let project = if let Some(package) = package {
             VirtualProject::Project(
-                Workspace::discover(project_dir, &DiscoveryOptions::default())
-                    .await?
-                    .with_current_project(package.clone())
-                    .with_context(|| format!("Package `{package}` not found in workspace"))?,
+                Workspace::discover(
+                    project_dir,
+                    &DiscoveryOptions::default(),
+                    &WorkspaceCache::default(),
+                )
+                .await?
+                .with_current_project(package.clone())
+                .with_context(|| format!("Package `{package}` not found in workspace"))?,
             )
         } else {
-            VirtualProject::discover(project_dir, &DiscoveryOptions::default()).await?
+            VirtualProject::discover(
+                project_dir,
+                &DiscoveryOptions::default(),
+                &WorkspaceCache::default(),
+            )
+            .await?
         };
 
-        Target::Project(project)
+        RemoveTarget::Project(project)
     };
 
     let mut toml = match &target {
-        Target::Script(script) => {
+        RemoveTarget::Script(script) => {
             PyProjectTomlMut::from_toml(&script.metadata.raw, DependencyTarget::Script)
         }
-        Target::Project(project) => PyProjectTomlMut::from_toml(
+        RemoveTarget::Project(project) => PyProjectTomlMut::from_toml(
             project.pyproject_toml().raw.as_ref(),
             DependencyTarget::PyProjectToml,
         ),
@@ -110,10 +126,10 @@ pub(crate) async fn remove(
             DependencyType::Production => {
                 let deps = toml.remove_dependency(&package)?;
                 if deps.is_empty() {
-                    warn_if_present(&package, &toml);
+                    show_other_dependency_type_hint(printer, &package, &toml)?;
                     anyhow::bail!(
-                        "The dependency `{package}` could not be found in `dependencies`"
-                    );
+                        "The dependency `{package}` could not be found in `project.dependencies`"
+                    )
                 }
             }
             DependencyType::Dev => {
@@ -121,18 +137,18 @@ pub(crate) async fn remove(
                 let group_deps =
                     toml.remove_dependency_group_requirement(&package, &DEV_DEPENDENCIES)?;
                 if dev_deps.is_empty() && group_deps.is_empty() {
-                    warn_if_present(&package, &toml);
+                    show_other_dependency_type_hint(printer, &package, &toml)?;
                     anyhow::bail!(
-                        "The dependency `{package}` could not be found in `dev-dependencies` or `dependency-groups.dev`"
+                        "The dependency `{package}` could not be found in `tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`"
                     );
                 }
             }
             DependencyType::Optional(ref extra) => {
                 let deps = toml.remove_optional_dependency(&package, extra)?;
                 if deps.is_empty() {
-                    warn_if_present(&package, &toml);
+                    show_other_dependency_type_hint(printer, &package, &toml)?;
                     anyhow::bail!(
-                        "The dependency `{package}` could not be found in `optional-dependencies`"
+                        "The dependency `{package}` could not be found in `project.optional-dependencies.{extra}`"
                     );
                 }
             }
@@ -142,17 +158,17 @@ pub(crate) async fn remove(
                     let group_deps =
                         toml.remove_dependency_group_requirement(&package, &DEV_DEPENDENCIES)?;
                     if dev_deps.is_empty() && group_deps.is_empty() {
-                        warn_if_present(&package, &toml);
+                        show_other_dependency_type_hint(printer, &package, &toml)?;
                         anyhow::bail!(
-                            "The dependency `{package}` could not be found in `dev-dependencies` or `dependency-groups.dev`"
+                            "The dependency `{package}` could not be found in `tool.uv.dev-dependencies` or `tool.uv.dependency-groups.dev`"
                         );
                     }
                 } else {
                     let deps = toml.remove_dependency_group_requirement(&package, group)?;
                     if deps.is_empty() {
-                        warn_if_present(&package, &toml);
+                        show_other_dependency_type_hint(printer, &package, &toml)?;
                         anyhow::bail!(
-                            "The dependency `{package}` could not be found in `dependency-groups`"
+                            "The dependency `{package}` could not be found in `dependency-groups.{group}`"
                         );
                     }
                 }
@@ -160,27 +176,20 @@ pub(crate) async fn remove(
         }
     }
 
-    // Save the modified dependencies.
-    match &target {
-        Target::Script(script) => {
-            script.write(&toml.to_string()).await?;
-        }
-        Target::Project(project) => {
-            let pyproject_path = project.root().join("pyproject.toml");
-            fs_err::write(pyproject_path, toml.to_string())?;
-        }
-    };
+    let content = toml.to_string();
 
-    // If `--frozen`, exit early. There's no reason to lock and sync, and we don't need a `uv.lock`
+    // Save the modified `pyproject.toml` or script.
+    target.write(&content)?;
+
+    // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
     // to exist at all.
     if frozen {
         return Ok(ExitStatus::Success);
     }
 
-    let project = match target {
-        Target::Project(project) => project,
-        // If `--script`, exit early. There's no reason to lock and sync.
-        Target::Script(script) => {
+    // If we're modifying a script, and lockfile doesn't exist, don't create it.
+    if let RemoveTarget::Script(ref script) = target {
+        if !LockTarget::from(script).lock_path().is_file() {
             writeln!(
                 printer.stderr(),
                 "Updated `{}`",
@@ -188,74 +197,128 @@ pub(crate) async fn remove(
             )?;
             return Ok(ExitStatus::Success);
         }
+    }
+
+    // Update the `pypackage.toml` in-memory.
+    let target = target.update(&content)?;
+
+    // Convert to an `AddTarget` by attaching the appropriate interpreter or environment.
+    let target = match target {
+        RemoveTarget::Project(project) => {
+            if no_sync {
+                // Discover the interpreter.
+                let interpreter = ProjectInterpreter::discover(
+                    project.workspace(),
+                    project_dir,
+                    python.as_deref().map(PythonRequest::parse),
+                    &network_settings,
+                    python_preference,
+                    python_downloads,
+                    &install_mirrors,
+                    no_config,
+                    active,
+                    cache,
+                    printer,
+                )
+                .await?
+                .into_interpreter();
+
+                AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)))
+            } else {
+                // Discover or create the virtual environment.
+                let environment = ProjectEnvironment::get_or_init(
+                    project.workspace(),
+                    python.as_deref().map(PythonRequest::parse),
+                    &install_mirrors,
+                    &network_settings,
+                    python_preference,
+                    python_downloads,
+                    no_config,
+                    active,
+                    cache,
+                    DryRun::Disabled,
+                    printer,
+                )
+                .await?
+                .into_environment()?;
+
+                AddTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
+            }
+        }
+        RemoveTarget::Script(script) => {
+            let interpreter = ScriptInterpreter::discover(
+                Pep723ItemRef::Script(&script),
+                python.as_deref().map(PythonRequest::parse),
+                &network_settings,
+                python_preference,
+                python_downloads,
+                &install_mirrors,
+                no_config,
+                active,
+                cache,
+                printer,
+            )
+            .await?
+            .into_interpreter();
+
+            AddTarget::Script(script, Box::new(interpreter))
+        }
     };
 
-    // Discover or create the virtual environment.
-    let venv = project::get_or_init_environment(
-        project.workspace(),
-        python.as_deref().map(PythonRequest::parse),
-        install_mirrors,
-        python_preference,
-        python_downloads,
-        connectivity,
-        native_tls,
-        allow_insecure_host,
-        no_config,
-        cache,
-        printer,
-    )
-    .await?;
-
     // Determine the lock mode.
-    let mode = if frozen {
-        LockMode::Frozen
-    } else if locked {
-        LockMode::Locked(venv.interpreter())
+    let mode = if locked {
+        LockMode::Locked(target.interpreter())
     } else {
-        LockMode::Write(venv.interpreter())
+        LockMode::Write(target.interpreter())
     };
 
     // Initialize any shared state.
-    let state = SharedState::default();
+    let state = UniversalState::default();
 
     // Lock and sync the environment, if necessary.
-    let lock = match project::lock::do_safe_lock(
+    let lock = match project::lock::LockOperation::new(
         mode,
-        project.workspace(),
-        settings.as_ref().into(),
-        LowerBound::Allow,
+        &settings.resolver,
+        &network_settings,
         &state,
         Box::new(DefaultResolveLogger),
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         printer,
         preview,
     )
+    .execute((&target).into())
     .await
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
         Err(err) => return Err(err.into()),
     };
 
-    if no_sync {
+    let AddTarget::Project(project, environment) = target else {
+        // If we're not adding to a project, exit early.
         return Ok(ExitStatus::Success);
-    }
+    };
+
+    let PythonTarget::Environment(venv) = &*environment else {
+        // If we're not syncing, exit early.
+        return Ok(ExitStatus::Success);
+    };
 
     // Perform a full sync, because we don't know what exactly is affected by the removal.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
-    let extras = ExtrasSpecification::All;
+    let extras = ExtrasSpecification::from_all_extras();
     let install_options = InstallOptions::default();
 
     // Determine the default groups to include.
-    let defaults = default_dependency_groups(project.pyproject_toml())?;
+    let default_groups = default_dependency_groups(project.pyproject_toml())?;
+
+    // Determine the default extras to include.
+    let default_extras = DefaultExtras::default();
 
     // Identify the installation target.
     let target = match &project {
@@ -270,22 +333,24 @@ pub(crate) async fn remove(
         },
     };
 
+    let state = state.fork();
+
     match project::sync::do_sync(
         target,
-        &venv,
-        &extras,
-        &DevGroupsManifest::from_defaults(defaults),
+        venv,
+        &extras.with_defaults(default_extras),
+        &DependencyGroups::default().with_defaults(default_groups),
         EditableMode::Editable,
         install_options,
         Modifications::Exact,
-        settings.as_ref().into(),
+        (&settings).into(),
+        &network_settings,
+        &state,
         Box::new(DefaultInstallLogger),
         installer_metadata,
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
+        DryRun::Disabled,
         printer,
         preview,
     )
@@ -293,7 +358,7 @@ pub(crate) async fn remove(
     {
         Ok(()) => {}
         Err(ProjectError::Operation(err)) => {
-            return diagnostics::OperationDiagnostic::default()
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
                 .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
         }
@@ -305,36 +370,104 @@ pub(crate) async fn remove(
 
 /// Represents the destination where dependencies are added, either to a project or a script.
 #[derive(Debug)]
-enum Target {
+enum RemoveTarget {
     /// A PEP 723 script, with inline metadata.
     Project(VirtualProject),
     /// A project with a `pyproject.toml`.
     Script(Pep723Script),
 }
 
-/// Emit a warning if a dependency with the given name is present as any dependency type.
-///
-/// This is useful when a dependency of the user-specified type was not found, but it may be present
-/// elsewhere.
-fn warn_if_present(name: &PackageName, pyproject: &PyProjectTomlMut) {
-    for dep_ty in pyproject.find_dependency(name, None) {
-        match dep_ty {
-            DependencyType::Production => {
-                warn_user!("`{name}` is a production dependency");
+impl RemoveTarget {
+    /// Write the updated content to the target.
+    ///
+    /// Returns `true` if the content was modified.
+    fn write(&self, content: &str) -> Result<bool, io::Error> {
+        match self {
+            Self::Script(script) => {
+                if content == script.metadata.raw {
+                    debug!("No changes to dependencies; skipping update");
+                    Ok(false)
+                } else {
+                    script.write(content)?;
+                    Ok(true)
+                }
             }
-            DependencyType::Dev => {
-                warn_user!("`{name}` is a development dependency; try calling `uv remove --dev`");
-            }
-            DependencyType::Optional(group) => {
-                warn_user!(
-                    "`{name}` is an optional dependency; try calling `uv remove --optional {group}`",
-                );
-            }
-            DependencyType::Group(group) => {
-                warn_user!(
-                    "`{name}` is in the `{group}` group; try calling `uv remove --group {group}`",
-                );
+            Self::Project(project) => {
+                if content == project.pyproject_toml().raw {
+                    debug!("No changes to dependencies; skipping update");
+                    Ok(false)
+                } else {
+                    let pyproject_path = project.root().join("pyproject.toml");
+                    fs_err::write(pyproject_path, content)?;
+                    Ok(true)
+                }
             }
         }
     }
+
+    /// Update the target in-memory to incorporate the new content.
+    #[allow(clippy::result_large_err)]
+    fn update(self, content: &str) -> Result<Self, ProjectError> {
+        match self {
+            Self::Script(mut script) => {
+                script.metadata = Pep723Metadata::from_str(content)
+                    .map_err(ProjectError::Pep723ScriptTomlParse)?;
+                Ok(Self::Script(script))
+            }
+            Self::Project(project) => {
+                let project = project
+                    .with_pyproject_toml(
+                        toml::from_str(content).map_err(ProjectError::PyprojectTomlParse)?,
+                    )
+                    .ok_or(ProjectError::PyprojectTomlUpdate)?;
+                Ok(Self::Project(project))
+            }
+        }
+    }
+}
+
+/// Show a hint if a dependency with the given name is present as any dependency type.
+///
+/// This is useful when a dependency of the user-specified type was not found, but it may be present
+/// elsewhere.
+fn show_other_dependency_type_hint(
+    printer: Printer,
+    name: &PackageName,
+    pyproject: &PyProjectTomlMut,
+) -> Result<()> {
+    // TODO(zanieb): Attach these hints to the error so they render _after_ in accordance our
+    // typical styling
+    for dep_ty in pyproject.find_dependency(name, None) {
+        match dep_ty {
+            DependencyType::Production => writeln!(
+                printer.stderr(),
+                "{}{} `{name}` is a production dependency",
+                "hint".bold().cyan(),
+                ":".bold(),
+            )?,
+            DependencyType::Dev => writeln!(
+                printer.stderr(),
+                "{}{} `{name}` is a development dependency (try: `{}`)",
+                "hint".bold().cyan(),
+                ":".bold(),
+                format!("uv remove {name} --dev`").bold()
+            )?,
+            DependencyType::Optional(group) => writeln!(
+                printer.stderr(),
+                "{}{} `{name}` is an optional dependency (try: `{}`)",
+                "hint".bold().cyan(),
+                ":".bold(),
+                format!("uv remove {name} --optional {group}").bold()
+            )?,
+            DependencyType::Group(group) => writeln!(
+                printer.stderr(),
+                "{}{} `{name}` is in the `{group}` group (try: `{}`)",
+                "hint".bold().cyan(),
+                ":".bold(),
+                format!("uv remove {name} --group {group}").bold()
+            )?,
+        }
+    }
+
+    Ok(())
 }

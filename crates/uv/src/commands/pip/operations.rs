@@ -3,17 +3,18 @@
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tracing::debug;
 use uv_tool::InstalledTools;
 
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, ExtrasSpecification, Overrides,
-    Reinstall, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, DryRun,
+    ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -25,9 +26,9 @@ use uv_distribution_types::{
     DistributionMetadata, IndexLocations, InstalledMetadata, Name, Resolution,
 };
 use uv_fs::Simplified;
-use uv_install_wheel::linker::LinkMode;
+use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
@@ -53,13 +54,24 @@ pub(crate) async fn read_requirements(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification,
+    groups: BTreeMap<PathBuf, Vec<GroupName>>,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
+        let hint = if requirements.iter().any(|source| {
+            matches!(
+                source,
+                RequirementsSource::Editable(_) | RequirementsSource::SourceTree(_)
+            )
+        }) {
+            "Use `<dir>[extra]` syntax or `-r <file>` instead."
+        } else {
+            "Use `package[extra]` syntax instead."
+        };
         return Err(anyhow!(
-            "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file."
+            "Requesting extras requires a `pyproject.toml`, `setup.cfg`, or `setup.py` file. {hint}"
         )
         .into());
     }
@@ -69,6 +81,7 @@ pub(crate) async fn read_requirements(
         requirements,
         constraints,
         overrides,
+        groups,
         client_builder,
     )
     .await?)
@@ -79,11 +92,15 @@ pub(crate) async fn read_constraints(
     constraints: &[RequirementsSource],
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<Vec<NameRequirementSpecification>, Error> {
-    Ok(
-        RequirementsSpecification::from_sources(&[], constraints, &[], client_builder)
-            .await?
-            .constraints,
+    Ok(RequirementsSpecification::from_sources(
+        &[],
+        constraints,
+        &[],
+        BTreeMap::default(),
+        client_builder,
     )
+    .await?
+    .constraints)
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
@@ -93,8 +110,9 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     overrides: Vec<UnresolvedRequirementSpecification>,
     source_trees: Vec<PathBuf>,
     mut project: Option<PackageName>,
-    workspace_members: Option<BTreeSet<PackageName>>,
+    workspace_members: BTreeSet<PackageName>,
     extras: &ExtrasSpecification,
+    groups: &BTreeMap<PathBuf, DependencyGroups>,
     preferences: Vec<Preference>,
     installed_packages: InstalledPackages,
     hasher: &HashStrategy,
@@ -138,7 +156,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     index,
                     DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
                 )
-                .with_reporter(ResolverReporter::from(printer))
+                .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
                 .await?,
             );
@@ -148,11 +166,12 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         if !source_trees.is_empty() {
             let resolutions = SourceTreeResolver::new(
                 extras,
+                groups,
                 hasher,
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
-            .with_reporter(ResolverReporter::from(printer))
+            .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(source_trees.iter().map(PathBuf::as_path))
             .await?;
 
@@ -166,25 +185,23 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             });
 
             // If any of the extras were unused, surface a warning.
-            if let ExtrasSpecification::Some(extras) = extras {
-                let mut unused_extras = extras
-                    .iter()
-                    .filter(|extra| {
-                        !resolutions
-                            .iter()
-                            .any(|resolution| resolution.extras.contains(extra))
-                    })
-                    .collect::<Vec<_>>();
-                if !unused_extras.is_empty() {
-                    unused_extras.sort_unstable();
-                    unused_extras.dedup();
-                    let s = if unused_extras.len() == 1 { "" } else { "s" };
-                    return Err(anyhow!(
-                        "Requested extra{s} not found: {}",
-                        unused_extras.iter().join(", ")
-                    )
-                    .into());
-                }
+            let mut unused_extras = extras
+                .explicit_names()
+                .filter(|extra| {
+                    !resolutions
+                        .iter()
+                        .any(|resolution| resolution.extras.contains(extra))
+                })
+                .collect::<Vec<_>>();
+            if !unused_extras.is_empty() {
+                unused_extras.sort_unstable();
+                unused_extras.dedup();
+                let s = if unused_extras.len() == 1 { "" } else { "s" };
+                return Err(anyhow!(
+                    "Requested extra{s} not found: {}",
+                    unused_extras.iter().join(", ")
+                )
+                .into());
             }
 
             // Extend the requirements with the resolved source trees.
@@ -221,7 +238,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                     index,
                     DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
                 )
-                .with_reporter(ResolverReporter::from(printer))
+                .with_reporter(Arc::new(ResolverReporter::from(printer)))
                 .resolve(unnamed.into_iter())
                 .await?,
             );
@@ -251,7 +268,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
                 index,
                 DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
             )
-            .with_reporter(ResolverReporter::from(printer))
+            .with_reporter(Arc::new(ResolverReporter::from(printer)))
             .resolve(&resolver_env)
             .await?
         }
@@ -297,7 +314,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             installed_packages,
             DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
         )?
-        .with_reporter(reporter);
+        .with_reporter(Arc::new(reporter));
 
         resolver.resolve().await?
     };
@@ -397,7 +414,7 @@ pub(crate) async fn install(
     venv: &PythonEnvironment,
     logger: Box<dyn InstallLogger>,
     installer_metadata: bool,
-    dry_run: bool,
+    dry_run: DryRun,
     printer: Printer,
 ) -> Result<Changelog, Error> {
     let start = std::time::Instant::now();
@@ -418,8 +435,8 @@ pub(crate) async fn install(
         )
         .context("Failed to determine installation plan")?;
 
-    if dry_run {
-        report_dry_run(resolution, plan, modifications, start, printer)?;
+    if dry_run.enabled() {
+        report_dry_run(dry_run, resolution, plan, modifications, start, printer)?;
         return Ok(Changelog::default());
     }
 
@@ -460,7 +477,9 @@ pub(crate) async fn install(
             build_options,
             DistributionDatabase::new(client, build_dispatch, concurrency.downloads),
         )
-        .with_reporter(PrepareReporter::from(printer).with_length(remote.len() as u64));
+        .with_reporter(Arc::new(
+            PrepareReporter::from(printer).with_length(remote.len() as u64),
+        ));
 
         let wheels = preparer
             .prepare(remote.clone(), in_flight, resolution)
@@ -493,7 +512,7 @@ pub(crate) async fn install(
                 )) => {
                     warn_user!(
                         "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
-                        dist_info.path().user_display().cyan(),
+                        dist_info.install_path().user_display().cyan(),
                     );
                 }
                 Err(uv_installer::UninstallError::Uninstall(
@@ -501,7 +520,7 @@ pub(crate) async fn install(
                 )) => {
                     warn_user!(
                         "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",
-                        dist_info.path().user_display().cyan(),
+                        dist_info.install_path().user_display().cyan(),
                     );
                 }
                 Err(err) => return Err(err.into()),
@@ -519,7 +538,9 @@ pub(crate) async fn install(
             .with_link_mode(link_mode)
             .with_cache(cache)
             .with_installer_metadata(installer_metadata)
-            .with_reporter(InstallReporter::from(printer).with_length(installs.len() as u64))
+            .with_reporter(Arc::new(
+                InstallReporter::from(printer).with_length(installs.len() as u64),
+            ))
             // This technically can block the runtime, but we are on the main thread and
             // have no other running tasks at this point, so this lets us avoid spawning a blocking
             // task.
@@ -529,7 +550,7 @@ pub(crate) async fn install(
     }
 
     if compile {
-        compile_bytecode(venv, cache, printer).await?;
+        compile_bytecode(venv, &concurrency, cache, printer).await?;
     }
 
     // Construct a summary of the changes made to the environment.
@@ -642,6 +663,7 @@ pub(crate) fn report_target_environment(
 
 /// Report on the results of a dry-run installation.
 fn report_dry_run(
+    dry_run: DryRun,
     resolution: &Resolution,
     plan: Plan,
     modifications: Modifications,
@@ -765,6 +787,10 @@ fn report_dry_run(
         }
     }
 
+    if matches!(dry_run, DryRun::Check) {
+        return Err(Error::OutdatedEnvironment);
+    }
+
     Ok(())
 }
 
@@ -836,4 +862,7 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+
+    #[error("The environment is outdated; run `{}` to update the environment", "uv sync".cyan())]
+    OutdatedEnvironment,
 }

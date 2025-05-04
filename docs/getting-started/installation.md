@@ -25,7 +25,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.5.8/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.7.2/install.sh | sh
     ```
 
 === "Windows"
@@ -41,7 +41,7 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.8/install.ps1 | iex"
+    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.7.2/install.ps1 | iex"
     ```
 
 !!! tip
@@ -105,12 +105,20 @@ uv is available in the core Homebrew packages.
 $ brew install uv
 ```
 
-### Winget
+### WinGet
 
-uv is available via [winget](https://winstall.app/apps/astral-sh.uv).
+uv is available via [WinGet](https://winstall.app/apps/astral-sh.uv).
 
 ```console
 $ winget install --id=astral-sh.uv  -e
+```
+
+### Scoop
+
+uv is available via [Scoop](https://scoop.sh/#/apps?q=uv).
+
+```console
+$ scoop install main/uv
 ```
 
 ### Docker
@@ -150,39 +158,77 @@ $ pip install --upgrade uv
 
 ## Shell autocompletion
 
+!!! tip
+
+    You can run `echo $SHELL` to help you determine your shell.
+
 To enable shell autocompletion for uv commands, run one of the following:
 
-=== "Linux and macOS"
+=== "Bash"
 
     ```bash
-    # Determine your shell (e.g., with `echo $SHELL`), then run one of:
     echo 'eval "$(uv generate-shell-completion bash)"' >> ~/.bashrc
+    ```
+
+=== "Zsh"
+
+    ```bash
     echo 'eval "$(uv generate-shell-completion zsh)"' >> ~/.zshrc
-    echo 'uv generate-shell-completion fish | source' >> ~/.config/fish/config.fish
+    ```
+
+=== "fish"
+
+    ```bash
+    echo 'uv generate-shell-completion fish | source' > ~/.config/fish/completions/uv.fish
+    ```
+
+=== "Elvish"
+
+    ```bash
     echo 'eval (uv generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
     ```
 
-=== "Windows"
+=== "PowerShell / pwsh"
 
     ```powershell
+    if (!(Test-Path -Path $PROFILE)) {
+      New-Item -ItemType File -Path $PROFILE -Force
+    }
     Add-Content -Path $PROFILE -Value '(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression'
     ```
 
 To enable shell autocompletion for uvx, run one of the following:
 
-=== "Linux and macOS"
+=== "Bash"
 
     ```bash
-    # Determine your shell (e.g., with `echo $SHELL`), then run one of:
     echo 'eval "$(uvx --generate-shell-completion bash)"' >> ~/.bashrc
+    ```
+
+=== "Zsh"
+
+    ```bash
     echo 'eval "$(uvx --generate-shell-completion zsh)"' >> ~/.zshrc
-    echo 'uvx --generate-shell-completion fish | source' >> ~/.config/fish/config.fish
+    ```
+
+=== "fish"
+
+    ```bash
+    echo 'uvx --generate-shell-completion fish | source' > ~/.config/fish/completions/uvx.fish
+    ```
+
+=== "Elvish"
+
+    ```bash
     echo 'eval (uvx --generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
     ```
 
-=== "Windows"
+=== "PowerShell / pwsh"
 
     ```powershell
+    if (!(Test-Path -Path $PROFILE)) {
+      New-Item -ItemType File -Path $PROFILE -Force
+    }
     Add-Content -Path $PROFILE -Value '(& uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression'
     ```
 
@@ -190,24 +236,9 @@ Then restart the shell or source the shell config file.
 
 ## Uninstallation
 
-If you need to remove uv from your system, just remove the `uv` and `uvx` binaries:
+If you need to remove uv from your system, follow these steps:
 
-=== "macOS and Linux"
-
-    ```console
-    $ rm ~/.local/bin/uv ~/.local/bin/uvx
-    ```
-
-=== "Windows"
-
-    ```powershell
-    $ rm $HOME\.local\bin\uv.exe
-    $ rm $HOME\.local\bin\uvx.exe
-    ```
-
-!!! tip
-
-    You may want to remove data that uv has stored before removing the binaries:
+1.  Clean up stored data (optional):
 
     ```console
     $ uv cache clean
@@ -215,11 +246,30 @@ If you need to remove uv from your system, just remove the `uv` and `uvx` binari
     $ rm -r "$(uv tool dir)"
     ```
 
-!!! note
+    !!! tip
 
-    Prior to 0.5.0, uv was installed into `~/.cargo/bin`. The binaries can be removed from there to
-    uninstall. Upgrading from an older version will not automatically remove the binaries from
-    `~/.cargo/bin`.
+        Before removing the binaries, you may want to remove any data that uv has stored.
+
+2.  Remove the uv and uvx binaries:
+
+    === "macOS and Linux"
+
+        ```console
+        $ rm ~/.local/bin/uv ~/.local/bin/uvx
+        ```
+
+    === "Windows"
+
+        ```powershell
+        $ rm $HOME\.local\bin\uv.exe
+        $ rm $HOME\.local\bin\uvx.exe
+        ```
+
+    !!! note
+
+        Prior to 0.5.0, uv was installed into `~/.cargo/bin`. The binaries can be removed from there to
+        uninstall. Upgrading from an older version will not automatically remove the binaries from
+        `~/.cargo/bin`.
 
 ## Next steps
 

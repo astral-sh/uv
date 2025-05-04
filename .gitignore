@@ -23,6 +23,8 @@ __pycache__
 *.so
 *.pyd
 *.dll
+/dist
+/crates/uv-build/dist
 
 # Profiling
 flamegraph.svg
@@ -35,3 +37,7 @@ profile.json
 
 # macOS
 **/.DS_Store
+
+# IDE
+.idea
+.vscode

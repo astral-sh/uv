@@ -1,31 +1,34 @@
+use std::borrow::Cow;
 use std::ops::Deref;
 use std::str::FromStr;
 
 use thiserror::Error;
 
+use uv_small_str::SmallString;
+
 /// The normalized name of an index.
 ///
 /// Index names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, serde::Serialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, serde::Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-pub struct IndexName(String);
+pub struct IndexName(SmallString);
 
 impl IndexName {
     /// Validates the given index name and returns [`IndexName`] if it's valid, or an error
     /// otherwise.
-    pub fn new(name: String) -> Result<Self, IndexNameError> {
+    pub fn new(name: &str) -> Result<Self, IndexNameError> {
         for c in name.chars() {
             match c {
                 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' => {}
                 c if c.is_ascii() => {
-                    return Err(IndexNameError::UnsupportedCharacter(c, name));
+                    return Err(IndexNameError::UnsupportedCharacter(c, name.to_string()));
                 }
                 c => {
-                    return Err(IndexNameError::NonAsciiName(c, name));
+                    return Err(IndexNameError::NonAsciiName(c, name.to_string()));
                 }
             }
         }
-        Ok(Self(name))
+        Ok(Self(SmallString::from(name)))
     }
 
     /// Converts the index name to an environment variable name.
@@ -49,7 +52,7 @@ impl FromStr for IndexName {
     type Err = IndexNameError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::new(s.to_string())
+        Self::new(s)
     }
 }
 
@@ -58,7 +61,8 @@ impl<'de> serde::de::Deserialize<'de> for IndexName {
     where
         D: serde::de::Deserializer<'de>,
     {
-        IndexName::new(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+        let s = Cow::<'_, str>::deserialize(deserializer)?;
+        IndexName::new(&s).map_err(serde::de::Error::custom)
     }
 }
 

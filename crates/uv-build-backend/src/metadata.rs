@@ -1,20 +1,27 @@
-use crate::Error;
-use itertools::Itertools;
-use serde::Deserialize;
 use std::collections::{BTreeMap, Bound};
 use std::ffi::OsStr;
 use std::fmt::Display;
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+
+use itertools::Itertools;
+use serde::Deserialize;
 use tracing::{debug, trace};
+use version_ranges::Ranges;
+use walkdir::WalkDir;
+
 use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::{Requirement, VersionOrUrl};
+use uv_pep508::{
+    ExtraOperator, MarkerExpression, MarkerTree, MarkerValueExtra, Requirement, VersionOrUrl,
+};
 use uv_pypi_types::{Metadata23, VerbatimParsedUrl};
-use version_ranges::Ranges;
-use walkdir::WalkDir;
+
+use crate::serde_verbatim::SerdeVerbatim;
+use crate::{BuildBackendSettings, Error};
 
 /// By default, we ignore generated python files.
 pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
@@ -119,8 +126,31 @@ impl PyProjectToml {
         self.project.readme.as_ref()
     }
 
-    pub(crate) fn license_files(&self) -> Option<&[String]> {
-        self.project.license_files.as_deref()
+    /// The license files that need to be included in the source distribution.
+    pub(crate) fn license_files_source_dist(&self) -> impl Iterator<Item = &str> {
+        let license_file = self
+            .project
+            .license
+            .as_ref()
+            .and_then(|license| license.file())
+            .into_iter();
+        let license_files = self
+            .project
+            .license_files
+            .iter()
+            .flatten()
+            .map(String::as_str);
+        license_files.chain(license_file)
+    }
+
+    /// The license files that need to be included in the wheel.
+    pub(crate) fn license_files_wheel(&self) -> impl Iterator<Item = &str> {
+        // The pre-PEP 639 `license = { file = "..." }` is included inline in `METADATA`.
+        self.project
+            .license_files
+            .iter()
+            .flatten()
+            .map(String::as_str)
     }
 
     pub(crate) fn settings(&self) -> Option<&BuildBackendSettings> {
@@ -133,14 +163,14 @@ impl PyProjectToml {
     ///
     /// ```toml
     /// [build-system]
-    /// requires = ["uv>=0.4.15,<5"]
-    /// build-backend = "uv"
+    /// requires = ["uv_build>=0.4.15,<5"]
+    /// build-backend = "uv_build"
     /// ```
     pub fn check_build_system(&self, uv_version: &str) -> Vec<String> {
         let mut warnings = Vec::new();
-        if self.build_system.build_backend.as_deref() != Some("uv") {
+        if self.build_system.build_backend.as_deref() != Some("uv_build") {
             warnings.push(format!(
-                r#"The value for `build_system.build-backend` should be `"uv"`, not `"{}"`"#,
+                r#"The value for `build_system.build-backend` should be `"uv_build"`, not `"{}"`"#,
                 self.build_system.build_backend.clone().unwrap_or_default()
             ));
         }
@@ -161,7 +191,7 @@ impl PyProjectToml {
             warnings.push(expected());
             return warnings;
         };
-        if uv_requirement.name.as_str() != "uv" {
+        if uv_requirement.name.as_str() != "uv-build" {
             warnings.push(expected());
             return warnings;
         }
@@ -193,10 +223,13 @@ impl PyProjectToml {
 
         if !bounded {
             warnings.push(format!(
-                "`build_system.requires = [\"{uv_requirement}\"]` is missing an \
-                upper bound on the uv version such as `<{next_breaking}`. \
-                Without bounding the uv version, the source distribution will break \
-                when a future, breaking version of uv is released.",
+                "`build_system.requires = [\"{}\"]` is missing an \
+                upper bound on the `uv_build` version such as `<{next_breaking}`. \
+                Without bounding the `uv_build` version, the source distribution will break \
+                when a future, breaking version of `uv_build` is released.",
+                // Use an underscore consistently, to avoid confusing users between a package name with dash and a
+                // module name with underscore
+                uv_requirement.verbatim()
             ));
         }
 
@@ -448,8 +481,32 @@ impl PyProjectToml {
             .optional_dependencies
             .iter()
             .flat_map(|optional_dependencies| optional_dependencies.keys())
-            .map(ToString::to_string)
-            .collect();
+            .collect::<Vec<_>>();
+
+        let requires_dist =
+            self.project
+                .dependencies
+                .iter()
+                .flatten()
+                .cloned()
+                .chain(self.project.optional_dependencies.iter().flat_map(
+                    |optional_dependencies| {
+                        optional_dependencies
+                            .iter()
+                            .flat_map(|(extra, requirements)| {
+                                requirements.iter().cloned().map(|mut requirement| {
+                                    requirement.marker.and(MarkerTree::expression(
+                                        MarkerExpression::Extra {
+                                            operator: ExtraOperator::Equal,
+                                            name: MarkerValueExtra::Extra(extra.clone()),
+                                        },
+                                    ));
+                                    requirement
+                                })
+                            })
+                    },
+                ))
+                .collect::<Vec<_>>();
 
         Ok(Metadata23 {
             metadata_version: metadata_version.to_string(),
@@ -477,13 +534,8 @@ impl PyProjectToml {
             license_expression,
             license_files,
             classifiers: self.project.classifiers.clone().unwrap_or_default(),
-            requires_dist: self
-                .project
-                .dependencies
-                .iter()
-                .flatten()
-                .map(ToString::to_string)
-                .collect(),
+            requires_dist: requires_dist.iter().map(ToString::to_string).collect(),
+            provides_extras: extras.iter().map(ToString::to_string).collect(),
             // Not commonly set.
             provides_dist: vec![],
             // Not supported.
@@ -496,7 +548,6 @@ impl PyProjectToml {
             // Not used by other tools, not supported.
             requires_external: vec![],
             project_urls,
-            provides_extras: extras,
             dynamic: vec![],
         })
     }
@@ -553,7 +604,7 @@ impl PyProjectToml {
             return Err(ValidationError::InvalidGroup(group.to_string()));
         }
 
-        writer.push_str(&format!("[{group}]\n"));
+        let _ = writeln!(writer, "[{group}]");
         for (name, object_reference) in entries {
             // More strict than the spec, we enforce the recommendation
             if !name
@@ -564,7 +615,7 @@ impl PyProjectToml {
             }
 
             // TODO(konsti): Validate that the object references are valid Python identifiers.
-            writer.push_str(&format!("{name} = {object_reference}\n"));
+            let _ = writeln!(writer, "{name} = {object_reference}");
         }
         writer.push('\n');
         Ok(())
@@ -682,8 +733,18 @@ pub(crate) enum License {
     },
     File {
         /// The file containing the license text.
-        file: PathBuf,
+        file: String,
     },
+}
+
+impl License {
+    fn file(&self) -> Option<&str> {
+        if let Self::File { file } = self {
+            Some(file)
+        } else {
+            None
+        }
+    }
 }
 
 /// A `project.authors` or `project.maintainers` entry as specified in
@@ -712,7 +773,7 @@ pub(crate) enum Contact {
 #[serde(rename_all = "kebab-case")]
 struct BuildSystem {
     /// PEP 508 dependencies required to execute the build system.
-    requires: Vec<Requirement<VerbatimParsedUrl>>,
+    requires: Vec<SerdeVerbatim<Requirement<VerbatimParsedUrl>>>,
     /// A string naming a Python object that will be used to perform the build.
     build_backend: Option<String>,
     /// <https://peps.python.org/pep-0517/#in-tree-build-backends>
@@ -735,139 +796,6 @@ pub(crate) struct ToolUv {
     build_backend: Option<BuildBackendSettings>,
 }
 
-/// To select which files to include in the source distribution, we first add the includes, then
-/// remove the excludes from that.
-///
-/// ## Include and exclude configuration
-///
-/// When building the source distribution, the following files and directories are included:
-/// * `pyproject.toml`
-/// * The module under `tool.uv.build-backend.module-root`, by default
-///   `src/<project_name_with_underscores>/**`.
-/// * `project.license-files` and `project.readme`.
-/// * All directories under `tool.uv.build-backend.data`.
-/// * All patterns from `tool.uv.build-backend.source-include`.
-///
-/// From these, we remove the `tool.uv.build-backend.source-exclude` matches.
-///
-/// When building the wheel, the following files and directories are included:
-/// * The module under `tool.uv.build-backend.module-root`, by default
-///   `src/<project_name_with_underscores>/**`.
-/// * `project.license-files` and `project.readme`, as part of the project metadata.
-/// * Each directory under `tool.uv.build-backend.data`, as data directories.
-///
-/// From these, we remove the `tool.uv.build-backend.source-exclude` and
-/// `tool.uv.build-backend.wheel-exclude` matches. The source dist excludes are applied to avoid
-/// source tree -> wheel source including more files than
-/// source tree -> source distribution -> wheel.
-///
-/// There are no specific wheel includes. There must only be one top level module, and all data
-/// files must either be under the module root or in a data directory. Most packages store small
-/// data in the module root alongside the source code.
-///
-/// ## Include and exclude syntax
-///
-/// Includes are anchored, which means that `pyproject.toml` includes only
-/// `<project root>/pyproject.toml`. Use for example `assets/**/sample.csv` to include for all
-/// `sample.csv` files in `<project root>/assets` or any child directory. To recursively include
-/// all files under a directory, use a `/**` suffix, e.g. `src/**`. For performance and
-/// reproducibility, avoid unanchored matches such as `**/sample.csv`.
-///
-/// Excludes are not anchored, which means that `__pycache__` excludes all directories named
-/// `__pycache__` and it's children anywhere. To anchor a directory, use a `/` prefix, e.g.,
-/// `/dist` will exclude only `<project root>/dist`.
-///
-/// The glob syntax is the reduced portable glob from
-/// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
-#[derive(Deserialize, Debug, Clone)]
-#[serde(default, rename_all = "kebab-case")]
-pub(crate) struct BuildBackendSettings {
-    /// The directory that contains the module directory, usually `src`, or an empty path when
-    /// using the flat layout over the src layout.
-    pub(crate) module_root: PathBuf,
-
-    /// Glob expressions which files and directories to additionally include in the source
-    /// distribution.
-    ///
-    /// `pyproject.toml` and the contents of the module directory are always included.
-    ///
-    /// The glob syntax is the reduced portable glob from
-    /// [PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
-    pub(crate) source_include: Vec<String>,
-
-    /// If set to `false`, the default excludes aren't applied.
-    ///
-    /// Default excludes: `__pycache__`, `*.pyc`, and `*.pyo`.
-    pub(crate) default_excludes: bool,
-
-    /// Glob expressions which files and directories to exclude from the source distribution.
-    pub(crate) source_exclude: Vec<String>,
-
-    /// Glob expressions which files and directories to exclude from the wheel.
-    pub(crate) wheel_exclude: Vec<String>,
-
-    /// Data includes for wheels.
-    ///
-    /// The directories included here are also included in the source distribution. They are copied
-    /// to the right wheel subdirectory on build.
-    pub(crate) data: WheelDataIncludes,
-}
-
-impl Default for BuildBackendSettings {
-    fn default() -> Self {
-        Self {
-            module_root: PathBuf::from("src"),
-            source_include: Vec::new(),
-            default_excludes: true,
-            source_exclude: Vec::new(),
-            wheel_exclude: Vec::new(),
-            data: WheelDataIncludes::default(),
-        }
-    }
-}
-
-/// Data includes for wheels.
-///
-/// Each entry is a directory, whose contents are copied to the matching directory in the wheel in
-/// `<name>-<version>.data/(purelib|platlib|headers|scripts|data)`. Upon installation, this data
-/// is moved to its target location, as defined by
-/// <https://docs.python.org/3.12/library/sysconfig.html#installation-paths>:
-/// - `data`: Installed over the virtualenv environment root. Warning: This may override existing
-///   files!
-/// - `scripts`: Installed to the directory for executables, `<venv>/bin` on Unix or
-///   `<venv>\Scripts` on Windows. This directory is added to PATH when the virtual environment is
-///   activated or when using `uv run`, so this data type can be used to install additional
-///   binaries. Consider using `project.scripts` instead for starting Python code.
-/// - `headers`: Installed to the include directory, where compilers building Python packages with
-///   this package as built requirement will search for header files.
-/// - `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended to
-///   uses these two options.
-#[derive(Default, Deserialize, Debug, Clone)]
-// `deny_unknown_fields` to catch typos such as `header` vs `headers`.
-#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
-pub(crate) struct WheelDataIncludes {
-    purelib: Option<String>,
-    platlib: Option<String>,
-    headers: Option<String>,
-    scripts: Option<String>,
-    data: Option<String>,
-}
-
-impl WheelDataIncludes {
-    /// Yield all data directories name and corresponding paths.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (&'static str, &str)> {
-        [
-            ("purelib", self.purelib.as_deref()),
-            ("platlib", self.platlib.as_deref()),
-            ("headers", self.headers.as_deref()),
-            ("scripts", self.scripts.as_deref()),
-            ("data", self.data.as_deref()),
-        ]
-        .into_iter()
-        .filter_map(|(name, value)| Some((name, value?)))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -884,8 +812,8 @@ mod tests {
             {payload}
 
             [build-system]
-            requires = ["uv>=0.4.15,<5"]
-            build-backend = "uv"
+            requires = ["uv_build>=0.4.15,<5"]
+            build-backend = "uv_build"
         "#
         }
     }
@@ -893,7 +821,7 @@ mod tests {
     fn format_err(err: impl std::error::Error) -> String {
         let mut formatted = err.to_string();
         for source in iter::successors(err.source(), |&err| err.source()) {
-            formatted += &format!("\n  Caused by: {source}");
+            let _ = write!(formatted, "\n  Caused by: {source}");
         }
         formatted
     }
@@ -967,8 +895,8 @@ mod tests {
             foo-bar = "foo:bar"
 
             [build-system]
-            requires = ["uv>=0.4.15,<5"]
-            build-backend = "uv"
+            requires = ["uv_build>=0.4.15,<5"]
+            build-backend = "uv_build"
         "#
         };
 
@@ -976,37 +904,173 @@ mod tests {
         let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
 
         assert_snapshot!(metadata.core_metadata_format(), @r###"
-    Metadata-Version: 2.3
-    Name: hello-world
-    Version: 0.1.0
-    Summary: A Python package
-    Keywords: demo,example,package
-    Author: Ferris the crab
-    Author-email: Ferris the crab <ferris@rustacean.net>
-    License: THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-             INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-             PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-             HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
-             CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
-             OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-    Classifier: Development Status :: 6 - Mature
-    Classifier: License :: OSI Approved :: MIT License
-    Classifier: License :: OSI Approved :: Apache Software License
-    Classifier: Programming Language :: Python
-    Requires-Dist: flask>=3,<4
-    Requires-Dist: sqlalchemy[asyncio]>=2.0.35,<3
-    Maintainer: Konsti
-    Maintainer-email: Konsti <konstin@mailbox.org>
-    Project-URL: Homepage, https://github.com/astral-sh/uv
-    Project-URL: Repository, https://astral.sh
-    Provides-Extra: mysql
-    Provides-Extra: postgres
-    Description-Content-Type: text/markdown
+        Metadata-Version: 2.3
+        Name: hello-world
+        Version: 0.1.0
+        Summary: A Python package
+        Keywords: demo,example,package
+        Author: Ferris the crab
+        Author-email: Ferris the crab <ferris@rustacean.net>
+        License: THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+                 INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+                 PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+                 HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+                 CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+                 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+        Classifier: Development Status :: 6 - Mature
+        Classifier: License :: OSI Approved :: MIT License
+        Classifier: License :: OSI Approved :: Apache Software License
+        Classifier: Programming Language :: Python
+        Requires-Dist: flask>=3,<4
+        Requires-Dist: sqlalchemy[asyncio]>=2.0.35,<3
+        Requires-Dist: pymysql>=1.1.1,<2 ; extra == 'mysql'
+        Requires-Dist: psycopg>=3.2.2,<4 ; extra == 'postgres'
+        Maintainer: Konsti
+        Maintainer-email: Konsti <konstin@mailbox.org>
+        Project-URL: Homepage, https://github.com/astral-sh/uv
+        Project-URL: Repository, https://astral.sh
+        Provides-Extra: mysql
+        Provides-Extra: postgres
+        Description-Content-Type: text/markdown
 
-    # Foo
+        # Foo
 
-    This is the foo library.
-    "###);
+        This is the foo library.
+        "###);
+
+        assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @r###"
+        [console_scripts]
+        foo = foo.cli:__main__
+
+        [gui_scripts]
+        foo-gui = foo.gui
+
+        [bar_group]
+        foo-bar = foo:bar
+
+        "###);
+    }
+
+    #[test]
+    fn self_extras() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs_err::write(
+            temp_dir.path().join("Readme.md"),
+            indoc! {r"
+            # Foo
+
+            This is the foo library.
+        "},
+        )
+        .unwrap();
+
+        fs_err::write(
+            temp_dir.path().join("License.txt"),
+            indoc! {r#"
+                THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+                INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+                PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+                HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+                CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+                OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+        "#},
+        )
+        .unwrap();
+
+        let contents = indoc! {r#"
+            # See https://github.com/pypa/sampleproject/blob/main/pyproject.toml for another example
+
+            [project]
+            name = "hello-world"
+            version = "0.1.0"
+            description = "A Python package"
+            readme = "Readme.md"
+            requires_python = ">=3.12"
+            license = { file = "License.txt" }
+            authors = [{ name = "Ferris the crab", email = "ferris@rustacean.net" }]
+            maintainers = [{ name = "Konsti", email = "konstin@mailbox.org" }]
+            keywords = ["demo", "example", "package"]
+            classifiers = [
+                "Development Status :: 6 - Mature",
+                "License :: OSI Approved :: MIT License",
+                # https://github.com/pypa/trove-classifiers/issues/17
+                "License :: OSI Approved :: Apache Software License",
+                "Programming Language :: Python",
+            ]
+            dependencies = ["flask>=3,<4", "sqlalchemy[asyncio]>=2.0.35,<3"]
+            # We don't support dynamic fields, the default empty array is the only allowed value.
+            dynamic = []
+
+            [project.optional-dependencies]
+            postgres = ["psycopg>=3.2.2,<4 ; sys_platform == 'linux'"]
+            mysql = ["pymysql>=1.1.1,<2"]
+            databases = ["hello-world[mysql]", "hello-world[postgres]"]
+            all = ["hello-world[databases]", "hello-world[postgres]", "hello-world[mysql]"]
+
+            [project.urls]
+            "Homepage" = "https://github.com/astral-sh/uv"
+            "Repository" = "https://astral.sh"
+
+            [project.scripts]
+            foo = "foo.cli:__main__"
+
+            [project.gui-scripts]
+            foo-gui = "foo.gui"
+
+            [project.entry-points.bar_group]
+            foo-bar = "foo:bar"
+
+            [build-system]
+            requires = ["uv_build>=0.4.15,<5"]
+            build-backend = "uv_build"
+        "#
+        };
+
+        let pyproject_toml = PyProjectToml::parse(contents).unwrap();
+        let metadata = pyproject_toml.to_metadata(temp_dir.path()).unwrap();
+
+        assert_snapshot!(metadata.core_metadata_format(), @r###"
+        Metadata-Version: 2.3
+        Name: hello-world
+        Version: 0.1.0
+        Summary: A Python package
+        Keywords: demo,example,package
+        Author: Ferris the crab
+        Author-email: Ferris the crab <ferris@rustacean.net>
+        License: THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+                 INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+                 PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+                 HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+                 CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+                 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+        Classifier: Development Status :: 6 - Mature
+        Classifier: License :: OSI Approved :: MIT License
+        Classifier: License :: OSI Approved :: Apache Software License
+        Classifier: Programming Language :: Python
+        Requires-Dist: flask>=3,<4
+        Requires-Dist: sqlalchemy[asyncio]>=2.0.35,<3
+        Requires-Dist: hello-world[databases] ; extra == 'all'
+        Requires-Dist: hello-world[postgres] ; extra == 'all'
+        Requires-Dist: hello-world[mysql] ; extra == 'all'
+        Requires-Dist: hello-world[mysql] ; extra == 'databases'
+        Requires-Dist: hello-world[postgres] ; extra == 'databases'
+        Requires-Dist: pymysql>=1.1.1,<2 ; extra == 'mysql'
+        Requires-Dist: psycopg>=3.2.2,<4 ; sys_platform == 'linux' and extra == 'postgres'
+        Maintainer: Konsti
+        Maintainer-email: Konsti <konstin@mailbox.org>
+        Project-URL: Homepage, https://github.com/astral-sh/uv
+        Project-URL: Repository, https://astral.sh
+        Provides-Extra: all
+        Provides-Extra: databases
+        Provides-Extra: mysql
+        Provides-Extra: postgres
+        Description-Content-Type: text/markdown
+
+        # Foo
+
+        This is the foo library.
+        "###);
 
         assert_snapshot!(pyproject_toml.to_entry_points().unwrap().unwrap(), @r###"
         [console_scripts]
@@ -1039,13 +1103,13 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv"]
-            build-backend = "uv"
+            requires = ["uv_build"]
+            build-backend = "uv_build"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r###"`build_system.requires = ["uv"]` is missing an upper bound on the uv version such as `<0.5`. Without bounding the uv version, the source distribution will break when a future, breaking version of uv is released."###
+            @r###"`build_system.requires = ["uv_build"]` is missing an upper bound on the `uv_build` version such as `<0.5`. Without bounding the `uv_build` version, the source distribution will break when a future, breaking version of `uv_build` is released."###
         );
     }
 
@@ -1057,8 +1121,8 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv>=0.4.15,<5", "wheel"]
-            build-backend = "uv"
+            requires = ["uv_build>=0.4.15,<5", "wheel"]
+            build-backend = "uv_build"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
@@ -1076,7 +1140,7 @@ mod tests {
 
             [build-system]
             requires = ["setuptools"]
-            build-backend = "uv"
+            build-backend = "uv_build"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
@@ -1093,13 +1157,13 @@ mod tests {
             version = "0.1.0"
 
             [build-system]
-            requires = ["uv>=0.4.15,<5"]
+            requires = ["uv_build>=0.4.15,<5"]
             build-backend = "setuptools"
         "#};
         let pyproject_toml = PyProjectToml::parse(contents).unwrap();
         assert_snapshot!(
             pyproject_toml.check_build_system("0.4.15+test").join("\n"),
-            @r###"The value for `build_system.build-backend` should be `"uv"`, not `"setuptools"`"###
+            @r###"The value for `build_system.build-backend` should be `"uv_build"`, not `"setuptools"`"###
         );
     }
 

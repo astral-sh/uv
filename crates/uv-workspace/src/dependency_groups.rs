@@ -3,16 +3,14 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use thiserror::Error;
-use tracing::warn;
+use tracing::error;
 
 use uv_normalize::{GroupName, DEV_DEPENDENCIES};
 use uv_pep508::Pep508Error;
-use uv_pypi_types::VerbatimParsedUrl;
-
-use crate::pyproject::DependencyGroupSpecifier;
+use uv_pypi_types::{DependencyGroupSpecifier, VerbatimParsedUrl};
 
 /// PEP 735 dependency groups, with any `include-group` entries resolved.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct FlatDependencyGroups(
     BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
 );
@@ -76,9 +74,10 @@ impl FlatDependencyGroups {
                             .extend(resolved.get(include_group).into_iter().flatten().cloned());
                     }
                     DependencyGroupSpecifier::Object(map) => {
-                        warn!(
-                            "Ignoring Dependency Object Specifier referenced by `{name}`: {map:?}"
-                        );
+                        return Err(DependencyGroupError::DependencyObjectSpecifierNotSupported(
+                            name.clone(),
+                            map.clone(),
+                        ));
                     }
                 }
             }
@@ -104,11 +103,29 @@ impl FlatDependencyGroups {
         self.0.get(group)
     }
 
+    /// Return the entry for a given group, if any.
     pub fn entry(
         &mut self,
         group: GroupName,
     ) -> Entry<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>> {
         self.0.entry(group)
+    }
+
+    /// Consume the [`FlatDependencyGroups`] and return the inner map.
+    pub fn into_inner(self) -> BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>> {
+        self.0
+    }
+}
+
+impl FromIterator<(GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>)>
+    for FlatDependencyGroups
+{
+    fn from_iter<
+        T: IntoIterator<Item = (GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>)>,
+    >(
+        iter: T,
+    ) -> Self {
+        Self(iter.into_iter().collect())
     }
 }
 
@@ -138,6 +155,8 @@ pub enum DependencyGroupError {
     DevGroupInclude(GroupName),
     #[error("Detected a cycle in `dependency-groups`: {0}")]
     DependencyGroupCycle(Cycle),
+    #[error("Group `{0}` contains an unknown dependency object specifier: {1:?}")]
+    DependencyObjectSpecifierNotSupported(GroupName, BTreeMap<String, String>),
 }
 
 impl DependencyGroupError {

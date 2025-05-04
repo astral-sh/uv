@@ -1,3 +1,5 @@
+use uv_static::EnvVars;
+
 use crate::common::{uv_snapshot, TestContext};
 
 #[test]
@@ -5,7 +7,7 @@ fn help() {
     let context = TestContext::new_with_versions(&[]);
 
     // The `uv help` command should show the long help message
-    uv_snapshot!(context.filters(), context.help(), @r###"
+    uv_snapshot!(context.filters(), context.help(), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -30,7 +32,7 @@ fn help() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Display uv's version
+      version                    Read or update the project's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
@@ -40,19 +42,17 @@ fn help() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
-              [possible values: only-managed, managed, system, only-system]
-          --no-python-downloads
-              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
+      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
@@ -65,7 +65,7 @@ fn help() {
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
           --project <PROJECT>
-              Run the command within the given project directory
+              Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -79,14 +79,14 @@ fn help() {
 
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
 fn help_flag() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.command().arg("--help"), @r###"
+    uv_snapshot!(context.filters(), context.command().arg("--help"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -111,7 +111,7 @@ fn help_flag() {
       publish  Upload distributions to an index
       cache    Manage uv's cache
       self     Manage the uv executable
-      version  Display uv's version
+      version  Read or update the project's version
       help     Display documentation for a command
 
     Cache options:
@@ -120,19 +120,17 @@ fn help_flag() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
-              [possible values: only-managed, managed, system, only-system]
-          --no-python-downloads
-              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
+      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
@@ -145,7 +143,7 @@ fn help_flag() {
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
           --project <PROJECT>
-              Run the command within the given project directory
+              Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -158,14 +156,14 @@ fn help_flag() {
     Use `uv help` for more details.
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
 fn help_short_flag() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.command().arg("-h"), @r###"
+    uv_snapshot!(context.filters(), context.command().arg("-h"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -190,7 +188,7 @@ fn help_short_flag() {
       publish  Upload distributions to an index
       cache    Manage uv's cache
       self     Manage the uv executable
-      version  Display uv's version
+      version  Read or update the project's version
       help     Display documentation for a command
 
     Cache options:
@@ -199,19 +197,17 @@ fn help_short_flag() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
-              [possible values: only-managed, managed, system, only-system]
-          --no-python-downloads
-              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
+      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
@@ -224,7 +220,7 @@ fn help_short_flag() {
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
           --project <PROJECT>
-              Run the command within the given project directory
+              Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -237,14 +233,14 @@ fn help_short_flag() {
     Use `uv help` for more details.
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
 fn help_subcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("python"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -316,29 +312,31 @@ fn help_subcommand() {
               [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations.
+      --managed-python
+              Require use of uv-managed Python versions.
               
               By default, uv prefers using Python versions it manages. However, it will use system
-              Python installations if a uv-managed Python is not installed. This option allows
-              prioritizing or ignoring system Python installations.
+              Python versions if a uv-managed Python is not installed. This option disables use of
+              system Python versions.
               
-              [env: UV_PYTHON_PREFERENCE=]
+              [env: UV_MANAGED_PYTHON=]
 
-              Possible values:
-              - only-managed: Only use managed Python installations; never use system Python
-                installations
-              - managed:      Prefer managed Python installations over system Python installations
-              - system:       Prefer system Python installations over managed Python installations
-              - only-system:  Only use system Python installations; never use managed Python
-                installations
+      --no-managed-python
+              Disable use of uv-managed Python versions.
+              
+              Instead, uv will search for a suitable Python version on the system.
+              
+              [env: UV_NO_MANAGED_PYTHON=]
 
-          --no-python-downloads
+      --no-python-downloads
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output.
+              
+              Repeating this option, e.g., `-qq`, will enable a silent mode in which uv will write no
+              output to stdout.
 
       -v, --verbose...
               Use verbose output.
@@ -347,9 +345,9 @@ fn help_subcommand() {
               (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
 
           --color <COLOR_CHOICE>
-              Control colors in output
+              Control the use of color in output.
               
-              [default: auto]
+              By default, uv will automatically detect support for colors when writing to a terminal.
 
               Possible values:
               - auto:   Enables colored output only when the output is going to a terminal or TTY with
@@ -418,6 +416,8 @@ fn help_subcommand() {
               See `--directory` to change the working directory entirely.
               
               This setting has no effect when used in the `uv pip` interface.
+              
+              [env: UV_PROJECT=]
 
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration.
@@ -438,30 +438,27 @@ fn help_subcommand() {
       -h, --help
               Display the concise help for this command
 
-      -V, --version
-              Display the uv version
-
     Use `uv help python <command>` for more information on a specific command.
 
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
 fn help_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("install"), @r###"
+    uv_snapshot!(context.filters(), context.help().env_remove(EnvVars::UV_PYTHON_INSTALL_DIR).arg("python").arg("install"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
     Download and install Python versions.
 
-    Multiple Python versions may be requested.
-
-    Supports CPython and PyPy. CPython distributions are downloaded from the `python-build-standalone`
-    project. PyPy distributions are downloaded from `python.org`.
+    Supports CPython and PyPy. CPython distributions are downloaded from the Astral
+    `python-build-standalone` project. PyPy distributions are downloaded from `python.org`. The
+    available Python versions are bundled with each uv release. To install new Python versions, you may
+    need upgrade uv.
 
     Python versions are installed into the uv Python directory, which can be retrieved with `uv python
     dir`.
@@ -469,6 +466,8 @@ fn help_subsubcommand() {
     A `python` executable is not made globally available, managed Python versions are only used in uv
     commands or in active virtual environments. There is experimental support for adding Python
     executables to the `PATH` — use the `--preview` flag to enable this behavior.
+
+    Multiple Python versions may be requested.
 
     See `uv help python` to view supported request formats.
 
@@ -478,11 +477,14 @@ fn help_subsubcommand() {
       [TARGETS]...
               The Python version(s) to install.
               
-              If not provided, the requested Python version(s) will be read from the `.python-versions`
-              or `.python-version` files. If neither file is present, uv will check if it has installed
-              any Python versions. If not, it will install the latest stable version of Python.
+              If not provided, the requested Python version(s) will be read from the `UV_PYTHON`
+              environment variable then `.python-versions` or `.python-version` files. If none of the
+              above are present, uv will check if it has installed any Python versions. If not, it will
+              install the latest stable version of Python.
               
               See `uv help python` to view supported request formats.
+              
+              [env: UV_PYTHON=]
 
     Options:
       -i, --install-dir <INSTALL_DIR>
@@ -500,8 +502,8 @@ fn help_subsubcommand() {
               Set the URL to use as the source for downloading Python installations.
               
               The provided URL will replace
-              `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g.,
-              `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+              `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g.,
+              `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
               
               Distributions can be read from a local directory by using the `file://` URL scheme.
               
@@ -516,6 +518,13 @@ fn help_subsubcommand() {
               Distributions can be read from a local directory by using the `file://` URL scheme.
               
               [env: UV_PYPY_INSTALL_MIRROR=]
+
+          --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
+              URL pointing to JSON of custom Python installations.
+              
+              Note that currently, only local paths are supported.
+              
+              [env: UV_PYTHON_DOWNLOADS_JSON_URL=]
 
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed.
@@ -540,8 +549,7 @@ fn help_subsubcommand() {
               3.13+freethreaded with `--default` will include in `python3t` and `pythont`, not `python3`
               and `python`.
               
-              If multiple Python versions are requested during the installation, the first request will
-              be the default.
+              If multiple Python versions are requested, uv will exit with an error.
 
     Cache options:
       -n, --no-cache
@@ -561,29 +569,31 @@ fn help_subsubcommand() {
               [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations.
+      --managed-python
+              Require use of uv-managed Python versions.
               
               By default, uv prefers using Python versions it manages. However, it will use system
-              Python installations if a uv-managed Python is not installed. This option allows
-              prioritizing or ignoring system Python installations.
+              Python versions if a uv-managed Python is not installed. This option disables use of
+              system Python versions.
               
-              [env: UV_PYTHON_PREFERENCE=]
+              [env: UV_MANAGED_PYTHON=]
 
-              Possible values:
-              - only-managed: Only use managed Python installations; never use system Python
-                installations
-              - managed:      Prefer managed Python installations over system Python installations
-              - system:       Prefer system Python installations over managed Python installations
-              - only-system:  Only use system Python installations; never use managed Python
-                installations
+      --no-managed-python
+              Disable use of uv-managed Python versions.
+              
+              Instead, uv will search for a suitable Python version on the system.
+              
+              [env: UV_NO_MANAGED_PYTHON=]
 
-          --no-python-downloads
+      --no-python-downloads
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output.
+              
+              Repeating this option, e.g., `-qq`, will enable a silent mode in which uv will write no
+              output to stdout.
 
       -v, --verbose...
               Use verbose output.
@@ -592,9 +602,9 @@ fn help_subsubcommand() {
               (<https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives>)
 
           --color <COLOR_CHOICE>
-              Control colors in output
+              Control the use of color in output.
               
-              [default: auto]
+              By default, uv will automatically detect support for colors when writing to a terminal.
 
               Possible values:
               - auto:   Enables colored output only when the output is going to a terminal or TTY with
@@ -663,6 +673,8 @@ fn help_subsubcommand() {
               See `--directory` to change the working directory entirely.
               
               This setting has no effect when used in the `uv pip` interface.
+              
+              [env: UV_PROJECT=]
 
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration.
@@ -683,19 +695,16 @@ fn help_subsubcommand() {
       -h, --help
               Display the concise help for this command
 
-      -V, --version
-              Display the uv version
-
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
 fn help_flag_subcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.command().arg("python").arg("--help"), @r###"
+    uv_snapshot!(context.filters(), context.command().arg("python").arg("--help"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -717,19 +726,17 @@ fn help_flag_subcommand() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
-              [possible values: only-managed, managed, system, only-system]
-          --no-python-downloads
-              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
+      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
@@ -742,27 +749,25 @@ fn help_flag_subcommand() {
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
           --project <PROJECT>
-              Run the command within the given project directory
+              Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     Use `uv help python` for more details.
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
 fn help_flag_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.command().arg("python").arg("install").arg("--help"), @r###"
+    uv_snapshot!(context.filters(), context.command().arg("python").arg("install").arg("--help"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -771,18 +776,25 @@ fn help_flag_subsubcommand() {
     Usage: uv python install [OPTIONS] [TARGETS]...
 
     Arguments:
-      [TARGETS]...  The Python version(s) to install
+      [TARGETS]...  The Python version(s) to install [env: UV_PYTHON=]
 
     Options:
-      -i, --install-dir <INSTALL_DIR>  The directory to store the Python installation in [env:
-                                       UV_PYTHON_INSTALL_DIR=]
-          --mirror <MIRROR>            Set the URL to use as the source for downloading Python
-                                       installations [env: UV_PYTHON_INSTALL_MIRROR=]
-          --pypy-mirror <PYPY_MIRROR>  Set the URL to use as the source for downloading PyPy
-                                       installations [env: UV_PYPY_INSTALL_MIRROR=]
-      -r, --reinstall                  Reinstall the requested Python version, if it's already installed
-      -f, --force                      Replace existing Python executables during installation
-          --default                    Use as the default Python version
+      -i, --install-dir <INSTALL_DIR>
+              The directory to store the Python installation in [env: UV_PYTHON_INSTALL_DIR=]
+          --mirror <MIRROR>
+              Set the URL to use as the source for downloading Python installations [env:
+              UV_PYTHON_INSTALL_MIRROR=]
+          --pypy-mirror <PYPY_MIRROR>
+              Set the URL to use as the source for downloading PyPy installations [env:
+              UV_PYPY_INSTALL_MIRROR=]
+          --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
+              URL pointing to JSON of custom Python installations [env: UV_PYTHON_DOWNLOADS_JSON_URL=]
+      -r, --reinstall
+              Reinstall the requested Python version, if it's already installed
+      -f, --force
+              Replace existing Python executables during installation
+          --default
+              Use as the default Python version
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -790,19 +802,17 @@ fn help_flag_subsubcommand() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
-              [possible values: only-managed, managed, system, only-system]
-          --no-python-downloads
-              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
+      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
@@ -815,25 +825,23 @@ fn help_flag_subsubcommand() {
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
           --project <PROJECT>
-              Run the command within the given project directory
+              Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
 fn help_unknown_subcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("foobar"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("foobar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -858,9 +866,9 @@ fn help_unknown_subcommand() {
         self
         version
         generate-shell-completion
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -885,14 +893,14 @@ fn help_unknown_subcommand() {
         self
         version
         generate-shell-completion
-    "###);
+    ");
 }
 
 #[test]
 fn help_unknown_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("foobar"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("python").arg("foobar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -905,14 +913,14 @@ fn help_unknown_subsubcommand() {
         pin
         dir
         uninstall
-    "###);
+    ");
 }
 
 #[test]
 fn help_with_global_option() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("--no-cache"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("--no-cache"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -937,7 +945,7 @@ fn help_with_global_option() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Display uv's version
+      version                    Read or update the project's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
@@ -947,19 +955,17 @@ fn help_with_global_option() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
-              [possible values: only-managed, managed, system, only-system]
-          --no-python-downloads
-              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
+      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
@@ -972,7 +978,7 @@ fn help_with_global_option() {
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
           --project <PROJECT>
-              Run the command within the given project directory
+              Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -986,7 +992,7 @@ fn help_with_global_option() {
 
 
     ----- stderr -----
-    "###);
+    "#);
 }
 
 #[test]
@@ -1012,14 +1018,20 @@ fn help_with_help() {
 fn help_with_version() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("--version"), @r###"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.help().arg("--version"), @r"
+    success: false
+    exit_code: 2
     ----- stdout -----
-    uv [VERSION] ([COMMIT] DATE)
 
     ----- stderr -----
-    "###);
+    error: unexpected argument '--version' found
+
+      tip: a similar argument exists: '--verbose'
+
+    Usage: uv help --verbose... [COMMAND]...
+
+    For more information, try '--help'.
+    ");
 }
 
 #[test]
@@ -1028,7 +1040,7 @@ fn help_with_no_pager() {
 
     // We can't really test whether the --no-pager option works with a snapshot test.
     // It's still nice to have a test for the option to confirm the option exists.
-    uv_snapshot!(context.filters(), context.help().arg("--no-pager"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("--no-pager"), @r#"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1053,7 +1065,7 @@ fn help_with_no_pager() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Display uv's version
+      version                    Read or update the project's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
@@ -1063,19 +1075,17 @@ fn help_with_no_pager() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-          --python-preference <PYTHON_PREFERENCE>
-              Whether to prefer uv-managed or system Python installations [env: UV_PYTHON_PREFERENCE=]
-              [possible values: only-managed, managed, system, only-system]
-          --no-python-downloads
-              Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
+      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
-      -q, --quiet
-              Do not print any output
+      -q, --quiet...
+              Use quiet output
       -v, --verbose...
               Use verbose output
           --color <COLOR_CHOICE>
-              Control colors in output [default: auto] [possible values: auto, always, never]
+              Control the use of color in output [possible values: auto, always, never]
           --native-tls
               Whether to load TLS certificates from the platform's native certificate store [env:
               UV_NATIVE_TLS=]
@@ -1088,7 +1098,7 @@ fn help_with_no_pager() {
           --directory <DIRECTORY>
               Change to the given directory prior to running the command
           --project <PROJECT>
-              Run the command within the given project directory
+              Run the command within the given project directory [env: UV_PROJECT=]
           --config-file <CONFIG_FILE>
               The path to a `uv.toml` file to use for configuration [env: UV_CONFIG_FILE=]
           --no-config
@@ -1102,5 +1112,5 @@ fn help_with_no_pager() {
 
 
     ----- stderr -----
-    "###);
+    "#);
 }

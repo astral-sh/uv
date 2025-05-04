@@ -1,5 +1,7 @@
 //! Trusted publishing (via OIDC) with GitHub actions.
 
+use base64::prelude::BASE64_URL_SAFE_NO_PAD;
+use base64::Engine;
 use reqwest::{header, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
@@ -27,9 +29,12 @@ pub enum TrustedPublishingError {
     #[error(transparent)]
     SerdeJson(#[from] serde_json::error::Error),
     #[error(
-        "PyPI returned error code {0}, is trusted publishing correctly configured?\nResponse: {1}"
+        "PyPI returned error code {0}, is trusted publishing correctly configured?\nResponse: {1}\nToken claims, which must match the PyPI configuration: {2:#?}"
     )]
-    Pypi(StatusCode, String),
+    Pypi(StatusCode, String, OidcTokenClaims),
+    /// When trusted publishing is misconfigured, the error above should occur, not this one.
+    #[error("PyPI returned error code {0}, and the OIDC has an unexpected format.\nResponse: {1}")]
+    InvalidOidcToken(StatusCode, String),
 }
 
 impl TrustedPublishingError {
@@ -73,6 +78,18 @@ struct MintTokenRequest {
 #[derive(Deserialize)]
 struct PublishToken {
     token: TrustedPublishingToken,
+}
+
+/// The payload of the OIDC token.
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+pub struct OidcTokenClaims {
+    sub: String,
+    repository: String,
+    repository_owner: String,
+    repository_owner_id: String,
+    job_workflow_ref: String,
+    r#ref: String,
 }
 
 /// Returns the short-lived token to use for uploading.
@@ -158,6 +175,18 @@ async fn get_oidc_token(
     Ok(oidc_token.value)
 }
 
+/// Parse the JSON Web Token that the OIDC token is.
+///
+/// See: <https://github.com/pypa/gh-action-pypi-publish/blob/db8f07d3871a0a180efa06b95d467625c19d5d5f/oidc-exchange.py#L165-L184>
+fn decode_oidc_token(oidc_token: &str) -> Option<OidcTokenClaims> {
+    let token_segments = oidc_token.splitn(3, '.').collect::<Vec<&str>>();
+    let [_header, payload, _signature] = *token_segments.into_boxed_slice() else {
+        return None;
+    };
+    let decoded = BASE64_URL_SAFE_NO_PAD.decode(payload).ok()?;
+    serde_json::from_slice(&decoded).ok()
+}
+
 async fn get_publish_token(
     registry: &Url,
     oidc_token: &str,
@@ -189,13 +218,26 @@ async fn get_publish_token(
         let publish_token: PublishToken = serde_json::from_slice(&body)?;
         Ok(publish_token.token)
     } else {
-        // An error here means that something is misconfigured, e.g. a typo in the PyPI
-        // configuration, so we're showing the body for more context, see
-        // https://docs.pypi.org/trusted-publishers/troubleshooting/#token-minting
-        // for what the body can mean.
-        Err(TrustedPublishingError::Pypi(
-            status,
-            String::from_utf8_lossy(&body).to_string(),
-        ))
+        match decode_oidc_token(oidc_token) {
+            Some(claims) => {
+                // An error here means that something is misconfigured, e.g. a typo in the PyPI
+                // configuration, so we're showing the body and the JWT claims for more context, see
+                // https://docs.pypi.org/trusted-publishers/troubleshooting/#token-minting
+                // for what the body can mean.
+                Err(TrustedPublishingError::Pypi(
+                    status,
+                    String::from_utf8_lossy(&body).to_string(),
+                    claims,
+                ))
+            }
+            None => {
+                // This is not a user configuration error, the OIDC token should always have a valid
+                // format.
+                Err(TrustedPublishingError::InvalidOidcToken(
+                    status,
+                    String::from_utf8_lossy(&body).to_string(),
+                ))
+            }
+        }
     }
 }

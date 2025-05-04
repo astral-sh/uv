@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.39/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/HEAD/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 #![allow(clippy::needless_raw_string_hashes)]
@@ -16,6 +16,167 @@ use insta::assert_snapshot;
 use uv_static::EnvVars;
 
 use crate::common::{packse_index_url, uv_snapshot, TestContext};
+
+/// There are two packages, `a` and `b`. We select `a` with `a==2.0.0` first, and then `b`, but `a==2.0.0` conflicts with all new versions of `b`, so we backtrack through versions of `b`.
+///
+/// We need to detect this conflict and prioritize `b` over `a` instead of backtracking down to the too old version of `b==1.0.0` that doesn't depend on `a` anymore.
+///
+/// ```text
+/// wrong-backtracking-basic
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   ├── requires a
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   └── satisfied by a-2.0.0
+/// │   └── requires b
+/// │       ├── satisfied by b-1.0.0
+/// │       ├── satisfied by b-2.0.0
+/// │       ├── satisfied by b-2.0.1
+/// │       ├── satisfied by b-2.0.2
+/// │       ├── satisfied by b-2.0.3
+/// │       ├── satisfied by b-2.0.4
+/// │       ├── satisfied by b-2.0.5
+/// │       ├── satisfied by b-2.0.6
+/// │       ├── satisfied by b-2.0.7
+/// │       ├── satisfied by b-2.0.8
+/// │       └── satisfied by b-2.0.9
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   └── a-2.0.0
+/// ├── b
+/// │   ├── b-1.0.0
+/// │   │   └── requires too-old
+/// │   │       └── satisfied by too-old-1.0.0
+/// │   ├── b-2.0.0
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.1
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.2
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.3
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.4
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.5
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.6
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.7
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   ├── b-2.0.8
+/// │   │   └── requires a==1.0.0
+/// │   │       └── satisfied by a-1.0.0
+/// │   └── b-2.0.9
+/// │       └── requires a==1.0.0
+/// │           └── satisfied by a-1.0.0
+/// └── too-old
+///     └── too-old-1.0.0
+/// ```
+#[test]
+fn wrong_backtracking_basic() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"wrong-backtracking-basic-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''wrong-backtracking-basic-a''',
+          '''wrong-backtracking-basic-b''',
+        ]
+        requires-python = ">=3.8"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "###
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.8"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "package-a" },
+            { name = "package-b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a" },
+            { name = "package-b" },
+        ]
+
+        [[package]]
+        name = "package-a"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_basic_a-1.0.0.tar.gz", hash = "sha256:5251a827291d4e5b7ca11c742df3aa26802cc55442e3f5fc307ff3423b8f9295" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_basic_a-1.0.0-py3-none-any.whl", hash = "sha256:d9a7ee79b176cd36c9db03e36bc3325856dd4fb061aefc6159eecad6e8776e88" },
+        ]
+
+        [[package]]
+        name = "package-b"
+        version = "2.0.9"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-a" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_basic_b-2.0.9.tar.gz", hash = "sha256:a4e95f3f0f0d82cc5f19de6c638f70300da1b5101f1ba70d8814c7fe7e949e20" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_basic_b-2.0.9-py3-none-any.whl", hash = "sha256:bf96af1a69f8c1d1d9c2687cd5d6f023cda56dd77d3f37f3cdd422e2a410541f" },
+        ]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(packse_index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
 
 /// This test ensures that multiple non-conflicting but also
 /// non-overlapping dependency specifications with the same package name
@@ -84,8 +245,9 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -115,7 +277,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=1" },
         ]
-        "###
+        "#
         );
     });
 
@@ -201,8 +363,9 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
 
         [[package]]
@@ -227,7 +390,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
             { name = "package-a", specifier = "<2" },
             { name = "package-a", specifier = ">=1" },
         ]
-        "###
+        "#
         );
     });
 
@@ -300,8 +463,9 @@ fn fork_basic() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -347,7 +511,7 @@ fn fork_basic() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -428,7 +592,7 @@ fn conflict_in_fork() -> Result<()> {
       × No solution found when resolving dependencies for split (sys_platform == 'darwin'):
       ╰─▶ Because only package-b==1.0.0 is available and package-b==1.0.0 depends on package-d==1, we can conclude that all versions of package-b depend on package-d==1.
           And because package-c==1.0.0 depends on package-d==2 and only package-c==1.0.0 is available, we can conclude that all versions of package-b and all versions of package-c are incompatible.
-          And because package-a{sys_platform == 'darwin'}==1.0.0 depends on package-b and package-c, we can conclude that package-a{sys_platform == 'darwin'}==1.0.0 cannot be used.
+          And because package-a==1.0.0 depends on package-b and package-c, we can conclude that package-a==1.0.0 cannot be used.
           And because only the following versions of package-a{sys_platform == 'darwin'} are available:
               package-a{sys_platform == 'darwin'}==1.0.0
               package-a{sys_platform == 'darwin'}>2
@@ -585,8 +749,9 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'linux'",
@@ -684,7 +849,7 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
             { name = "package-b", marker = "sys_platform == 'linux'", specifier = "==1.0.0" },
             { name = "package-c", marker = "sys_platform == 'darwin'", specifier = "==1.0.0" },
         ]
-        "###
+        "#
         );
     });
 
@@ -763,8 +928,9 @@ fn fork_upgrade() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
 
         [[package]]
@@ -798,7 +964,7 @@ fn fork_upgrade() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "package-foo" }]
-        "###
+        "#
         );
     });
 
@@ -883,13 +1049,14 @@ fn fork_incomplete_markers() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
-            "python_full_version < '3.10'",
-            "python_full_version == '3.10.*'",
             "python_full_version >= '3.11'",
+            "python_full_version == '3.10.*'",
+            "python_full_version < '3.10'",
         ]
 
         [[package]]
@@ -953,7 +1120,7 @@ fn fork_incomplete_markers() -> Result<()> {
             { name = "package-a", marker = "python_full_version >= '3.11'", specifier = "==2" },
             { name = "package-b" },
         ]
-        "###
+        "#
         );
     });
 
@@ -1036,8 +1203,9 @@ fn fork_marker_accrue() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
 
         [[package]]
@@ -1087,7 +1255,7 @@ fn fork_marker_accrue() -> Result<()> {
             { name = "package-a", marker = "implementation_name == 'cpython'", specifier = "==1.0.0" },
             { name = "package-b", marker = "implementation_name == 'pypy'", specifier = "==1.0.0" },
         ]
-        "###
+        "#
         );
     });
 
@@ -1160,7 +1328,7 @@ fn fork_marker_disjoint() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (sys_platform == 'linux'):
+      × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that your project's requirements are unsatisfiable.
     "###
     );
@@ -1239,8 +1407,9 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
@@ -1330,7 +1499,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -1419,8 +1588,9 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
@@ -1498,7 +1668,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -1588,8 +1758,9 @@ fn fork_marker_inherit_combined() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "implementation_name == 'pypy' and sys_platform == 'darwin'",
@@ -1667,7 +1838,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -1750,8 +1921,9 @@ fn fork_marker_inherit_isolated() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -1809,7 +1981,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -1898,8 +2070,9 @@ fn fork_marker_inherit_transitive() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -1969,7 +2142,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2054,8 +2227,9 @@ fn fork_marker_inherit() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -2101,7 +2275,7 @@ fn fork_marker_inherit() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2192,8 +2366,9 @@ fn fork_marker_limited_inherit() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -2262,7 +2437,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'linux'", specifier = ">=2" },
             { name = "package-b" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2347,8 +2522,9 @@ fn fork_marker_selection() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -2405,7 +2581,7 @@ fn fork_marker_selection() -> Result<()> {
             { name = "package-b", marker = "sys_platform == 'darwin'", specifier = "<2" },
             { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2502,8 +2678,9 @@ fn fork_marker_track() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'darwin'",
@@ -2572,7 +2749,7 @@ fn fork_marker_track() -> Result<()> {
             { name = "package-b", marker = "sys_platform == 'darwin'", specifier = "<2.8" },
             { name = "package-b", marker = "sys_platform == 'linux'", specifier = ">=2.8" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2654,8 +2831,9 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
 
         [[package]]
@@ -2705,7 +2883,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
             { name = "package-a", specifier = "==1.0.0" },
             { name = "package-b", specifier = "==1.0.0" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2780,7 +2958,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because package-a{sys_platform == 'linux'}==1.0.0 depends on package-c<2.0.0 and package-b{sys_platform == 'darwin'}==1.0.0 depends on package-c>=2.0.0, we can conclude that package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0 are incompatible.
+      ╰─▶ Because package-a==1.0.0 depends on package-c<2.0.0 and package-b==1.0.0 depends on package-c>=2.0.0, we can conclude that package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0 are incompatible.
           And because your project depends on package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0, we can conclude that your project's requirements are unsatisfiable.
     "###
     );
@@ -2953,13 +3131,14 @@ fn fork_overlapping_markers_basic() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
-            "python_full_version < '3.10'",
-            "python_full_version == '3.10.*'",
             "python_full_version >= '3.11'",
+            "python_full_version == '3.10.*'",
+            "python_full_version < '3.10'",
         ]
 
         [[package]]
@@ -2985,7 +3164,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
             { name = "package-a", marker = "python_full_version >= '3.10'", specifier = ">=1.1.0" },
             { name = "package-a", marker = "python_full_version >= '3.11'", specifier = ">=1.2.0" },
         ]
-        "###
+        "#
         );
     });
 
@@ -3120,8 +3299,9 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'linux'",
@@ -3225,7 +3405,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "package-cleaver" }]
-        "###
+        "#
         );
     });
 
@@ -3498,8 +3678,9 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'linux'",
@@ -3651,7 +3832,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
             { name = "package-cleaver" },
             { name = "package-foo" },
         ]
-        "###
+        "#
         );
     });
 
@@ -3781,8 +3962,9 @@ fn preferences_dependent_forking() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "sys_platform == 'linux'",
@@ -3852,7 +4034,7 @@ fn preferences_dependent_forking() -> Result<()> {
             { name = "package-cleaver" },
             { name = "package-foo" },
         ]
-        "###
+        "#
         );
     });
 
@@ -3955,8 +4137,9 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
         resolution-markers = [
             "os_name == 'darwin' and sys_platform == 'illumos'",
@@ -4034,7 +4217,7 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
             { name = "package-a", marker = "sys_platform == 'illumos'", specifier = "<2" },
             { name = "package-a", marker = "sys_platform == 'windows'", specifier = ">=2" },
         ]
-        "###
+        "#
         );
     });
 
@@ -4107,8 +4290,9 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.10"
 
         [[package]]
@@ -4118,7 +4302,7 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "package-a", marker = "python_full_version == '3.9'", specifier = "==1.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -4191,8 +4375,9 @@ fn fork_requires_python_full() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.10"
 
         [[package]]
@@ -4202,7 +4387,7 @@ fn fork_requires_python_full() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "package-a", marker = "python_full_version == '3.9'", specifier = "==1.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -4279,8 +4464,9 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.10.1"
 
         [[package]]
@@ -4302,7 +4488,7 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "package-a", marker = "python_full_version == '3.10.*'", specifier = "==1.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -4372,8 +4558,9 @@ fn fork_requires_python() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.10"
 
         [[package]]
@@ -4383,7 +4570,7 @@ fn fork_requires_python() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "package-a", marker = "python_full_version == '3.9.*'", specifier = "==1.0.0" }]
-        "###
+        "#
         );
     });
 
@@ -4452,8 +4639,9 @@ fn requires_python_wheels() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.10"
 
         [[package]]
@@ -4476,7 +4664,7 @@ fn requires_python_wheels() -> Result<()> {
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/requires_python_wheels_a-1.0.0-cp310-cp310-any.whl", hash = "sha256:b979494a0d7dc825b84d6c516ac407143915f6d2840d229ee2a36b3d06deb61d" },
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/requires_python_wheels_a-1.0.0-cp311-cp311-any.whl", hash = "sha256:b979494a0d7dc825b84d6c516ac407143915f6d2840d229ee2a36b3d06deb61d" },
         ]
-        "###
+        "#
         );
     });
 
@@ -4548,8 +4736,9 @@ fn unreachable_package() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
 
         [[package]]
@@ -4571,7 +4760,7 @@ fn unreachable_package() -> Result<()> {
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_package_a-1.0.0-py3-none-any.whl", hash = "sha256:cc472ded9f3b260e6cda0e633fa407a13607e190422cb455f02beebd32d6751f" },
         ]
-        "###
+        "#
         );
     });
 
@@ -4649,8 +4838,9 @@ fn unreachable_wheels() -> Result<()> {
         filters => filters,
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
+        revision = 2
         requires-python = ">=3.8"
 
         [[package]]
@@ -4697,7 +4887,148 @@ fn unreachable_wheels() -> Result<()> {
         wheels = [
             { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/unreachable_wheels_c-1.0.0-cp312-cp312-macosx_14_0_x86_64.whl", hash = "sha256:4b846c5b1646b04828a2bef6c9d180ff7cfd725866013dcec8933de7fb5f9e8d" },
         ]
-        "###
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(packse_index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// When a dependency is only required on a specific platform (like x86_64), omit wheels that target other platforms (like aarch64).
+///
+/// ```text
+/// specific-architecture
+/// ├── environment
+/// │   └── python3.8
+/// ├── root
+/// │   └── requires a
+/// │       └── satisfied by a-1.0.0
+/// ├── a
+/// │   └── a-1.0.0
+/// │       ├── requires b; platform_machine == "x86_64"
+/// │       │   └── satisfied by b-1.0.0
+/// │       ├── requires c; platform_machine == "aarch64"
+/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires d; platform_machine == "i686"
+/// │           └── satisfied by d-1.0.0
+/// ├── b
+/// │   └── b-1.0.0
+/// ├── c
+/// │   └── c-1.0.0
+/// └── d
+///     └── d-1.0.0
+/// ```
+#[test]
+fn specific_architecture() -> Result<()> {
+    let context = TestContext::new("3.8");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"specific-architecture-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''specific-architecture-a''',
+        ]
+        requires-python = ">=3.8"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "###
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.8"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "package-a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "package-a" }]
+
+        [[package]]
+        name = "package-a"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-b", marker = "platform_machine == 'x86_64'" },
+            { name = "package-c", marker = "platform_machine == 'aarch64'" },
+            { name = "package-d", marker = "platform_machine == 'i686'" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_a-1.0.0.tar.gz", hash = "sha256:3543f7e4bc8aaf16a9705e07df1521f40a77407c7a33a82424b35ef63df8224a" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_a-1.0.0-py3-none-any.whl", hash = "sha256:cd2f9894093805af0749592e8239d62e7a724476a74c4cb65da30bc6a3900046" },
+        ]
+
+        [[package]]
+        name = "package-b"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_b-1.0.0-cp313-cp313-freebsd_13_aarch64.whl", hash = "sha256:4ce70a68440d4aaa31cc1c6174b83b741e9b8f3074ad0f3ef41c572795378999" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_b-1.0.0-cp313-cp313-freebsd_13_x86_64.whl", hash = "sha256:4ce70a68440d4aaa31cc1c6174b83b741e9b8f3074ad0f3ef41c572795378999" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_b-1.0.0-cp313-cp313-macosx_10_9_x86_64.whl", hash = "sha256:4ce70a68440d4aaa31cc1c6174b83b741e9b8f3074ad0f3ef41c572795378999" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_b-1.0.0-cp313-cp313-manylinux2010_x86_64.whl", hash = "sha256:4ce70a68440d4aaa31cc1c6174b83b741e9b8f3074ad0f3ef41c572795378999" },
+        ]
+
+        [[package]]
+        name = "package-c"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_c-1.0.0-cp313-cp313-freebsd_13_aarch64.whl", hash = "sha256:b028c88fe496724cea4a7d95eb789a000b7f000067f95c922b09461be2746a3d" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_c-1.0.0-cp313-cp313-freebsd_13_x86_64.whl", hash = "sha256:b028c88fe496724cea4a7d95eb789a000b7f000067f95c922b09461be2746a3d" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_c-1.0.0-cp313-cp313-macosx_10_9_arm64.whl", hash = "sha256:b028c88fe496724cea4a7d95eb789a000b7f000067f95c922b09461be2746a3d" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_c-1.0.0-cp313-cp313-manylinux2010_aarch64.whl", hash = "sha256:b028c88fe496724cea4a7d95eb789a000b7f000067f95c922b09461be2746a3d" },
+        ]
+
+        [[package]]
+        name = "package-d"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_d-1.0.0-cp313-cp313-freebsd_13_aarch64.whl", hash = "sha256:842864c1348694fab33199eb05921602c2abfc77844a81085a55db02edd30da4" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_d-1.0.0-cp313-cp313-freebsd_13_x86_64.whl", hash = "sha256:842864c1348694fab33199eb05921602c2abfc77844a81085a55db02edd30da4" },
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/specific_architecture_d-1.0.0-cp313-cp313-manylinux2010_i686.whl", hash = "sha256:842864c1348694fab33199eb05921602c2abfc77844a81085a55db02edd30da4" },
+        ]
+        "#
         );
     });
 

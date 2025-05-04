@@ -1,12 +1,13 @@
 use std::str::FromStr;
 
-use tl::{HTMLTag, Parser};
-use tracing::{instrument, warn};
+use jiff::Timestamp;
+use tl::HTMLTag;
+use tracing::{debug, instrument, warn};
 use url::Url;
 
 use uv_pep440::VersionSpecifiers;
-use uv_pypi_types::LenientVersionSpecifiers;
 use uv_pypi_types::{BaseUrl, CoreMetadata, File, Hashes, Yanked};
+use uv_pypi_types::{HashError, LenientVersionSpecifiers};
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
@@ -44,7 +45,12 @@ impl SimpleHtml {
             .iter()
             .filter_map(|node| node.as_tag())
             .filter(|link| link.name().as_bytes() == b"a")
-            .map(|link| Self::parse_anchor(link, dom.parser()))
+            .map(|link| Self::parse_anchor(link))
+            .filter_map(|result| match result {
+                Ok(None) => None,
+                Ok(Some(file)) => Some(Ok(file)),
+                Err(err) => Some(Err(err)),
+            })
             .collect::<Result<Vec<_>, _>>()?;
         // While it has not been positively observed, we sort the files
         // to ensure we have a defined ordering. Otherwise, if we rely on
@@ -70,26 +76,50 @@ impl SimpleHtml {
     }
 
     /// Parse a [`File`] from an `<a>` tag.
-    fn parse_anchor(link: &HTMLTag, parser: &Parser) -> Result<File, Error> {
+    ///
+    /// Returns `None` if the `<a>` don't doesn't have an `href` attribute.
+    fn parse_anchor(link: &HTMLTag) -> Result<Option<File>, Error> {
         // Extract the href.
-        let href = link
+        let Some(href) = link
             .attributes()
             .get("href")
             .flatten()
             .filter(|bytes| !bytes.as_bytes().is_empty())
-            .ok_or(Error::MissingHref(link.inner_text(parser).to_string()))?;
+        else {
+            return Ok(None);
+        };
         let href = std::str::from_utf8(href.as_bytes())?;
 
         // Extract the hash, which should be in the fragment.
         let decoded = html_escape::decode_html_entities(href);
         let (path, hashes) = if let Some((path, fragment)) = decoded.split_once('#') {
-            let fragment = urlencoding::decode(fragment)?;
+            let fragment = percent_encoding::percent_decode_str(fragment).decode_utf8()?;
             (
                 path,
                 if fragment.trim().is_empty() {
                     Hashes::default()
                 } else {
-                    Hashes::parse_fragment(&fragment)?
+                    match Hashes::parse_fragment(&fragment) {
+                        Ok(hashes) => hashes,
+                        Err(
+                            err
+                            @ (HashError::InvalidFragment(..) | HashError::InvalidStructure(..)),
+                        ) => {
+                            // If the URL includes an irrelevant hash (e.g., `#main`), ignore it.
+                            debug!("{err}");
+                            Hashes::default()
+                        }
+                        Err(HashError::UnsupportedHashAlgorithm(fragment)) => {
+                            if fragment == "egg" {
+                                // If the URL references an egg hash, ignore it.
+                                debug!("{}", HashError::UnsupportedHashAlgorithm(fragment));
+                                Hashes::default()
+                            } else {
+                                // If the URL references a hash, but it's unsupported, error.
+                                return Err(HashError::UnsupportedHashAlgorithm(fragment).into());
+                            }
+                        }
+                    }
                 },
             )
         } else {
@@ -100,14 +130,15 @@ impl SimpleHtml {
         // the final path component of the URL.
         let filename = path
             .split('/')
-            .last()
+            .next_back()
             .ok_or_else(|| Error::MissingFilename(href.to_string()))?;
 
         // Strip any query string from the filename.
         let filename = filename.split('?').next().unwrap_or(filename);
 
         // Unquote the filename.
-        let filename = urlencoding::decode(filename)
+        let filename = percent_encoding::percent_decode_str(filename)
+            .decode_utf8()
             .map_err(|_| Error::UnsupportedFilename(filename.to_string()))?;
 
         // Extract the `requires-python` value, which should be set on the
@@ -153,23 +184,43 @@ impl SimpleHtml {
         let yanked = if let Some(yanked) = link.attributes().get("data-yanked").flatten() {
             let yanked = std::str::from_utf8(yanked.as_bytes())?;
             let yanked = html_escape::decode_html_entities(yanked);
-            Some(Yanked::Reason(yanked.to_string()))
+            Some(Box::new(Yanked::Reason(yanked.into())))
         } else {
             None
         };
 
-        Ok(File {
+        // Extract the `size` field, which should be set on the `data-size` attribute. This isn't
+        // included in PEP 700, which omits the HTML API, but we respect it anyway. Since this
+        // field isn't standardized, we discard errors.
+        let size = link
+            .attributes()
+            .get("data-size")
+            .flatten()
+            .and_then(|size| std::str::from_utf8(size.as_bytes()).ok())
+            .map(|size| html_escape::decode_html_entities(size))
+            .and_then(|size| size.parse().ok());
+
+        // Extract the `upload-time` field, which should be set on the `data-upload-time` attribute. This isn't
+        // included in PEP 700, which omits the HTML API, but we respect it anyway. Since this
+        // field isn't standardized, we discard errors.
+        let upload_time = link
+            .attributes()
+            .get("data-upload-time")
+            .flatten()
+            .and_then(|upload_time| std::str::from_utf8(upload_time.as_bytes()).ok())
+            .map(|upload_time| html_escape::decode_html_entities(upload_time))
+            .and_then(|upload_time| Timestamp::from_str(&upload_time).ok());
+
+        Ok(Some(File {
             core_metadata,
-            dist_info_metadata: None,
-            data_dist_info_metadata: None,
             yanked,
             requires_python,
             hashes,
-            filename: filename.to_string(),
-            url: decoded.to_string(),
-            size: None,
-            upload_time: None,
-        })
+            filename: filename.into(),
+            url: path.into(),
+            size,
+            upload_time,
+        }))
     }
 }
 
@@ -200,7 +251,7 @@ pub enum Error {
     MissingHash(String),
 
     #[error(transparent)]
-    FragmentParse(#[from] uv_pypi_types::HashError),
+    FragmentParse(#[from] HashError),
 
     #[error("Invalid `requires-python` specifier: {0}")]
     Pep440(#[source] uv_pep440::VersionSpecifiersParseError),
@@ -224,48 +275,47 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
-    SimpleHtml {
-        base: BaseUrl(
-            Url {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "download.pytorch.org",
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
                     ),
-                ),
-                port: None,
-                path: "/whl/jinja2/",
-                query: None,
-                fragment: None,
-            },
-        ),
-        files: [
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Jinja2-3.1.2-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: Some(
-                        "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
-                    ),
-                    sha384: None,
-                    sha512: None,
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.2-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
-                yanked: None,
-            },
-        ],
-    }
-    "###);
+            ),
+            files: [
+                File {
+                    core_metadata: None,
+                    filename: "Jinja2-3.1.2-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: Some(
+                            "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                        ),
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
     }
 
     #[test]
@@ -282,48 +332,47 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
-    SimpleHtml {
-        base: BaseUrl(
-            Url {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "download.pytorch.org",
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
                     ),
-                ),
-                port: None,
-                path: "/whl/jinja2/",
-                query: None,
-                fragment: None,
-            },
-        ),
-        files: [
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Jinja2-3.1.2-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: Some(
-                        "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
-                    ),
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.2-py3-none-any.whl#md5=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
-                yanked: None,
-            },
-        ],
-    }
-    "###);
+            ),
+            files: [
+                File {
+                    core_metadata: None,
+                    filename: "Jinja2-3.1.2-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: Some(
+                            "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                        ),
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
     }
 
     #[test]
@@ -343,48 +392,47 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
-    SimpleHtml {
-        base: BaseUrl(
-            Url {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "index.python.org",
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "index.python.org",
+                        ),
                     ),
-                ),
-                port: None,
-                path: "/",
-                query: None,
-                fragment: None,
-            },
-        ),
-        files: [
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Jinja2-3.1.2-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: Some(
-                        "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
-                    ),
-                    sha384: None,
-                    sha512: None,
+                    port: None,
+                    path: "/",
+                    query: None,
+                    fragment: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.2-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
-                yanked: None,
-            },
-        ],
-    }
-    "###);
+            ),
+            files: [
+                File {
+                    core_metadata: None,
+                    filename: "Jinja2-3.1.2-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: Some(
+                            "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                        ),
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
     }
 
     #[test]
@@ -401,48 +449,47 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
-    SimpleHtml {
-        base: BaseUrl(
-            Url {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "download.pytorch.org",
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
                     ),
-                ),
-                port: None,
-                path: "/whl/jinja2/",
-                query: None,
-                fragment: None,
-            },
-        ),
-        files: [
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Jinja2-3.1.2+233fca715f49-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: Some(
-                        "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
-                    ),
-                    sha384: None,
-                    sha512: None,
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.2+233fca715f49-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
-                yanked: None,
-            },
-        ],
-    }
-    "###);
+            ),
+            files: [
+                File {
+                    core_metadata: None,
+                    filename: "Jinja2-3.1.2+233fca715f49-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: Some(
+                            "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                        ),
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.2+233fca715f49-py3-none-any.whl",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
     }
 
     #[test]
@@ -459,48 +506,47 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
-    SimpleHtml {
-        base: BaseUrl(
-            Url {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "download.pytorch.org",
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
                     ),
-                ),
-                port: None,
-                path: "/whl/jinja2/",
-                query: None,
-                fragment: None,
-            },
-        ),
-        files: [
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Jinja2-3.1.2-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: Some(
-                        "4095ada29e51070f7d199a0a5bdf5c8d8e238e03f0bf4dcc02571e78c9ae800d",
-                    ),
-                    sha384: None,
-                    sha512: None,
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.2-py3-none-any.whl#sha256%3D4095ada29e51070f7d199a0a5bdf5c8d8e238e03f0bf4dcc02571e78c9ae800d",
-                yanked: None,
-            },
-        ],
-    }
-    "###);
+            ),
+            files: [
+                File {
+                    core_metadata: None,
+                    filename: "Jinja2-3.1.2-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: Some(
+                            "4095ada29e51070f7d199a0a5bdf5c8d8e238e03f0bf4dcc02571e78c9ae800d",
+                        ),
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
     }
 
     #[test]
@@ -517,46 +563,45 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
-    SimpleHtml {
-        base: BaseUrl(
-            Url {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "download.pytorch.org",
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
                     ),
-                ),
-                port: None,
-                path: "/whl/jinja2/",
-                query: None,
-                fragment: None,
-            },
-        ),
-        files: [
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "torchtext-0.17.0+cpu-cp39-cp39-win_amd64.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "cpu/torchtext-0.17.0%2Bcpu-cp39-cp39-win_amd64.whl",
-                yanked: None,
-            },
-        ],
-    }
-    "###);
+            ),
+            files: [
+                File {
+                    core_metadata: None,
+                    filename: "torchtext-0.17.0+cpu-cp39-cp39-win_amd64.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "cpu/torchtext-0.17.0%2Bcpu-cp39-cp39-win_amd64.whl",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
     }
 
     #[test]
@@ -573,46 +618,45 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
-    SimpleHtml {
-        base: BaseUrl(
-            Url {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "download.pytorch.org",
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
                     ),
-                ),
-                port: None,
-                path: "/whl/jinja2/",
-                query: None,
-                fragment: None,
-            },
-        ),
-        files: [
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Jinja2-3.1.2-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
-                yanked: None,
-            },
-        ],
-    }
-    "###);
+            ),
+            files: [
+                File {
+                    core_metadata: None,
+                    filename: "Jinja2-3.1.2-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
     }
 
     #[test]
@@ -628,8 +672,29 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     ";
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_snapshot!(result, @"Missing href attribute on anchor link: `Jinja2-3.1.2-py3-none-any.whl`");
+        let result = SimpleHtml::parse(text, &base).unwrap();
+        insta::assert_debug_snapshot!(result, @r###"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
+            files: [],
+        }
+        "###);
     }
 
     #[test]
@@ -645,8 +710,29 @@ mod tests {
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_snapshot!(result, @"Missing href attribute on anchor link: `Jinja2-3.1.2-py3-none-any.whl`");
+        let result = SimpleHtml::parse(text, &base).unwrap();
+        insta::assert_debug_snapshot!(result, @r###"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
+            files: [],
+        }
+        "###);
     }
 
     #[test]
@@ -663,46 +749,45 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
-    SimpleHtml {
-        base: BaseUrl(
-            Url {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "download.pytorch.org",
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
                     ),
-                ),
-                port: None,
-                path: "/whl/jinja2/",
-                query: None,
-                fragment: None,
-            },
-        ),
-        files: [
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Jinja2-3.1.2-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.2-py3-none-any.whl#",
-                yanked: None,
-            },
-        ],
-    }
-    "###);
+            ),
+            files: [
+                File {
+                    core_metadata: None,
+                    filename: "Jinja2-3.1.2-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
     }
 
     #[test]
@@ -719,63 +804,159 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
-    SimpleHtml {
-        base: BaseUrl(
-            Url {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "download.pytorch.org",
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
                     ),
-                ),
-                port: None,
-                path: "/whl/jinja2/",
-                query: None,
-                fragment: None,
-            },
-        ),
-        files: [
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Jinja2-3.1.2-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.2-py3-none-any.whl?project=legacy",
-                yanked: None,
-            },
-        ],
-    }
-    "###);
+            ),
+            files: [
+                File {
+                    core_metadata: None,
+                    filename: "Jinja2-3.1.2-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl?project=legacy",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
     }
 
     #[test]
-    fn parse_missing_hash_value() {
+    fn parse_unknown_fragment() {
         let text = r#"
 <!DOCTYPE html>
 <html>
 <body>
 <h1>Links for jinja2</h1>
-<a href="/whl/Jinja2-3.1.2-py3-none-any.whl#sha256">Jinja2-3.1.2-py3-none-any.whl</a><br/>
+<a href="/whl/Jinja2-3.1.2-py3-none-any.whl#main">Jinja2-3.1.2-py3-none-any.whl</a><br/>
 </body>
 </html>
 <!--TIMESTAMP 1703347410-->
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
-        let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_snapshot!(result, @"Unexpected fragment (expected `#sha256=...` or similar) on URL: sha256");
+        let result = SimpleHtml::parse(text, &base);
+        insta::assert_debug_snapshot!(result, @r#"
+        Ok(
+            SimpleHtml {
+                base: BaseUrl(
+                    Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "download.pytorch.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/whl/jinja2/",
+                        query: None,
+                        fragment: None,
+                    },
+                ),
+                files: [
+                    File {
+                        core_metadata: None,
+                        filename: "Jinja2-3.1.2-py3-none-any.whl",
+                        hashes: Hashes {
+                            md5: None,
+                            sha256: None,
+                            sha384: None,
+                            sha512: None,
+                            blake2b: None,
+                        },
+                        requires_python: None,
+                        size: None,
+                        upload_time: None,
+                        url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
+                        yanked: None,
+                    },
+                ],
+            },
+        )
+        "#);
+    }
+
+    #[test]
+    fn parse_egg_fragment() {
+        let text = r#"
+<!DOCTYPE html>
+<html>
+<body>
+<h1>Links for jinja2</h1>
+<a href="/whl/Jinja2-3.1.2-py3-none-any.whl#main">Jinja2-3.1.2-py3-none-any.whl#egg=public-hello-0.1</a><br/>
+</body>
+</html>
+<!--TIMESTAMP 1703347410-->
+    "#;
+        let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
+        let result = SimpleHtml::parse(text, &base);
+        insta::assert_debug_snapshot!(result, @r#"
+        Ok(
+            SimpleHtml {
+                base: BaseUrl(
+                    Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "download.pytorch.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/whl/jinja2/",
+                        query: None,
+                        fragment: None,
+                    },
+                ),
+                files: [
+                    File {
+                        core_metadata: None,
+                        filename: "Jinja2-3.1.2-py3-none-any.whl",
+                        hashes: Hashes {
+                            md5: None,
+                            sha256: None,
+                            sha384: None,
+                            sha512: None,
+                            blake2b: None,
+                        },
+                        requires_python: None,
+                        size: None,
+                        upload_time: None,
+                        url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
+                        yanked: None,
+                    },
+                ],
+            },
+        )
+        "#);
     }
 
     #[test]
@@ -792,7 +973,7 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap_err();
-        insta::assert_snapshot!(result, @"Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, or `sha512`) on: `blake2=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61`");
+        insta::assert_snapshot!(result, @"Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, `sha512`, or `blake2b`) on: `blake2=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61`");
     }
 
     #[test]
@@ -810,63 +991,61 @@ mod tests {
         let base = Url::parse("https://storage.googleapis.com/jax-releases/jax_cuda_releases.html")
             .unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
-    SimpleHtml {
-        base: BaseUrl(
-            Url {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "storage.googleapis.com",
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "storage.googleapis.com",
+                        ),
                     ),
-                ),
-                port: None,
-                path: "/jax-releases/jax_cuda_releases.html",
-                query: None,
-                fragment: None,
-            },
-        ),
-        files: [
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "jaxlib-0.1.52+cuda100-cp36-none-manylinux2010_x86_64.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
+                    port: None,
+                    path: "/jax-releases/jax_cuda_releases.html",
+                    query: None,
+                    fragment: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "https://storage.googleapis.com/jax-releases/cuda100/jaxlib-0.1.52+cuda100-cp36-none-manylinux2010_x86_64.whl",
-                yanked: None,
-            },
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "jaxlib-0.1.52+cuda100-cp37-none-manylinux2010_x86_64.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
+            ),
+            files: [
+                File {
+                    core_metadata: None,
+                    filename: "jaxlib-0.1.52+cuda100-cp36-none-manylinux2010_x86_64.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "https://storage.googleapis.com/jax-releases/cuda100/jaxlib-0.1.52+cuda100-cp36-none-manylinux2010_x86_64.whl",
+                    yanked: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "https://storage.googleapis.com/jax-releases/cuda100/jaxlib-0.1.52+cuda100-cp37-none-manylinux2010_x86_64.whl",
-                yanked: None,
-            },
-        ],
-    }
-    "###);
+                File {
+                    core_metadata: None,
+                    filename: "jaxlib-0.1.52+cuda100-cp37-none-manylinux2010_x86_64.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "https://storage.googleapis.com/jax-releases/cuda100/jaxlib-0.1.52+cuda100-cp37-none-manylinux2010_x86_64.whl",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
     }
 
     /// Test for AWS Code Artifact
@@ -894,97 +1073,94 @@ mod tests {
         let base = Url::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/")
             .unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
-    SimpleHtml {
-        base: BaseUrl(
-            Url {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "account.d.codeartifact.us-west-2.amazonaws.com",
-                    ),
-                ),
-                port: None,
-                path: "/pypi/shared-packages-pypi/simple/flask/",
-                query: None,
-                fragment: None,
-            },
-        ),
-        files: [
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Flask-0.1.tar.gz",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: Some(
-                        "9da884457e910bf0847d396cb4b778ad9f3c3d17db1c5997cb861937bd284237",
-                    ),
-                    sha384: None,
-                    sha512: None,
-                },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "0.1/Flask-0.1.tar.gz#sha256=9da884457e910bf0847d396cb4b778ad9f3c3d17db1c5997cb861937bd284237",
-                yanked: None,
-            },
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Flask-0.10.1.tar.gz",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: Some(
-                        "4c83829ff83d408b5e1d4995472265411d2c414112298f2eb4b359d9e4563373",
-                    ),
-                    sha384: None,
-                    sha512: None,
-                },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "0.10.1/Flask-0.10.1.tar.gz#sha256=4c83829ff83d408b5e1d4995472265411d2c414112298f2eb4b359d9e4563373",
-                yanked: None,
-            },
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "flask-3.0.1.tar.gz",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: Some(
-                        "6489f51bb3666def6f314e15f19d50a1869a19ae0e8c9a3641ffe66c77d42403",
-                    ),
-                    sha384: None,
-                    sha512: None,
-                },
-                requires_python: Some(
-                    Ok(
-                        VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: GreaterThanEqual,
-                                    version: "3.8",
-                                },
-                            ],
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "account.d.codeartifact.us-west-2.amazonaws.com",
                         ),
                     ),
-                ),
-                size: None,
-                upload_time: None,
-                url: "3.0.1/flask-3.0.1.tar.gz#sha256=6489f51bb3666def6f314e15f19d50a1869a19ae0e8c9a3641ffe66c77d42403",
-                yanked: None,
-            },
-        ],
-    }
-    "###);
+                    port: None,
+                    path: "/pypi/shared-packages-pypi/simple/flask/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
+            files: [
+                File {
+                    core_metadata: None,
+                    filename: "Flask-0.1.tar.gz",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: Some(
+                            "9da884457e910bf0847d396cb4b778ad9f3c3d17db1c5997cb861937bd284237",
+                        ),
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "0.1/Flask-0.1.tar.gz",
+                    yanked: None,
+                },
+                File {
+                    core_metadata: None,
+                    filename: "Flask-0.10.1.tar.gz",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: Some(
+                            "4c83829ff83d408b5e1d4995472265411d2c414112298f2eb4b359d9e4563373",
+                        ),
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "0.10.1/Flask-0.10.1.tar.gz",
+                    yanked: None,
+                },
+                File {
+                    core_metadata: None,
+                    filename: "flask-3.0.1.tar.gz",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: Some(
+                            "6489f51bb3666def6f314e15f19d50a1869a19ae0e8c9a3641ffe66c77d42403",
+                        ),
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: Some(
+                        Ok(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: GreaterThanEqual,
+                                        version: "3.8",
+                                    },
+                                ],
+                            ),
+                        ),
+                    ),
+                    size: None,
+                    upload_time: None,
+                    url: "3.0.1/flask-3.0.1.tar.gz",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
     }
 
     #[test]
@@ -1000,59 +1176,58 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
-    SimpleHtml {
-        base: BaseUrl(
-            Url {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "download.pytorch.org",
-                    ),
-                ),
-                port: None,
-                path: "/whl/jinja2/",
-                query: None,
-                fragment: None,
-            },
-        ),
-        files: [
-            File {
-                core_metadata: None,
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Jinja2-3.1.2-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: Some(
-                        "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
-                    ),
-                    sha384: None,
-                    sha512: None,
-                },
-                requires_python: Some(
-                    Ok(
-                        VersionSpecifiers(
-                            [
-                                VersionSpecifier {
-                                    operator: GreaterThanEqual,
-                                    version: "3.8",
-                                },
-                            ],
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
                         ),
                     ),
-                ),
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.2-py3-none-any.whl#sha256=6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
-                yanked: None,
-            },
-        ],
-    }
-    "###);
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
+            ),
+            files: [
+                File {
+                    core_metadata: None,
+                    filename: "Jinja2-3.1.2-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: Some(
+                            "6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61",
+                        ),
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: Some(
+                        Ok(
+                            VersionSpecifiers(
+                                [
+                                    VersionSpecifier {
+                                        operator: GreaterThanEqual,
+                                        version: "3.8",
+                                    },
+                                ],
+                            ),
+                        ),
+                    ),
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
     }
 
     /// Respect PEP 714 (see: <https://peps.python.org/pep-0714/>).
@@ -1074,133 +1249,128 @@ mod tests {
         let base = Url::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/")
             .unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r###"
-    SimpleHtml {
-        base: BaseUrl(
-            Url {
-                scheme: "https",
-                cannot_be_a_base: false,
-                username: "",
-                password: None,
-                host: Some(
-                    Domain(
-                        "account.d.codeartifact.us-west-2.amazonaws.com",
+        insta::assert_debug_snapshot!(result, @r#"
+        SimpleHtml {
+            base: BaseUrl(
+                Url {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "account.d.codeartifact.us-west-2.amazonaws.com",
+                        ),
                     ),
-                ),
-                port: None,
-                path: "/pypi/shared-packages-pypi/simple/flask/",
-                query: None,
-                fragment: None,
-            },
-        ),
-        files: [
-            File {
-                core_metadata: Some(
-                    Bool(
-                        true,
-                    ),
-                ),
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Jinja2-3.1.2-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
+                    port: None,
+                    path: "/pypi/shared-packages-pypi/simple/flask/",
+                    query: None,
+                    fragment: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
-                yanked: None,
-            },
-            File {
-                core_metadata: Some(
-                    Bool(
-                        true,
+            ),
+            files: [
+                File {
+                    core_metadata: Some(
+                        Bool(
+                            true,
+                        ),
                     ),
-                ),
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Jinja2-3.1.3-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
+                    filename: "Jinja2-3.1.2-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.2-py3-none-any.whl",
+                    yanked: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.3-py3-none-any.whl",
-                yanked: None,
-            },
-            File {
-                core_metadata: Some(
-                    Bool(
-                        false,
+                File {
+                    core_metadata: Some(
+                        Bool(
+                            true,
+                        ),
                     ),
-                ),
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Jinja2-3.1.4-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
+                    filename: "Jinja2-3.1.3-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.3-py3-none-any.whl",
+                    yanked: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.4-py3-none-any.whl",
-                yanked: None,
-            },
-            File {
-                core_metadata: Some(
-                    Bool(
-                        false,
+                File {
+                    core_metadata: Some(
+                        Bool(
+                            false,
+                        ),
                     ),
-                ),
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Jinja2-3.1.5-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
+                    filename: "Jinja2-3.1.4-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.4-py3-none-any.whl",
+                    yanked: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.5-py3-none-any.whl",
-                yanked: None,
-            },
-            File {
-                core_metadata: Some(
-                    Bool(
-                        true,
+                File {
+                    core_metadata: Some(
+                        Bool(
+                            false,
+                        ),
                     ),
-                ),
-                dist_info_metadata: None,
-                data_dist_info_metadata: None,
-                filename: "Jinja2-3.1.6-py3-none-any.whl",
-                hashes: Hashes {
-                    md5: None,
-                    sha256: None,
-                    sha384: None,
-                    sha512: None,
+                    filename: "Jinja2-3.1.5-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.5-py3-none-any.whl",
+                    yanked: None,
                 },
-                requires_python: None,
-                size: None,
-                upload_time: None,
-                url: "/whl/Jinja2-3.1.6-py3-none-any.whl",
-                yanked: None,
-            },
-        ],
-    }
-    "###);
+                File {
+                    core_metadata: Some(
+                        Bool(
+                            true,
+                        ),
+                    ),
+                    filename: "Jinja2-3.1.6-py3-none-any.whl",
+                    hashes: Hashes {
+                        md5: None,
+                        sha256: None,
+                        sha384: None,
+                        sha512: None,
+                        blake2b: None,
+                    },
+                    requires_python: None,
+                    size: None,
+                    upload_time: None,
+                    url: "/whl/Jinja2-3.1.6-py3-none-any.whl",
+                    yanked: None,
+                },
+            ],
+        }
+        "#);
     }
 }

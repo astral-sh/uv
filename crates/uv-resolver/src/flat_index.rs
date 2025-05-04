@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use rustc_hash::FxHashMap;
 use tracing::instrument;
 
-use uv_client::FlatIndexEntries;
+use uv_client::{FlatIndexEntries, FlatIndexEntry};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
@@ -39,11 +39,10 @@ impl FlatIndex {
         build_options: &BuildOptions,
     ) -> Self {
         // Collect compatible distributions.
-        let mut index = FxHashMap::default();
+        let mut index = FxHashMap::<PackageName, FlatDistributions>::default();
         for entry in entries.entries {
             let distributions = index.entry(entry.filename.name().clone()).or_default();
-            Self::add_file(
-                distributions,
+            distributions.add_file(
                 entry.file,
                 entry.filename,
                 tags,
@@ -59,8 +58,59 @@ impl FlatIndex {
         Self { index, offline }
     }
 
+    /// Get the [`FlatDistributions`] for the given package name.
+    pub fn get(&self, package_name: &PackageName) -> Option<&FlatDistributions> {
+        self.index.get(package_name)
+    }
+
+    /// Whether any `--find-links` entries could not be resolved due to a lack of network
+    /// connectivity.
+    pub fn offline(&self) -> bool {
+        self.offline
+    }
+}
+
+/// A set of [`PrioritizedDist`] from a `--find-links` entry for a single package, indexed
+/// by [`Version`].
+#[derive(Debug, Clone, Default)]
+pub struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
+
+impl FlatDistributions {
+    /// Collect all files from a `--find-links` target into a [`FlatIndex`].
+    #[instrument(skip_all)]
+    pub fn from_entries(
+        entries: Vec<FlatIndexEntry>,
+        tags: Option<&Tags>,
+        hasher: &HashStrategy,
+        build_options: &BuildOptions,
+    ) -> Self {
+        let mut distributions = Self::default();
+        for entry in entries {
+            distributions.add_file(
+                entry.file,
+                entry.filename,
+                tags,
+                hasher,
+                build_options,
+                entry.index,
+            );
+        }
+        distributions
+    }
+
+    /// Returns an [`Iterator`] over the distributions.
+    pub fn iter(&self) -> impl Iterator<Item = (&Version, &PrioritizedDist)> {
+        self.0.iter()
+    }
+
+    /// Removes the [`PrioritizedDist`] for the given version.
+    pub fn remove(&mut self, version: &Version) -> Option<PrioritizedDist> {
+        self.0.remove(version)
+    }
+
+    /// Add the given [`File`] to the [`FlatDistributions`] for the given package.
     fn add_file(
-        distributions: &mut FlatDistributions,
+        &mut self,
         file: File,
         filename: DistFilename,
         tags: Option<&Tags>,
@@ -74,14 +124,19 @@ impl FlatIndex {
             DistFilename::WheelFilename(filename) => {
                 let version = filename.version.clone();
 
-                let compatibility =
-                    Self::wheel_compatibility(&filename, &file.hashes, tags, hasher, build_options);
+                let compatibility = Self::wheel_compatibility(
+                    &filename,
+                    file.hashes.as_slice(),
+                    tags,
+                    hasher,
+                    build_options,
+                );
                 let dist = RegistryBuiltWheel {
                     filename,
                     file: Box::new(file),
                     index,
                 };
-                match distributions.0.entry(version) {
+                match self.0.entry(version) {
                     Entry::Occupied(mut entry) => {
                         entry.get_mut().insert_built(dist, vec![], compatibility);
                     }
@@ -91,8 +146,12 @@ impl FlatIndex {
                 }
             }
             DistFilename::SourceDistFilename(filename) => {
-                let compatibility =
-                    Self::source_dist_compatibility(&filename, &file.hashes, hasher, build_options);
+                let compatibility = Self::source_dist_compatibility(
+                    &filename,
+                    file.hashes.as_slice(),
+                    hasher,
+                    build_options,
+                );
                 let dist = RegistrySourceDist {
                     name: filename.name.clone(),
                     version: filename.version.clone(),
@@ -101,7 +160,7 @@ impl FlatIndex {
                     index,
                     wheels: vec![],
                 };
-                match distributions.0.entry(filename.version) {
+                match self.0.entry(filename.version) {
                     Entry::Occupied(mut entry) => {
                         entry.get_mut().insert_source(dist, vec![], compatibility);
                     }
@@ -181,34 +240,9 @@ impl FlatIndex {
         };
 
         // Break ties with the build tag.
-        let build_tag = filename.build_tag.clone();
+        let build_tag = filename.build_tag().cloned();
 
         WheelCompatibility::Compatible(hash, priority, build_tag)
-    }
-
-    /// Get the [`FlatDistributions`] for the given package name.
-    pub fn get(&self, package_name: &PackageName) -> Option<&FlatDistributions> {
-        self.index.get(package_name)
-    }
-
-    /// Returns `true` if there are any offline `--find-links` entries.
-    pub fn offline(&self) -> bool {
-        self.offline
-    }
-}
-
-/// A set of [`PrioritizedDist`] from a `--find-links` entry for a single package, indexed
-/// by [`Version`].
-#[derive(Debug, Clone, Default)]
-pub struct FlatDistributions(BTreeMap<Version, PrioritizedDist>);
-
-impl FlatDistributions {
-    pub fn iter(&self) -> impl Iterator<Item = (&Version, &PrioritizedDist)> {
-        self.0.iter()
-    }
-
-    pub fn remove(&mut self, version: &Version) -> Option<PrioritizedDist> {
-        self.0.remove(version)
     }
 }
 

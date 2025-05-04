@@ -1,9 +1,9 @@
-use std::cmp::max;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::io::Write;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 
 use rustc_hash::FxHashSet;
@@ -11,8 +11,8 @@ use tracing::debug;
 
 pub use archive::ArchiveId;
 use uv_cache_info::Timestamp;
-use uv_distribution_types::InstalledDist;
-use uv_fs::{cachedir, directories};
+use uv_distribution_filename::WheelFilename;
+use uv_fs::{cachedir, directories, LockedFile};
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 
@@ -30,6 +30,11 @@ mod by_timestamp;
 mod cli;
 mod removal;
 mod wheel;
+
+/// The version of the archive bucket.
+///
+/// Must be kept in-sync with the version in [`CacheBucket::to_str`].
+pub const ARCHIVE_VERSION: u8 = 0;
 
 /// A [`CacheEntry`] which may or may not exist yet.
 #[derive(Debug, Clone)]
@@ -74,6 +79,12 @@ impl CacheEntry {
     pub fn with_file(&self, file: impl AsRef<Path>) -> Self {
         Self(self.dir().join(file))
     }
+
+    /// Acquire the [`CacheEntry`] as an exclusive lock.
+    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+        fs_err::create_dir_all(self.dir())?;
+        LockedFile::acquire(self.path(), self.path().display()).await
+    }
 }
 
 impl AsRef<Path> for CacheEntry {
@@ -96,6 +107,17 @@ impl CacheShard {
     #[must_use]
     pub fn shard(&self, dir: impl AsRef<Path>) -> Self {
         Self(self.0.join(dir.as_ref()))
+    }
+
+    /// Acquire the cache entry as an exclusive lock.
+    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+        fs_err::create_dir_all(self.as_ref())?;
+        LockedFile::acquire(self.join(".lock"), self.display()).await
+    }
+
+    /// Return the [`CacheShard`] as a [`PathBuf`].
+    pub fn into_path_buf(self) -> PathBuf {
+        self.0
     }
 }
 
@@ -201,11 +223,22 @@ impl Cache {
     }
 
     /// Returns `true` if a cache entry must be revalidated given the [`Refresh`] policy.
-    pub fn must_revalidate(&self, package: &PackageName) -> bool {
+    pub fn must_revalidate_package(&self, package: &PackageName) -> bool {
         match &self.refresh {
             Refresh::None(_) => false,
             Refresh::All(_) => true,
-            Refresh::Packages(packages, _) => packages.contains(package),
+            Refresh::Packages(packages, _, _) => packages.contains(package),
+        }
+    }
+
+    /// Returns `true` if a cache entry must be revalidated given the [`Refresh`] policy.
+    pub fn must_revalidate_path(&self, path: &Path) -> bool {
+        match &self.refresh {
+            Refresh::None(_) => false,
+            Refresh::All(_) => true,
+            Refresh::Packages(_, paths, _) => paths
+                .iter()
+                .any(|target| same_file::is_same_file(path, target).unwrap_or(false)),
         }
     }
 
@@ -217,13 +250,20 @@ impl Cache {
         &self,
         entry: &CacheEntry,
         package: Option<&PackageName>,
+        path: Option<&Path>,
     ) -> io::Result<Freshness> {
         // Grab the cutoff timestamp, if it's relevant.
         let timestamp = match &self.refresh {
             Refresh::None(_) => return Ok(Freshness::Fresh),
             Refresh::All(timestamp) => timestamp,
-            Refresh::Packages(packages, timestamp) => {
-                if package.map_or(true, |package| packages.contains(package)) {
+            Refresh::Packages(packages, paths, timestamp) => {
+                if package.is_none_or(|package| packages.contains(package))
+                    || path.is_some_and(|path| {
+                        paths
+                            .iter()
+                            .any(|target| same_file::is_same_file(path, target).unwrap_or(false))
+                    })
+                {
                     timestamp
                 } else {
                     return Ok(Freshness::Fresh);
@@ -261,7 +301,7 @@ impl Cache {
 
         // Create a symlink to the directory store.
         fs_err::create_dir_all(path.as_ref().parent().expect("Cache entry to have parent"))?;
-        uv_fs::replace_symlink(archive_entry.path(), path.as_ref())?;
+        self.create_link(&id, path.as_ref())?;
 
         Ok(id)
     }
@@ -336,23 +376,7 @@ impl Cache {
     /// Returns the number of entries removed from the cache.
     pub fn remove(&self, name: &PackageName) -> Result<Removal, io::Error> {
         // Collect the set of referenced archives.
-        let before = {
-            let mut references = FxHashSet::default();
-            for bucket in CacheBucket::iter() {
-                let bucket = self.bucket(bucket);
-                if bucket.is_dir() {
-                    for entry in walkdir::WalkDir::new(bucket) {
-                        let entry = entry?;
-                        if entry.file_type().is_symlink() {
-                            if let Ok(target) = fs_err::canonicalize(entry.path()) {
-                                references.insert(target);
-                            }
-                        }
-                    }
-                }
-            }
-            references
-        };
+        let before = self.find_archive_references()?;
 
         // Remove any entries for the package from the cache.
         let mut summary = Removal::default();
@@ -361,23 +385,7 @@ impl Cache {
         }
 
         // Collect the set of referenced archives after the removal.
-        let after = {
-            let mut references = FxHashSet::default();
-            for bucket in CacheBucket::iter() {
-                let bucket = self.bucket(bucket);
-                if bucket.is_dir() {
-                    for entry in walkdir::WalkDir::new(bucket) {
-                        let entry = entry?;
-                        if entry.file_type().is_symlink() {
-                            if let Ok(target) = fs_err::canonicalize(entry.path()) {
-                                references.insert(target);
-                            }
-                        }
-                    }
-                }
-            }
-            references
-        };
+        let after = self.find_archive_references()?;
 
         if before != after {
             // Remove any archives that are no longer referenced.
@@ -471,39 +479,35 @@ impl Cache {
                     continue;
                 }
 
-                // Remove any symlinks and directories in the revision. The symlinks represent
-                // unzipped wheels, and the directories represent the source distribution archives.
+                // Remove everything except the built wheel archive and the metadata.
                 for entry in fs_err::read_dir(entry.path())? {
                     let entry = entry?;
                     let path = entry.path();
 
-                    if path.is_dir() {
-                        debug!("Removing unzipped built wheel entry: {}", path.display());
-                        summary += rm_rf(path)?;
-                    } else if path.is_symlink() {
-                        debug!("Removing unzipped built wheel entry: {}", path.display());
-                        summary += rm_rf(path)?;
+                    // Retain the resolved metadata (`metadata.msgpack`).
+                    if path
+                        .file_name()
+                        .is_some_and(|file_name| file_name == "metadata.msgpack")
+                    {
+                        continue;
                     }
+
+                    // Retain any built wheel archives.
+                    if path
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("whl"))
+                    {
+                        continue;
+                    }
+
+                    debug!("Removing unzipped built wheel entry: {}", path.display());
+                    summary += rm_rf(path)?;
                 }
             }
         }
 
         // Fourth, remove any unused archives (by searching for archives that are not symlinked).
-        let mut references = FxHashSet::default();
-
-        for bucket in CacheBucket::iter() {
-            let bucket = self.bucket(bucket);
-            if bucket.is_dir() {
-                for entry in walkdir::WalkDir::new(bucket) {
-                    let entry = entry?;
-                    if entry.file_type().is_symlink() {
-                        if let Ok(target) = fs_err::canonicalize(entry.path()) {
-                            references.insert(target);
-                        }
-                    }
-                }
-            }
-        }
+        let references = self.find_archive_references()?;
 
         match fs_err::read_dir(self.bucket(CacheBucket::Archive)) {
             Ok(entries) => {
@@ -521,6 +525,221 @@ impl Cache {
         }
 
         Ok(summary)
+    }
+
+    /// Find all references to entries in the archive bucket.
+    ///
+    /// Archive entries are often referenced by symlinks in other cache buckets. This method
+    /// searches for all such references.
+    fn find_archive_references(&self) -> Result<FxHashSet<PathBuf>, io::Error> {
+        let mut references = FxHashSet::default();
+        for bucket in CacheBucket::iter() {
+            let bucket_path = self.bucket(bucket);
+            if bucket_path.is_dir() {
+                for entry in walkdir::WalkDir::new(bucket_path) {
+                    let entry = entry?;
+
+                    // Ignore any `.lock` files.
+                    if entry
+                        .path()
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
+                    {
+                        continue;
+                    }
+
+                    let Some(filename) = entry
+                        .path()
+                        .file_name()
+                        .and_then(|file_name| file_name.to_str())
+                    else {
+                        continue;
+                    };
+
+                    if bucket == CacheBucket::Wheels {
+                        // In the `wheels` bucket, we often use a hash of the filename as the
+                        // directory name, so we can't rely on the stem.
+                        //
+                        // Instead, we skip if it contains an extension (e.g., `.whl`, `.http`,
+                        // `.rev`, and `.msgpack` files).
+                        if filename
+                            .rsplit_once('-') // strip version/tags, might contain a dot ('.')
+                            .is_none_or(|(_, suffix)| suffix.contains('.'))
+                        {
+                            continue;
+                        }
+                    } else {
+                        // For other buckets only include entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
+                        if WheelFilename::from_stem(filename).is_err() {
+                            continue;
+                        }
+                    }
+
+                    if let Ok(target) = self.resolve_link(entry.path()) {
+                        references.insert(target);
+                    }
+                }
+            }
+        }
+        Ok(references)
+    }
+
+    /// Create a link to a directory in the archive bucket.
+    ///
+    /// On Windows, we write structured data ([`Link`]) to a file containing the archive ID and
+    /// version. On Unix, we create a symlink to the target directory.
+    #[cfg(windows)]
+    pub fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
+        // Serialize the link.
+        let link = Link::new(id.clone());
+        let contents = link.to_string();
+
+        // First, attempt to create a file at the location, but fail if it already exists.
+        match fs_err::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(dst.as_ref())
+        {
+            Ok(mut file) => {
+                // Write the target path to the file.
+                file.write_all(contents.as_bytes())?;
+                Ok(())
+            }
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                // Write to a temporary file, then move it into place.
+                let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
+                let temp_file = temp_dir.path().join("link");
+                fs_err::write(&temp_file, contents.as_bytes())?;
+
+                // Move the symlink into the target location.
+                fs_err::rename(&temp_file, dst.as_ref())?;
+
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Resolve an archive link, returning the fully-resolved path.
+    ///
+    /// Returns an error if the link target does not exist.
+    #[cfg(windows)]
+    pub fn resolve_link(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
+        // Deserialize the link.
+        let contents = fs_err::read_to_string(path.as_ref())?;
+        let link = Link::from_str(&contents)?;
+
+        // Ignore stale links.
+        if link.version != ARCHIVE_VERSION {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "The link target does not exist.",
+            ));
+        }
+
+        // Reconstruct the path.
+        let path = self.archive(&link.id);
+        path.canonicalize()
+    }
+
+    /// Create a link to a directory in the archive bucket.
+    ///
+    /// On Windows, we write structured data ([`Link`]) to a file containing the archive ID and
+    /// version. On Unix, we create a symlink to the target directory.
+    #[cfg(unix)]
+    pub fn create_link(&self, id: &ArchiveId, dst: impl AsRef<Path>) -> io::Result<()> {
+        // Construct the link target.
+        let src = self.archive(id);
+        let dst = dst.as_ref();
+
+        // Attempt to create the symlink directly.
+        match std::os::unix::fs::symlink(&src, dst) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                // Create a symlink, using a temporary file to ensure atomicity.
+                let temp_dir = tempfile::tempdir_in(dst.parent().unwrap())?;
+                let temp_file = temp_dir.path().join("link");
+                std::os::unix::fs::symlink(&src, &temp_file)?;
+
+                // Move the symlink into the target location.
+                fs_err::rename(&temp_file, dst)?;
+
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Resolve an archive link, returning the fully-resolved path.
+    ///
+    /// Returns an error if the link target does not exist.
+    #[cfg(unix)]
+    pub fn resolve_link(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
+        path.as_ref().canonicalize()
+    }
+}
+
+/// An archive (unzipped wheel) that exists in the local cache.
+#[derive(Debug, Clone)]
+#[allow(unused)]
+struct Link {
+    /// The unique ID of the entry in the archive bucket.
+    id: ArchiveId,
+    /// The version of the archive bucket.
+    version: u8,
+}
+
+#[allow(unused)]
+impl Link {
+    /// Create a new [`Archive`] with the given ID and hashes.
+    fn new(id: ArchiveId) -> Self {
+        Self {
+            id,
+            version: ARCHIVE_VERSION,
+        }
+    }
+}
+
+impl Display for Link {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "archive-v{}/{}", self.version, self.id)
+    }
+}
+
+impl FromStr for Link {
+    type Err = io::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.splitn(2, '/');
+        let version = parts
+            .next()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing version"))?;
+        let id = parts
+            .next()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing ID"))?;
+
+        // Parse the archive version from `archive-v{version}/{id}`.
+        let version = version
+            .strip_prefix("archive-v")
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing version prefix"))?;
+        let version = u8::from_str(version).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("failed to parse version: {err}"),
+            )
+        })?;
+
+        // Parse the ID from `archive-v{version}/{id}`.
+        let id = ArchiveId::from_str(id).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("failed to parse ID: {err}"),
+            )
+        })?;
+
+        Ok(Self { id, version })
     }
 }
 
@@ -679,7 +898,7 @@ pub enum CacheBucket {
     ///
     /// ...may be cached as:
     /// ```text
-    /// built-wheels-v3/
+    /// built-wheels-v4/
     /// ├── git
     /// │   └── 2122faf3e081fb7a
     /// │       └── 7a2d650a4a7b4d04
@@ -780,20 +999,22 @@ impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
             // Note that when bumping this, you'll also need to bump it
-            // in crates/uv/tests/cache_prune.rs.
-            Self::SourceDistributions => "sdists-v6",
+            // in `crates/uv/tests/it/cache_prune.rs`.
+            Self::SourceDistributions => "sdists-v9",
             Self::FlatIndex => "flat-index-v2",
             Self::Git => "git-v0",
-            Self::Interpreter => "interpreter-v3",
+            Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
-            // in crates/uv/tests/cache_clean.rs.
-            Self::Simple => "simple-v14",
+            // in `crates/uv/tests/it/cache_clean.rs`.
+            Self::Simple => "simple-v15",
             // Note that when bumping this, you'll also need to bump it
-            // in crates/uv/tests/cache_prune.rs.
-            Self::Wheels => "wheels-v3",
+            // in `crates/uv/tests/it/cache_prune.rs`.
+            Self::Wheels => "wheels-v5",
+            // Note that when bumping this, you'll also need to bump
+            // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
             Self::Builds => "builds-v0",
-            Self::Environments => "environments-v1",
+            Self::Environments => "environments-v2",
         }
     }
 
@@ -822,14 +1043,14 @@ impl CacheBucket {
                 // For alternate indices, we expect a directory for every index (under an `index`
                 // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
-                for directory in directories(root) {
+                for directory in directories(root)? {
                     summary += rm_rf(directory.join(name.to_string()))?;
                 }
 
                 // For direct URLs, we expect a directory for every URL, followed by a
                 // directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
-                for directory in directories(root) {
+                for directory in directories(root)? {
                     summary += rm_rf(directory.join(name.to_string()))?;
                 }
             }
@@ -841,7 +1062,7 @@ impl CacheBucket {
                 // For alternate indices, we expect a directory for every index (under an `index`
                 // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
-                for directory in directories(root) {
+                for directory in directories(root)? {
                     summary += rm_rf(directory.join(name.to_string()))?;
                 }
 
@@ -849,8 +1070,8 @@ impl CacheBucket {
                 // directory per version. To determine whether the URL is relevant, we need to
                 // search for a wheel matching the package name.
                 let root = cache.bucket(self).join(WheelCacheKind::Url);
-                for url in directories(root) {
-                    if directories(&url).any(|version| is_match(&version, name)) {
+                for url in directories(root)? {
+                    if directories(&url)?.any(|version| is_match(&version, name)) {
                         summary += rm_rf(url)?;
                     }
                 }
@@ -859,8 +1080,8 @@ impl CacheBucket {
                 // directory per version. To determine whether the path is relevant, we need to
                 // search for a wheel matching the package name.
                 let root = cache.bucket(self).join(WheelCacheKind::Path);
-                for path in directories(root) {
-                    if directories(&path).any(|version| is_match(&version, name)) {
+                for path in directories(root)? {
+                    if directories(&path)?.any(|version| is_match(&version, name)) {
                         summary += rm_rf(path)?;
                     }
                 }
@@ -869,8 +1090,8 @@ impl CacheBucket {
                 // directory for every SHA. To determine whether the SHA is relevant, we need to
                 // search for a wheel matching the package name.
                 let root = cache.bucket(self).join(WheelCacheKind::Git);
-                for repository in directories(root) {
-                    for sha in directories(repository) {
+                for repository in directories(root)? {
+                    for sha in directories(repository)? {
                         if is_match(&sha, name) {
                             summary += rm_rf(sha)?;
                         }
@@ -885,7 +1106,7 @@ impl CacheBucket {
                 // For alternate indices, we expect a directory for every index (under an `index`
                 // subdirectory), followed by a directory per package (indexed by name).
                 let root = cache.bucket(self).join(WheelCacheKind::Index);
-                for directory in directories(root) {
+                for directory in directories(root)? {
                     summary += rm_rf(directory.join(format!("{name}.rkyv")))?;
                 }
             }
@@ -895,19 +1116,7 @@ impl CacheBucket {
                 let root = cache.bucket(self);
                 summary += rm_rf(root)?;
             }
-            Self::Git => {
-                // Nothing to do.
-            }
-            Self::Interpreter => {
-                // Nothing to do.
-            }
-            Self::Archive => {
-                // Nothing to do.
-            }
-            Self::Builds => {
-                // Nothing to do.
-            }
-            Self::Environments => {
+            Self::Git | Self::Interpreter | Self::Archive | Self::Builds | Self::Environments => {
                 // Nothing to do.
             }
         }
@@ -938,123 +1147,6 @@ impl Display for CacheBucket {
     }
 }
 
-/// A timestamp for an archive, which could be a directory (in which case the modification time is
-/// the latest modification time of the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the
-/// directory) or a single file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ArchiveTimestamp(Timestamp);
-
-impl ArchiveTimestamp {
-    /// Return the modification timestamp for an archive, which could be a file (like a wheel or a zip
-    /// archive) or a directory containing a Python package.
-    ///
-    /// If the path is to a directory with no entrypoint (i.e., no `pyproject.toml`, `setup.py`, or
-    /// `setup.cfg`), returns `None`.
-    pub fn from_path(path: impl AsRef<Path>) -> Result<Option<Self>, io::Error> {
-        let metadata = fs_err::metadata(path.as_ref())?;
-        if metadata.is_file() {
-            Ok(Some(Self(Timestamp::from_metadata(&metadata))))
-        } else {
-            Self::from_source_tree(path)
-        }
-    }
-
-    /// Return the modification timestamp for a file.
-    pub fn from_file(path: impl AsRef<Path>) -> Result<Self, io::Error> {
-        let metadata = fs_err::metadata(path.as_ref())?;
-        Ok(Self(Timestamp::from_metadata(&metadata)))
-    }
-
-    /// Return the modification timestamp for a source tree, i.e., a directory.
-    ///
-    /// If the source tree doesn't contain an entrypoint (i.e., no `pyproject.toml`, `setup.py`, or
-    /// `setup.cfg`), returns `None`.
-    pub fn from_source_tree(path: impl AsRef<Path>) -> Result<Option<Self>, io::Error> {
-        // Compute the modification timestamp for the `pyproject.toml`, `setup.py`, and
-        // `setup.cfg` files, if they exist.
-        let pyproject_toml = path
-            .as_ref()
-            .join("pyproject.toml")
-            .metadata()
-            .ok()
-            .filter(std::fs::Metadata::is_file)
-            .as_ref()
-            .map(Timestamp::from_metadata);
-
-        let setup_py = path
-            .as_ref()
-            .join("setup.py")
-            .metadata()
-            .ok()
-            .filter(std::fs::Metadata::is_file)
-            .as_ref()
-            .map(Timestamp::from_metadata);
-
-        let setup_cfg = path
-            .as_ref()
-            .join("setup.cfg")
-            .metadata()
-            .ok()
-            .filter(std::fs::Metadata::is_file)
-            .as_ref()
-            .map(Timestamp::from_metadata);
-
-        // Take the most recent timestamp of the three files.
-        let Some(timestamp) = max(pyproject_toml, max(setup_py, setup_cfg)) else {
-            return Ok(None);
-        };
-
-        Ok(Some(Self(timestamp)))
-    }
-
-    /// Return the modification timestamp for an archive.
-    pub fn timestamp(&self) -> Timestamp {
-        self.0
-    }
-
-    /// Returns `true` if the `target` (an installed or cached distribution) is up-to-date with the
-    /// source archive (`source`).
-    ///
-    /// The `target` should be an installed package in a virtual environment, or an unzipped
-    /// package in the cache.
-    ///
-    /// The `source` is a source archive, i.e., a path to a built wheel or a Python package directory.
-    pub fn up_to_date_with(source: &Path, target: ArchiveTarget) -> Result<bool, io::Error> {
-        let Some(modified_at) = Self::from_path(source)? else {
-            // If there's no entrypoint, we can't determine the modification time, so we assume that the
-            // target is not up-to-date.
-            return Ok(false);
-        };
-        let created_at = match target {
-            ArchiveTarget::Install(installed) => {
-                Timestamp::from_path(installed.path().join("METADATA"))?
-            }
-            ArchiveTarget::Cache(cache) => Timestamp::from_path(cache)?,
-        };
-        Ok(modified_at.timestamp() <= created_at)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum ArchiveTarget<'a> {
-    /// The target is an installed package in a virtual environment.
-    Install(&'a InstalledDist),
-    /// The target is an unzipped package in the cache.
-    Cache(&'a Path),
-}
-
-impl PartialOrd for ArchiveTimestamp {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.timestamp().cmp(&other.timestamp()))
-    }
-}
-
-impl Ord for ArchiveTimestamp {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.timestamp().cmp(&other.timestamp())
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Freshness {
     /// The cache entry is fresh according to the [`Refresh`] policy.
@@ -1081,7 +1173,7 @@ pub enum Refresh {
     /// Don't refresh any entries.
     None(Timestamp),
     /// Refresh entries linked to the given packages, if created before the given timestamp.
-    Packages(Vec<PackageName>, Timestamp),
+    Packages(Vec<PackageName>, Vec<Box<Path>>, Timestamp),
     /// Refresh all entries created before the given timestamp.
     All(Timestamp),
 }
@@ -1097,7 +1189,7 @@ impl Refresh {
                 if refresh_package.is_empty() {
                     Self::None(timestamp)
                 } else {
-                    Self::Packages(refresh_package, timestamp)
+                    Self::Packages(refresh_package, vec![], timestamp)
                 }
             }
         }
@@ -1107,7 +1199,7 @@ impl Refresh {
     pub fn timestamp(&self) -> Timestamp {
         match self {
             Self::None(timestamp) => *timestamp,
-            Self::Packages(_, timestamp) => *timestamp,
+            Self::Packages(.., timestamp) => *timestamp,
             Self::All(timestamp) => *timestamp,
         }
     }
@@ -1134,24 +1226,54 @@ impl Refresh {
             // Take the `max` of the two timestamps.
             (Self::None(t1), Refresh::None(t2)) => Refresh::None(max(t1, t2)),
             (Self::None(t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
-            (Self::None(t1), Refresh::Packages(packages, t2)) => {
-                Refresh::Packages(packages, max(t1, t2))
+            (Self::None(t1), Refresh::Packages(packages, paths, t2)) => {
+                Refresh::Packages(packages, paths, max(t1, t2))
             }
 
             // If the policy is `All`, refresh all packages.
             (Self::All(t1), Refresh::None(t2)) => Refresh::All(max(t1, t2)),
             (Self::All(t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
-            (Self::All(t1), Refresh::Packages(_packages, t2)) => Refresh::All(max(t1, t2)),
+            (Self::All(t1), Refresh::Packages(.., t2)) => Refresh::All(max(t1, t2)),
 
             // If the policy is `Packages`, take the "max" of the two policies.
-            (Self::Packages(packages, t1), Refresh::None(t2)) => {
-                Refresh::Packages(packages, max(t1, t2))
+            (Self::Packages(packages, paths, t1), Refresh::None(t2)) => {
+                Refresh::Packages(packages, paths, max(t1, t2))
             }
-            (Self::Packages(_packages, t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
-            (Self::Packages(packages1, t1), Refresh::Packages(packages2, t2)) => Refresh::Packages(
-                packages1.into_iter().chain(packages2).collect(),
-                max(t1, t2),
-            ),
+            (Self::Packages(.., t1), Refresh::All(t2)) => Refresh::All(max(t1, t2)),
+            (Self::Packages(packages1, paths1, t1), Refresh::Packages(packages2, paths2, t2)) => {
+                Refresh::Packages(
+                    packages1.into_iter().chain(packages2).collect(),
+                    paths1.into_iter().chain(paths2).collect(),
+                    max(t1, t2),
+                )
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use crate::ArchiveId;
+
+    use super::Link;
+
+    #[test]
+    fn test_link_round_trip() {
+        let id = ArchiveId::new();
+        let link = Link::new(id);
+        let s = link.to_string();
+        let parsed = Link::from_str(&s).unwrap();
+        assert_eq!(link.id, parsed.id);
+        assert_eq!(link.version, parsed.version);
+    }
+
+    #[test]
+    fn test_link_deserialize() {
+        assert!(Link::from_str("archive-v0/foo").is_ok());
+        assert!(Link::from_str("archive/foo").is_err());
+        assert!(Link::from_str("v1/foo").is_err());
+        assert!(Link::from_str("archive-v0/").is_err());
     }
 }

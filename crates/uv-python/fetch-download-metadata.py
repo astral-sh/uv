@@ -61,6 +61,10 @@ import httpx
 SELF_DIR = Path(__file__).parent
 VERSIONS_FILE = SELF_DIR / "download-metadata.json"
 
+# The date at which the default CPython musl builds became dynamically linked
+# instead of statically.
+CPYTHON_MUSL_STATIC_RELEASE_END = 20250311
+
 
 def batched(iterable: Iterable, n: int) -> Generator[tuple, None, None]:
     """Batch data into tuples of length n. The last batch may be shorter."""
@@ -142,6 +146,7 @@ class Variant(StrEnum):
 
 @dataclass
 class PythonDownload:
+    release: int
     version: Version
     triple: PlatformTriple
     flavor: str
@@ -171,7 +176,7 @@ class CPythonFinder(Finder):
     implementation = ImplementationName.CPYTHON
 
     RELEASE_URL = (
-        "https://api.github.com/repos/indygreg/python-build-standalone/releases"
+        "https://api.github.com/repos/astral-sh/python-build-standalone/releases"
     )
 
     FLAVOR_PREFERENCES = [
@@ -238,16 +243,25 @@ class CPythonFinder(Finder):
         # Collect all available Python downloads
         for page in range(1, pages + 1):
             logging.info("Fetching CPython release page %d", page)
-            resp = await self.client.get(self.RELEASE_URL, params={"page": page})
+            resp = await self.client.get(
+                self.RELEASE_URL, params={"page": page, "per_page": 10}
+            )
             resp.raise_for_status()
             rows = resp.json()
             if not rows:
                 break
             for row in rows:
+                # Sort the assets to ensure deterministic results
+                row["assets"].sort(key=lambda asset: asset["browser_download_url"])
                 for asset in row["assets"]:
                     url = asset["browser_download_url"]
                     download = self._parse_download_url(url)
                     if download is None:
+                        continue
+                    if (
+                        download.release < CPYTHON_MUSL_STATIC_RELEASE_END
+                        and download.triple.libc == "musl"
+                    ):
                         continue
                     logging.debug("Found %s (%s)", download.key(), download.filename)
                     downloads_by_version.setdefault(download.version, []).append(
@@ -333,10 +347,11 @@ class CPythonFinder(Finder):
     def _parse_download_url(self, url: str) -> PythonDownload | None:
         """Parse an indygreg download URL into a PythonDownload object."""
         # Ex)
-        # https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-lto-full.tar.zst
+        # https://github.com/astral-sh/python-build-standalone/releases/download/20240107/cpython-3.12.1%2B20240107-aarch64-unknown-linux-gnu-lto-full.tar.zst
         if url.endswith(".sha256"):
             return None
         filename = unquote(url.rsplit("/", maxsplit=1)[-1])
+        release = int(url.rsplit("/")[-2])
 
         match = self._filename_re.match(filename) or self._legacy_filename_re.match(
             filename
@@ -366,6 +381,7 @@ class CPythonFinder(Finder):
             return None
 
         return PythonDownload(
+            release=release,
             version=version,
             triple=triple,
             flavor=flavor,
@@ -428,6 +444,7 @@ class CPythonFinder(Finder):
             (
                 "lto" in build_options,
                 "pgo" in build_options,
+                "static" not in build_options,
             )
         )
 
@@ -485,6 +502,7 @@ class PyPyFinder(Finder):
                 platform = self._normalize_os(file["platform"])
                 libc = "gnu" if platform == "linux" else "none"
                 download = PythonDownload(
+                    release=0,
                     version=python_version,
                     triple=PlatformTriple(
                         platform=platform,
@@ -564,6 +582,14 @@ def render(downloads: list[PythonDownload]) -> None:
     results = {}
     for download in downloads:
         key = download.key()
+        if (download.version.major, download.version.minor) < (3, 8):
+            logging.info(
+                "Skipping unsupported version %s%s",
+                key,
+                (" (%s)" % download.flavor) if download.flavor else "",
+            )
+            continue
+
         logging.info(
             "Selected %s%s", key, (" (%s)" % download.flavor) if download.flavor else ""
         )
@@ -593,7 +619,10 @@ async def find() -> None:
             "`GITHUB_TOKEN` env var not found, you may hit rate limits for GitHub API requests."
         )
 
-    headers = {"X-GitHub-Api-Version": "2022-11-28"}
+    headers = {
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Accept-Encoding": "gzip, deflate",
+    }
     if token:
         headers["Authorization"] = "Bearer " + token
     client = httpx.AsyncClient(follow_redirects=True, headers=headers, timeout=15)

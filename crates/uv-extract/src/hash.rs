@@ -1,7 +1,7 @@
+use blake2::digest::consts::U32;
+use sha2::Digest;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-
-use sha2::Digest;
 use tokio::io::{AsyncReadExt, ReadBuf};
 
 use uv_pypi_types::{HashAlgorithm, HashDigest};
@@ -12,6 +12,7 @@ pub enum Hasher {
     Sha256(sha2::Sha256),
     Sha384(sha2::Sha384),
     Sha512(sha2::Sha512),
+    Blake2b(blake2::Blake2b<U32>),
 }
 
 impl Hasher {
@@ -21,6 +22,7 @@ impl Hasher {
             Hasher::Sha256(hasher) => hasher.update(data),
             Hasher::Sha384(hasher) => hasher.update(data),
             Hasher::Sha512(hasher) => hasher.update(data),
+            Hasher::Blake2b(hasher) => hasher.update(data),
         }
     }
 }
@@ -32,6 +34,7 @@ impl From<HashAlgorithm> for Hasher {
             HashAlgorithm::Sha256 => Hasher::Sha256(sha2::Sha256::new()),
             HashAlgorithm::Sha384 => Hasher::Sha384(sha2::Sha384::new()),
             HashAlgorithm::Sha512 => Hasher::Sha512(sha2::Sha512::new()),
+            HashAlgorithm::Blake2b => Hasher::Blake2b(blake2::Blake2b::new()),
         }
     }
 }
@@ -41,19 +44,23 @@ impl From<Hasher> for HashDigest {
         match hasher {
             Hasher::Md5(hasher) => HashDigest {
                 algorithm: HashAlgorithm::Md5,
-                digest: format!("{:x}", hasher.finalize()).into_boxed_str(),
+                digest: format!("{:x}", hasher.finalize()).into(),
             },
             Hasher::Sha256(hasher) => HashDigest {
                 algorithm: HashAlgorithm::Sha256,
-                digest: format!("{:x}", hasher.finalize()).into_boxed_str(),
+                digest: format!("{:x}", hasher.finalize()).into(),
             },
             Hasher::Sha384(hasher) => HashDigest {
                 algorithm: HashAlgorithm::Sha384,
-                digest: format!("{:x}", hasher.finalize()).into_boxed_str(),
+                digest: format!("{:x}", hasher.finalize()).into(),
             },
             Hasher::Sha512(hasher) => HashDigest {
                 algorithm: HashAlgorithm::Sha512,
-                digest: format!("{:x}", hasher.finalize()).into_boxed_str(),
+                digest: format!("{:x}", hasher.finalize()).into(),
+            },
+            Hasher::Blake2b(hasher) => HashDigest {
+                algorithm: HashAlgorithm::Blake2b,
+                digest: format!("{:x}", hasher.finalize()).into(),
             },
         }
     }

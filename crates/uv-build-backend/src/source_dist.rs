@@ -1,6 +1,8 @@
-use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
+use crate::metadata::DEFAULT_EXCLUDES;
 use crate::wheel::build_exclude_matcher;
-use crate::{DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
+use crate::{
+    find_roots, BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use fs_err::File;
@@ -8,11 +10,13 @@ use globset::{Glob, GlobSet};
 use std::io;
 use std::io::{BufReader, Cursor};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use tar::{EntryType, Header};
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::Simplified;
 use uv_globfilter::{parse_portable_glob, GlobDirFilter};
+use uv_pypi_types::Identifier;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 
@@ -65,11 +69,21 @@ fn source_dist_matcher(
     let mut includes: Vec<String> = settings.source_include;
     // pyproject.toml is always included.
     includes.push(globset::escape("pyproject.toml"));
+
+    let module_name = if let Some(module_name) = settings.module_name {
+        module_name
+    } else {
+        // Should never error, the rules for package names (in dist-info formatting) are stricter
+        // than those for identifiers
+        Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
+    };
+    debug!("Module name: `{:?}`", module_name);
+
     // The wheel must not include any files included by the source distribution (at least until we
     // have files generated in the source dist -> wheel build step).
     let import_path = &settings
         .module_root
-        .join(pyproject_toml.name().as_dist_info_name().as_ref())
+        .join(module_name.as_ref())
         .portable_display()
         .to_string();
     includes.push(format!("{}/**", globset::escape(import_path)));
@@ -95,7 +109,7 @@ fn source_dist_matcher(
     }
 
     // Include the license files
-    for license_files in pyproject_toml.license_files().into_iter().flatten() {
+    for license_files in pyproject_toml.license_files_source_dist() {
         trace!("Including license files at: `{license_files}`");
         let glob = parse_portable_glob(license_files).map_err(|err| Error::PortableGlob {
             field: "project.license-files".to_string(),
@@ -172,6 +186,15 @@ fn write_source_dist(
     let metadata = pyproject_toml.to_metadata(source_tree)?;
     let metadata_email = metadata.core_metadata_format();
 
+    debug!("Adding content files to wheel");
+    // Check that the source tree contains a module.
+    find_roots(
+        source_tree,
+        &pyproject_toml,
+        &settings.module_root,
+        settings.module_name.as_ref(),
+    )?;
+
     writer.write_bytes(
         &Path::new(&top_level)
             .join("PKG-INFO")
@@ -219,7 +242,7 @@ fn write_source_dist(
         if !include_matcher.match_path(relative) || exclude_matcher.is_match(relative) {
             trace!("Excluding: `{}`", relative.user_display());
             continue;
-        };
+        }
 
         debug!("Including {}", relative.user_display());
         if entry.file_type().is_dir() {
@@ -273,7 +296,6 @@ impl DirectoryWriter for TarGzWriter {
         // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
         // unpacking.
         header.set_mode(0o644);
-        header.set_cksum();
         self.tar
             .append_data(&mut header, path, Cursor::new(bytes))
             .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
@@ -295,7 +317,6 @@ impl DirectoryWriter for TarGzWriter {
             header.set_mode(0o644);
         }
         header.set_size(metadata.len());
-        header.set_cksum();
         let reader = BufReader::new(File::open(file)?);
         self.tar
             .append_data(&mut header, path, reader)
@@ -308,13 +329,9 @@ impl DirectoryWriter for TarGzWriter {
         // Directories are always executable, which means they can be listed.
         header.set_mode(0o755);
         header.set_entry_type(EntryType::Directory);
-        header
-            .set_path(directory)
-            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         header.set_size(0);
-        header.set_cksum();
         self.tar
-            .append(&header, io::empty())
+            .append_data(&mut header, directory, io::empty())
             .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }

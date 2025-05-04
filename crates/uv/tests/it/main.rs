@@ -17,7 +17,7 @@ mod cache_clean;
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod cache_prune;
 
-#[cfg(all(feature = "python", feature = "pypi"))]
+#[cfg(all(feature = "python", feature = "pypi", feature = "test-ecosystem"))]
 mod ecosystem;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
@@ -28,7 +28,7 @@ mod export;
 
 mod help;
 
-#[cfg(all(feature = "python", feature = "pypi"))]
+#[cfg(all(feature = "python", feature = "pypi", feature = "git"))]
 mod init;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
@@ -38,6 +38,8 @@ mod lock;
 mod lock_conflict;
 
 mod lock_scenarios;
+
+mod version;
 
 mod pip_check;
 
@@ -71,6 +73,9 @@ mod python_dir;
 
 #[cfg(feature = "python")]
 mod python_find;
+
+#[cfg(feature = "python")]
+mod python_list;
 
 #[cfg(feature = "python-managed")]
 mod python_install;

@@ -1,6 +1,9 @@
+use std::fmt::{Display, Formatter};
+
+use either::Either;
 use itertools::Itertools;
 use pubgrub::Range;
-use std::fmt::{Display, Formatter};
+use smallvec::SmallVec;
 use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
@@ -10,7 +13,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_types::InstalledPackagesProvider;
 
-use crate::preferences::Preferences;
+use crate::preferences::{Entry, Preferences};
 use crate::prerelease::{AllowPrerelease, PrereleaseStrategy};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::universal_marker::UniversalMarker;
@@ -28,7 +31,7 @@ pub(crate) struct CandidateSelector {
 impl CandidateSelector {
     /// Return a [`CandidateSelector`] for the given [`Manifest`].
     pub(crate) fn for_resolution(
-        options: Options,
+        options: &Options,
         manifest: &Manifest,
         env: &ResolverEnvironment,
     ) -> Self {
@@ -83,17 +86,25 @@ impl CandidateSelector {
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
     ) -> Option<Candidate<'a>> {
-        let is_excluded = exclusions.contains(package_name);
+        let reinstall = exclusions.reinstall(package_name);
+        let upgrade = exclusions.upgrade(package_name);
 
-        // Check for a preference from a lockfile or a previous fork that satisfies the range and
-        // is allowed.
+        // If we have a preference (e.g., from a lockfile), search for a version matching that
+        // preference.
+        //
+        // If `--reinstall` is provided, we should omit any already-installed packages from here,
+        // since we can't reinstall already-installed packages.
+        //
+        // If `--upgrade` is provided, we should still search for a matching preference. In
+        // practice, preferences should be empty if `--upgrade` is provided, but it's the caller's
+        // responsibility to ensure that.
         if let Some(preferred) = self.get_preferred(
             package_name,
             range,
             version_maps,
             preferences,
             installed_packages,
-            is_excluded,
+            reinstall,
             index,
             env,
         ) {
@@ -101,19 +112,52 @@ impl CandidateSelector {
             return Some(preferred);
         }
 
-        // Check for a locally installed distribution that satisfies the range and is allowed.
-        if !is_excluded {
-            if let Some(installed) = Self::get_installed(package_name, range, installed_packages) {
+        // If we don't have a preference, find an already-installed distribution that satisfies the
+        // range.
+        let installed = if reinstall {
+            None
+        } else {
+            Self::get_installed(package_name, range, installed_packages)
+        };
+
+        // If we're not upgrading, we should prefer the already-installed distribution.
+        if !upgrade {
+            if let Some(installed) = installed {
                 trace!(
-                    "Using preference {} {} from installed package",
+                    "Using installed {} {} that satisfies {range}",
                     installed.name,
-                    installed.version,
+                    installed.version
                 );
                 return Some(installed);
             }
         }
 
-        self.select_no_preference(package_name, range, version_maps, env)
+        // Otherwise, find the best candidate from the version maps.
+        let compatible = self.select_no_preference(package_name, range, version_maps, env);
+
+        // Cross-reference against the already-installed distribution.
+        //
+        // If the already-installed version is _more_ compatible than the best candidate
+        // from the version maps, use the installed version.
+        if let Some(installed) = installed {
+            if compatible.as_ref().is_none_or(|compatible| {
+                let highest = self.use_highest_version(package_name, env);
+                if highest {
+                    installed.version() >= compatible.version()
+                } else {
+                    installed.version() <= compatible.version()
+                }
+            }) {
+                trace!(
+                    "Using installed {} {} that satisfies {range}",
+                    installed.name,
+                    installed.version
+                );
+                return Some(installed);
+            }
+        }
+
+        compatible
     }
 
     /// If the package has a preference, an existing version from an existing lockfile or a version
@@ -132,34 +176,63 @@ impl CandidateSelector {
         version_maps: &'a [VersionMap],
         preferences: &'a Preferences,
         installed_packages: &'a InstalledPackages,
-        is_excluded: bool,
+        reinstall: bool,
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
     ) -> Option<Candidate<'a>> {
-        // In the branches, we "sort" the preferences by marker-matching through an iterator that
-        // first has the matching half and then the mismatching half.
-        let preferences_match = preferences
-            .get(package_name)
-            .filter(|(marker, _index, _version)| env.included_by_marker(marker.pep508()));
-        let preferences_mismatch = preferences
-            .get(package_name)
-            .filter(|(marker, _index, _version)| !env.included_by_marker(marker.pep508()));
-        let preferences = preferences_match.chain(preferences_mismatch).filter_map(
-            |(marker, source, version)| {
-                // If the package is mapped to an explicit index, only consider preferences that
-                // match the index.
-                index
-                    .map_or(true, |index| source == Some(index))
-                    .then_some((marker, version))
-            },
-        );
+        let preferences = preferences.get(package_name);
+
+        // If there are multiple preferences for the same package, we need to sort them by priority.
+        let preferences = match preferences {
+            [] => return None,
+            [entry] => {
+                // Filter out preferences that map to a conflicting index.
+                if index.is_some_and(|index| !entry.index().matches(index)) {
+                    return None;
+                }
+                Either::Left(std::iter::once((entry.marker(), entry.pin().version())))
+            }
+            [..] => {
+                type Entries<'a> = SmallVec<[&'a Entry; 3]>;
+
+                let mut preferences = preferences.iter().collect::<Entries>();
+
+                // Filter out preferences that map to a conflicting index.
+                preferences.retain(|entry| index.is_none_or(|index| entry.index().matches(index)));
+
+                // Sort the preferences by priority.
+                let highest = self.use_highest_version(package_name, env);
+                preferences.sort_by_key(|entry| {
+                    let marker = entry.marker();
+
+                    // Prefer preferences that match the current environment.
+                    let matches_env = env.included_by_marker(marker.pep508());
+
+                    // Prefer the latest (or earliest) version.
+                    let version = if highest {
+                        Either::Left(entry.pin().version())
+                    } else {
+                        Either::Right(std::cmp::Reverse(entry.pin().version()))
+                    };
+
+                    std::cmp::Reverse((matches_env, version))
+                });
+
+                Either::Right(
+                    preferences
+                        .into_iter()
+                        .map(|entry| (entry.marker(), entry.pin().version())),
+                )
+            }
+        };
+
         self.get_preferred_from_iter(
             preferences,
             package_name,
             range,
             version_maps,
             installed_packages,
-            is_excluded,
+            reinstall,
             env,
         )
     }
@@ -172,7 +245,7 @@ impl CandidateSelector {
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
         installed_packages: &'a InstalledPackages,
-        is_excluded: bool,
+        reinstall: bool,
         env: &ResolverEnvironment,
     ) -> Option<Candidate<'a>> {
         for (marker, version) in preferences {
@@ -181,8 +254,9 @@ impl CandidateSelector {
                 continue;
             }
 
-            // Check for a locally installed distribution that matches the preferred version.
-            if !is_excluded {
+            // Check for a locally installed distribution that matches the preferred version, unless
+            // we have to reinstall, in which case we can't reuse an already-installed distribution.
+            if !reinstall {
                 let installed_dists = installed_packages.get_packages(package_name);
                 match installed_dists.as_slice() {
                     [] => {}
@@ -193,6 +267,7 @@ impl CandidateSelector {
                             return Some(Candidate {
                                 name: package_name,
                                 version,
+                                prioritized: None,
                                 dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(
                                     dist,
                                 )),
@@ -223,10 +298,38 @@ impl CandidateSelector {
             }
 
             // Check for a remote distribution that matches the preferred version
-            if let Some(file) = version_maps
+            if let Some((version_map, file)) = version_maps
                 .iter()
-                .find_map(|version_map| version_map.get(version))
+                .find_map(|version_map| version_map.get(version).map(|dist| (version_map, dist)))
             {
+                // If the preferred version has a local variant, prefer that.
+                if version_map.local() {
+                    for local in version_map
+                        .versions()
+                        .rev()
+                        .take_while(|local| *local > version)
+                    {
+                        if !local.is_local() {
+                            continue;
+                        }
+                        if local.clone().without_local() != *version {
+                            continue;
+                        }
+                        if !range.contains(local) {
+                            continue;
+                        }
+                        if let Some(dist) = version_map.get(local) {
+                            debug!("Preferring local version `{package_name}` (v{local})");
+                            return Some(Candidate::new(
+                                package_name,
+                                local,
+                                dist,
+                                VersionChoiceKind::Preference,
+                            ));
+                        }
+                    }
+                }
+
                 return Some(Candidate::new(
                     package_name,
                     version,
@@ -259,6 +362,7 @@ impl CandidateSelector {
                 return Some(Candidate {
                     name: package_name,
                     version,
+                    prioritized: None,
                     dist: CandidateDist::Compatible(CompatibleDist::InstalledDist(dist)),
                     choice_kind: VersionChoiceKind::Installed,
                 });
@@ -418,7 +522,7 @@ impl CandidateSelector {
                 }
                 if !range.contains(version) {
                     continue;
-                };
+                }
                 let Some(dist) = maybe_dist.prioritized_dist() else {
                     continue;
                 };
@@ -540,6 +644,8 @@ pub(crate) struct Candidate<'a> {
     name: &'a PackageName,
     /// The version of the package.
     version: &'a Version,
+    /// The prioritized distribution for the package.
+    prioritized: Option<&'a PrioritizedDist>,
     /// The distributions to use for resolving and installing the package.
     dist: CandidateDist<'a>,
     /// Whether this candidate was selected from a preference.
@@ -556,6 +662,7 @@ impl<'a> Candidate<'a> {
         Self {
             name,
             version,
+            prioritized: Some(dist),
             dist: CandidateDist::from(dist),
             choice_kind,
         }
@@ -588,6 +695,11 @@ impl<'a> Candidate<'a> {
     /// Return the distribution for the candidate.
     pub(crate) fn dist(&self) -> &CandidateDist<'a> {
         &self.dist
+    }
+
+    /// Return the prioritized distribution for the candidate.
+    pub(crate) fn prioritized(&self) -> Option<&PrioritizedDist> {
+        self.prioritized
     }
 }
 

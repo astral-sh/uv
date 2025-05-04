@@ -5,12 +5,14 @@ use url::Url;
 
 use cache::CredentialsCache;
 pub use credentials::Credentials;
+pub use index::{AuthPolicy, Index, Indexes};
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
 use realm::Realm;
 
 mod cache;
 mod credentials;
+mod index;
 mod keyring;
 mod middleware;
 mod realm;
@@ -39,7 +41,7 @@ pub fn store_credentials_from_url(url: &Url) -> bool {
 /// Populate the global authentication store with credentials on a URL, if there are any.
 ///
 /// Returns `true` if the store was updated.
-pub fn store_credentials(url: &Url, credentials: Credentials) {
+pub fn store_credentials(url: &Url, credentials: Arc<Credentials>) {
     trace!("Caching credentials for {url}");
-    CREDENTIALS_CACHE.insert(url, Arc::new(credentials));
+    CREDENTIALS_CACHE.insert(url, credentials);
 }

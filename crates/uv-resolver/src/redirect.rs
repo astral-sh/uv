@@ -1,5 +1,6 @@
 use url::Url;
-use uv_git::{GitReference, GitResolver};
+
+use uv_git::GitResolver;
 use uv_pep508::VerbatimUrl;
 use uv_pypi_types::{ParsedGitUrl, ParsedUrl, VerbatimParsedUrl};
 
@@ -14,12 +15,11 @@ pub(crate) fn url_to_precise(url: VerbatimParsedUrl, git: &GitResolver) -> Verba
     };
 
     let Some(new_git_url) = git.precise(git_url.clone()) else {
-        debug_assert!(
-            matches!(git_url.reference(), GitReference::FullCommit(_)),
-            "Unseen Git URL: {}, {git_url:?}",
-            url.verbatim,
-        );
-        return url;
+        if cfg!(debug_assertions) {
+            panic!("Unresolved Git URL: {}, {git_url:?}", url.verbatim);
+        } else {
+            return url;
+        }
     };
 
     let new_parsed_url = ParsedGitUrl {
@@ -122,7 +122,7 @@ mod tests {
 
         // If there's a conflict after the `@`, discard the original representation.
         let verbatim = VerbatimUrl::parse_url("https://github.com/flask.git@main")?
-            .with_given("git+https://github.com/flask.git@${TAG}".to_string());
+            .with_given("git+https://github.com/flask.git@${TAG}");
         let redirect =
             Url::parse("https://github.com/flask.git@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe")?;
 

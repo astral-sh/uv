@@ -108,7 +108,7 @@ As of v0.1.39, users can opt in to `pip`-style behavior for multiple indexes via
 `--index-strategy` command-line option, or the `UV_INDEX_STRATEGY` environment variable, which
 supports the following values:
 
-- `first-match` (default): Search for each package across all indexes, limiting the candidate
+- `first-index` (default): Search for each package across all indexes, limiting the candidate
   versions to those present in the first index that contains the package, prioritizing the
   `--extra-index-url` indexes over the default index URL.
 - `unsafe-first-match`: Search for each package across all indexes, but prefer the first index with
@@ -350,9 +350,20 @@ def manylinux_compatible(*_, **__):  # PEP 600
 
 ## Bytecode compilation
 
-Unlike pip, uv does not compile `.py` files to `.pyc` files during installation by default (i.e., uv
-does not create or populate `__pycache__` directories). To enable bytecode compilation during
-installs, pass the `--compile-bytecode` flag to `uv pip install` or `uv pip sync`.
+Unlike `pip`, uv does not compile `.py` files to `.pyc` files during installation by default (i.e.,
+uv does not create or populate `__pycache__` directories). To enable bytecode compilation during
+installs, pass the `--compile-bytecode` flag to `uv pip install` or `uv pip sync`, or set the
+`UV_COMPILE_BYTECODE` environment variable to `1`.
+
+Skipping bytecode compilation can be undesirable in workflows; for example, we recommend enabling
+bytecode compilation in [Docker builds](../guides/integration/docker.md) to improve startup times
+(at the cost of increased build times).
+
+As bytecode compilation suppresses various warnings issued by the Python interpreter, in rare cases
+you may seen `SyntaxWarning` or `DeprecationWarning` messages when running Python code that was
+installed with uv that do not appear when using `pip`. These are valid warnings, but are typically
+hidden by the bytecode compilation process, and can either be ignored, fixed upstream, or similarly
+suppressed by enabling bytecode compilation in uv.
 
 ## Strictness and spec enforcement
 
@@ -437,6 +448,12 @@ in the output file, pass the `--emit-index-url` flag to `uv pip compile`. Unlike
 will include all index URLs when `--emit-index-url` is passed, including the default index URL.
 
 ## `requires-python` enforcement
+
+When evaluating `requires-python` ranges for dependencies, uv only considers lower bounds and
+ignores upper bounds entirely. For example, `>=3.8, <4` is treated as `>=3.8`. Respecting upper
+bounds on `requires-python` often leads to formally correct but practically incorrect resolutions,
+as, e.g., resolvers will backtrack to the first published version that omits the upper bound (see:
+[`Requires-Python` upper limits](https://discuss.python.org/t/requires-python-upper-limits/12663)).
 
 When evaluating Python versions against `requires-python` specifiers, uv truncates the candidate
 version to the major, minor, and patch components, ignoring (e.g.) pre-release and post-release

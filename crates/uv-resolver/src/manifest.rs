@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 use either::Either;
 
 use uv_configuration::{Constraints, Overrides};
+use uv_distribution_types::Requirement;
 use uv_normalize::PackageName;
-use uv_pypi_types::Requirement;
 use uv_types::RequestedRequirements;
 
 use crate::preferences::Preferences;
@@ -57,7 +57,7 @@ impl Manifest {
         overrides: Overrides,
         preferences: Preferences,
         project: Option<PackageName>,
-        workspace_members: Option<BTreeSet<PackageName>>,
+        workspace_members: BTreeSet<PackageName>,
         exclusions: Exclusions,
         lookaheads: Vec<RequestedRequirements>,
     ) -> Self {
@@ -67,7 +67,7 @@ impl Manifest {
             overrides,
             preferences,
             project,
-            workspace_members: workspace_members.unwrap_or_default(),
+            workspace_members,
             exclusions,
             lookaheads,
         }

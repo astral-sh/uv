@@ -1,4 +1,7 @@
 use std::fmt::{Display, Formatter};
+use std::path::Path;
+use std::sync::Arc;
+
 use uv_pep440::Version;
 use uv_pep508::PackageName;
 use uv_pypi_types::Yanked;
@@ -15,8 +18,13 @@ use crate::{
 #[derive(Debug, Clone, Hash)]
 #[allow(clippy::large_enum_variant)]
 pub enum ResolvedDist {
-    Installed { dist: InstalledDist },
-    Installable { dist: Dist, version: Version },
+    Installed {
+        dist: Arc<InstalledDist>,
+    },
+    Installable {
+        dist: Arc<Dist>,
+        version: Option<Version>,
+    },
 }
 
 /// A variant of [`ResolvedDist`] with borrowed inner distributions.
@@ -67,20 +75,30 @@ impl ResolvedDist {
     /// Returns the [`Yanked`] status of the distribution, if available.
     pub fn yanked(&self) -> Option<&Yanked> {
         match self {
-            Self::Installable { dist, .. } => match dist {
-                Dist::Source(SourceDist::Registry(sdist)) => sdist.file.yanked.as_ref(),
-                Dist::Built(BuiltDist::Registry(wheel)) => wheel.best_wheel().file.yanked.as_ref(),
+            Self::Installable { dist, .. } => match dist.as_ref() {
+                Dist::Source(SourceDist::Registry(sdist)) => sdist.file.yanked.as_deref(),
+                Dist::Built(BuiltDist::Registry(wheel)) => {
+                    wheel.best_wheel().file.yanked.as_deref()
+                }
                 _ => None,
             },
             Self::Installed { .. } => None,
         }
     }
 
-    /// Returns the version of the distribution.
-    pub fn version(&self) -> &Version {
+    /// Returns the version of the distribution, if available.
+    pub fn version(&self) -> Option<&Version> {
         match self {
-            Self::Installable { version, .. } => version,
-            Self::Installed { dist } => dist.version(),
+            Self::Installable { version, dist } => dist.version().or(version.as_ref()),
+            Self::Installed { dist } => Some(dist.version()),
+        }
+    }
+
+    /// Return the source tree of the distribution, if available.
+    pub fn source_tree(&self) -> Option<&Path> {
+        match self {
+            Self::Installable { dist, .. } => dist.source_tree(),
+            Self::Installed { .. } => None,
         }
     }
 }
@@ -98,8 +116,8 @@ impl ResolvedDistRef<'_> {
                     "expected chosen sdist to match prioritized sdist"
                 );
                 ResolvedDist::Installable {
-                    dist: Dist::Source(SourceDist::Registry(source)),
-                    version: sdist.version.clone(),
+                    dist: Arc::new(Dist::Source(SourceDist::Registry(source))),
+                    version: Some(sdist.version.clone()),
                 }
             }
             Self::InstallableRegistryBuiltDist {
@@ -114,12 +132,12 @@ impl ResolvedDistRef<'_> {
                 // has at least one wheel, so this always succeeds.
                 let built = prioritized.built_dist().expect("at least one wheel");
                 ResolvedDist::Installable {
-                    dist: Dist::Built(BuiltDist::Registry(built)),
-                    version: wheel.filename.version.clone(),
+                    dist: Arc::new(Dist::Built(BuiltDist::Registry(built))),
+                    version: Some(wheel.filename.version.clone()),
                 }
             }
             Self::Installed { dist } => ResolvedDist::Installed {
-                dist: (*dist).clone(),
+                dist: Arc::new((*dist).clone()),
             },
         }
     }

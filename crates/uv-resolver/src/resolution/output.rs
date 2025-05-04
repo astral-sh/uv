@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 
 use indexmap::IndexSet;
 use petgraph::{
@@ -7,19 +8,18 @@ use petgraph::{
     Directed, Direction,
 };
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+
 use uv_configuration::{Constraints, Overrides};
 use uv_distribution::Metadata;
 use uv_distribution_types::{
-    Dist, DistributionMetadata, Edge, IndexUrl, Name, Node, ResolutionDiagnostic, ResolvedDist,
-    VersionId, VersionOrUrlRef,
+    Dist, DistributionMetadata, Edge, IndexUrl, Name, Node, Requirement, ResolutionDiagnostic,
+    ResolvedDist, VersionId, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifier};
 use uv_pep508::{MarkerEnvironment, MarkerTree, MarkerTreeKind};
-use uv_pypi_types::{
-    Conflicts, HashDigest, ParsedUrlError, Requirement, VerbatimParsedUrl, Yanked,
-};
+use uv_pypi_types::{Conflicts, HashDigests, ParsedUrlError, VerbatimParsedUrl, Yanked};
 
 use crate::graph_ops::{marker_reachability, simplify_conflict_markers};
 use crate::pins::FilePins;
@@ -90,6 +90,13 @@ impl ResolutionGraphNode {
                 let group = dist.dev.as_ref()?;
                 Some((&dist.name, group))
             }
+        }
+    }
+
+    pub(crate) fn package_name(&self) -> Option<&PackageName> {
+        match *self {
+            ResolutionGraphNode::Root => None,
+            ResolutionGraphNode::Dist(ref dist) => Some(&dist.name),
         }
     }
 }
@@ -405,7 +412,7 @@ impl ResolverOutput {
         preferences: &Preferences,
         in_memory: &InMemoryIndex,
         git: &GitResolver,
-    ) -> Result<(ResolvedDist, Vec<HashDigest>, Option<Metadata>), ResolveError> {
+    ) -> Result<(ResolvedDist, HashDigests, Option<Metadata>), ResolveError> {
         Ok(if let Some(url) = url {
             // Create the distribution.
             let dist = Dist::from_url(name.clone(), url_to_precise(url.clone(), git))?;
@@ -441,8 +448,8 @@ impl ResolverOutput {
 
             (
                 ResolvedDist::Installable {
-                    dist,
-                    version: version.clone(),
+                    dist: Arc::new(dist),
+                    version: Some(version.clone()),
                 },
                 hashes,
                 Some(metadata),
@@ -467,7 +474,7 @@ impl ResolverOutput {
                 Some(Yanked::Reason(reason)) => {
                     diagnostics.push(ResolutionDiagnostic::YankedVersion {
                         dist: dist.clone(),
-                        reason: Some(reason.clone()),
+                        reason: Some(reason.to_string()),
                     });
                 }
             }
@@ -511,11 +518,11 @@ impl ResolverOutput {
         version: &Version,
         preferences: &Preferences,
         in_memory: &InMemoryIndex,
-    ) -> Vec<HashDigest> {
+    ) -> HashDigests {
         // 1. Look for hashes from the lockfile.
         if let Some(digests) = preferences.match_hashes(name, version) {
             if !digests.is_empty() {
-                return digests.to_vec();
+                return HashDigests::from(digests);
             }
         }
 
@@ -532,31 +539,53 @@ impl ResolverOutput {
 
         // 3. Look for hashes from the registry, which are served at the package level.
         if url.is_none() {
-            let versions_response = if let Some(index) = index {
-                in_memory.explicit().get(&(name.clone(), index.clone()))
-            } else {
-                in_memory.implicit().get(name)
-            };
+            // Query the implicit and explicit indexes (lazily) for the hashes.
+            let implicit_response = in_memory.implicit().get(name);
+            let mut explicit_response = None;
 
-            if let Some(versions_response) = versions_response {
-                if let VersionsResponse::Found(ref version_maps) = *versions_response {
-                    if let Some(digests) = version_maps
-                        .iter()
-                        .find_map(|version_map| version_map.hashes(version))
-                        .map(|mut digests| {
-                            digests.sort_unstable();
-                            digests
-                        })
-                    {
-                        if !digests.is_empty() {
-                            return digests;
-                        }
+            // Search in the implicit indexes.
+            let hashes = implicit_response
+                .as_ref()
+                .and_then(|response| {
+                    if let VersionsResponse::Found(version_maps) = &**response {
+                        Some(version_maps)
+                    } else {
+                        None
                     }
+                })
+                .into_iter()
+                .flatten()
+                .filter(|version_map| version_map.index() == index)
+                .find_map(|version_map| version_map.hashes(version))
+                .or_else(|| {
+                    // Search in the explicit indexes.
+                    explicit_response = index
+                        .and_then(|index| in_memory.explicit().get(&(name.clone(), index.clone())));
+                    explicit_response
+                        .as_ref()
+                        .and_then(|response| {
+                            if let VersionsResponse::Found(version_maps) = &**response {
+                                Some(version_maps)
+                            } else {
+                                None
+                            }
+                        })
+                        .into_iter()
+                        .flatten()
+                        .filter(|version_map| version_map.index() == index)
+                        .find_map(|version_map| version_map.hashes(version))
+                });
+
+            if let Some(hashes) = hashes {
+                let mut digests = HashDigests::from(hashes);
+                digests.sort_unstable();
+                if !digests.is_empty() {
+                    return digests;
                 }
             }
         }
 
-        vec![]
+        HashDigests::empty()
     }
 
     /// Returns an iterator over the distinct packages in the graph.
@@ -726,7 +755,7 @@ impl ResolverOutput {
                     MarkerExpression::String {
                         key: value_string.into(),
                         operator: MarkerOperator::Equal,
-                        value: from_env.to_string(),
+                        value: from_env.into(),
                     }
                 }
             };
@@ -915,14 +944,6 @@ fn report_missing_lower_bounds(
             // Ignore the root package.
             continue;
         };
-        if dist.dev.is_some() {
-            // TODO(konsti): Dev dependencies are modelled incorrectly in the graph. There should
-            // be an edge from root to project-with-dev, just like to project-with-extra, but
-            // currently there is only an edge from project to to project-with-dev that we then
-            // have to drop.
-            continue;
-        }
-
         if !has_lower_bound(node_index, dist.name(), graph, constraints, overrides) {
             diagnostics.push(ResolutionDiagnostic::MissingLowerBound {
                 package_name: dist.name().clone(),

@@ -140,7 +140,7 @@ impl PagerKind {
     }
 }
 
-impl std::fmt::Display for PagerKind {
+impl Display for PagerKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Less => write!(f, "less"),

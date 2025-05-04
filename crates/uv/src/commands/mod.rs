@@ -3,7 +3,7 @@ use anyhow::Context;
 use owo_colors::OwoColorize;
 use std::borrow::Cow;
 use std::io::stdout;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::{fmt::Display, fmt::Write, process::ExitCode};
 
@@ -32,6 +32,7 @@ pub(crate) use project::tree::tree;
 pub(crate) use publish::publish;
 pub(crate) use python::dir::dir as python_dir;
 pub(crate) use python::find::find as python_find;
+pub(crate) use python::find::find_script as python_find_script;
 pub(crate) use python::install::install as python_install;
 pub(crate) use python::list::list as python_list;
 pub(crate) use python::pin::pin as python_pin;
@@ -47,13 +48,15 @@ pub(crate) use tool::uninstall::uninstall as tool_uninstall;
 pub(crate) use tool::update_shell::update_shell as tool_update_shell;
 pub(crate) use tool::upgrade::upgrade as tool_upgrade;
 use uv_cache::Cache;
+use uv_configuration::Concurrency;
 use uv_distribution_types::InstalledMetadata;
-use uv_fs::Simplified;
+use uv_fs::{Simplified, CWD};
 use uv_installer::compile_tree;
 use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
+use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
-pub(crate) use version::version;
+pub(crate) use version::{project_version, self_version};
 
 use crate::printer::Printer;
 
@@ -69,6 +72,7 @@ mod project;
 mod publish;
 mod python;
 pub(crate) mod reporters;
+mod run;
 #[cfg(feature = "self-update")]
 mod self_update;
 mod tool;
@@ -146,20 +150,27 @@ pub(super) struct DryRunEvent<T: Display> {
 /// See the `--compile` option on `pip sync` and `pip install`.
 pub(super) async fn compile_bytecode(
     venv: &PythonEnvironment,
+    concurrency: &Concurrency,
     cache: &Cache,
     printer: Printer,
 ) -> anyhow::Result<()> {
     let start = std::time::Instant::now();
     let mut files = 0;
     for site_packages in venv.site_packages() {
-        files += compile_tree(&site_packages, venv.python_executable(), cache.root())
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to bytecode-compile Python file in: {}",
-                    site_packages.user_display()
-                )
-            })?;
+        let site_packages = CWD.join(site_packages);
+        files += compile_tree(
+            &site_packages,
+            venv.python_executable(),
+            concurrency,
+            cache.root(),
+        )
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to bytecode-compile Python file in: {}",
+                site_packages.user_display()
+            )
+        })?;
     }
     let s = if files == 1 { "" } else { "s" };
     writeln!(
@@ -280,4 +291,13 @@ pub(super) fn capitalize(s: &str) -> String {
         None => String::new(),
         Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
     }
+}
+
+/// A Python file that may or may not include an existing PEP 723 script tag.
+#[derive(Debug)]
+pub(crate) enum ScriptPath {
+    /// The Python file already includes a PEP 723 script tag.
+    Script(Pep723Script),
+    /// The Python file does not include a PEP 723 script tag.
+    Path(PathBuf),
 }

@@ -1,12 +1,23 @@
-use crate::{DistRef, Edge, Name, Node, Resolution, ResolvedDist};
+use std::collections::VecDeque;
+use std::fmt::{Debug, Display, Formatter};
+
 use petgraph::prelude::EdgeRef;
 use petgraph::Direction;
 use rustc_hash::FxHashSet;
-use std::collections::VecDeque;
-use std::fmt::{Display, Formatter};
+use version_ranges::Ranges;
+
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use version_ranges::Ranges;
+
+use crate::{
+    BuiltDist, Dist, DistRef, Edge, Name, Node, RequestedDist, Resolution, ResolvedDist, SourceDist,
+};
+
+/// Inspect whether an error type is a build error.
+pub trait IsBuildBackendError: std::error::Error + Send + Sync + 'static {
+    /// Returns whether the build backend failed to build the package, so it's not a uv error.
+    fn is_build_backend_error(&self) -> bool;
+}
 
 /// The operation(s) that failed when reporting an error with a distribution.
 #[derive(Debug)]
@@ -16,6 +27,36 @@ pub enum DistErrorKind {
     Build,
     BuildBackend,
     Read,
+}
+
+impl DistErrorKind {
+    pub fn from_requested_dist(dist: &RequestedDist, err: &impl IsBuildBackendError) -> Self {
+        match dist {
+            RequestedDist::Installed(_) => DistErrorKind::Read,
+            RequestedDist::Installable(dist) => Self::from_dist(dist, err),
+        }
+    }
+
+    pub fn from_dist(dist: &Dist, err: &impl IsBuildBackendError) -> Self {
+        if err.is_build_backend_error() {
+            DistErrorKind::BuildBackend
+        } else {
+            match dist {
+                Dist::Built(BuiltDist::Path(_)) => DistErrorKind::Read,
+                Dist::Source(SourceDist::Path(_) | SourceDist::Directory(_)) => {
+                    DistErrorKind::Build
+                }
+                Dist::Built(_) => DistErrorKind::Download,
+                Dist::Source(source_dist) => {
+                    if source_dist.is_local() {
+                        DistErrorKind::Build
+                    } else {
+                        DistErrorKind::DownloadAndBuild
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl Display for DistErrorKind {
@@ -59,7 +100,7 @@ impl DerivationChain {
             else {
                 return false;
             };
-            target == dist.as_ref()
+            target == dist.as_ref().into()
         })?;
 
         // Perform a BFS to find the shortest path to the root.
@@ -85,7 +126,7 @@ impl DerivationChain {
                             dist.name().clone(),
                             extra.clone(),
                             group.clone(),
-                            dist.version().clone(),
+                            dist.version().cloned(),
                             Ranges::empty(),
                         ));
                         let target = edge.source();
@@ -150,7 +191,7 @@ pub struct DerivationStep {
     /// The enabled dependency group of the package, if any.
     pub group: Option<GroupName>,
     /// The version of the package.
-    pub version: Version,
+    pub version: Option<Version>,
     /// The constraints applied to the subsequent package in the chain.
     pub range: Ranges<Version>,
 }
@@ -161,7 +202,7 @@ impl DerivationStep {
         name: PackageName,
         extra: Option<ExtraName>,
         group: Option<GroupName>,
-        version: Version,
+        version: Option<Version>,
         range: Ranges<Version>,
     ) -> Self {
         Self {

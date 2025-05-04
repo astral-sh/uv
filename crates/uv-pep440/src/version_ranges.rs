@@ -1,5 +1,8 @@
-//! Convert [`VersionSpecifiers`] to [`version_ranges::Ranges`].
+//! Convert [`VersionSpecifiers`] to [`Ranges`].
 
+use std::cmp::Ordering;
+use std::collections::Bound;
+use std::ops::Deref;
 use version_ranges::Ranges;
 
 use crate::{
@@ -43,7 +46,8 @@ impl From<VersionSpecifier> for Ranges<Version> {
             })
             .complement(),
             Operator::TildeEqual => {
-                let [rest @ .., last, _] = version.release() else {
+                let release = version.release();
+                let [rest @ .., last, _] = &*release else {
                     unreachable!("~= must have at least two segments");
                 };
                 let upper = Version::new(rest.iter().chain([&(last + 1)]))
@@ -122,7 +126,7 @@ impl From<VersionSpecifier> for Ranges<Version> {
 ///
 /// These semantics are used for testing Python compatibility (e.g., `requires-python` against
 /// the user's installed Python version). In that context, it's more intuitive that `3.13.0b0`
-/// is allowed for projects that declare `requires-python = ">3.13"`.
+/// is allowed for projects that declare `requires-python = ">=3.13"`.
 ///
 /// See: <https://github.com/pypa/pip/blob/a432c7f4170b9ef798a15f035f5dfdb4cc939f35/src/pip/_internal/resolution/resolvelib/candidates.py#L540>
 pub fn release_specifiers_to_ranges(specifiers: VersionSpecifiers) -> Ranges<Version> {
@@ -160,7 +164,8 @@ pub fn release_specifier_to_range(specifier: VersionSpecifier) -> Ranges<Version
             Ranges::singleton(version).complement()
         }
         Operator::TildeEqual => {
-            let [rest @ .., last, _] = version.release() else {
+            let release = version.release();
+            let [rest @ .., last, _] = &*release else {
                 unreachable!("~= must have at least two segments");
             };
             let upper = Version::new(rest.iter().chain([&(last + 1)]));
@@ -205,5 +210,279 @@ pub fn release_specifier_to_range(specifier: VersionSpecifier) -> Ranges<Version
             };
             Ranges::from_range_bounds(low..high).complement()
         }
+    }
+}
+
+/// A lower bound for a version range.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct LowerBound(pub Bound<Version>);
+
+impl LowerBound {
+    /// Initialize a [`LowerBound`] with the given bound.
+    ///
+    /// These bounds use release-only semantics when comparing versions.
+    pub fn new(bound: Bound<Version>) -> Self {
+        Self(match bound {
+            Bound::Included(version) => Bound::Included(version.only_release()),
+            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
+            Bound::Unbounded => Bound::Unbounded,
+        })
+    }
+
+    /// Return the [`LowerBound`] truncated to the major and minor version.
+    #[must_use]
+    pub fn major_minor(&self) -> Self {
+        match &self.0 {
+            // Ex) `>=3.10.1` -> `>=3.10`
+            Bound::Included(version) => Self(Bound::Included(Version::new(
+                version.release().iter().take(2),
+            ))),
+            // Ex) `>3.10.1` -> `>=3.10`.
+            Bound::Excluded(version) => Self(Bound::Included(Version::new(
+                version.release().iter().take(2),
+            ))),
+            Bound::Unbounded => Self(Bound::Unbounded),
+        }
+    }
+
+    /// Returns `true` if the lower bound contains the given version.
+    pub fn contains(&self, version: &Version) -> bool {
+        match self.0 {
+            Bound::Included(ref bound) => bound <= version,
+            Bound::Excluded(ref bound) => bound < version,
+            Bound::Unbounded => true,
+        }
+    }
+
+    /// Returns the [`VersionSpecifier`] for the lower bound.
+    pub fn specifier(&self) -> Option<VersionSpecifier> {
+        match &self.0 {
+            Bound::Included(version) => Some(VersionSpecifier::greater_than_equal_version(
+                version.clone(),
+            )),
+            Bound::Excluded(version) => {
+                Some(VersionSpecifier::greater_than_version(version.clone()))
+            }
+            Bound::Unbounded => None,
+        }
+    }
+}
+
+impl PartialOrd for LowerBound {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// See: <https://github.com/pubgrub-rs/pubgrub/blob/4b4b44481c5f93f3233221dc736dd23e67e00992/src/range.rs#L324>
+impl Ord for LowerBound {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let left = self.0.as_ref();
+        let right = other.0.as_ref();
+
+        match (left, right) {
+            // left:   ∞-----
+            // right:  ∞-----
+            (Bound::Unbounded, Bound::Unbounded) => Ordering::Equal,
+            // left:     [---
+            // right:  ∞-----
+            (Bound::Included(_left), Bound::Unbounded) => Ordering::Greater,
+            // left:     ]---
+            // right:  ∞-----
+            (Bound::Excluded(_left), Bound::Unbounded) => Ordering::Greater,
+            // left:   ∞-----
+            // right:    [---
+            (Bound::Unbounded, Bound::Included(_right)) => Ordering::Less,
+            // left:   [----- OR [----- OR   [-----
+            // right:    [--- OR [----- OR [---
+            (Bound::Included(left), Bound::Included(right)) => left.cmp(right),
+            (Bound::Excluded(left), Bound::Included(right)) => match left.cmp(right) {
+                // left:   ]-----
+                // right:    [---
+                Ordering::Less => Ordering::Less,
+                // left:   ]-----
+                // right:  [---
+                Ordering::Equal => Ordering::Greater,
+                // left:     ]---
+                // right:  [-----
+                Ordering::Greater => Ordering::Greater,
+            },
+            // left:   ∞-----
+            // right:    ]---
+            (Bound::Unbounded, Bound::Excluded(_right)) => Ordering::Less,
+            (Bound::Included(left), Bound::Excluded(right)) => match left.cmp(right) {
+                // left:   [-----
+                // right:    ]---
+                Ordering::Less => Ordering::Less,
+                // left:   [-----
+                // right:  ]---
+                Ordering::Equal => Ordering::Less,
+                // left:     [---
+                // right:  ]-----
+                Ordering::Greater => Ordering::Greater,
+            },
+            // left:   ]----- OR ]----- OR   ]---
+            // right:    ]--- OR ]----- OR ]-----
+            (Bound::Excluded(left), Bound::Excluded(right)) => left.cmp(right),
+        }
+    }
+}
+
+impl Default for LowerBound {
+    fn default() -> Self {
+        Self(Bound::Unbounded)
+    }
+}
+
+impl Deref for LowerBound {
+    type Target = Bound<Version>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<LowerBound> for Bound<Version> {
+    fn from(bound: LowerBound) -> Self {
+        bound.0
+    }
+}
+
+/// An upper bound for a version range.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct UpperBound(pub Bound<Version>);
+
+impl UpperBound {
+    /// Initialize a [`UpperBound`] with the given bound.
+    ///
+    /// These bounds use release-only semantics when comparing versions.
+    pub fn new(bound: Bound<Version>) -> Self {
+        Self(match bound {
+            Bound::Included(version) => Bound::Included(version.only_release()),
+            Bound::Excluded(version) => Bound::Excluded(version.only_release()),
+            Bound::Unbounded => Bound::Unbounded,
+        })
+    }
+
+    /// Return the [`UpperBound`] truncated to the major and minor version.
+    #[must_use]
+    pub fn major_minor(&self) -> Self {
+        match &self.0 {
+            // Ex) `<=3.10.1` -> `<=3.10`
+            Bound::Included(version) => Self(Bound::Included(Version::new(
+                version.release().iter().take(2),
+            ))),
+            // Ex) `<3.10.1` -> `<=3.10` (but `<3.10.0` is `<3.10`)
+            Bound::Excluded(version) => {
+                if version.release().get(2).is_some_and(|patch| *patch > 0) {
+                    Self(Bound::Included(Version::new(
+                        version.release().iter().take(2),
+                    )))
+                } else {
+                    Self(Bound::Excluded(Version::new(
+                        version.release().iter().take(2),
+                    )))
+                }
+            }
+            Bound::Unbounded => Self(Bound::Unbounded),
+        }
+    }
+
+    /// Returns `true` if the upper bound contains the given version.
+    pub fn contains(&self, version: &Version) -> bool {
+        match self.0 {
+            Bound::Included(ref bound) => bound >= version,
+            Bound::Excluded(ref bound) => bound > version,
+            Bound::Unbounded => true,
+        }
+    }
+
+    /// Returns the [`VersionSpecifier`] for the upper bound.
+    pub fn specifier(&self) -> Option<VersionSpecifier> {
+        match &self.0 {
+            Bound::Included(version) => {
+                Some(VersionSpecifier::less_than_equal_version(version.clone()))
+            }
+            Bound::Excluded(version) => Some(VersionSpecifier::less_than_version(version.clone())),
+            Bound::Unbounded => None,
+        }
+    }
+}
+
+impl PartialOrd for UpperBound {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// See: <https://github.com/pubgrub-rs/pubgrub/blob/4b4b44481c5f93f3233221dc736dd23e67e00992/src/range.rs#L324>
+impl Ord for UpperBound {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let left = self.0.as_ref();
+        let right = other.0.as_ref();
+
+        match (left, right) {
+            // left:   -----∞
+            // right:  -----∞
+            (Bound::Unbounded, Bound::Unbounded) => Ordering::Equal,
+            // left:   ---]
+            // right:  -----∞
+            (Bound::Included(_left), Bound::Unbounded) => Ordering::Less,
+            // left:   ---[
+            // right:  -----∞
+            (Bound::Excluded(_left), Bound::Unbounded) => Ordering::Less,
+            // left:  -----∞
+            // right: ---]
+            (Bound::Unbounded, Bound::Included(_right)) => Ordering::Greater,
+            // left:   -----] OR -----] OR ---]
+            // right:    ---] OR -----] OR -----]
+            (Bound::Included(left), Bound::Included(right)) => left.cmp(right),
+            (Bound::Excluded(left), Bound::Included(right)) => match left.cmp(right) {
+                // left:   ---[
+                // right:  -----]
+                Ordering::Less => Ordering::Less,
+                // left:   -----[
+                // right:  -----]
+                Ordering::Equal => Ordering::Less,
+                // left:   -----[
+                // right:  ---]
+                Ordering::Greater => Ordering::Greater,
+            },
+            (Bound::Unbounded, Bound::Excluded(_right)) => Ordering::Greater,
+            (Bound::Included(left), Bound::Excluded(right)) => match left.cmp(right) {
+                // left:   ---]
+                // right:  -----[
+                Ordering::Less => Ordering::Less,
+                // left:   -----]
+                // right:  -----[
+                Ordering::Equal => Ordering::Greater,
+                // left:   -----]
+                // right:  ---[
+                Ordering::Greater => Ordering::Greater,
+            },
+            // left:   -----[ OR -----[ OR ---[
+            // right:  ---[   OR -----[ OR -----[
+            (Bound::Excluded(left), Bound::Excluded(right)) => left.cmp(right),
+        }
+    }
+}
+
+impl Default for UpperBound {
+    fn default() -> Self {
+        Self(Bound::Unbounded)
+    }
+}
+
+impl Deref for UpperBound {
+    type Target = Bound<Version>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<UpperBound> for Bound<Version> {
+    fn from(bound: UpperBound) -> Self {
+        bound.0
     }
 }

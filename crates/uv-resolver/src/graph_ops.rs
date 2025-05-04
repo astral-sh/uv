@@ -1,10 +1,11 @@
+use std::collections::hash_map::Entry;
+
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::visit::EdgeRef;
 use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-use std::collections::hash_map::Entry;
 
-use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep508::MarkerTree;
 use uv_pypi_types::{ConflictItem, Conflicts};
 
 use crate::resolution::ResolutionGraphNode;
@@ -17,10 +18,14 @@ use crate::universal_marker::UniversalMarker;
 /// marker), we re-queue the node and update all its children. This implicitly handles cycles,
 /// whenever we re-reach a node through a cycle the marker we have is a more
 /// specific marker/longer path, so we don't update the node and don't re-queue it.
-pub(crate) fn marker_reachability<T>(
-    graph: &Graph<T, UniversalMarker>,
-    fork_markers: &[UniversalMarker],
-) -> FxHashMap<NodeIndex, UniversalMarker> {
+pub(crate) fn marker_reachability<
+    Marker: Boolean + Copy + PartialEq,
+    Node,
+    Edge: Reachable<Marker>,
+>(
+    graph: &Graph<Node, Edge>,
+    fork_markers: &[Edge],
+) -> FxHashMap<NodeIndex, Marker> {
     // Note that we build including the virtual packages due to how we propagate markers through
     // the graph, even though we then only read the markers for base packages.
     let mut reachability = FxHashMap::with_capacity_and_hasher(graph.node_count(), FxBuildHasher);
@@ -42,12 +47,12 @@ pub(crate) fn marker_reachability<T>(
     // The root nodes are always applicable, unless the user has restricted resolver
     // environments with `tool.uv.environments`.
     let root_markers = if fork_markers.is_empty() {
-        UniversalMarker::TRUE
+        Edge::true_marker()
     } else {
         fork_markers
             .iter()
-            .fold(UniversalMarker::FALSE, |mut acc, marker| {
-                acc.or(*marker);
+            .fold(Edge::false_marker(), |mut acc, edge| {
+                acc.or(edge.marker());
                 acc
             })
     };
@@ -61,7 +66,7 @@ pub(crate) fn marker_reachability<T>(
         let marker = reachability[&parent_index];
         for child_edge in graph.edges_directed(parent_index, Direction::Outgoing) {
             // The marker for all paths to the child through the parent.
-            let mut child_marker = *child_edge.weight();
+            let mut child_marker = child_edge.weight().marker();
             child_marker.and(marker);
             match reachability.entry(child_edge.target()) {
                 Entry::Occupied(mut existing) => {
@@ -159,7 +164,10 @@ pub(crate) fn simplify_conflict_markers(
                 set.insert(ConflictItem::from((package.clone(), group.clone())));
             }
         }
-        let sets = activated.get(&parent_index).cloned().unwrap_or_default();
+        let sets = activated
+            .get(&parent_index)
+            .cloned()
+            .unwrap_or_else(|| vec![FxHashSet::default()]);
         for child_edge in graph.edges_directed(parent_index, Direction::Outgoing) {
             let mut change = false;
             for set in sets.clone() {
@@ -192,7 +200,7 @@ pub(crate) fn simplify_conflict_markers(
 
     let mut inferences: FxHashMap<NodeIndex, Vec<FxHashSet<Inference>>> = FxHashMap::default();
     for (node_id, sets) in activated {
-        let mut new_sets = vec![];
+        let mut new_sets = Vec::with_capacity(sets.len());
         for set in sets {
             let mut new_set = FxHashSet::default();
             for item in set {
@@ -221,7 +229,21 @@ pub(crate) fn simplify_conflict_markers(
     }
 
     for edge_index in (0..graph.edge_count()).map(EdgeIndex::new) {
-        let (from_index, _) = graph.edge_endpoints(edge_index).unwrap();
+        let (from_index, to_index) = graph.edge_endpoints(edge_index).unwrap();
+        // If there are ambiguous edges (i.e., two or more edges
+        // with the same package name), then we specifically skip
+        // conflict marker simplification. It seems that in some
+        // cases, the logic encoded in `inferences` isn't quite enough
+        // to perfectly disambiguate between them. It's plausible we
+        // could do better here, but it requires smarter simplification
+        // logic. ---AG
+        let ambiguous_edges = graph
+            .edges_directed(from_index, Direction::Outgoing)
+            .filter(|edge| graph[to_index].package_name() == graph[edge.target()].package_name())
+            .count();
+        if ambiguous_edges > 1 {
+            continue;
+        }
         let Some(inference_sets) = inferences.get(&from_index) else {
             continue;
         };
@@ -236,18 +258,18 @@ pub(crate) fn simplify_conflict_markers(
                     if !inf.included {
                         return None;
                     }
-                    Some((inf.item.package().clone(), inf.item.extra()?.clone()))
+                    Some((inf.item.package(), inf.item.extra()?))
                 })
-                .collect::<Vec<(PackageName, ExtraName)>>();
+                .collect::<Vec<_>>();
             let groups = set
                 .iter()
                 .filter_map(|inf| {
                     if !inf.included {
                         return None;
                     }
-                    Some((inf.item.package().clone(), inf.item.group()?.clone()))
+                    Some((inf.item.package(), inf.item.group()?))
                 })
-                .collect::<Vec<(PackageName, GroupName)>>();
+                .collect::<Vec<_>>();
             graph[edge_index].conflict().evaluate(&extras, &groups)
         });
         if !all_paths_satisfied {
@@ -262,5 +284,73 @@ pub(crate) fn simplify_conflict_markers(
                 }
             }
         }
+    }
+}
+
+pub(crate) trait Reachable<T> {
+    /// The marker representing the "true" value.
+    fn true_marker() -> T;
+
+    /// The marker representing the "false" value.
+    fn false_marker() -> T;
+
+    /// The marker attached to the edge.
+    fn marker(&self) -> T;
+}
+
+impl Reachable<MarkerTree> for MarkerTree {
+    fn true_marker() -> MarkerTree {
+        MarkerTree::TRUE
+    }
+
+    fn false_marker() -> MarkerTree {
+        MarkerTree::FALSE
+    }
+
+    fn marker(&self) -> MarkerTree {
+        *self
+    }
+}
+
+impl Reachable<UniversalMarker> for UniversalMarker {
+    fn true_marker() -> UniversalMarker {
+        UniversalMarker::TRUE
+    }
+
+    fn false_marker() -> UniversalMarker {
+        UniversalMarker::FALSE
+    }
+
+    fn marker(&self) -> UniversalMarker {
+        *self
+    }
+}
+
+/// A trait for types that can be used as markers in the dependency graph.
+pub(crate) trait Boolean {
+    /// Perform a logical AND operation with another marker.
+    fn and(&mut self, other: Self);
+
+    /// Perform a logical OR operation with another marker.
+    fn or(&mut self, other: Self);
+}
+
+impl Boolean for UniversalMarker {
+    fn and(&mut self, other: Self) {
+        self.and(other);
+    }
+
+    fn or(&mut self, other: Self) {
+        self.or(other);
+    }
+}
+
+impl Boolean for MarkerTree {
+    fn and(&mut self, other: Self) {
+        self.and(other);
+    }
+
+    fn or(&mut self, other: Self) {
+        self.or(other);
     }
 }

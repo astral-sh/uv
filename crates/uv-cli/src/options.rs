@@ -1,6 +1,5 @@
 use uv_cache::Refresh;
 use uv_configuration::ConfigSettings;
-use uv_distribution_types::{PipExtraIndex, PipFindLinks, PipIndex};
 use uv_resolver::PrereleaseMode;
 use uv_settings::{Combine, PipOptions, ResolverInstallerOptions, ResolverOptions};
 
@@ -43,6 +42,7 @@ impl From<ResolverArgs> for PipOptions {
             resolution,
             prerelease,
             pre,
+            fork_strategy,
             config_setting,
             no_build_isolation,
             no_build_isolation_package,
@@ -58,6 +58,7 @@ impl From<ResolverArgs> for PipOptions {
             index_strategy,
             keyring_provider,
             resolution,
+            fork_strategy,
             prerelease: if pre {
                 Some(PrereleaseMode::Allow)
             } else {
@@ -126,6 +127,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             resolution,
             prerelease,
             pre,
+            fork_strategy,
             config_setting,
             no_build_isolation,
             no_build_isolation_package,
@@ -150,6 +152,7 @@ impl From<ResolverInstallerArgs> for PipOptions {
             } else {
                 prerelease
             },
+            fork_strategy,
             config_settings: config_setting
                 .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
             no_build_isolation: flag(no_build_isolation, build_isolation),
@@ -196,15 +199,18 @@ impl From<IndexArgs> for PipOptions {
             index: default_index
                 .and_then(Maybe::into_option)
                 .map(|default_index| vec![default_index])
-                .combine(
-                    index.map(|index| index.into_iter().filter_map(Maybe::into_option).collect()),
-                ),
-            index_url: index_url.and_then(Maybe::into_option).map(PipIndex::from),
+                .combine(index.map(|index| {
+                    index
+                        .iter()
+                        .flat_map(std::clone::Clone::clone)
+                        .filter_map(Maybe::into_option)
+                        .collect()
+                })),
+            index_url: index_url.and_then(Maybe::into_option),
             extra_index_url: extra_index_url.map(|extra_index_urls| {
                 extra_index_urls
                     .into_iter()
                     .filter_map(Maybe::into_option)
-                    .map(PipExtraIndex::from)
                     .collect()
             }),
             no_index: if no_index { Some(true) } else { None },
@@ -212,7 +218,6 @@ impl From<IndexArgs> for PipOptions {
                 find_links
                     .into_iter()
                     .filter_map(Maybe::into_option)
-                    .map(PipFindLinks::from)
                     .collect()
             }),
             ..PipOptions::default()
@@ -235,6 +240,7 @@ pub fn resolver_options(
         resolution,
         prerelease,
         pre,
+        fork_strategy,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -258,11 +264,13 @@ pub fn resolver_options(
             .default_index
             .and_then(Maybe::into_option)
             .map(|default_index| vec![default_index])
-            .combine(
-                index_args
-                    .index
-                    .map(|index| index.into_iter().filter_map(Maybe::into_option).collect()),
-            ),
+            .combine(index_args.index.map(|index| {
+                index
+                    .into_iter()
+                    .flat_map(|v| v.clone())
+                    .filter_map(Maybe::into_option)
+                    .collect()
+            })),
         index_url: index_args.index_url.and_then(Maybe::into_option),
         extra_index_url: index_args.extra_index_url.map(|extra_index_url| {
             extra_index_url
@@ -291,6 +299,7 @@ pub fn resolver_options(
         } else {
             prerelease
         },
+        fork_strategy,
         dependency_metadata: None,
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),
@@ -324,6 +333,7 @@ pub fn resolver_installer_options(
         resolution,
         prerelease,
         pre,
+        fork_strategy,
         config_setting,
         no_build_isolation,
         no_build_isolation_package,
@@ -348,9 +358,13 @@ pub fn resolver_installer_options(
         .default_index
         .and_then(Maybe::into_option)
         .map(|default_index| vec![default_index]);
-    let index = index_args
-        .index
-        .map(|index| index.into_iter().filter_map(Maybe::into_option).collect());
+    let index = index_args.index.map(|index| {
+        index
+            .into_iter()
+            .flat_map(|v| v.clone())
+            .filter_map(Maybe::into_option)
+            .collect()
+    });
 
     ResolverInstallerOptions {
         index: default_index.combine(index),
@@ -392,6 +406,7 @@ pub fn resolver_installer_options(
         } else {
             prerelease
         },
+        fork_strategy,
         dependency_metadata: None,
         config_settings: config_setting
             .map(|config_settings| config_settings.into_iter().collect::<ConfigSettings>()),

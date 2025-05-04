@@ -1,5 +1,6 @@
 use std::sync::Arc;
-
+use tracing::trace;
+use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ResolverMarkerEnvironment};
 
@@ -7,7 +8,7 @@ use crate::pubgrub::{PubGrubDependency, PubGrubPackage};
 use crate::requires_python::RequiresPythonRange;
 use crate::resolver::ForkState;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
-use crate::PythonRequirement;
+use crate::{PythonRequirement, RequiresPython, ResolveError};
 
 /// Represents one or more marker environments for a resolution.
 ///
@@ -302,7 +303,10 @@ impl ResolverEnvironment {
     /// with an initial set of forked resolver states (e.g., those present in
     /// a lock file), then this creates the initial set of forks from that
     /// configuration.
-    pub(crate) fn initial_forked_states(&self, init: ForkState) -> Vec<ForkState> {
+    pub(crate) fn initial_forked_states(
+        &self,
+        init: ForkState,
+    ) -> Result<Vec<ForkState>, ResolveError> {
         let Kind::Universal {
             ref initial_forks,
             markers: ref _markers,
@@ -310,17 +314,28 @@ impl ResolverEnvironment {
             exclude: ref _exclude,
         } = self.kind
         else {
-            return vec![init];
+            return Ok(vec![init]);
         };
         if initial_forks.is_empty() {
-            return vec![init];
+            return Ok(vec![init]);
         }
         initial_forks
             .iter()
             .rev()
-            .map(|initial_fork| {
-                init.clone()
-                    .with_env(self.narrow_environment(*initial_fork))
+            .filter_map(|&initial_fork| {
+                let combined = UniversalMarker::from_combined(initial_fork);
+                let (include, exclude) = match combined.conflict().filter_rules() {
+                    Ok(rules) => rules,
+                    Err(err) => return Some(Err(err)),
+                };
+                let mut env = self.filter_by_group(
+                    include
+                        .into_iter()
+                        .map(Ok)
+                        .chain(exclude.into_iter().map(Err)),
+                )?;
+                env = env.narrow_environment(combined.pep508());
+                Some(Ok(init.clone().with_env(env)))
             })
             .collect()
     }
@@ -434,7 +449,7 @@ impl<'d> ForkingPossibility<'d> {
         env: &ResolverEnvironment,
         dep: &'d PubGrubDependency,
     ) -> ForkingPossibility<'d> {
-        let marker = dep.package.marker().unwrap_or(MarkerTree::TRUE);
+        let marker = dep.package.marker();
         if !env.included_by_marker(marker) {
             ForkingPossibility::DependencyAlwaysExcluded
         } else if marker.is_true() {
@@ -505,9 +520,96 @@ impl<'d> Forker<'d> {
     /// Returns true if the dependency represented by this forker may be
     /// included in the given resolver environment.
     pub(crate) fn included(&self, env: &ResolverEnvironment) -> bool {
-        let marker = self.package.marker().unwrap_or(MarkerTree::TRUE);
+        let marker = self.package.marker();
         env.included_by_marker(marker)
     }
+}
+
+/// Fork the resolver based on a `Requires-Python` specifier.
+pub(crate) fn fork_version_by_python_requirement(
+    requires_python: &VersionSpecifiers,
+    python_requirement: &PythonRequirement,
+    env: &ResolverEnvironment,
+) -> Vec<ResolverEnvironment> {
+    let requires_python = RequiresPython::from_specifiers(requires_python);
+    let lower = requires_python.range().lower().clone();
+
+    // Attempt to split the current Python requirement based on the `requires-python` specifier.
+    //
+    // For example, if the current requirement is `>=3.10`, and the split point is `>=3.11`, then
+    // the result will be `>=3.10 and <3.11` and `>=3.11`.
+    //
+    // However, if the current requirement is `>=3.10`, and the split point is `>=3.9`, then the
+    // lower segment will be empty, so we should return an empty list.
+    let Some((lower, upper)) = python_requirement.split(lower.into()) else {
+        trace!(
+            "Unable to split Python requirement `{}` via `Requires-Python` specifier `{}`",
+            python_requirement.target(),
+            requires_python,
+        );
+        return vec![];
+    };
+
+    let Kind::Universal {
+        markers: ref env_marker,
+        ..
+    } = env.kind
+    else {
+        panic!("resolver must be in universal mode for forking")
+    };
+
+    let mut envs = vec![];
+    if !env_marker.is_disjoint(lower.to_marker_tree()) {
+        envs.push(env.narrow_environment(lower.to_marker_tree()));
+    }
+    if !env_marker.is_disjoint(upper.to_marker_tree()) {
+        envs.push(env.narrow_environment(upper.to_marker_tree()));
+    }
+    debug_assert!(!envs.is_empty(), "at least one fork should be produced");
+    envs
+}
+
+/// Fork the resolver based on a marker.
+pub(crate) fn fork_version_by_marker(
+    env: &ResolverEnvironment,
+    marker: MarkerTree,
+) -> Option<(ResolverEnvironment, ResolverEnvironment)> {
+    let Kind::Universal {
+        markers: ref env_marker,
+        ..
+    } = env.kind
+    else {
+        panic!("resolver must be in universal mode for forking")
+    };
+
+    // Attempt to split based on the marker.
+    //
+    // For example, given `python_version >= '3.10'` and the split marker `sys_platform == 'linux'`,
+    // the result will be:
+    //
+    //   `python_version >= '3.10' and sys_platform == 'linux'`
+    //   `python_version >= '3.10' and sys_platform != 'linux'`
+    //
+    // If the marker is disjoint with the current environment, then we should return an empty list.
+    // If the marker complement is disjoint with the current environment, then we should also return
+    // an empty list.
+    //
+    // For example, given `python_version >= '3.10' and sys_platform == 'linux'` and the split marker
+    // `sys_platform == 'win32'`, return an empty list, since the following isn't satisfiable:
+    //
+    //   python_version >= '3.10' and sys_platform == 'linux' and sys_platform == 'win32'
+    if env_marker.is_disjoint(marker) {
+        return None;
+    }
+    let with_marker = env.narrow_environment(marker);
+
+    let complement = marker.negate();
+    if env_marker.is_disjoint(complement) {
+        return None;
+    }
+    let without_marker = env.narrow_environment(complement);
+
+    Some((with_marker, without_marker))
 }
 
 #[cfg(test)]
@@ -515,10 +617,10 @@ mod tests {
     use std::ops::Bound;
     use std::sync::LazyLock;
 
-    use uv_pep440::Version;
+    use uv_pep440::{LowerBound, UpperBound, Version};
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
 
-    use crate::requires_python::{LowerBound, RequiresPython, RequiresPythonRange, UpperBound};
+    use crate::requires_python::{RequiresPython, RequiresPythonRange};
 
     use super::*;
 
@@ -602,17 +704,14 @@ mod tests {
     }
 
     /// Inside a fork whose marker's Python requirement is equal
-    /// to our Requires-Python means that narrowing produces a
-    /// result, but is unchanged from what we started with.
+    /// to our Requires-Python means that narrowing does not produce
+    /// a result.
     #[test]
     fn narrow_python_requirement_forking_no_op() {
         let pyreq = python_requirement("3.10");
         let resolver_env = ResolverEnvironment::universal(vec![])
             .narrow_environment(marker("python_version >= '3.10'"));
-        assert_eq!(
-            resolver_env.narrow_python_requirement(&pyreq),
-            Some(python_requirement("3.10")),
-        );
+        assert_eq!(resolver_env.narrow_python_requirement(&pyreq), None);
     }
 
     /// In this test, we narrow a more relaxed requirement compared to the

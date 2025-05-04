@@ -1,4 +1,4 @@
-# Python environments
+# Using Python environments
 
 Each Python installation has an environment that is active when Python is used. Packages can be
 installed into an environment to make their modules available from your Python scripts. Generally,
@@ -56,6 +56,38 @@ The virtual environment can be "activated" to make its packages available:
     ```console
     $ .venv\Scripts\activate
     ```
+
+!!! note
+
+    The default activation script on Unix is for POSIX compliant shells like `sh`, `bash`, or `zsh`.
+    There are additional activation scripts for common alternative shells.
+
+    === "fish"
+
+        ```console
+        $ source .venv/bin/activate.fish
+        ```
+
+    === "csh / tcsh"
+
+
+        ```console
+        $ source .venv/bin/activate.csh
+        ```
+
+    === "Nushell"
+
+        ```console
+        $ use .venv\Scripts\activate.nu
+        ```
+
+## Deactivating an environment
+
+To exit a virtual environment, use the `deactivate` command:
+
+```console
+$ deactivate
+```
 
 ## Using arbitrary Python environments
 

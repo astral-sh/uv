@@ -9,19 +9,20 @@ use serde::Deserialize;
 use tracing::debug;
 use url::Host;
 
-use crate::Error;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_filename::{DistExtension, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
     BuildableSource, DirectSourceUrl, DirectorySourceUrl, GitSourceUrl, PathSourceUrl,
-    RemoteSource, SourceUrl, VersionId,
+    RemoteSource, Requirement, SourceUrl, VersionId,
 };
 use uv_normalize::PackageName;
 use uv_pep508::{UnnamedRequirement, VersionOrUrl};
-use uv_pypi_types::{Metadata10, Requirement};
+use uv_pypi_types::Metadata10;
 use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
+
+use crate::Error;
 
 /// Like [`RequirementsSpecification`], but with concrete names for all requirements.
 pub struct NamedRequirementsResolver<'a, Context: BuildContext> {
@@ -49,7 +50,7 @@ impl<'a, Context: BuildContext> NamedRequirementsResolver<'a, Context> {
 
     /// Set the [`Reporter`] to use for this resolver.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             database: self.database.with_reporter(reporter),
             ..self

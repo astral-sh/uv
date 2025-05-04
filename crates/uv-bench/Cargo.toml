@@ -36,6 +36,7 @@ uv-dispatch = { workspace = true }
 uv-distribution = { workspace = true }
 uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
+uv-extract = { workspace = true, optional = true }
 uv-install-wheel = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
@@ -44,6 +45,7 @@ uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }
+uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 codspeed-criterion-compat = { version = "2.7.2", default-features = false, optional = true }
@@ -51,5 +53,9 @@ criterion = { version = "0.5.1", default-features = false, features = ["async_to
 jiff = { workspace = true }
 tokio = { workspace = true }
 
+[package.metadata.cargo-shear]
+ignored = ["uv-extract"]
+
 [features]
 codspeed = ["codspeed-criterion-compat"]
+static = ["uv-extract/static"]

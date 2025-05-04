@@ -1,8 +1,8 @@
 # Managing dependencies
 
-## Dependency tables
+## Dependency fields
 
-Dependencies of the project are defined in several tables:
+Dependencies of the project are defined in several fields:
 
 - [`project.dependencies`](#project-dependencies): Published dependencies.
 - [`project.optional-dependencies`](#optional-dependencies): Published optional dependencies, or
@@ -12,7 +12,7 @@ Dependencies of the project are defined in several tables:
 
 !!! note
 
-    The `project.dependencies` and `project.optional-dependencies` tables can be used even if
+    The `project.dependencies` and `project.optional-dependencies` fields can be used even if
     project isn't going to be published. `dependency-groups` are a recently standardized feature
     and may not be supported by all tools yet.
 
@@ -27,7 +27,7 @@ To add a dependency:
 $ uv add httpx
 ```
 
-An entry will be added in the `project.dependencies` table:
+An entry will be added in the `project.dependencies` field:
 
 ```toml title="pyproject.toml" hl_lines="4"
 [project]
@@ -38,17 +38,17 @@ dependencies = ["httpx>=0.27.2"]
 
 The [`--dev`](#development-dependencies), [`--group`](#dependency-groups), or
 [`--optional`](#optional-dependencies) flags can be used to add a dependencies to an alternative
-table.
+field.
 
 The dependency will include a constraint, e.g., `>=0.27.2`, for the most recent, compatible version
 of the package. An alternative constraint can be provided:
 
 ```console
-$ uv add 'httpx>=0.20'
+$ uv add "httpx>=0.20"
 ```
 
 When adding a dependency from a source other than a package registry, uv will add an entry in the
-sources table. For example, when adding `httpx` from GitHub:
+sources field. For example, when adding `httpx` from GitHub:
 
 ```console
 $ uv add "httpx @ git+https://github.com/encode/httpx"
@@ -71,10 +71,18 @@ httpx = { git = "https://github.com/encode/httpx" }
 If a dependency cannot be used, uv will display an error.:
 
 ```console
-$ uv add 'httpx>9999'
+$ uv add "httpx>9999"
   × No solution found when resolving dependencies:
   ╰─▶ Because only httpx<=1.0.0b0 is available and your project depends on httpx>9999,
       we can conclude that your project's requirements are unsatisfiable.
+```
+
+### Importing dependencies
+
+Dependencies declared in a `requirements.txt` file can be added to the project with the `-r` option:
+
+```
+uv add -r requirements.txt
 ```
 
 ## Removing dependencies
@@ -96,7 +104,7 @@ references to the dependency, it will also be removed.
 To change an existing dependency, e.g., to use a different constraint for `httpx`:
 
 ```console
-$ uv add 'httpx>0.1.0'
+$ uv add "httpx>0.1.0"
 ```
 
 !!! note
@@ -106,7 +114,7 @@ $ uv add 'httpx>0.1.0'
     constraints. To force the package version to update to the latest within the constraints, use `--upgrade-package <name>`, e.g.:
 
     ```console
-    $ uv add 'httpx>0.1.0' --upgrade-package httpx
+    $ uv add "httpx>0.1.0" --upgrade-package httpx
     ```
 
     See the [lockfile](./sync.md#upgrading-locked-package-versions) documentation for more details
@@ -127,7 +135,7 @@ use [environment markers](https://peps.python.org/pep-0508/#environment-markers)
 For example, to install `jax` on Linux, but not on Windows or macOS:
 
 ```console
-$ uv add 'jax; sys_platform == "linux"'
+$ uv add "jax; sys_platform == 'linux'"
 ```
 
 The resulting `pyproject.toml` will then include the environment marker in the dependency
@@ -144,7 +152,7 @@ dependencies = ["jax; sys_platform == 'linux'"]
 Similarly, to include `numpy` on Python 3.11 and later:
 
 ```console
-$ uv add 'numpy; python_version >= "3.11"'
+$ uv add "numpy; python_version >= '3.11'"
 ```
 
 See Python's [environment marker](https://peps.python.org/pep-0508/#environment-markers)
@@ -190,9 +198,9 @@ dependencies = [
 The `tool.uv.sources` table extends the standard dependency tables with alternative dependency
 sources, which are used during development.
 
-Dependency sources add support common patterns that are not supported by the `project.dependencies`
-standard, like editable installations and relative paths. For example, to install `foo` from a
-directory relative to the project root:
+Dependency sources add support for common patterns that are not supported by the
+`project.dependencies` standard, like editable installations and relative paths. For example, to
+install `foo` from a directory relative to the project root:
 
 ```toml title="pyproject.toml" hl_lines="7"
 [project]
@@ -253,7 +261,7 @@ When defining an index, an `explicit` flag can be included to indicate that the 
 be used for packages that explicitly specify it in `tool.uv.sources`. If `explicit` is not set,
 other packages may be resolved from the index, if not found elsewhere.
 
-```toml title="pyproject.toml" hl_lines="3"
+```toml title="pyproject.toml" hl_lines="4"
 [[tool.uv.index]]
 name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
@@ -290,10 +298,7 @@ $ uv add git+https://github.com/encode/httpx --tag 0.27.0
 dependencies = ["httpx"]
 
 [tool.uv.sources]
-httpx = {
-  git = "https://github.com/encode/httpx",
-  tag = "0.27.0"
-}
+httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
 ```
 
 Or, a branch:
@@ -307,10 +312,7 @@ $ uv add git+https://github.com/encode/httpx --branch main
 dependencies = ["httpx"]
 
 [tool.uv.sources]
-httpx = {
-  git = "https://github.com/encode/httpx",
-  branch = "main"
-}
+httpx = { git = "https://github.com/encode/httpx", branch = "main" }
 ```
 
 Or, a revision (commit):
@@ -324,13 +326,22 @@ $ uv add git+https://github.com/encode/httpx --rev 326b9431c761e1ef1e00b9f760d1f
 dependencies = ["httpx"]
 
 [tool.uv.sources]
-httpx = {
-  git = "https://github.com/encode/httpx",
-  rev = "326b9431c761e1ef1e00b9f760d1f654c8db48c6"
-}
+httpx = { git = "https://github.com/encode/httpx", rev = "326b9431c761e1ef1e00b9f760d1f654c8db48c6" }
 ```
 
-A `subdirectory` may be specified if the package isn't in the repository root.
+A `subdirectory` may be specified if the package isn't in the repository root:
+
+```console
+$ uv add git+https://github.com/langchain-ai/langchain#subdirectory=libs/langchain
+```
+
+```toml title="pyproject.toml"
+[project]
+dependencies = ["langchain"]
+
+[tool.uv.sources]
+langchain = { git = "https://github.com/langchain-ai/langchain", subdirectory = "libs/langchain" }
+```
 
 ### URL
 
@@ -399,7 +410,28 @@ $ uv add ~/projects/bar/
     default. An editable installation may be requested for project directories:
 
     ```console
-    $ uv add --editable ~/projects/bar/
+    $ uv add --editable ../projects/bar/
+    ```
+
+    Which will result in a `pyproject.toml` with:
+
+    ```toml title="pyproject.toml"
+    [project]
+    dependencies = ["bar"]
+
+    [tool.uv.sources]
+    bar = { path = "../projects/bar", editable = true }
+    ```
+
+    Similarly, if a project is marked as a [non-package](./config.md#build-systems), but you'd
+    like to install it in the environment as a package, set `package = true` on the source:
+
+    ```toml title="pyproject.toml"
+    [project]
+    dependencies = ["bar"]
+
+    [tool.uv.sources]
+    bar = { path = "../projects/bar", package = true }
     ```
 
     For multiple packages in the same repository, [_workspaces_](./workspaces.md) may be a better
@@ -438,11 +470,7 @@ For example, to pull `httpx` from GitHub, but only on macOS, use the following:
 dependencies = ["httpx"]
 
 [tool.uv.sources]
-httpx = {
-  git = "https://github.com/encode/httpx",
-  tag = "0.27.2",
-  marker = "sys_platform == 'darwin'"
-}
+httpx = { git = "https://github.com/encode/httpx", tag = "0.27.2", marker = "sys_platform == 'darwin'" }
 ```
 
 By specifying the marker on the source, uv will still include `httpx` on all platforms, but will
@@ -456,22 +484,14 @@ environment markers.
 
 For example, to pull in different `httpx` tags on macOS vs. Linux:
 
-```toml title="pyproject.toml" hl_lines="8-9 13-14"
+```toml title="pyproject.toml" hl_lines="6-7"
 [project]
 dependencies = ["httpx"]
 
 [tool.uv.sources]
 httpx = [
-  {
-    git = "https://github.com/encode/httpx",
-    tag = "0.27.2",
-    marker = "sys_platform == 'darwin'"
-  },
-  {
-    git = "https://github.com/encode/httpx",
-    tag = "0.24.1",
-    marker = "sys_platform == 'linux'"
-  },
+  { git = "https://github.com/encode/httpx", tag = "0.27.2", marker = "sys_platform == 'darwin'" },
+  { git = "https://github.com/encode/httpx", tag = "0.24.1", marker = "sys_platform == 'linux'" },
 ]
 ```
 
@@ -491,10 +511,12 @@ torch = [
 [[tool.uv.index]]
 name = "torch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [[tool.uv.index]]
 name = "torch-gpu"
 url = "https://download.pytorch.org/whl/cu124"
+explicit = true
 ```
 
 ### Disabling sources
@@ -609,8 +631,8 @@ dev = [
 ```
 
 The `dev` group is special-cased; there are `--dev`, `--only-dev`, and `--no-dev` flags to toggle
-inclusion or exclusion of its dependencies. Additionally, the `dev` group is
-[synced by default](#default-groups).
+inclusion or exclusion of its dependencies. See `--no-default-groups` to disable all default groups
+instead. Additionally, the `dev` group is [synced by default](#default-groups).
 
 ### Dependency groups
 
@@ -634,8 +656,8 @@ lint = [
 ]
 ```
 
-Once groups are defined, the `--group`, `--only-group`, and `--no-group` options can be used to
-include or exclude their dependencies.
+Once groups are defined, the `--all-groups`, `--no-default-groups`, `--group`, `--only-group`, and
+`--no-group` options can be used to include or exclude their dependencies.
 
 !!! tip
 
@@ -663,9 +685,17 @@ By default, uv includes the `dev` dependency group in the environment (e.g., dur
 default-groups = ["dev", "foo"]
 ```
 
+To enable all dependencies groups by default, use `"all"` instead of listing group names:
+
+```toml title="pyproject.toml"
+[tool.uv]
+default-groups = "all"
+```
+
 !!! tip
 
-    To exclude a default group during `uv run` or `uv sync`, use `--no-group <name>`.
+    To disable this behaviour during `uv run` or `uv sync`, use `--no-default-groups`.
+    To exclude a specific default group, use `--no-group <name>`.
 
 ### Legacy `dev-dependencies`
 
@@ -771,7 +801,7 @@ interpreted as "a version of `foo` that's at least 1.2.3, but less than 2, and n
 
 Specifiers are padded with trailing zeros if required, so `foo ==2` matches foo 2.0.0, too.
 
-A star can be used for the last digit with equals, e.g. `foo ==2.1.*` will accept any release from
+A star can be used for the last digit with equals, e.g., `foo ==2.1.*` will accept any release from
 the 2.1 series. Similarly, `~=` matches where the last digit is equal or higher, e.g., `foo ~=1.2`
 is equal to `foo >=1.2,<2`, and `foo ~=1.2.3` is equal to `foo >=1.2.3,<1.3`.
 

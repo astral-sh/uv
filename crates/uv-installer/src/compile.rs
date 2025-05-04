@@ -1,4 +1,3 @@
-use std::num::NonZeroUsize;
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -14,6 +13,7 @@ use tokio::sync::oneshot;
 use tracing::{debug, instrument};
 use walkdir::WalkDir;
 
+use uv_configuration::Concurrency;
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
@@ -48,8 +48,11 @@ pub enum CompileError {
         #[source]
         err: Box<Self>,
     },
-    #[error("Bytecode timed out ({}s)", _0.as_secs_f32())]
-    CompileTimeout(Duration),
+    #[error("Bytecode timed out ({}s) compiling file: `{}`", elapsed.as_secs_f32(), source_file)]
+    CompileTimeout {
+        elapsed: Duration,
+        source_file: String,
+    },
     #[error("Python startup timed out ({}s)", _0.as_secs_f32())]
     StartupTimeout(Duration),
 }
@@ -68,19 +71,18 @@ pub enum CompileError {
 pub async fn compile_tree(
     dir: &Path,
     python_executable: &Path,
+    concurrency: &Concurrency,
     cache: &Path,
 ) -> Result<usize, CompileError> {
     debug_assert!(
         dir.is_absolute(),
-        "compileall doesn't work with relative paths"
+        "compileall doesn't work with relative paths: `{}`",
+        dir.display()
     );
-    let worker_count = std::thread::available_parallelism().unwrap_or_else(|err| {
-        warn_user!("Couldn't determine number of cores, compiling with a single thread: {err}");
-        NonZeroUsize::MIN
-    });
+    let worker_count = concurrency.installs;
 
     // A larger buffer is significantly faster than just 1 or the worker count.
-    let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count.get() * 10);
+    let (sender, receiver) = async_channel::bounded::<PathBuf>(worker_count * 10);
 
     // Running Python with an actual file will produce better error messages.
     let tempdir = tempdir_in(cache).map_err(CompileError::TempFile)?;
@@ -88,7 +90,7 @@ pub async fn compile_tree(
 
     debug!("Starting {} bytecode compilation workers", worker_count);
     let mut worker_handles = Vec::new();
-    for _ in 0..worker_count.get() {
+    for _ in 0..worker_count {
         let (tx, rx) = oneshot::channel();
 
         let worker = worker(
@@ -129,9 +131,23 @@ pub async fn compile_tree(
         // Otherwise we stumble over temporary files from `compileall`.
         .filter_entry(|dir| dir.file_name() != "__pycache__");
     for entry in walker {
-        let entry = entry?;
+        // Retrieve the entry and its metadata, with shared handling for IO errors
+        let (entry, metadata) =
+            match entry.and_then(|entry| entry.metadata().map(|metadata| (entry, metadata))) {
+                Ok((entry, metadata)) => (entry, metadata),
+                Err(err) => {
+                    if err
+                        .io_error()
+                        .is_some_and(|err| err.kind() == io::ErrorKind::NotFound)
+                    {
+                        // The directory was removed, just ignore it
+                        continue;
+                    }
+                    return Err(err.into());
+                }
+            };
         // https://github.com/pypa/pip/blob/3820b0e52c7fed2b2c43ba731b718f316e6816d1/src/pip/_internal/operations/install/wheel.py#L593-L604
-        if entry.metadata()?.is_file() && entry.path().extension().is_some_and(|ext| ext == "py") {
+        if metadata.is_file() && entry.path().extension().is_some_and(|ext| ext == "py") {
             source_files += 1;
             if let Err(err) = sender.send(entry.path().to_owned()).await {
                 // The workers exited.
@@ -358,7 +374,10 @@ async fn worker_main_loop(
         // should ever take.
         tokio::time::timeout(COMPILE_TIMEOUT, python_handle)
             .await
-            .map_err(|_| CompileError::CompileTimeout(COMPILE_TIMEOUT))??;
+            .map_err(|_| CompileError::CompileTimeout {
+                elapsed: COMPILE_TIMEOUT,
+                source_file: source_file.clone(),
+            })??;
 
         // This is a sanity check, if we don't get the path back something has gone wrong, e.g.
         // we're not actually running a python interpreter.

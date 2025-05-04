@@ -1,18 +1,28 @@
 mod metadata;
+mod serde_verbatim;
+mod settings;
 mod source_dist;
 mod wheel;
 
 pub use metadata::{check_direct_build, PyProjectToml};
+pub use settings::{BuildBackendSettings, WheelDataIncludes};
 pub use source_dist::{build_source_dist, list_source_dist};
 pub use wheel::{build_editable, build_wheel, list_wheel, metadata};
 
-use crate::metadata::ValidationError;
 use std::fs::FileType;
 use std::io;
-use std::path::{Path, PathBuf, StripPrefixError};
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
+use itertools::Itertools;
 use thiserror::Error;
+use tracing::debug;
+
 use uv_fs::Simplified;
 use uv_globfilter::PortableGlobError;
+use uv_pypi_types::{Identifier, IdentifierParseError};
+
+use crate::metadata::ValidationError;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -22,6 +32,8 @@ pub enum Error {
     Toml(#[from] toml::de::Error),
     #[error("Invalid pyproject.toml")]
     Validation(#[from] ValidationError),
+    #[error(transparent)]
+    Identifier(#[from] IdentifierParseError),
     #[error("Unsupported glob expression in: `{field}`")]
     PortableGlob {
         field: String,
@@ -35,13 +47,6 @@ pub enum Error {
         #[source]
         source: globset::Error,
     },
-    /// [`globset::Error`] shows the glob that failed to parse.
-    #[error("Unsupported glob expression in: `{field}`")]
-    GlobSet {
-        field: String,
-        #[source]
-        err: globset::Error,
-    },
     #[error("`pyproject.toml` must not be excluded from source distribution build")]
     PyprojectTomlExcluded,
     #[error("Failed to walk source tree: `{}`", root.user_display())]
@@ -50,16 +55,36 @@ pub enum Error {
         #[source]
         err: walkdir::Error,
     },
-    #[error("Failed to walk source tree")]
-    StripPrefix(#[from] StripPrefixError),
     #[error("Unsupported file type {:?}: `{}`", _1, _0.user_display())]
     UnsupportedFileType(PathBuf, FileType),
     #[error("Failed to write wheel zip archive")]
     Zip(#[from] zip::result::ZipError),
     #[error("Failed to write RECORD file")]
     Csv(#[from] csv::Error),
-    #[error("Expected a Python module with an `__init__.py` at: `{}`", _0.user_display())]
+    #[error(
+        "Missing source directory at: `{}`",
+        _0.user_display()
+    )]
+    MissingSrc(PathBuf),
+    #[error(
+        "Expected a Python module directory at: `{}`",
+        _0.user_display()
+    )]
     MissingModule(PathBuf),
+    #[error(
+        "Expected an `__init__.py` at: `{}`",
+        _0.user_display()
+    )]
+    MissingInitPy(PathBuf),
+    #[error(
+        "Expected an `__init__.py` at `{}`, found multiple:\n* `{}`",
+        module_name,
+        paths.iter().map(Simplified::user_display).join("`\n* `")
+    )]
+    MultipleModules {
+        module_name: Identifier,
+        paths: Vec<PathBuf>,
+    },
     #[error("Absolute module root is not allowed: `{}`", _0.display())]
     AbsoluteModuleRoot(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: `{0}`")]
@@ -139,26 +164,22 @@ fn check_metadata_directory(
         return Ok(());
     };
 
-    let dist_info_dir = format!(
-        "{}-{}.dist-info",
-        pyproject_toml.name().as_dist_info_name(),
-        pyproject_toml.version()
+    debug!(
+        "Checking metadata directory {}",
+        metadata_directory.user_display()
     );
 
     // `METADATA` is a mandatory file.
     let current = pyproject_toml
         .to_metadata(source_tree)?
         .core_metadata_format();
-    let previous =
-        fs_err::read_to_string(metadata_directory.join(&dist_info_dir).join("METADATA"))?;
+    let previous = fs_err::read_to_string(metadata_directory.join("METADATA"))?;
     if previous != current {
         return Err(Error::InconsistentSteps("METADATA"));
     }
 
     // `entry_points.txt` is not written if it would be empty.
-    let entrypoints_path = metadata_directory
-        .join(&dist_info_dir)
-        .join("entry_points.txt");
+    let entrypoints_path = metadata_directory.join("entry_points.txt");
     match pyproject_toml.to_entry_points()? {
         None => {
             if entrypoints_path.is_file() {
@@ -175,14 +196,89 @@ fn check_metadata_directory(
     Ok(())
 }
 
+/// Resolve the source root and module root paths.
+fn find_roots(
+    source_tree: &Path,
+    pyproject_toml: &PyProjectToml,
+    relative_module_root: &Path,
+    module_name: Option<&Identifier>,
+) -> Result<(PathBuf, PathBuf), Error> {
+    if relative_module_root.is_absolute() {
+        return Err(Error::AbsoluteModuleRoot(
+            relative_module_root.to_path_buf(),
+        ));
+    }
+    let src_root = source_tree.join(relative_module_root);
+
+    let module_name = if let Some(module_name) = module_name {
+        module_name.clone()
+    } else {
+        // Should never error, the rules for package names (in dist-info formatting) are stricter
+        // than those for identifiers
+        Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
+    };
+    debug!("Module name: `{:?}`", module_name);
+
+    let module_root = find_module_root(&src_root, module_name)?;
+    Ok((src_root, module_root))
+}
+
+/// Match the module name to its module directory with potentially different casing.
+///
+/// For example, a package may have the dist-info-normalized package name `pil_util`, but the
+/// importable module is named `PIL_util`.
+///
+/// We get the module either as dist-info-normalized package name, or explicitly from the user.
+/// For dist-info-normalizing a package name, the rules are lowercasing, replacing `.` with `_` and
+/// replace `-` with `_`. Since `.` and `-` are not allowed in module names, we can check whether a
+/// directory name matches our expected module name by lowercasing it.
+fn find_module_root(src_root: &Path, module_name: Identifier) -> Result<PathBuf, Error> {
+    let normalized = module_name.to_string();
+    let dir_iterator = match fs_err::read_dir(src_root) {
+        Ok(dir_iterator) => dir_iterator,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            return Err(Error::MissingSrc(src_root.to_path_buf()))
+        }
+        Err(err) => return Err(Error::Io(err)),
+    };
+    let modules = dir_iterator
+        .filter_ok(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|file_name| file_name.to_lowercase() == normalized)
+        })
+        .map_ok(|entry| entry.path())
+        .collect::<Result<Vec<_>, _>>()?;
+    match modules.as_slice() {
+        [] => {
+            // Show the normalized path in the error message, as representative example.
+            Err(Error::MissingModule(src_root.join(module_name.as_ref())))
+        }
+        [module_root] => {
+            if module_root.join("__init__.py").is_file() {
+                Ok(module_root.clone())
+            } else {
+                Err(Error::MissingInitPy(module_root.join("__init__.py")))
+            }
+        }
+        multiple => {
+            let mut paths = multiple.to_vec();
+            paths.sort();
+            Err(Error::MultipleModules { module_name, paths })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use flate2::bufread::GzDecoder;
     use fs_err::File;
+    use indoc::indoc;
     use insta::assert_snapshot;
     use itertools::Itertools;
-    use std::io::BufReader;
+    use std::io::{BufReader, Read};
     use tempfile::TempDir;
     use uv_fs::{copy_dir_all, relative_to};
 
@@ -390,5 +486,138 @@ mod tests {
             fs_err::read(direct_output_dir.path().join(wheel_filename)).unwrap(),
             fs_err::read(indirect_output_dir.path().join(wheel_filename)).unwrap()
         );
+    }
+
+    /// Test that `license = { file = "LICENSE" }` is supported.
+    #[test]
+    fn license_file_pre_pep639() {
+        let src = TempDir::new().unwrap();
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "pep-pep639-license"
+            version = "1.0.0"
+            license = { file = "license.txt" }
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+        "#
+            },
+        )
+        .unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("pep_pep639_license")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("pep_pep639_license")
+                .join("__init__.py"),
+        )
+        .unwrap();
+        fs_err::write(
+            src.path().join("license.txt"),
+            "Copy carefully.\nSincerely, the authors",
+        )
+        .unwrap();
+
+        // Build a wheel from a source distribution
+        let output_dir = TempDir::new().unwrap();
+        build_source_dist(src.path(), output_dir.path(), "0.5.15").unwrap();
+        let sdist_tree = TempDir::new().unwrap();
+        let source_dist_path = output_dir.path().join("pep_pep639_license-1.0.0.tar.gz");
+        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
+        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
+        source_dist.unpack(sdist_tree.path()).unwrap();
+        build_wheel(
+            &sdist_tree.path().join("pep_pep639_license-1.0.0"),
+            output_dir.path(),
+            None,
+            "0.5.15",
+        )
+        .unwrap();
+        let wheel = output_dir
+            .path()
+            .join("pep_pep639_license-1.0.0-py3-none-any.whl");
+        let mut wheel = zip::ZipArchive::new(File::open(wheel).unwrap()).unwrap();
+
+        let mut metadata = String::new();
+        wheel
+            .by_name("pep_pep639_license-1.0.0.dist-info/METADATA")
+            .unwrap()
+            .read_to_string(&mut metadata)
+            .unwrap();
+
+        assert_snapshot!(metadata, @r###"
+        Metadata-Version: 2.3
+        Name: pep-pep639-license
+        Version: 1.0.0
+        License: Copy carefully.
+                 Sincerely, the authors
+        "###);
+    }
+
+    /// Test that `build_wheel` works after the `prepare_metadata_for_build_wheel` hook.
+    #[test]
+    fn prepare_metadata_then_build_wheel() {
+        let src = TempDir::new().unwrap();
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "two-step-build"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+        "#
+            },
+        )
+        .unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("two_step_build")).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("two_step_build")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        // Prepare the metadata.
+        let metadata_dir = TempDir::new().unwrap();
+        let dist_info_dir = metadata(src.path(), metadata_dir.path(), "0.5.15").unwrap();
+        let metadata_prepared =
+            fs_err::read_to_string(metadata_dir.path().join(&dist_info_dir).join("METADATA"))
+                .unwrap();
+
+        // Build the wheel, using the prepared metadata directory.
+        let output_dir = TempDir::new().unwrap();
+        build_wheel(
+            src.path(),
+            output_dir.path(),
+            Some(&metadata_dir.path().join(&dist_info_dir)),
+            "0.5.15",
+        )
+        .unwrap();
+        let wheel = output_dir
+            .path()
+            .join("two_step_build-1.0.0-py3-none-any.whl");
+        let mut wheel = zip::ZipArchive::new(File::open(wheel).unwrap()).unwrap();
+
+        let mut metadata_wheel = String::new();
+        wheel
+            .by_name("two_step_build-1.0.0.dist-info/METADATA")
+            .unwrap()
+            .read_to_string(&mut metadata_wheel)
+            .unwrap();
+
+        assert_eq!(metadata_prepared, metadata_wheel);
+
+        assert_snapshot!(metadata_wheel, @r###"
+        Metadata-Version: 2.3
+        Name: two-step-build
+        Version: 1.0.0
+        "###);
     }
 }

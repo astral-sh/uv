@@ -20,3 +20,9 @@ workspace = true
 uv-static = { workspace = true }
 
 etcetera = { workspace = true }
+fs-err = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+assert_fs = { version = "1.1.2" }
+indoc = { workspace = true }

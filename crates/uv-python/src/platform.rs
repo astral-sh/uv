@@ -54,7 +54,7 @@ impl Libc {
                     // Checks if the CPU supports hardware floating-point operations.
                     // Depending on the result, it selects either the `gnueabihf` (hard-float) or `gnueabi` (soft-float) environment.
                     // download-metadata.json only includes armv7.
-                    "arm" | "armv7" => match detect_hardware_floating_point_support() {
+                    "arm" | "armv5te" | "armv7" => match detect_hardware_floating_point_support() {
                         Ok(true) => target_lexicon::Environment::Gnueabihf,
                         Ok(false) => target_lexicon::Environment::Gnueabi,
                         Err(_) => target_lexicon::Environment::Gnu,
@@ -101,6 +101,34 @@ impl Arch {
             family: target_lexicon::HOST.architecture,
             variant: None,
         }
+    }
+
+    /// Does the current architecture support running the other?
+    ///
+    /// When the architecture is equal, this is always true. Otherwise, this is true if the
+    /// architecture is transparently emulated or is a microarchitecture with worse performance
+    /// characteristics.
+    pub(crate) fn supports(self, other: Self) -> bool {
+        if self == other {
+            return true;
+        }
+
+        // TODO: Implement `variant` support checks
+
+        // Windows ARM64 runs emulated x86_64 binaries transparently
+        if cfg!(windows) && matches!(self.family, target_lexicon::Architecture::Aarch64(_)) {
+            return other.family == target_lexicon::Architecture::X86_64;
+        }
+
+        false
+    }
+
+    pub fn family(&self) -> target_lexicon::Architecture {
+        self.family
+    }
+
+    pub fn is_arm(&self) -> bool {
+        matches!(self.family, target_lexicon::Architecture::Arm(_))
     }
 }
 
@@ -240,6 +268,10 @@ impl From<&uv_platform_tags::Arch> for Arch {
                 ),
                 variant: None,
             },
+            uv_platform_tags::Arch::Armv5TEL => Self {
+                family: target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv5te),
+                variant: None,
+            },
             uv_platform_tags::Arch::Armv6L => Self {
                 family: target_lexicon::Architecture::Arm(target_lexicon::ArmArchitecture::Armv6),
                 variant: None,
@@ -250,6 +282,10 @@ impl From<&uv_platform_tags::Arch> for Arch {
             },
             uv_platform_tags::Arch::S390X => Self {
                 family: target_lexicon::Architecture::S390x,
+                variant: None,
+            },
+            uv_platform_tags::Arch::Powerpc => Self {
+                family: target_lexicon::Architecture::Powerpc,
                 variant: None,
             },
             uv_platform_tags::Arch::Powerpc64 => Self {
@@ -268,6 +304,10 @@ impl From<&uv_platform_tags::Arch> for Arch {
             },
             uv_platform_tags::Arch::X86_64 => Self {
                 family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            uv_platform_tags::Arch::LoongArch64 => Self {
+                family: target_lexicon::Architecture::LoongArch64,
                 variant: None,
             },
             uv_platform_tags::Arch::Riscv64 => Self {

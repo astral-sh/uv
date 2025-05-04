@@ -14,15 +14,36 @@
         "$ref": "#/definitions/TrustedHost"
       }
     },
+    "build-backend": {
+      "description": "Configuration for the uv build backend.\n\nNote that those settings only apply when using the `uv_build` backend, other build backends (such as hatchling) have their own configuration.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/BuildBackendSettings"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "build-constraint-dependencies": {
+      "description": "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
     "cache-dir": {
-      "description": "Path to the cache directory.\n\nDefaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux, and `%LOCALAPPDATA%\\uv\\cache` on Windows.",
+      "description": "Path to the cache directory.\n\nDefaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux and macOS, and `%LOCALAPPDATA%\\uv\\cache` on Windows.",
       "type": [
         "string",
         "null"
       ]
     },
     "cache-keys": {
-      "description": "The keys to consider when caching builds for the project.\n\nCache keys enable you to specify the files or directories that should trigger a rebuild when modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`, or `setup.cfg` files in the project directory are modified, i.e.:\n\n```toml cache-keys = [{ file = \"pyproject.toml\" }, { file = \"setup.py\" }, { file = \"setup.cfg\" }] ```\n\nAs an example: if a project uses dynamic metadata to read its dependencies from a `requirements.txt` file, you can specify `cache-keys = [{ file = \"requirements.txt\" }, { file = \"pyproject.toml\" }]` to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in addition to watching the `pyproject.toml`).\n\nGlobs are supported, following the syntax of the [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html) crate. For example, to invalidate the cache whenever a `.toml` file in the project directory or any of its subdirectories is modified, you can specify `cache-keys = [{ file = \"**/*.toml\" }]`. Note that the use of globs can be expensive, as uv may need to walk the filesystem to determine whether any files have changed.\n\nCache keys can also include version control information. For example, if a project uses `setuptools_scm` to read its version from a Git commit, you can specify `cache-keys = [{ git = { commit = true }, { file = \"pyproject.toml\" }]` to include the current Git commit hash in the cache key (in addition to the `pyproject.toml`). Git tags are also supported via `cache-keys = [{ git = { commit = true, tags = true } }]`.\n\nCache keys only affect the project defined by the `pyproject.toml` in which they're specified (as opposed to, e.g., affecting all members in a workspace), and all paths and globs are interpreted as relative to the project directory.",
+      "description": "The keys to consider when caching builds for the project.\n\nCache keys enable you to specify the files or directories that should trigger a rebuild when modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`, or `setup.cfg` files in the project directory are modified, or if a `src` directory is added or removed, i.e.:\n\n```toml cache-keys = [{ file = \"pyproject.toml\" }, { file = \"setup.py\" }, { file = \"setup.cfg\" }, { dir = \"src\" }] ```\n\nAs an example: if a project uses dynamic metadata to read its dependencies from a `requirements.txt` file, you can specify `cache-keys = [{ file = \"requirements.txt\" }, { file = \"pyproject.toml\" }]` to ensure that the project is rebuilt whenever the `requirements.txt` file is modified (in addition to watching the `pyproject.toml`).\n\nGlobs are supported, following the syntax of the [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html) crate. For example, to invalidate the cache whenever a `.toml` file in the project directory or any of its subdirectories is modified, you can specify `cache-keys = [{ file = \"**/*.toml\" }]`. Note that the use of globs can be expensive, as uv may need to walk the filesystem to determine whether any files have changed.\n\nCache keys can also include version control information. For example, if a project uses `setuptools_scm` to read its version from a Git commit, you can specify `cache-keys = [{ git = { commit = true }, { file = \"pyproject.toml\" }]` to include the current Git commit hash in the cache key (in addition to the `pyproject.toml`). Git tags are also supported via `cache-keys = [{ git = { commit = true, tags = true } }]`.\n\nCache keys can also include environment variables. For example, if a project relies on `MACOSX_DEPLOYMENT_TARGET` or other environment variables to determine its behavior, you can specify `cache-keys = [{ env = \"MACOSX_DEPLOYMENT_TARGET\" }]` to invalidate the cache whenever the environment variable changes.\n\nCache keys only affect the project defined by the `pyproject.toml` in which they're specified (as opposed to, e.g., affecting all members in a workspace), and all paths and globs are interpreted as relative to the project directory.",
       "type": [
         "array",
         "null"
@@ -88,7 +109,7 @@
       ]
     },
     "conflicts": {
-      "description": "A list sets of conflicting groups or extras.",
+      "description": "A list of sets of conflicting groups or extras.",
       "anyOf": [
         {
           "$ref": "#/definitions/SchemaConflicts"
@@ -109,14 +130,15 @@
       }
     },
     "default-groups": {
-      "description": "The list of `dependency-groups` to install by default.",
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "$ref": "#/definitions/GroupName"
-      }
+      "description": "The list of `dependency-groups` to install by default.\n\nCan also be the literal `\"all\"` to default enable all groups.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/DefaultGroups"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "dependency-metadata": {
       "description": "Pre-defined static metadata for dependencies of the project (direct or transitive). When provided, enables the resolver to use the specified metadata instead of querying the registry or building the relevant package from source.\n\nMetadata should be provided in adherence with the [Metadata 2.3](https://packaging.python.org/en/latest/specifications/core-metadata/) standard, though only the following fields are respected:\n\n- `name`: The name of the package. - (Optional) `version`: The version of the package. If omitted, the metadata will be applied to all versions of the package. - (Optional) `requires-dist`: The dependencies of the package (e.g., `werkzeug>=0.14`). - (Optional) `requires-python`: The Python version required by the package (e.g., `>=3.10`). - (Optional) `provides-extras`: The extras provided by the package.",
@@ -179,8 +201,20 @@
         "$ref": "#/definitions/IndexUrl"
       }
     },
+    "fork-strategy": {
+      "description": "The strategy to use when selecting multiple versions of a given package across Python versions and platforms.\n\nBy default, uv will optimize for selecting the latest version of each package for each supported Python version (`requires-python`), while minimizing the number of selected versions across platforms.\n\nUnder `fewest`, uv will minimize the number of selected versions for each package, preferring older versions that are compatible with a wider range of supported Python versions or platforms.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ForkStrategy"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "index": {
-      "description": "The indexes to use when resolving dependencies.\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nIndexes are considered in the order in which they're defined, such that the first-defined index has the highest priority. Further, the indexes provided by this setting are given higher priority than any indexes specified via [`index_url`](#index-url) or [`extra_index_url`](#extra-index-url). uv will only consider the first index that contains a given package, unless an alternative [index strategy](#index-strategy) is specified.\n\nIf an index is marked as `explicit = true`, it will be used exclusively for those dependencies that select it explicitly via `[tool.uv.sources]`, as in:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\" explicit = true\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```\n\nIf an index is marked as `default = true`, it will be moved to the end of the prioritized list, such that it is given the lowest priority when resolving packages. Additionally, marking an index as default will disable the PyPI default index.",
+      "description": "The indexes to use when resolving dependencies.\n\nAccepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/) (the simple repository API), or a local directory laid out in the same format.\n\nIndexes are considered in the order in which they're defined, such that the first-defined index has the highest priority. Further, the indexes provided by this setting are given higher priority than any indexes specified via [`index_url`](#index-url) or [`extra_index_url`](#extra-index-url). uv will only consider the first index that contains a given package, unless an alternative [index strategy](#index-strategy) is specified.\n\nIf an index is marked as `explicit = true`, it will be used exclusively for the dependencies that select it explicitly via `[tool.uv.sources]`, as in:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\" explicit = true\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```\n\nIf an index is marked as `default = true`, it will be moved to the end of the prioritized list, such that it is given the lowest priority when resolving packages. Additionally, marking an index as default will disable the PyPI default index.",
+      "default": null,
       "type": [
         "array",
         "null"
@@ -190,7 +224,7 @@
       }
     },
     "index-strategy": {
-      "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.",
+      "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-index`). This prevents \"dependency confusion\" attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.",
       "anyOf": [
         {
           "$ref": "#/definitions/IndexStrategy"
@@ -397,8 +431,15 @@
         }
       ]
     },
+    "python-downloads-json-url": {
+      "description": "URL pointing to JSON of custom Python installations.\n\nNote that currently, only local paths are supported.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "python-install-mirror": {
-      "description": "Mirror URL for downloading managed Python installations.\n\nBy default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/indygreg/python-build-standalone). This variable can be set to a mirror URL to use a different source for Python installations. The provided URL will replace `https://github.com/indygreg/python-build-standalone/releases/download` in, e.g., `https://github.com/indygreg/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
+      "description": "Mirror URL for downloading managed Python installations.\n\nBy default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone). This variable can be set to a mirror URL to use a different source for Python installations. The provided URL will replace `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g., `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
       "type": [
         "string",
         "null"
@@ -431,6 +472,27 @@
       "items": {
         "$ref": "#/definitions/PackageName"
       }
+    },
+    "required-environments": {
+      "description": "A list of environment markers, e.g., `sys_platform == 'darwin'.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "required-version": {
+      "description": "Enforce a requirement on the version of uv.\n\nIf the version of uv does not meet the requirement at runtime, uv will exit with an error.\n\nAccepts a [PEP 440](https://peps.python.org/pep-0440/) specifier, like `==0.5.0` or `>=0.5.0`.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/RequiredVersion"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "resolution": {
       "description": "The strategy to use when selecting between the different compatible versions for a given package requirement.\n\nBy default, uv will use the latest compatible version of each package (`highest`).",
@@ -514,6 +576,99 @@
         }
       ]
     },
+    "AuthPolicy": {
+      "description": "When to use authentication.",
+      "oneOf": [
+        {
+          "description": "Authenticate when necessary.\n\nIf credentials are provided, they will be used. Otherwise, an unauthenticated request will be attempted first. If the request fails, uv will search for credentials. If credentials are found, an authenticated request will be attempted.",
+          "type": "string",
+          "enum": [
+            "auto"
+          ]
+        },
+        {
+          "description": "Always authenticate.\n\nIf credentials are not provided, uv will eagerly search for credentials. If credentials cannot be found, uv will error instead of attempting an unauthenticated request.",
+          "type": "string",
+          "enum": [
+            "always"
+          ]
+        },
+        {
+          "description": "Never authenticate.\n\nIf credentials are provided, uv will error. uv will not search for credentials.",
+          "type": "string",
+          "enum": [
+            "never"
+          ]
+        }
+      ]
+    },
+    "BuildBackendSettings": {
+      "description": "Settings for the uv build backend (`uv_build`).\n\n!!! note\n\nThe uv build backend is currently in preview and may change in any future release.\n\nNote that those settings only apply when using the `uv_build` backend, other build backends (such as hatchling) have their own configuration.\n\nAll options that accept globs use the portable glob patterns from [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).",
+      "type": "object",
+      "properties": {
+        "data": {
+          "description": "Data includes for wheels.\n\nEach entry is a directory, whose contents are copied to the matching directory in the wheel in `<name>-<version>.data/(purelib|platlib|headers|scripts|data)`. Upon installation, this data is moved to its target location, as defined by <https://docs.python.org/3.12/library/sysconfig.html#installation-paths>. Usually, small data files are included by placing them in the Python module instead of using data includes.\n\n- `scripts`: Installed to the directory for executables, `<venv>/bin` on Unix or `<venv>\\Scripts` on Windows. This directory is added to `PATH` when the virtual environment  is activated or when using `uv run`, so this data type can be used to install additional binaries. Consider using `project.scripts` instead for Python entrypoints. - `data`: Installed over the virtualenv environment root.\n\nWarning: This may override existing files!\n\n- `headers`: Installed to the include directory. Compilers building Python packages with this package as build requirement use the include directory to find additional header files. - `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended to uses these two options.",
+          "default": {
+            "data": null,
+            "headers": null,
+            "platlib": null,
+            "purelib": null,
+            "scripts": null
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/WheelDataIncludes"
+            }
+          ]
+        },
+        "default-excludes": {
+          "description": "If set to `false`, the default excludes aren't applied.\n\nDefault excludes: `__pycache__`, `*.pyc`, and `*.pyo`.",
+          "default": true,
+          "type": "boolean"
+        },
+        "module-name": {
+          "description": "The name of the module directory inside `module-root`.\n\nThe default module name is the package name with dots and dashes replaced by underscores.\n\nNote that using this option runs the risk of creating two packages with different names but the same module names. Installing such packages together leads to unspecified behavior, often with corrupted files or directory trees.",
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "module-root": {
+          "description": "The directory that contains the module directory.\n\nCommon values are `src` (src layout, the default) or an empty path (flat layout).",
+          "default": "src",
+          "type": "string"
+        },
+        "source-exclude": {
+          "description": "Glob expressions which files and directories to exclude from the source distribution.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source-include": {
+          "description": "Glob expressions which files and directories to additionally include in the source distribution.\n\n`pyproject.toml` and the contents of the module directory are always included.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "wheel-exclude": {
+          "description": "Glob expressions which files and directories to exclude from the wheel.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "CacheKey": {
       "anyOf": [
         {
@@ -534,6 +689,19 @@
           "additionalProperties": false
         },
         {
+          "description": "Ex) `{ dir = \"src\" }`",
+          "type": "object",
+          "required": [
+            "dir"
+          ],
+          "properties": {
+            "dir": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
           "description": "Ex) `{ git = true }` or `{ git = { commit = true, tags = false } }`",
           "type": "object",
           "required": [
@@ -545,39 +713,34 @@
             }
           },
           "additionalProperties": false
-        }
-      ]
-    },
-    "ConfigSettingValue": {
-      "oneOf": [
+        },
         {
-          "description": "The value consists of a single string.",
+          "description": "Ex) `{ env = \"UV_CACHE_INFO\" }`",
           "type": "object",
           "required": [
-            "String"
+            "env"
           ],
           "properties": {
-            "String": {
+            "env": {
               "type": "string"
             }
           },
           "additionalProperties": false
+        }
+      ]
+    },
+    "ConfigSettingValue": {
+      "anyOf": [
+        {
+          "description": "The value consists of a single string.",
+          "type": "string"
         },
         {
           "description": "The value consists of a list of strings.",
-          "type": "object",
-          "required": [
-            "List"
-          ],
-          "properties": {
-            "List": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          "additionalProperties": false
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       ]
     },
@@ -588,29 +751,28 @@
         "$ref": "#/definitions/ConfigSettingValue"
       }
     },
-    "ConflictPackage": {
-      "description": "The actual conflicting data for a package.\n\nThat is, either an extra or a group name.",
+    "DefaultGroups": {
+      "description": "Either the literal \"all\" or a list of groups",
       "oneOf": [
         {
-          "type": "object",
-          "required": [
-            "Extra"
-          ],
-          "properties": {
-            "Extra": {
-              "$ref": "#/definitions/ExtraName"
-            }
-          },
-          "additionalProperties": false
+          "description": "All groups are defaulted",
+          "type": "string",
+          "enum": [
+            "All"
+          ]
         },
         {
+          "description": "A list of groups",
           "type": "object",
           "required": [
-            "Group"
+            "List"
           ],
           "properties": {
-            "Group": {
-              "$ref": "#/definitions/GroupName"
+            "List": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/GroupName"
+              }
             }
           },
           "additionalProperties": false
@@ -625,6 +787,24 @@
     "ExtraName": {
       "description": "The normalized name of an extra dependency.\n\nConverts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`. For example, `---`, `.`, and `__` are all converted to a single `-`.\n\nSee: - <https://peps.python.org/pep-0685/#specification/> - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "type": "string"
+    },
+    "ForkStrategy": {
+      "oneOf": [
+        {
+          "description": "Optimize for selecting the fewest number of versions for each package. Older versions may be preferred if they are compatible with a wider range of supported Python versions or platforms.",
+          "type": "string",
+          "enum": [
+            "fewest"
+          ]
+        },
+        {
+          "description": "Optimize for selecting latest supported version of each package, for each supported Python version.",
+          "type": "string",
+          "enum": [
+            "requires-python"
+          ]
+        }
+      ]
     },
     "GitPattern": {
       "anyOf": [
@@ -658,12 +838,26 @@
       "description": "The normalized name of a dependency group.\n\nSee: - <https://peps.python.org/pep-0735/> - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "type": "string"
     },
+    "Identifier": {
+      "description": "An identifier in Python",
+      "type": "string",
+      "pattern": "^[_\\p{Alphabetic}][_0-9\\p{Alphabetic}]*$"
+    },
     "Index": {
       "type": "object",
       "required": [
         "url"
       ],
       "properties": {
+        "authenticate": {
+          "description": "When uv should use authentication for requests to the index.\n\n```toml [[tool.uv.index]] name = \"my-index\" url = \"https://<omitted>/simple\" authenticate = \"always\" ```",
+          "default": "auto",
+          "allOf": [
+            {
+              "$ref": "#/definitions/AuthPolicy"
+            }
+          ]
+        },
         "default": {
           "description": "Mark the index as the default index.\n\nBy default, uv uses PyPI as the default index, such that even if additional indexes are defined via `[[tool.uv.index]]`, PyPI will still be used as a fallback for packages that aren't found elsewhere. To disable the PyPI default, set `default = true` on at least one other index.\n\nMarking an index as default will move it to the front of the list of indexes, such that it is given the highest priority when resolving packages.",
           "default": false,
@@ -673,6 +867,26 @@
           "description": "Mark the index as explicit.\n\nExplicit indexes will _only_ be used when explicitly requested via a `[tool.uv.sources]` definition, as in:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\" explicit = true\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```",
           "default": false,
           "type": "boolean"
+        },
+        "format": {
+          "description": "The format used by the index.\n\nIndexes can either be PEP 503-compliant (i.e., a PyPI-style registry implementing the Simple API) or structured as a flat list of distributions (e.g., `--find-links`). In both cases, indexes can point to either local or remote resources.",
+          "default": "simple",
+          "allOf": [
+            {
+              "$ref": "#/definitions/IndexFormat"
+            }
+          ]
+        },
+        "ignore-error-codes": {
+          "description": "Status codes that uv should ignore when deciding whether to continue searching in the next index after a failure.\n\n```toml [[tool.uv.index]] name = \"my-index\" url = \"https://<omitted>/simple\" ignore-error-codes = [401, 403] ```",
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/StatusCode"
+          }
         },
         "name": {
           "description": "The name of the index.\n\nIndex names can be used to reference indexes elsewhere in the configuration. For example, you can pin a package to a specific index by name:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\"\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```",
@@ -702,6 +916,24 @@
           ]
         }
       }
+    },
+    "IndexFormat": {
+      "oneOf": [
+        {
+          "description": "A PyPI-style index implementing the Simple Repository API.",
+          "type": "string",
+          "enum": [
+            "simple"
+          ]
+        },
+        {
+          "description": "A `--find-links`-style index containing a flat list of wheels and source distributions.",
+          "type": "string",
+          "enum": [
+            "flat"
+          ]
+        }
+      ]
     },
     "IndexName": {
       "description": "The normalized name of an index.\n\nIndex names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.",
@@ -733,7 +965,7 @@
       ]
     },
     "IndexUrl": {
-      "description": "The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`).",
+      "description": "The URL of an index to use for fetching packages (e.g., `https://pypi.org/simple`), or a local path.",
       "type": "string"
     },
     "KeyringProviderType": {
@@ -799,6 +1031,24 @@
       "description": "The name of a package, or `:all:` or `:none:` to select or omit all packages, respectively.",
       "type": "string",
       "pattern": "^(:none:|:all:|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]))$"
+    },
+    "PipGroupName": {
+      "description": "The pip-compatible variant of a [`GroupName`].\n\nEither <groupname> or <path>:<groupname>. If <path> is omitted it defaults to \"pyproject.toml\".",
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/definitions/GroupName"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     },
     "PipOptions": {
       "description": "Settings that are specific to the `uv pip` command-line interface.\n\nThese values will be ignored when running commands outside the `uv pip` namespace (e.g., `uv lock`, `uvx`).",
@@ -907,7 +1157,7 @@
           ]
         },
         "exclude-newer": {
-          "description": "Limit candidate packages to those that were uploaded prior to the given date.\n\nAccepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your system's configured time zone.",
+          "description": "Limit candidate packages to those that were uploaded prior to a given point in time.\n\nAccepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g., `2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will behave consistently across timezones.",
           "anyOf": [
             {
               "$ref": "#/definitions/ExcludeNewer"
@@ -947,6 +1197,17 @@
             "$ref": "#/definitions/IndexUrl"
           }
         },
+        "fork-strategy": {
+          "description": "The strategy to use when selecting multiple versions of a given package across Python versions and platforms.\n\nBy default, uv will optimize for selecting the latest version of each package for each supported Python version (`requires-python`), while minimizing the number of selected versions across platforms.\n\nUnder `fewest`, uv will minimize the number of selected versions for each package, preferring older versions that are compatible with a wider range of supported Python versions or platforms.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ForkStrategy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "generate-hashes": {
           "description": "Include distribution hashes in the output file.",
           "type": [
@@ -954,8 +1215,18 @@
             "null"
           ]
         },
+        "group": {
+          "description": "Include the following dependency groups.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/PipGroupName"
+          }
+        },
         "index-strategy": {
-          "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-match`). This prevents \"dependency confusion\" attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.",
+          "description": "The strategy to use when resolving against multiple index URLs.\n\nBy default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (`first-index`). This prevents \"dependency confusion\" attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.",
           "anyOf": [
             {
               "$ref": "#/definitions/IndexStrategy"
@@ -1040,7 +1311,7 @@
           }
         },
         "no-deps": {
-          "description": "Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting the requirements file.",
+          "description": "Ignore package dependencies, instead only add those packages explicitly listed on the command line to the resulting requirements file.",
           "type": [
             "boolean",
             "null"
@@ -1221,6 +1492,17 @@
             "null"
           ]
         },
+        "torch-backend": {
+          "description": "The backend to use when fetching packages in the PyTorch ecosystem.\n\nWhen set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem, and will instead use the defined backend.\n\nFor example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`, uv will use the PyTorch index for CUDA 12.6.\n\nThe `auto` mode will attempt to detect the appropriate PyTorch index based on the currently installed CUDA drivers.\n\nThis option is in preview and may change in any future release.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TorchMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "universal": {
           "description": "Perform a universal resolution, attempting to generate a single `requirements.txt` output file that is compatible with all operating systems, architectures, and Python implementations.\n\nIn universal mode, the current Python version (or user-provided `--python-version`) will be treated as a lower bound. For example, `--universal --python-version 3.7` would produce a universal resolution for Python 3.7 and later.",
           "type": [
@@ -1352,9 +1634,13 @@
       ]
     },
     "PythonVersion": {
-      "description": "A Python version specifier, e.g. `3.7` or `3.8.0`.",
+      "description": "A Python version specifier, e.g. `3.11` or `3.12.4`.",
       "type": "string",
       "pattern": "^3\\.\\d+(\\.\\d+)?$"
+    },
+    "RequiredVersion": {
+      "description": "A version specifier, e.g. `>=0.5.0` or `==0.5.0`.",
+      "type": "string"
     },
     "Requirement": {
       "description": "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`",
@@ -1386,16 +1672,33 @@
       ]
     },
     "SchemaConflictItem": {
-      "description": "Like [`ConflictItem`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.",
+      "description": "A single item in a conflicting set.\n\nEach item is a pair of an (optional) package and a corresponding extra or group name for that package.",
       "type": "object",
-      "required": [
-        "conflict"
-      ],
       "properties": {
-        "conflict": {
-          "$ref": "#/definitions/ConflictPackage"
+        "extra": {
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ExtraName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "group": {
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/GroupName"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "package": {
+          "default": null,
           "anyOf": [
             {
               "$ref": "#/definitions/PackageName"
@@ -1405,8 +1708,7 @@
             }
           ]
         }
-      },
-      "additionalProperties": false
+      }
     },
     "SchemaConflictSet": {
       "description": "Like [`ConflictSet`], but for deserialization in `pyproject.toml`.\n\nThe schema format is different from the in-memory format. Specifically, the schema format does not allow specifying the package name (or will make it optional in the future), where as the in-memory format needs the package name.",
@@ -1577,6 +1879,13 @@
             "marker": {
               "$ref": "#/definitions/MarkerTree"
             },
+            "package": {
+              "description": "Whether to treat the dependency as a buildable Python package (`true`) or as a virtual package (`false`). If `false`, the package will not be built or installed, but its dependencies will be included in the virtual environment.\n\nWhen omitted, the package status is inferred based on the presence of a `[build-system]` in the project's `pyproject.toml`.",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "path": {
               "$ref": "#/definitions/String"
             }
@@ -1714,6 +2023,13 @@
         }
       }
     },
+    "StatusCode": {
+      "description": "HTTP status code (100-599)",
+      "type": "integer",
+      "format": "uint16",
+      "maximum": 599.0,
+      "minimum": 100.0
+    },
     "String": {
       "type": "string"
     },
@@ -1763,14 +2079,14 @@
           ]
         },
         {
-          "description": "An ARM-based macOS target, as seen on Apple Silicon devices\n\nBy default, assumes the least-recent, non-EOL macOS version (12.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
+          "description": "An ARM-based macOS target, as seen on Apple Silicon devices\n\nBy default, assumes the least-recent, non-EOL macOS version (13.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
           "type": "string",
           "enum": [
             "aarch64-apple-darwin"
           ]
         },
         {
-          "description": "An x86 macOS target.\n\nBy default, assumes the least-recent, non-EOL macOS version (12.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
+          "description": "An x86 macOS target.\n\nBy default, assumes the least-recent, non-EOL macOS version (13.0), but respects the `MACOSX_DEPLOYMENT_TARGET` environment variable if set.",
           "type": "string",
           "enum": [
             "x86_64-apple-darwin"
@@ -1795,6 +2111,13 @@
           "type": "string",
           "enum": [
             "x86_64-unknown-linux-musl"
+          ]
+        },
+        {
+          "description": "An `x86_64` target for the `manylinux2014` platform. Equivalent to `x86_64-manylinux_2_17`.",
+          "type": "string",
+          "enum": [
+            "x86_64-manylinux2014"
           ]
         },
         {
@@ -1879,6 +2202,13 @@
           "type": "string",
           "enum": [
             "x86_64-manylinux_2_40"
+          ]
+        },
+        {
+          "description": "An ARM64 target for the `manylinux2014` platform. Equivalent to `aarch64-manylinux_2_17`.",
+          "type": "string",
+          "enum": [
+            "aarch64-manylinux2014"
           ]
         },
         {
@@ -1999,6 +2329,193 @@
       },
       "additionalProperties": false
     },
+    "TorchMode": {
+      "description": "The strategy to use when determining the appropriate PyTorch index.",
+      "oneOf": [
+        {
+          "description": "Select the appropriate PyTorch index based on the operating system and CUDA driver version.",
+          "type": "string",
+          "enum": [
+            "auto"
+          ]
+        },
+        {
+          "description": "Use the CPU-only PyTorch index.",
+          "type": "string",
+          "enum": [
+            "cpu"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.8.",
+          "type": "string",
+          "enum": [
+            "cu128"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.6.",
+          "type": "string",
+          "enum": [
+            "cu126"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.5.",
+          "type": "string",
+          "enum": [
+            "cu125"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.4.",
+          "type": "string",
+          "enum": [
+            "cu124"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.3.",
+          "type": "string",
+          "enum": [
+            "cu123"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.2.",
+          "type": "string",
+          "enum": [
+            "cu122"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.1.",
+          "type": "string",
+          "enum": [
+            "cu121"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.0.",
+          "type": "string",
+          "enum": [
+            "cu120"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.8.",
+          "type": "string",
+          "enum": [
+            "cu118"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.7.",
+          "type": "string",
+          "enum": [
+            "cu117"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.6.",
+          "type": "string",
+          "enum": [
+            "cu116"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.5.",
+          "type": "string",
+          "enum": [
+            "cu115"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.4.",
+          "type": "string",
+          "enum": [
+            "cu114"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.3.",
+          "type": "string",
+          "enum": [
+            "cu113"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.2.",
+          "type": "string",
+          "enum": [
+            "cu112"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.1.",
+          "type": "string",
+          "enum": [
+            "cu111"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 11.0.",
+          "type": "string",
+          "enum": [
+            "cu110"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 10.2.",
+          "type": "string",
+          "enum": [
+            "cu102"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 10.1.",
+          "type": "string",
+          "enum": [
+            "cu101"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 10.0.",
+          "type": "string",
+          "enum": [
+            "cu100"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 9.2.",
+          "type": "string",
+          "enum": [
+            "cu92"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 9.1.",
+          "type": "string",
+          "enum": [
+            "cu91"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 9.0.",
+          "type": "string",
+          "enum": [
+            "cu90"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 8.0.",
+          "type": "string",
+          "enum": [
+            "cu80"
+          ]
+        }
+      ]
+    },
     "TrustedHost": {
       "description": "A host or host-port pair.",
       "type": "string"
@@ -2020,6 +2537,48 @@
           ]
         }
       ]
+    },
+    "WheelDataIncludes": {
+      "description": "Data includes for wheels.\n\nSee `BuildBackendSettings::data`.",
+      "type": "object",
+      "properties": {
+        "data": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "headers": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platlib": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "purelib": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scripts": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

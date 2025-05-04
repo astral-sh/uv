@@ -1,5 +1,5 @@
+use arcstr::ArcStr;
 use std::str::FromStr;
-
 use uv_normalize::ExtraName;
 use uv_pep440::{Version, VersionPattern, VersionSpecifier};
 
@@ -50,7 +50,7 @@ fn parse_marker_operator<T: Pep508Url>(
                     input: cursor.to_string(),
                 });
             }
-        };
+        }
         cursor.eat_whitespace();
         cursor.next_expect_char('i', cursor.pos())?;
         cursor.next_expect_char('n', cursor.pos())?;
@@ -92,14 +92,14 @@ pub(crate) fn parse_marker_value<T: Pep508Url>(
         Some((start_pos, quotation_mark @ ('"' | '\''))) => {
             cursor.next();
             let (start, len) = cursor.take_while(|c| c != quotation_mark);
-            let value = cursor.slice(start, len).to_string();
+            let value = ArcStr::from(cursor.slice(start, len));
             cursor.next_expect_char(quotation_mark, start_pos)?;
             Ok(MarkerValue::QuotedString(value))
         }
         // ... or it can be a keyword
         Some(_) => {
             let (start, len) = cursor.take_while(|char| {
-                !char.is_whitespace() && !['>', '=', '<', '!', '~', ')'].contains(&char)
+                !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')')
             });
             let key = cursor.slice(start, len);
             MarkerValue::from_str(key)
@@ -607,7 +607,7 @@ pub(crate) fn parse_markers_cursor<T: Pep508Url>(
             len: cursor.remaining(),
             input: cursor.to_string(),
         });
-    };
+    }
 
     Ok(marker)
 }

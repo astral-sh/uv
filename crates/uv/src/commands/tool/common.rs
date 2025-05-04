@@ -1,25 +1,32 @@
-use std::fmt::Write;
-use std::{collections::BTreeSet, ffi::OsString};
-
 use anyhow::{bail, Context};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use std::collections::Bound;
+use std::fmt::Write;
+use std::{collections::BTreeSet, ffi::OsString};
 use tracing::{debug, warn};
-
+use uv_cache::Cache;
+use uv_client::BaseClientBuilder;
+use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledDist, Name};
 #[cfg(unix)]
 use uv_fs::replace_symlink;
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
+use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::PackageName;
-use uv_pypi_types::Requirement;
-use uv_python::PythonEnvironment;
-use uv_settings::ToolOptions;
+use uv_python::{
+    EnvironmentPreference, Interpreter, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVariant, VersionRequest,
+};
+use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{entrypoint_paths, tool_executable_dir, InstalledTools, Tool, ToolEntrypoint};
 use uv_warnings::warn_user;
 
-use crate::commands::ExitStatus;
+use crate::commands::project::ProjectError;
+use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::{pip, ExitStatus};
 use crate::printer::Printer;
 
 /// Return all packages which contain an executable with the given name.
@@ -61,6 +68,96 @@ pub(crate) fn remove_entrypoints(tool: &Tool) {
     }
 }
 
+/// Given a no-solution error and the [`Interpreter`] that was used during the solve, attempt to
+/// discover an alternate [`Interpreter`] that satisfies the `requires-python` constraint.
+pub(crate) async fn refine_interpreter(
+    interpreter: &Interpreter,
+    python_request: Option<&PythonRequest>,
+    err: &pip::operations::Error,
+    client_builder: &BaseClientBuilder<'_>,
+    reporter: &PythonDownloadReporter,
+    install_mirrors: &PythonInstallMirrors,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    cache: &Cache,
+) -> anyhow::Result<Option<Interpreter>, ProjectError> {
+    let pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(ref no_solution_err)) =
+        err
+    else {
+        return Ok(None);
+    };
+
+    // Infer the `requires-python` constraint from the error.
+    let requires_python = no_solution_err.find_requires_python();
+
+    // If the existing interpreter already satisfies the `requires-python` constraint, we don't need
+    // to refine it. We'd expect to fail again anyway.
+    if requires_python.contains(interpreter.python_version()) {
+        return Ok(None);
+    }
+
+    // If the user passed a `--python` request, and the refined interpreter is incompatible, we
+    // can't use it.
+    if let Some(python_request) = python_request {
+        if !python_request.satisfied(interpreter, cache) {
+            return Ok(None);
+        }
+    }
+
+    // We want an interpreter that's as close to the required version as possible. If we choose the
+    // "latest" Python, we risk choosing a version that lacks wheels for the tool's requirements
+    // (assuming those requirements don't publish source distributions).
+    //
+    // TODO(charlie): Solve for the Python version iteratively (or even, within the resolver
+    // itself). The current strategy can also fail if the tool's requirements have greater
+    // `requires-python` constraints, and we didn't see them in the initial solve. It can also fail
+    // if the tool's requirements don't publish wheels for this interpreter version, though that's
+    // rarer.
+    let lower_bound = match requires_python.as_ref() {
+        Bound::Included(version) => VersionSpecifier::greater_than_equal_version(version.clone()),
+        Bound::Excluded(version) => VersionSpecifier::greater_than_version(version.clone()),
+        Bound::Unbounded => unreachable!("`requires-python` should never be unbounded"),
+    };
+
+    let upper_bound = match requires_python.as_ref() {
+        Bound::Included(version) => {
+            let major = version.release().first().copied().unwrap_or(0);
+            let minor = version.release().get(1).copied().unwrap_or(0);
+            VersionSpecifier::less_than_version(Version::new([major, minor + 1]))
+        }
+        Bound::Excluded(version) => {
+            let major = version.release().first().copied().unwrap_or(0);
+            let minor = version.release().get(1).copied().unwrap_or(0);
+            VersionSpecifier::less_than_version(Version::new([major, minor + 1]))
+        }
+        Bound::Unbounded => unreachable!("`requires-python` should never be unbounded"),
+    };
+
+    let python_request = PythonRequest::Version(VersionRequest::Range(
+        VersionSpecifiers::from_iter([lower_bound, upper_bound]),
+        PythonVariant::default(),
+    ));
+
+    debug!("Refining interpreter with: {python_request}");
+
+    let interpreter = PythonInstallation::find_or_download(
+        Some(&python_request),
+        EnvironmentPreference::OnlySystem,
+        python_preference,
+        python_downloads,
+        client_builder,
+        cache,
+        Some(reporter),
+        install_mirrors.python_install_mirror.as_deref(),
+        install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
+    )
+    .await?
+    .into_interpreter();
+
+    Ok(Some(interpreter))
+}
+
 /// Installs tool executables for a given package and handles any conflicts.
 pub(crate) fn install_executables(
     environment: &PythonEnvironment,
@@ -72,6 +169,7 @@ pub(crate) fn install_executables(
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
+    build_constraints: Vec<Requirement>,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
     let site_packages = SitePackages::from_environment(environment)?;
@@ -193,6 +291,7 @@ pub(crate) fn install_executables(
         requirements,
         constraints,
         overrides,
+        build_constraints,
         python,
         target_entry_points
             .into_iter()
@@ -205,18 +304,18 @@ pub(crate) fn install_executables(
     if !Shell::contains_path(&executable_directory) {
         if let Some(shell) = Shell::from_env() {
             if let Some(command) = shell.prepend_path(&executable_directory) {
-                if shell.configuration_files().is_empty() {
-                    warn_user!(
-                        "`{}` is not on your PATH. To use installed tools, run `{}`.",
-                        executable_directory.simplified_display().cyan(),
-                        command.green()
-                    );
-                } else {
+                if shell.supports_update() {
                     warn_user!(
                         "`{}` is not on your PATH. To use installed tools, run `{}` or `{}`.",
                         executable_directory.simplified_display().cyan(),
                         command.green(),
                         "uv tool update-shell".green()
+                    );
+                } else {
+                    warn_user!(
+                        "`{}` is not on your PATH. To use installed tools, run `{}`.",
+                        executable_directory.simplified_display().cyan(),
+                        command.green()
                     );
                 }
             } else {

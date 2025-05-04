@@ -1,11 +1,13 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use uv_configuration::{LowerBound, SourceStrategy};
-use uv_distribution_types::IndexLocations;
+use uv_configuration::SourceStrategy;
+use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::PackageName;
 use uv_workspace::pyproject::ToolUvSources;
-use uv_workspace::{DiscoveryOptions, ProjectWorkspace, Workspace};
+use uv_workspace::{
+    DiscoveryOptions, MemberDiscovery, ProjectWorkspace, Workspace, WorkspaceCache,
+};
 
 use crate::metadata::{LoweredRequirement, MetadataError};
 
@@ -13,7 +15,7 @@ use crate::metadata::{LoweredRequirement, MetadataError};
 #[derive(Debug, Clone)]
 pub struct BuildRequires {
     pub name: Option<PackageName>,
-    pub requires_dist: Vec<uv_pypi_types::Requirement>,
+    pub requires_dist: Vec<Requirement>,
 }
 
 impl BuildRequires {
@@ -25,7 +27,7 @@ impl BuildRequires {
             requires_dist: metadata
                 .requires_dist
                 .into_iter()
-                .map(uv_pypi_types::Requirement::from)
+                .map(Requirement::from)
                 .collect(),
         }
     }
@@ -37,23 +39,22 @@ impl BuildRequires {
         install_path: &Path,
         locations: &IndexLocations,
         sources: SourceStrategy,
-        lower_bound: LowerBound,
+        cache: &WorkspaceCache,
     ) -> Result<Self, MetadataError> {
-        // TODO(konsti): Cache workspace discovery.
+        let discovery = match sources {
+            SourceStrategy::Enabled => DiscoveryOptions::default(),
+            SourceStrategy::Disabled => DiscoveryOptions {
+                members: MemberDiscovery::None,
+                ..Default::default()
+            },
+        };
         let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &DiscoveryOptions::default())
-                .await?
+            ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };
 
-        Self::from_project_workspace(
-            metadata,
-            &project_workspace,
-            locations,
-            sources,
-            lower_bound,
-        )
+        Self::from_project_workspace(metadata, &project_workspace, locations, sources)
     }
 
     /// Lower the `build-system.requires` field from a `pyproject.toml` file.
@@ -62,7 +63,6 @@ impl BuildRequires {
         project_workspace: &ProjectWorkspace,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
-        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -107,11 +107,10 @@ impl BuildRequires {
                         project_workspace.project_root(),
                         project_sources,
                         project_indexes,
-                        extra.as_ref(),
+                        extra.as_deref(),
                         group,
                         locations,
                         project_workspace.workspace(),
-                        lower_bound,
                         None,
                     )
                     .map(move |requirement| match requirement {
@@ -123,10 +122,7 @@ impl BuildRequires {
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?,
-            SourceStrategy::Disabled => requires_dist
-                .into_iter()
-                .map(uv_pypi_types::Requirement::from)
-                .collect(),
+            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
         };
 
         Ok(Self {
@@ -141,7 +137,6 @@ impl BuildRequires {
         workspace: &Workspace,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
-        lower_bound: LowerBound,
     ) -> Result<Self, MetadataError> {
         // Collect any `tool.uv.index` entries.
         let empty = vec![];
@@ -184,11 +179,10 @@ impl BuildRequires {
                         workspace.install_path(),
                         project_sources,
                         project_indexes,
-                        extra.as_ref(),
+                        extra.as_deref(),
                         group,
                         locations,
                         workspace,
-                        lower_bound,
                         None,
                     )
                     .map(move |requirement| match requirement {
@@ -200,10 +194,7 @@ impl BuildRequires {
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?,
-            SourceStrategy::Disabled => requires_dist
-                .into_iter()
-                .map(uv_pypi_types::Requirement::from)
-                .collect(),
+            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
         };
 
         Ok(Self {

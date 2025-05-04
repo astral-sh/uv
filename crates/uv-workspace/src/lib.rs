@@ -1,6 +1,6 @@
 pub use workspace::{
-    DiscoveryOptions, MemberDiscovery, ProjectWorkspace, VirtualProject, Workspace, WorkspaceError,
-    WorkspaceMember,
+    DiscoveryOptions, MemberDiscovery, ProjectWorkspace, VirtualProject, Workspace, WorkspaceCache,
+    WorkspaceError, WorkspaceMember,
 };
 
 pub mod dependency_groups;

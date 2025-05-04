@@ -41,10 +41,6 @@ bird-feeder = { workspace = true }
 [tool.uv.workspace]
 members = ["packages/*"]
 exclude = ["packages/seeds"]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
 ```
 
 Every directory included by the `members` globs (and not excluded by the `exclude` globs) must
@@ -87,6 +83,10 @@ In this example, the `albatross` project depends on the `bird-feeder` project, w
 the workspace. The `workspace = true` key-value pair in the `tool.uv.sources` table indicates the
 `bird-feeder` dependency should be provided by the workspace, rather than fetched from PyPI or
 another registry.
+
+!!! note
+
+    Dependencies between workspace members are editable.
 
 Any `tool.uv.sources` definitions in the workspace root apply to all members, unless overridden in
 the `tool.uv.sources` of a specific member. For example, given the following `pyproject.toml`:

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -76,7 +77,7 @@ pub enum InstalledDist {
 pub struct InstalledRegistryDist {
     pub name: PackageName,
     pub version: Version,
-    pub path: PathBuf,
+    pub path: Box<Path>,
     pub cache_info: Option<CacheInfo>,
 }
 
@@ -87,7 +88,7 @@ pub struct InstalledDirectUrlDist {
     pub direct_url: Box<DirectUrl>,
     pub url: Url,
     pub editable: bool,
-    pub path: PathBuf,
+    pub path: Box<Path>,
     pub cache_info: Option<CacheInfo>,
 }
 
@@ -95,24 +96,24 @@ pub struct InstalledDirectUrlDist {
 pub struct InstalledEggInfoFile {
     pub name: PackageName,
     pub version: Version,
-    pub path: PathBuf,
+    pub path: Box<Path>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledEggInfoDirectory {
     pub name: PackageName,
     pub version: Version,
-    pub path: PathBuf,
+    pub path: Box<Path>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct InstalledLegacyEditable {
     pub name: PackageName,
     pub version: Version,
-    pub egg_link: PathBuf,
-    pub target: PathBuf,
+    pub egg_link: Box<Path>,
+    pub target: Box<Path>,
     pub target_url: Url,
-    pub egg_info: PathBuf,
+    pub egg_info: Box<Path>,
 }
 
 impl InstalledDist {
@@ -144,7 +145,7 @@ impl InstalledDist {
                         editable: matches!(&direct_url, DirectUrl::LocalDirectory { dir_info, .. } if dir_info.editable == Some(true)),
                         direct_url: Box::new(direct_url),
                         url,
-                        path: path.to_path_buf(),
+                        path: path.to_path_buf().into_boxed_path(),
                         cache_info,
                     }))),
                     Err(err) => {
@@ -152,7 +153,7 @@ impl InstalledDist {
                         Ok(Some(Self::Registry(InstalledRegistryDist {
                             name,
                             version,
-                            path: path.to_path_buf(),
+                            path: path.to_path_buf().into_boxed_path(),
                             cache_info,
                         })))
                     }
@@ -161,7 +162,7 @@ impl InstalledDist {
                 Ok(Some(Self::Registry(InstalledRegistryDist {
                     name,
                     version,
-                    path: path.to_path_buf(),
+                    path: path.to_path_buf().into_boxed_path(),
                     cache_info,
                 })))
             };
@@ -190,7 +191,7 @@ impl InstalledDist {
                     return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
                         name: file_name.name,
                         version,
-                        path: path.to_path_buf(),
+                        path: path.to_path_buf().into_boxed_path(),
                     })));
                 }
 
@@ -198,10 +199,10 @@ impl InstalledDist {
                     return Ok(Some(Self::EggInfoFile(InstalledEggInfoFile {
                         name: file_name.name,
                         version,
-                        path: path.to_path_buf(),
+                        path: path.to_path_buf().into_boxed_path(),
                     })));
                 }
-            };
+            }
 
             if metadata.is_dir() {
                 let Some(egg_metadata) = read_metadata(&path.join("PKG-INFO")) else {
@@ -210,7 +211,7 @@ impl InstalledDist {
                 return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
                     name: file_name.name,
                     version: Version::from_str(&egg_metadata.version)?,
-                    path: path.to_path_buf(),
+                    path: path.to_path_buf().into_boxed_path(),
                 })));
             }
 
@@ -221,7 +222,7 @@ impl InstalledDist {
                 return Ok(Some(Self::EggInfoDirectory(InstalledEggInfoDirectory {
                     name: file_name.name,
                     version: Version::from_str(&egg_metadata.version)?,
-                    path: path.to_path_buf(),
+                    path: path.to_path_buf().into_boxed_path(),
                 })));
             }
         }
@@ -269,10 +270,10 @@ impl InstalledDist {
             return Ok(Some(Self::LegacyEditable(InstalledLegacyEditable {
                 name: egg_metadata.name,
                 version: Version::from_str(&egg_metadata.version)?,
-                egg_link: path.to_path_buf(),
-                target,
+                egg_link: path.to_path_buf().into_boxed_path(),
+                target: target.into_boxed_path(),
                 target_url: url,
-                egg_info,
+                egg_info: egg_info.into_boxed_path(),
             })));
         }
 
@@ -280,7 +281,7 @@ impl InstalledDist {
     }
 
     /// Return the [`Path`] at which the distribution is stored on-disk.
-    pub fn path(&self) -> &Path {
+    pub fn install_path(&self) -> &Path {
         match self {
             Self::Registry(dist) => &dist.path,
             Self::Url(dist) => &dist.path,
@@ -309,7 +310,8 @@ impl InstalledDist {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err.into()),
         };
-        let direct_url = serde_json::from_reader::<fs_err::File, DirectUrl>(file)?;
+        let direct_url =
+            serde_json::from_reader::<BufReader<fs_err::File>, DirectUrl>(BufReader::new(file))?;
         Ok(Some(direct_url))
     }
 
@@ -321,7 +323,8 @@ impl InstalledDist {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(err) => return Err(err.into()),
         };
-        let cache_info = serde_json::from_reader::<fs_err::File, CacheInfo>(file)?;
+        let cache_info =
+            serde_json::from_reader::<BufReader<fs_err::File>, CacheInfo>(BufReader::new(file))?;
         Ok(Some(cache_info))
     }
 
@@ -329,7 +332,7 @@ impl InstalledDist {
     pub fn metadata(&self) -> Result<uv_pypi_types::ResolutionMetadata, InstalledDistError> {
         match self {
             Self::Registry(_) | Self::Url(_) => {
-                let path = self.path().join("METADATA");
+                let path = self.install_path().join("METADATA");
                 let contents = fs::read(&path)?;
                 // TODO(zanieb): Update this to use thiserror so we can unpack parse errors downstream
                 uv_pypi_types::ResolutionMetadata::parse_metadata(&contents).map_err(|err| {
@@ -341,7 +344,7 @@ impl InstalledDist {
             }
             Self::EggInfoFile(_) | Self::EggInfoDirectory(_) | Self::LegacyEditable(_) => {
                 let path = match self {
-                    Self::EggInfoFile(dist) => Cow::Borrowed(&dist.path),
+                    Self::EggInfoFile(dist) => Cow::Borrowed(&*dist.path),
                     Self::EggInfoDirectory(dist) => Cow::Owned(dist.path.join("PKG-INFO")),
                     Self::LegacyEditable(dist) => Cow::Owned(dist.egg_info.join("PKG-INFO")),
                     _ => unreachable!(),
@@ -359,7 +362,7 @@ impl InstalledDist {
 
     /// Return the `INSTALLER` of the distribution.
     pub fn installer(&self) -> Result<Option<String>, InstalledDistError> {
-        let path = self.path().join("INSTALLER");
+        let path = self.install_path().join("INSTALLER");
         match fs::read_to_string(path) {
             Ok(installer) => Ok(Some(installer)),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),

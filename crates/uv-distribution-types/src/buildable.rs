@@ -3,7 +3,7 @@ use std::path::Path;
 
 use url::Url;
 use uv_distribution_filename::SourceDistExtension;
-use uv_git::GitUrl;
+use uv_git_types::GitUrl;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VerbatimUrl;
 
@@ -29,6 +29,14 @@ impl BuildableSource<'_> {
         match self {
             Self::Dist(dist) => Some(dist.name()),
             Self::Url(_) => None,
+        }
+    }
+
+    /// Return the source tree of the source, if available.
+    pub fn source_tree(&self) -> Option<&Path> {
+        match self {
+            Self::Dist(dist) => dist.source_tree(),
+            Self::Url(url) => url.source_tree(),
         }
     }
 
@@ -101,6 +109,14 @@ impl SourceUrl<'_> {
             Self::Git(dist) => dist.url,
             Self::Path(dist) => dist.url,
             Self::Directory(dist) => dist.url,
+        }
+    }
+
+    /// Return the source tree of the source, if available.
+    pub fn source_tree(&self) -> Option<&Path> {
+        match self {
+            Self::Directory(dist) => Some(&dist.install_path),
+            _ => None,
         }
     }
 

@@ -1,3 +1,8 @@
+---
+title: Using uv with dependency bots
+description: A guide to using uv with dependency bots like Renovate and Dependabot.
+---
+
 # Dependency bots
 
 It is considered best practice to regularly update dependencies, to avoid being exposed to
@@ -8,12 +13,6 @@ automated pull requests. Several of them support uv, or have work underway to su
 ## Renovate
 
 uv is supported by [Renovate](https://github.com/renovatebot/renovate).
-
-!!! note
-
-    Updating `uv pip compile` outputs such as `requirements.txt` is not yet supported. Progress can
-    be tracked
-    at [renovatebot/renovate#30909](https://github.com/renovatebot/renovate/issues/30909).
 
 ### `uv.lock` output
 
@@ -61,9 +60,5 @@ need to be explicitly defined using
 
 ## Dependabot
 
-Support for uv is not yet available. Progress can be tracked at:
-
-- [dependabot/dependabot-core#10478](https://github.com/dependabot/dependabot-core/issues/10478) for
-  `uv.lock` output
-- [dependabot/dependabot-core#10039](https://github.com/dependabot/dependabot-core/issues/10039) for
-  `uv pip compile` outputs
+Support for uv is not yet available. Progress can be tracked at
+[dependabot/dependabot-core#10478](https://github.com/dependabot/dependabot-core/issues/10478).

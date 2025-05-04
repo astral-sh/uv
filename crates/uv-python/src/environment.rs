@@ -1,12 +1,16 @@
-use owo_colors::OwoColorize;
 use std::borrow::Cow;
 use std::env;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+use owo_colors::OwoColorize;
+use tracing::debug;
+
 use uv_cache::Cache;
 use uv_cache_key::cache_digest;
 use uv_fs::{LockedFile, Simplified};
+use uv_pep440::Version;
 
 use crate::discovery::find_python_installation;
 use crate::installation::PythonInstallation;
@@ -111,8 +115,8 @@ impl fmt::Display for EnvironmentNotFound {
     }
 }
 
-impl std::fmt::Display for InvalidEnvironment {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for InvalidEnvironment {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
             "Invalid environment at `{}`: {}",
@@ -122,8 +126,8 @@ impl std::fmt::Display for InvalidEnvironment {
     }
 }
 
-impl std::fmt::Display for InvalidEnvironmentKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for InvalidEnvironmentKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::NotDirectory => write!(f, "expected directory but found a file"),
             Self::MissingExecutable(path) => {
@@ -161,45 +165,54 @@ impl PythonEnvironment {
     ///
     /// N.B. This function also works for system Python environments and users depend on this.
     pub fn from_root(root: impl AsRef<Path>, cache: &Cache) -> Result<Self, Error> {
-        let venv = match fs_err::canonicalize(root.as_ref()) {
-            Ok(venv) => venv,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+        debug!(
+            "Checking for Python environment at `{}`",
+            root.as_ref().user_display()
+        );
+        match root.as_ref().try_exists() {
+            Ok(true) => {}
+            Ok(false) => {
                 return Err(Error::MissingEnvironment(EnvironmentNotFound {
                     preference: EnvironmentPreference::Any,
                     request: PythonRequest::Directory(root.as_ref().to_owned()),
                 }));
             }
             Err(err) => return Err(Error::Discovery(err.into())),
-        };
+        }
 
-        if venv.is_file() {
+        if root.as_ref().is_file() {
             return Err(InvalidEnvironment {
-                path: venv,
+                path: root.as_ref().to_path_buf(),
                 kind: InvalidEnvironmentKind::NotDirectory,
             }
             .into());
         }
 
-        if venv.read_dir().is_ok_and(|mut dir| dir.next().is_none()) {
+        if root
+            .as_ref()
+            .read_dir()
+            .is_ok_and(|mut dir| dir.next().is_none())
+        {
             return Err(InvalidEnvironment {
-                path: venv,
+                path: root.as_ref().to_path_buf(),
                 kind: InvalidEnvironmentKind::Empty,
             }
             .into());
         }
 
-        let executable = virtualenv_python_executable(&venv);
+        // Note we do not canonicalize the root path or the executable path, this is important
+        // because the path the interpreter is invoked at can determine the value of
+        // `sys.executable`.
+        let executable = virtualenv_python_executable(&root);
 
-        // Check if the executable exists before querying so we can provide a more specific error
-        // Note we intentionally don't require a resolved link to exist here, we're just trying to
-        // tell if this _looks_ like a Python environment.
+        // If we can't find an executable, exit before querying to provide a better error.
         if !(executable.is_symlink() || executable.is_file()) {
             return Err(InvalidEnvironment {
-                path: venv,
+                path: root.as_ref().to_path_buf(),
                 kind: InvalidEnvironmentKind::MissingExecutable(executable.clone()),
             }
             .into());
-        };
+        }
 
         let interpreter = Interpreter::query(executable, cache)?;
 
@@ -256,6 +269,16 @@ impl PythonEnvironment {
     /// `pyvenv.cfg` file.
     pub fn cfg(&self) -> Result<PyVenvConfiguration, Error> {
         Ok(PyVenvConfiguration::parse(self.0.root.join("pyvenv.cfg"))?)
+    }
+
+    /// Set a key-value pair in the `pyvenv.cfg` file.
+    pub fn set_pyvenv_cfg(&self, key: &str, value: &str) -> Result<(), Error> {
+        let content = fs_err::read_to_string(self.0.root.join("pyvenv.cfg"))?;
+        fs_err::write(
+            self.0.root.join("pyvenv.cfg"),
+            PyVenvConfiguration::set(&content, key, value),
+        )?;
+        Ok(())
     }
 
     /// Returns `true` if the environment is "relocatable".
@@ -332,5 +355,26 @@ impl PythonEnvironment {
                 )
                 .unwrap_or(false)
         }
+    }
+
+    /// Check if the `pyvenv.cfg` version is the same as the interpreter's Python version.
+    ///
+    /// Returns [`None`] if the versions are the consistent or there is no `pyvenv.cfg`. If the
+    /// versions do not match, returns a tuple of the `pyvenv.cfg` and interpreter's Python versions
+    /// for display.
+    pub fn get_pyvenv_version_conflict(&self) -> Option<(Version, Version)> {
+        let cfg = self.cfg().ok()?;
+        let cfg_version = cfg.version?.into_version();
+
+        // Determine if we should be checking for patch or pre-release equality
+        let exe_version = if cfg_version.release().get(2).is_none() {
+            self.interpreter().python_minor_version()
+        } else if cfg_version.pre().is_none() {
+            self.interpreter().python_patch_version()
+        } else {
+            self.interpreter().python_version().clone()
+        };
+
+        (cfg_version != exe_version).then_some((cfg_version, exe_version))
     }
 }

@@ -1,10 +1,12 @@
 //! Vendored from <https://github.com/PyO3/python-pkginfo-rs>
 
-use crate::metadata::Headers;
-use crate::MetadataError;
 use std::fmt::Display;
+use std::fmt::Write;
 use std::str;
 use std::str::FromStr;
+
+use crate::metadata::Headers;
+use crate::MetadataError;
 
 /// Code Metadata 2.3 as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>.
@@ -200,15 +202,15 @@ impl Metadata23 {
             let value = value.to_string();
             let mut lines = value.lines();
             if let Some(line) = lines.next() {
-                writer.push_str(&format!("{key}: {line}\n"));
+                let _ = writeln!(writer, "{key}: {line}");
             } else {
                 // The value is an empty string
-                writer.push_str(&format!("{key}: \n"));
+                let _ = writeln!(writer, "{key}: ");
             }
             for line in lines {
                 // Python implementations vary
                 // https://github.com/pypa/pyproject-metadata/pull/150/files#diff-7d938dbc255a08c2cfab1b4f1f8d1f6519c9312dd0a39d7793fa778474f1fbd1L135-R141
-                writer.push_str(&format!("{}{}\n", " ".repeat(key.len() + 2), line));
+                let _ = writeln!(writer, "{}{}", " ".repeat(key.len() + 2), line);
             }
         }
         fn write_opt_str(writer: &mut String, key: &str, value: Option<&impl Display>) {

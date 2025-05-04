@@ -9,9 +9,16 @@ use windows::core::PCSTR;
 use windows::Win32::UI::WindowsAndMessaging::{MessageBoxA, MESSAGEBOX_STYLE};
 
 #[macro_export]
-macro_rules! eprintln {
+macro_rules! error {
     ($($tt:tt)*) => {{
-        $crate::diagnostics::write_diagnostic(&$crate::format!($($tt)*));
+        $crate::diagnostics::write_diagnostic(&$crate::format!($($tt)*), true);
+    }}
+}
+
+#[macro_export]
+macro_rules! warn {
+    ($($tt:tt)*) => {{
+        $crate::diagnostics::write_diagnostic(&$crate::format!($($tt)*), false);
     }}
 }
 
@@ -37,11 +44,11 @@ impl uWrite for StringBuffer {
 }
 
 #[cold]
-pub(crate) fn write_diagnostic(message: &str) {
+pub(crate) fn write_diagnostic(message: &str, is_error: bool) {
     let mut stderr = std::io::stderr();
     if !stderr.as_raw_handle().is_null() {
         let _ = stderr.write_all(message.as_bytes());
-    } else {
+    } else if is_error {
         let nul_terminated = unsafe { CString::new(message.as_bytes()).unwrap_unchecked() };
         let pcstr_message = PCSTR::from_raw(nul_terminated.as_ptr() as *const _);
         unsafe { MessageBoxA(None, pcstr_message, None, MESSAGEBOX_STYLE(0)) };

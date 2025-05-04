@@ -17,9 +17,10 @@ doctest = false
 workspace = true
 
 [dependencies]
-uv-dirs = { workspace = true }
 uv-cache-info = { workspace = true }
 uv-cache-key = { workspace = true }
+uv-dirs = { workspace = true }
+uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-normalize = { workspace = true }
@@ -31,6 +32,7 @@ fs-err = { workspace = true, features = ["tokio"] }
 nanoid = { workspace = true }
 rmp-serde = { workspace = true }
 rustc-hash = { workspace = true }
+same-file = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tempfile = { workspace = true }
 tracing = { workspace = true }

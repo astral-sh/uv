@@ -23,18 +23,23 @@ RUN case "$TARGETPLATFORM" in \
   "linux/amd64") echo "x86_64-unknown-linux-musl" > rust_target.txt ;; \
   *) exit 1 ;; \
   esac
+
 # Update rustup whenever we bump the rust version
 COPY rust-toolchain.toml rust-toolchain.toml
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --target $(cat rust_target.txt) --profile minimal --default-toolchain none
 ENV PATH="$HOME/.cargo/bin:$PATH"
-# Installs the correct toolchain version from rust-toolchain.toml and then the musl target
+# Install the toolchain then the musl target
+RUN rustup toolchain install
 RUN rustup target add $(cat rust_target.txt)
 
 # Build
 COPY crates crates
 COPY ./Cargo.toml Cargo.toml
 COPY ./Cargo.lock Cargo.lock
-RUN cargo zigbuild --bin uv --bin uvx --target $(cat rust_target.txt) --release
+RUN case "${TARGETPLATFORM}" in \
+  "linux/arm64") export JEMALLOC_SYS_WITH_LG_PAGE=16;; \
+  esac && \
+  cargo zigbuild --bin uv --bin uvx --target $(cat rust_target.txt) --release
 RUN cp target/$(cat rust_target.txt)/release/uv /uv \
   && cp target/$(cat rust_target.txt)/release/uvx /uvx
 # TODO(konsti): Optimize binary size, with a version that also works when cross compiling

@@ -4,23 +4,23 @@ chevron-blue==0.2.1
     # via
     #   -r scripts/scenarios/requirements.in
     #   packse
-hatchling==1.24.2
+hatchling==1.27.0
     # via packse
 msgspec==0.18.6
     # via packse
-packaging==24.0
+packaging==24.2
     # via hatchling
-packse==0.3.39
+packse==0.3.45
     # via -r scripts/scenarios/requirements.in
 pathspec==0.12.1
     # via hatchling
 pluggy==1.5.0
     # via hatchling
-pyyaml==6.0.1
+pyyaml==6.0.2
     # via packse
-setuptools==69.5.1
+setuptools==75.6.0
     # via packse
-trove-classifiers==2024.4.10
+trove-classifiers==2024.10.21.16
     # via hatchling
-uv==0.4.29
+uv==0.5.10
     # via packse

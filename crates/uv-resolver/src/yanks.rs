@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use uv_distribution_types::RequirementSource;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pypi_types::RequirementSource;
 
 use crate::{DependencyMode, Manifest, ResolverEnvironment};
 
@@ -55,6 +55,6 @@ impl AllowedYanks {
     pub fn contains(&self, package_name: &PackageName, version: &Version) -> bool {
         self.0
             .get(package_name)
-            .map_or(false, |versions| versions.contains(version))
+            .is_some_and(|versions| versions.contains(version))
     }
 }

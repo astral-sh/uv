@@ -51,12 +51,28 @@ fn missing_requirements_txt() {
 
 #[test]
 fn missing_venv() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12")
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
     let requirements = context.temp_dir.child("requirements.txt");
     requirements.write_str("anyio")?;
     fs::remove_dir_all(&context.venv)?;
 
     uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
+      Caused by: Python interpreter not found at `[VENV]/[BIN]/python`
+    "###);
+
+    assert!(predicates::path::missing().eval(&context.venv));
+
+    // If not "active", we hint to create one
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt").env_remove("VIRTUAL_ENV"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -214,6 +230,7 @@ fn install_hardlink() -> Result<()> {
 
 /// Install a package into a virtual environment using symlink semantics.
 #[test]
+#[cfg(unix)] // Windows does not allow symlinks by default
 fn install_symlink() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -700,13 +717,12 @@ fn install_git_subdirectories() -> Result<()> {
 /// Install a source distribution into a virtual environment.
 #[test]
 fn install_sdist() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source-distribution==0.0.1")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1402,14 +1418,18 @@ fn install_url_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.clean()
-        .arg("source_distribution"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("source_distribution"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 19 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
@@ -1533,13 +1553,12 @@ fn install_git_source_dist_cached() -> Result<()> {
 /// Check that we show the right messages on cached, registry source distribution installs.
 #[test]
 fn install_registry_source_dist_cached() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("source_distribution==0.0.1")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1562,7 +1581,6 @@ fn install_registry_source_dist_cached() -> Result<()> {
     context.reset_venv();
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1584,19 +1602,9 @@ fn install_registry_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    let filters: Vec<(&str, &str)> = if cfg!(windows) {
-        // On Windows, the number of files removed is different.
-        [("Removed 13 files", "Removed 14 files")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    } else {
-        // For some Linux distributions, like Gentoo, the number of files removed is different.
-        [("Removed 12 files", "Removed 14 files")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    };
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
     uv_snapshot!(filters, context.clean()
         .arg("source_distribution"), @r###"
     success: true
@@ -1604,12 +1612,11 @@ fn install_registry_source_dist_cached() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Removed 20 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1694,14 +1701,18 @@ fn install_path_source_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.clean()
-        .arg("source-distribution"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("source-distribution"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 19 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
@@ -1784,23 +1795,18 @@ fn install_path_built_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    let filters = if cfg!(windows) {
-        // We do not display sizes on Windows
-        [("Removed 1 file", "Removed 1 file ([SIZE])")]
-            .into_iter()
-            .chain(context.filters())
-            .collect()
-    } else {
-        context.filters()
-    };
-    uv_snapshot!(filters, context.clean()
-        .arg("tomli"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context.filters())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("tomli"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 11 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
@@ -1833,15 +1839,15 @@ fn install_url_built_dist_cached() -> Result<()> {
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("tqdm @ https://files.pythonhosted.org/packages/00/e5/f12a80907d0884e6dff9c16d0c0114d81b8cd07dc3ae54c5e962cc83037e/tqdm-4.66.1-py3-none-any.whl")?;
 
-    let filters = if cfg!(windows) {
-        [("warning: The package `tqdm` requires `colorama ; platform_system == 'Windows'`, but it's not installed\n", "")]
+    let context_filters = if cfg!(windows) {
+        [("warning: The package `tqdm` requires `colorama ; sys_platform == 'win32'`, but it's not installed\n", "")]
             .into_iter()
             .chain(context.filters())
             .collect()
     } else {
         context.filters()
     };
-    uv_snapshot!(filters, context.pip_sync()
+    uv_snapshot!(context_filters, context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict"), @r###"
     success: true
@@ -1861,7 +1867,7 @@ fn install_url_built_dist_cached() -> Result<()> {
     // Re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(filters, context.pip_sync()
+    uv_snapshot!(context_filters, context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -1881,18 +1887,22 @@ fn install_url_built_dist_cached() -> Result<()> {
     // Clear the cache, then re-run the installation in a new virtual environment.
     context.reset_venv();
 
-    uv_snapshot!(context.clean()
-        .arg("tqdm"), @r###"
+    let filters = std::iter::once(("Removed \\d+ files?", "Removed [N] files"))
+        .chain(context_filters.clone())
+        .collect::<Vec<_>>();
+    uv_snapshot!(
+        filters,
+        context.clean().arg("tqdm"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Removed 43 files ([SIZE])
+    Removed [N] files ([SIZE])
     "###
     );
 
-    uv_snapshot!(filters, context.pip_sync()
+    uv_snapshot!(context_filters, context.pip_sync()
         .arg("requirements.txt")
         .arg("--strict")
         , @r###"
@@ -2247,9 +2257,7 @@ fn sync_editable() -> Result<()> {
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&indoc::formatdoc! {r"
-        boltons==23.1.1
-        numpy==1.26.2
-            # via poetry-editable
+        anyio==3.7.0
         -e file://{poetry_editable}
         ",
         poetry_editable = poetry_editable.display()
@@ -2263,11 +2271,10 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + boltons==23.1.1
-     + numpy==1.26.2
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==3.7.0
      + poetry-editable==0.1.0 (from file://[TEMP_DIR]/poetry_editable)
     "###
     );
@@ -2280,8 +2287,8 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
     "###
     );
 
@@ -2295,7 +2302,7 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2345,8 +2352,8 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Audited 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
     "###
     );
 
@@ -2366,7 +2373,7 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2391,7 +2398,7 @@ fn sync_editable() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 3 packages in [TIME]
+    Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Uninstalled 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -2599,7 +2606,7 @@ fn sync_editable_and_local() -> Result<()> {
 #[test]
 fn incompatible_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
-    let wheel = context.temp_dir.child("foo-1.2.3-not-compatible-wheel.whl");
+    let wheel = context.temp_dir.child("foo-1.2.3-py3-none-any.whl");
     wheel.touch()?;
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -3433,14 +3440,14 @@ fn require_hashes_unknown_algorithm() -> Result<()> {
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, or `sha512`) on: `foo`
-    "###
+    error: Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, `sha512`, or `blake2b`) on: `foo`
+    "
     );
 
     Ok(())
@@ -3633,14 +3640,13 @@ fn require_hashes_wheel_only_binary() -> Result<()> {
 /// Include the hash for _just_ the source distribution with `--no-binary`.
 #[test]
 fn require_hashes_source_no_binary() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("source-distribution==0.0.1 --hash=sha256:1f83ed7498336c7f2ab9b002cf22583d91115ebc624053dc4eb3a45694490106")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--no-binary")
         .arg(":all:")
@@ -4169,7 +4175,7 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-      × Failed to download `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
+      × Failed to read `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
       ╰─▶ Hash mismatch for `tqdm @ file://[WORKSPACE]/scripts/links/tqdm-1000.0.0-py3-none-any.whl`
 
           Expected:
@@ -5028,14 +5034,13 @@ fn require_hashes_registry_invalid_hash() -> Result<()> {
 /// Include the hash in the URL directly.
 #[test]
 fn require_hashes_url() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -5056,14 +5061,13 @@ fn require_hashes_url() -> Result<()> {
 /// Include an irrelevant fragment in the URL.
 #[test]
 fn require_hashes_url_other_fragment() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#foo=bar")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5081,14 +5085,13 @@ fn require_hashes_url_other_fragment() -> Result<()> {
 /// Include an invalid hash in the URL directly.
 #[test]
 fn require_hashes_url_invalid() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5114,14 +5117,13 @@ fn require_hashes_url_invalid() -> Result<()> {
 /// Ignore the (valid) hash on the fragment if (invalid) hashes are provided directly.
 #[test]
 fn require_hashes_url_ignore() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374 --hash sha256:c6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: false
@@ -5147,14 +5149,13 @@ fn require_hashes_url_ignore() -> Result<()> {
 /// Include the hash in the URL directly.
 #[test]
 fn require_hashes_url_unnamed() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt
         .write_str("https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl#sha256=b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374")?;
 
     uv_snapshot!(context.pip_sync()
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .arg("requirements.txt")
         .arg("--require-hashes"), @r###"
     success: true
@@ -5728,6 +5729,357 @@ fn semicolon_no_space() -> Result<()> {
     iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'
                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 3 packages in [TIME]
+    "
+    );
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     + iniconfig==2.0.0
+     - sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
+/// Avoid erroring for packages that only include wheels, and _don't_ include a wheel for the
+/// current platform, but are omitted by markers anyway.
+///
+/// See: <https://github.com/astral-sh/uv/issues/13127>
+#[test]
+fn pep_751_wheel_only() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+        dependencies = ["torch"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    // If there's no compatible wheel for a package we _don't_ need to install (e.g., anything
+    // CUDA-related), succeed.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--dry-run")
+        .arg("--python-platform")
+        .arg("macos"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Would download 9 packages
+    Would install 9 packages
+     + filelock==3.13.1
+     + fsspec==2024.3.1
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + mpmath==1.3.0
+     + networkx==3.2.1
+     + sympy==1.12
+     + torch==2.2.1
+     + typing-extensions==4.10.0
+    "
+    );
+
+    // However, if there's no compatible wheel for a package that we _do_ need to install, we should
+    // error
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--dry-run")
+        .arg("--python-platform")
+        .arg("macos")
+        .arg("--python-version")
+        .arg("3.8"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `torch` can't be installed because it doesn't have a source distribution or wheel for the current platform
+
+    hint: You're using CPython 3.8 (`cp38`), but `torch` (v2.2.1) only has wheels with the following Python implementation tag: `cp312`
+    "
+    );
+
+    Ok(())
+}
+
+/// Respect `--no-binary` et al when installing from a `pylock.toml`.
+#[test]
+fn pep_751_build_options() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--no-binary")
+        .arg("anyio"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.8.0
+     + idna==3.10
+     + sniffio==1.3.1
+     + typing-extensions==4.12.2
+    "
+    );
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["odrive"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--no-binary")
+        .arg("odrive"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `odrive` can't be installed because it is marked as `--no-binary` but has no source distribution
+    "
+    );
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["source-distribution"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--only-binary")
+        .arg("source-distribution"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `source-distribution` can't be installed because it is marked as `--no-build` but has no binary distribution
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--no-binary")
+        .arg("source-distribution"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 4 packages in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.8.0
+     - idna==3.10
+     - sniffio==1.3.1
+     + source-distribution==0.0.3
+     - typing-extensions==4.12.2
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_direct_url_tags() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["MarkupSafe @ https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--python-platform")
+        .arg("linux"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to determine installation plan
+      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--python-platform")
+        .arg("macos"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + markupsafe==3.0.2 (from https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl)
+    "
     );
 
     Ok(())

@@ -1,10 +1,12 @@
-use either::Either;
-use uv_pep508::PackageName;
+use std::path::Path;
 
+use either::Either;
 use rustc_hash::FxHashMap;
+
 use uv_cache::Refresh;
 use uv_cache_info::Timestamp;
-use uv_pypi_types::Requirement;
+use uv_distribution_types::Requirement;
+use uv_pep508::PackageName;
 
 /// Whether to reinstall packages.
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
@@ -18,7 +20,7 @@ pub enum Reinstall {
     All,
 
     /// Reinstall only the specified packages.
-    Packages(Vec<PackageName>),
+    Packages(Vec<PackageName>, Vec<Box<Path>>),
 }
 
 impl Reinstall {
@@ -31,7 +33,7 @@ impl Reinstall {
                 if reinstall_package.is_empty() {
                     Self::None
                 } else {
-                    Self::Packages(reinstall_package)
+                    Self::Packages(reinstall_package, Vec::new())
                 }
             }
         }
@@ -47,6 +49,26 @@ impl Reinstall {
         matches!(self, Self::All)
     }
 
+    /// Returns `true` if the specified package should be reinstalled.
+    pub fn contains_package(&self, package_name: &PackageName) -> bool {
+        match &self {
+            Self::None => false,
+            Self::All => true,
+            Self::Packages(packages, ..) => packages.contains(package_name),
+        }
+    }
+
+    /// Returns `true` if the specified path should be reinstalled.
+    pub fn contains_path(&self, path: &Path) -> bool {
+        match &self {
+            Self::None => false,
+            Self::All => true,
+            Self::Packages(.., paths) => paths
+                .iter()
+                .any(|target| same_file::is_same_file(path, target).unwrap_or(false)),
+        }
+    }
+
     /// Combine a set of [`Reinstall`] values.
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
@@ -56,19 +78,46 @@ impl Reinstall {
             // If either is `All`, the result is `All`.
             (Self::All, _) | (_, Self::All) => Self::All,
             // If one is `None`, the result is the other.
-            (Self::Packages(a), Self::None) => Self::Packages(a),
-            (Self::None, Self::Packages(b)) => Self::Packages(b),
+            (Self::Packages(a1, a2), Self::None) => Self::Packages(a1, a2),
+            (Self::None, Self::Packages(b1, b2)) => Self::Packages(b1, b2),
             // If both are `Packages`, the result is the union of the two.
-            (Self::Packages(mut a), Self::Packages(b)) => {
-                a.extend(b);
-                Self::Packages(a)
+            (Self::Packages(mut a1, mut a2), Self::Packages(b1, b2)) => {
+                a1.extend(b1);
+                a2.extend(b2);
+                Self::Packages(a1, a2)
+            }
+        }
+    }
+
+    /// Add a [`Box<Path>`] to the [`Reinstall`] policy.
+    #[must_use]
+    pub fn with_path(self, path: Box<Path>) -> Self {
+        match self {
+            Self::None => Self::Packages(vec![], vec![path]),
+            Self::All => Self::All,
+            Self::Packages(packages, mut paths) => {
+                paths.push(path);
+                Self::Packages(packages, paths)
+            }
+        }
+    }
+
+    /// Add a [`Package`] to the [`Reinstall`] policy.
+    #[must_use]
+    pub fn with_package(self, package_name: PackageName) -> Self {
+        match self {
+            Self::None => Self::Packages(vec![package_name], vec![]),
+            Self::All => Self::All,
+            Self::Packages(mut packages, paths) => {
+                packages.push(package_name);
+                Self::Packages(packages, paths)
             }
         }
     }
 
     /// Create a [`Reinstall`] strategy to reinstall a single package.
     pub fn package(package_name: PackageName) -> Self {
-        Self::Packages(vec![package_name])
+        Self::Packages(vec![package_name], vec![])
     }
 }
 
@@ -78,7 +127,9 @@ impl From<Reinstall> for Refresh {
         match value {
             Reinstall::None => Self::None(Timestamp::now()),
             Reinstall::All => Self::All(Timestamp::now()),
-            Reinstall::Packages(packages) => Self::Packages(packages, Timestamp::now()),
+            Reinstall::Packages(packages, paths) => {
+                Self::Packages(packages, paths, Timestamp::now())
+            }
         }
     }
 }
@@ -191,9 +242,11 @@ impl From<Upgrade> for Refresh {
         match value {
             Upgrade::None => Self::None(Timestamp::now()),
             Upgrade::All => Self::All(Timestamp::now()),
-            Upgrade::Packages(packages) => {
-                Self::Packages(packages.into_keys().collect::<Vec<_>>(), Timestamp::now())
-            }
+            Upgrade::Packages(packages) => Self::Packages(
+                packages.into_keys().collect::<Vec<_>>(),
+                Vec::new(),
+                Timestamp::now(),
+            ),
         }
     }
 }

@@ -6,8 +6,13 @@ use either::Either;
 use path_slash::PathExt;
 
 /// The current working directory.
-pub static CWD: LazyLock<PathBuf> =
-    LazyLock::new(|| std::env::current_dir().expect("The current directory must exist"));
+#[allow(clippy::exit, clippy::print_stderr)]
+pub static CWD: LazyLock<PathBuf> = LazyLock::new(|| {
+    std::env::current_dir().unwrap_or_else(|_e| {
+        eprintln!("Current directory does not exist");
+        std::process::exit(1);
+    })
+});
 
 pub trait Simplified {
     /// Simplify a [`Path`].
@@ -134,7 +139,9 @@ impl<T: AsRef<Path>> PythonExt for T {
 /// On other platforms, this is a no-op.
 pub fn normalize_url_path(path: &str) -> Cow<'_, str> {
     // Apply percent-decoding to the URL.
-    let path = urlencoding::decode(path).unwrap_or(Cow::Borrowed(path));
+    let path = percent_encoding::percent_decode_str(path)
+        .decode_utf8()
+        .unwrap_or(Cow::Borrowed(path));
 
     // Return the path.
     if cfg!(windows) {
@@ -251,7 +258,7 @@ fn normalized(path: &Path) -> PathBuf {
                 normalized.push(component);
             }
             Component::ParentDir => {
-                match normalized.components().last() {
+                match normalized.components().next_back() {
                     None | Some(Component::ParentDir | Component::RootDir) => {
                         // Preserve leading and above-root `..`
                         normalized.push(component);
@@ -324,7 +331,7 @@ pub fn relative_to(
 
     // go as many levels up as required
     let levels_up = base.components().count() - common_prefix.components().count();
-    let up = std::iter::repeat("..").take(levels_up).collect::<PathBuf>();
+    let up = std::iter::repeat_n("..", levels_up).collect::<PathBuf>();
 
     Ok(up.join(stripped))
 }
@@ -337,7 +344,7 @@ pub fn relative_to(
 pub struct PortablePath<'a>(&'a Path);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PortablePathBuf(PathBuf);
+pub struct PortablePathBuf(Box<Path>);
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for PortablePathBuf {
@@ -345,7 +352,7 @@ impl schemars::JsonSchema for PortablePathBuf {
         PathBuf::schema_name()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         PathBuf::json_schema(_gen)
     }
 }
@@ -387,14 +394,24 @@ impl std::fmt::Display for PortablePathBuf {
     }
 }
 
-impl From<PortablePathBuf> for PathBuf {
+impl From<&str> for PortablePathBuf {
+    fn from(path: &str) -> Self {
+        if path == "." {
+            Self(PathBuf::new().into_boxed_path())
+        } else {
+            Self(PathBuf::from(path).into_boxed_path())
+        }
+    }
+}
+
+impl From<PortablePathBuf> for Box<Path> {
     fn from(portable: PortablePathBuf) -> Self {
         portable.0
     }
 }
 
-impl From<PathBuf> for PortablePathBuf {
-    fn from(path: PathBuf) -> Self {
+impl From<Box<Path>> for PortablePathBuf {
+    fn from(path: Box<Path>) -> Self {
         Self(path)
     }
 }
@@ -427,10 +444,16 @@ impl<'de> serde::de::Deserialize<'de> for PortablePathBuf {
     {
         let s = String::deserialize(deserializer)?;
         if s == "." {
-            Ok(Self(PathBuf::new()))
+            Ok(Self(PathBuf::new().into_boxed_path()))
         } else {
-            Ok(Self(PathBuf::from(s)))
+            Ok(Self(PathBuf::from(s).into_boxed_path()))
         }
+    }
+}
+
+impl AsRef<Path> for PortablePathBuf {
+    fn as_ref(&self) -> &Path {
+        &self.0
     }
 }
 

@@ -16,10 +16,12 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-auth = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
-uv-auth = { workspace = true }
-uv-static = { workspace = true}
+uv-git-types = { workspace = true }
+uv-static = { workspace = true }
+uv-version = { workspace = true }
 
 anyhow = { workspace = true }
 cargo-util = { workspace = true }
@@ -27,7 +29,6 @@ dashmap = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 reqwest = { workspace = true, features = ["blocking"] }
 reqwest-middleware = { workspace = true }
-serde = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

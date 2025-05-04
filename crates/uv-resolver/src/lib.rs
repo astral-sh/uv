@@ -3,9 +3,11 @@ pub use error::{NoSolutionError, NoSolutionHeader, ResolveError, SentinelRange};
 pub use exclude_newer::ExcludeNewer;
 pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
+pub use fork_strategy::ForkStrategy;
 pub use lock::{
-    InstallTarget, Lock, LockError, LockVersion, PackageMap, RequirementsTxtExport,
-    ResolverManifest, SatisfiesResult, TreeDisplay, VERSION,
+    Installable, Lock, LockError, LockVersion, Package, PackageMap, PylockToml,
+    PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
+    VERSION,
 };
 pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};
@@ -33,6 +35,8 @@ pub use yanks::AllowedYanks;
 /// `ConflictItemRef`. i.e., We can avoid allocs on lookups.
 type FxHashbrownSet<T> = hashbrown::HashSet<T, rustc_hash::FxBuildHasher>;
 
+type FxHashbrownMap<K, V> = hashbrown::HashMap<K, V, rustc_hash::FxBuildHasher>;
+
 mod candidate_selector;
 mod dependency_mode;
 mod dependency_provider;
@@ -41,6 +45,7 @@ mod exclude_newer;
 mod exclusions;
 mod flat_index;
 mod fork_indexes;
+mod fork_strategy;
 mod fork_urls;
 mod graph_ops;
 mod lock;
