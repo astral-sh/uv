@@ -623,8 +623,7 @@ impl CachedClient {
                 .await;
             if result
                 .as_ref()
-                .err()
-                .is_some_and(|err| is_extended_transient_error(err))
+                .is_err_and(|err| is_extended_transient_error(err))
             {
                 let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
                 if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
