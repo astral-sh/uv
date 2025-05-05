@@ -645,6 +645,7 @@ impl ScriptInterpreter {
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
+        keep_incompatible: bool,
         no_config: bool,
         active: Option<bool>,
         cache: &Cache,
@@ -662,30 +663,25 @@ impl ScriptInterpreter {
         let root = Self::root(script, active, cache);
         match PythonEnvironment::from_root(&root, cache) {
             Ok(venv) => {
-                if python_request.as_ref().is_none_or(|request| {
-                    if request.satisfied(venv.interpreter(), cache) {
-                        debug!(
-                            "The script environment's Python version satisfies `{}`",
-                            request.to_canonical_string()
+                match environment_is_usable(
+                    &venv,
+                    EnvironmentKind::Script,
+                    python_request.as_ref(),
+                    requires_python
+                        .as_ref()
+                        .map(|(requires_python, _)| requires_python),
+                    cache,
+                ) {
+                    Ok(()) => return Ok(Self::Environment(venv)),
+                    Err(err) if keep_incompatible => {
+                        warn_user!(
+                            "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
+                            root.user_display().cyan(),
                         );
-                        true
-                    } else {
-                        debug!(
-                            "The script environment's Python version does not satisfy `{}`",
-                            request.to_canonical_string()
-                        );
-                        false
-                    }
-                }) {
-                    if let Some((requires_python, ..)) = requires_python.as_ref() {
-                        if requires_python.contains(venv.interpreter().python_version()) {
-                            return Ok(Self::Environment(venv));
-                        }
-                        debug!(
-                            "The script environment's Python version does not meet the script's Python requirement: `{requires_python}`"
-                        );
-                    } else {
                         return Ok(Self::Environment(venv));
+                    }
+                    Err(err) => {
+                        debug!("{err}");
                     }
                 }
             }
@@ -766,41 +762,74 @@ impl ScriptInterpreter {
     }
 }
 
-/// Whether an environment is usable for the project, i.e., if it matches the requirements.
+#[derive(Debug)]
+pub(crate) enum EnvironmentKind {
+    Script,
+    Project,
+}
+
+impl std::fmt::Display for EnvironmentKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Script => write!(f, "script"),
+            Self::Project => write!(f, "project"),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum EnvironmentIncompatibilityError {
+    #[error("The {0} environment's Python version does not satisfy the request: `{1}`")]
+    PythonRequest(EnvironmentKind, PythonRequest),
+
+    #[error("The {0} environment's Python version does not meet the Python requirement: `{1}`")]
+    RequiresPython(EnvironmentKind, RequiresPython),
+
+    #[error("The interpreter in the {0} environment has different version ({1}) than it was created with ({2})")]
+    PyenvVersionConflict(EnvironmentKind, Version, Version),
+}
+
+/// Whether an environment is usable for a project or script, i.e., if it matches the requirements.
 fn environment_is_usable(
     environment: &PythonEnvironment,
+    kind: EnvironmentKind,
     python_request: Option<&PythonRequest>,
     requires_python: Option<&RequiresPython>,
     cache: &Cache,
-) -> bool {
+) -> Result<(), EnvironmentIncompatibilityError> {
     if let Some((cfg_version, int_version)) = environment.get_pyvenv_version_conflict() {
-        debug!("The interpreter in the virtual environment has different version ({int_version}) than it was created with ({cfg_version})");
-        return false;
+        return Err(EnvironmentIncompatibilityError::PyenvVersionConflict(
+            kind,
+            cfg_version,
+            int_version,
+        ));
     }
 
     if let Some(request) = python_request {
         if request.satisfied(environment.interpreter(), cache) {
-            debug!("The virtual environment's Python version satisfies the request: `{request}`");
+            debug!("The {kind} environment's Python version satisfies the request: `{request}`");
         } else {
-            debug!("The virtual environment's Python version does not satisfy the request: `{request}`");
-            return false;
+            return Err(EnvironmentIncompatibilityError::PythonRequest(
+                kind,
+                request.clone(),
+            ));
         }
     }
 
-    if let Some(requires_python) = requires_python.as_ref() {
+    if let Some(requires_python) = requires_python {
         if requires_python.contains(environment.interpreter().python_version()) {
             trace!(
-                "The virtual environment's Python version meets the Python requirement: `{requires_python}`"
+                "The {kind} environment's Python version meets the Python requirement: `{requires_python}`"
             );
         } else {
-            debug!(
-                "The virtual environment's Python version does not meet the Python requirement: `{requires_python}`"
-            );
-            return false;
+            return Err(EnvironmentIncompatibilityError::RequiresPython(
+                kind,
+                requires_python.clone(),
+            ));
         }
     }
 
-    true
+    Ok(())
 }
 
 /// An interpreter suitable for the project.
@@ -823,6 +852,7 @@ impl ProjectInterpreter {
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
+        keep_incompatible: bool,
         no_config: bool,
         active: Option<bool>,
         cache: &Cache,
@@ -837,16 +867,27 @@ impl ProjectInterpreter {
             .await?;
 
         // Read from the virtual environment first.
-        let venv = workspace.venv(active);
-        match PythonEnvironment::from_root(&venv, cache) {
+        let root = workspace.venv(active);
+        match PythonEnvironment::from_root(&root, cache) {
             Ok(venv) => {
-                if environment_is_usable(
+                match environment_is_usable(
                     &venv,
+                    EnvironmentKind::Project,
                     python_request.as_ref(),
                     requires_python.as_ref(),
                     cache,
                 ) {
-                    return Ok(Self::Environment(venv));
+                    Ok(()) => return Ok(Self::Environment(venv)),
+                    Err(err) if keep_incompatible => {
+                        warn_user!(
+                            "Using incompatible environment (`{}`) due to `--no-sync` ({err})",
+                            root.user_display().cyan(),
+                        );
+                        return Ok(Self::Environment(venv));
+                    }
+                    Err(err) => {
+                        debug!("{err}");
+                    }
                 }
             }
             Err(uv_python::Error::MissingEnvironment(_)) => {}
@@ -856,14 +897,14 @@ impl ProjectInterpreter {
                 match inner.kind {
                     InvalidEnvironmentKind::NotDirectory => {
                         return Err(ProjectError::InvalidProjectEnvironmentDir(
-                            venv,
+                            root,
                             inner.kind.to_string(),
                         ))
                     }
                     InvalidEnvironmentKind::MissingExecutable(_) => {
-                        if fs_err::read_dir(&venv).is_ok_and(|mut dir| dir.next().is_some()) {
+                        if fs_err::read_dir(&root).is_ok_and(|mut dir| dir.next().is_some()) {
                             return Err(ProjectError::InvalidProjectEnvironmentDir(
-                                venv,
+                                root,
                                 "it is not a valid Python environment (no Python executable was found)"
                                     .to_string(),
                             ));
@@ -1167,6 +1208,7 @@ impl ProjectEnvironment {
         network_settings: &NetworkSettings,
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
+        no_sync: bool,
         no_config: bool,
         active: Option<bool>,
         cache: &Cache,
@@ -1184,6 +1226,7 @@ impl ProjectEnvironment {
             python_preference,
             python_downloads,
             install_mirrors,
+            no_sync,
             no_config,
             active,
             cache,
@@ -1369,6 +1412,7 @@ impl ScriptEnvironment {
         python_preference: PythonPreference,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
+        no_sync: bool,
         no_config: bool,
         active: Option<bool>,
         cache: &Cache,
@@ -1385,6 +1429,7 @@ impl ScriptEnvironment {
             python_preference,
             python_downloads,
             install_mirrors,
+            no_sync,
             no_config,
             active,
             cache,
