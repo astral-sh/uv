@@ -28,9 +28,9 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts};
 use uv_python::{
-    EnvironmentPreference, Interpreter, InvalidEnvironmentKind, PythonDownloads, PythonEnvironment,
-    PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
-    VersionFileDiscoveryOptions, VersionRequest,
+    satisfies_python_preference, EnvironmentPreference, Interpreter, InvalidEnvironmentKind,
+    PythonDownloads, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
+    PythonSource, PythonVariant, PythonVersionFile, VersionFileDiscoveryOptions, VersionRequest,
 };
 use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
@@ -770,6 +770,7 @@ impl ScriptInterpreter {
 fn environment_is_usable(
     environment: &PythonEnvironment,
     python_request: Option<&PythonRequest>,
+    python_preference: PythonPreference,
     requires_python: Option<&RequiresPython>,
     cache: &Cache,
 ) -> bool {
@@ -798,6 +799,23 @@ fn environment_is_usable(
             );
             return false;
         }
+    }
+
+    if satisfies_python_preference(
+        PythonSource::DiscoveredEnvironment,
+        environment.interpreter(),
+        python_preference,
+    ) {
+        trace!(
+            "The virtual environment's Python interpreter meets the Python preference: `{}`",
+            python_preference
+        );
+    } else {
+        debug!(
+            "The virtual environment's Python interpreter does not meet the Python preference: `{}`",
+            python_preference
+        );
+        return false;
     }
 
     true
@@ -843,6 +861,7 @@ impl ProjectInterpreter {
                 if environment_is_usable(
                     &venv,
                     python_request.as_ref(),
+                    python_preference,
                     requires_python.as_ref(),
                     cache,
                 ) {

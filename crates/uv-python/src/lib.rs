@@ -5,8 +5,9 @@ use thiserror::Error;
 use uv_static::EnvVars;
 
 pub use crate::discovery::{
-    find_python_installations, EnvironmentPreference, Error as DiscoveryError, PythonDownloads,
-    PythonNotFound, PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
+    find_python_installations, satisfies_python_preference, EnvironmentPreference,
+    Error as DiscoveryError, PythonDownloads, PythonNotFound, PythonPreference, PythonRequest,
+    PythonSource, PythonVariant, VersionRequest,
 };
 pub use crate::environment::{InvalidEnvironmentKind, PythonEnvironment};
 pub use crate::implementation::ImplementationName;

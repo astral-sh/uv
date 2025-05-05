@@ -26,6 +26,7 @@ use uv_platform_tags::{Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
 use crate::implementation::LenientImplementationName;
+use crate::managed::ManagedPythonInstallations;
 use crate::platform::{Arch, Libc, Os};
 use crate::pointer_size::PointerSize;
 use crate::{
@@ -261,6 +262,21 @@ impl Interpreter {
     /// Returns `true` if the environment is a `--prefix` environment.
     pub fn is_prefix(&self) -> bool {
         self.prefix.is_some()
+    }
+
+    /// Returns `true` if this interpreter is managed by uv.
+    ///
+    /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
+    pub fn is_managed(&self) -> bool {
+        let Ok(installations) = ManagedPythonInstallations::from_settings(None) else {
+            return false;
+        };
+
+        installations
+            .find_all()
+            .into_iter()
+            .flatten()
+            .any(|install| install.path() == self.sys_base_prefix)
     }
 
     /// Returns `Some` if the environment is externally managed, optionally including an error
