@@ -1765,7 +1765,7 @@ fn build_with_symlink() -> Result<()> {
             requires = ["hatchling"]
             build-backend = "hatchling.build"
     "#})?;
-    std::os::unix::fs::symlink(
+    fs_err::os::unix::fs::symlink(
         context.temp_dir.child("pyproject.toml.real"),
         context.temp_dir.child("pyproject.toml"),
     )?;
