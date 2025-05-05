@@ -364,5 +364,5 @@ aarch64-unknown-linux-gnu = "2.28"
 [workspace.metadata.dist.github-action-commits]
 "actions/checkout" = "11bd71901bbe5b1630ceea73d27597364c9af683" # v4
 "actions/upload-artifact" = "6027e3dd177782cd8ab9af838c04fd81a07f1d47" # v4.6.2
-"actions/download-artifact" = "95815c38cf2ff2164869cbab79da8d1f422bc89e" # v4.2.1
+"actions/download-artifact" = "d3f86a106a0bac45b974a628896c90dbdf5c8093" # v4.3.0
 "actions/attest-build-provenance" = "c074443f1aee8d4aeeae555aebba3282517141b2" #v2.2.3
