@@ -14,9 +14,8 @@ The uv build backend currently only supports Python code. An alternative backend
 want to create a
 [library with extension modules](../concepts/projects/init.md#projects-with-extension-modules).
 
-To use the uv build backend as
-[build system](https://docs.astral.sh/uv/concepts/projects/config/#build-systems) in an existing
-project, add it to the `[build-system]` section in your `pyproject.toml`:
+To use the uv build backend as [build system](../concepts/projects/config.md#build-systems) in an
+existing project, add it to the `[build-system]` section in your `pyproject.toml`:
 
 ```toml
 [build-system]
@@ -26,9 +25,9 @@ build-backend = "uv_build"
 
 !!! important
 
-    The uv build backend follows the same
-    [versioning policy](https://docs.astral.sh/uv/reference/versioning/), setting an upper bound on
-    the `uv_build` version ensures that the package continues to build in the future.
+    The uv build backend follows the same [versioning policy](../reference/policies/versioning.md),
+    setting an upper bound on the `uv_build` version ensures that the package continues to build in
+    the future.
 
 You can also create a new project that uses the uv build backend with `uv init`:
 
