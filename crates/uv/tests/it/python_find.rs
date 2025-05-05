@@ -746,7 +746,8 @@ fn python_required_python_major_minor() {
 
     // Symlink it to `python3.11`.
     fs_err::create_dir_all(context.temp_dir.child("child")).unwrap();
-    std::os::unix::fs::symlink(path, context.temp_dir.child("child").join("python3.11")).unwrap();
+    fs_err::os::unix::fs::symlink(path, context.temp_dir.child("child").join("python3.11"))
+        .unwrap();
 
     // Find `python3.11`, which is `>=3.11.4`.
     uv_snapshot!(context.filters(), context.python_find().arg(">=3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"

@@ -653,13 +653,13 @@ impl Cache {
         let dst = dst.as_ref();
 
         // Attempt to create the symlink directly.
-        match std::os::unix::fs::symlink(&src, dst) {
+        match fs_err::os::unix::fs::symlink(&src, dst) {
             Ok(()) => Ok(()),
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 // Create a symlink, using a temporary file to ensure atomicity.
                 let temp_dir = tempfile::tempdir_in(dst.parent().unwrap())?;
                 let temp_file = temp_dir.path().join("link");
-                std::os::unix::fs::symlink(&src, &temp_file)?;
+                fs_err::os::unix::fs::symlink(&src, &temp_file)?;
 
                 // Move the symlink into the target location.
                 fs_err::rename(&temp_file, dst)?;

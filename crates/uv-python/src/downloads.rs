@@ -761,7 +761,7 @@ impl ManagedPythonDownload {
         // to that date do not.
         #[cfg(unix)]
         {
-            match std::os::unix::fs::symlink(
+            match fs_err::os::unix::fs::symlink(
                 format!("python{}.{}", self.key.major, self.key.minor),
                 extracted.join("bin").join("python"),
             ) {

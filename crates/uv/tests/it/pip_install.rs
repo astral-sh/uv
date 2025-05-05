@@ -3723,7 +3723,7 @@ fn launcher_with_symlink() -> Result<()> {
     );
 
     #[cfg(windows)]
-    if let Err(error) = std::os::windows::fs::symlink_file(
+    if let Err(error) = fs_err::os::windows::fs::symlink_file(
         context.venv.join("Scripts\\simple_launcher.exe"),
         context.temp_dir.join("simple_launcher.exe"),
     ) {
@@ -3736,7 +3736,7 @@ fn launcher_with_symlink() -> Result<()> {
     }
 
     #[cfg(unix)]
-    std::os::unix::fs::symlink(
+    fs_err::os::unix::fs::symlink(
         context.venv.join("bin/simple_launcher"),
         context.temp_dir.join("simple_launcher"),
     )?;
@@ -8123,7 +8123,7 @@ fn install_relocatable() -> Result<()> {
     #[cfg(unix)]
     {
         let script_symlink_path = context.temp_dir.join("black");
-        std::os::unix::fs::symlink(script_path, script_symlink_path.clone())?;
+        fs_err::os::unix::fs::symlink(script_path, script_symlink_path.clone())?;
         Command::new(script_symlink_path.as_os_str())
             .assert()
             .success()
