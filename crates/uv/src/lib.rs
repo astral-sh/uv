@@ -8,6 +8,13 @@ use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
+use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
+use crate::printer::Printer;
+use crate::settings::{
+    CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
+    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
+    PublishSettings,
+};
 use anstream::eprintln;
 use anyhow::{bail, Context, Result};
 use clap::error::{ContextKind, ContextValue};
@@ -15,6 +22,8 @@ use clap::{CommandFactory, Parser};
 use futures::FutureExt;
 use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
+#[cfg(feature = "self-update")]
+use std::ops::Bound;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument};
 use uv_cache::{Cache, Refresh};
@@ -37,14 +46,8 @@ use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
-
-use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
-use crate::printer::Printer;
-use crate::settings::{
-    CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
-    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
-    PublishSettings,
-};
+#[cfg(feature = "self-update")]
+use version_ranges::Ranges;
 
 pub(crate) mod commands;
 pub(crate) mod logging;
@@ -297,8 +300,33 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     if let Some(required_version) = globals.required_version.as_ref() {
         let package_version = uv_pep440::Version::from_str(uv_version::version())?;
         if !required_version.contains(&package_version) {
+            #[cfg(feature = "self-update")]
+            let hint = {
+                // If the required version range includes a lower bound that's higher than
+                // the current version, suggest `uv self update`.
+                let ranges = Ranges::from(required_version.version_sepcifiers().to_owned());
+                let self_update_might_help = ranges
+                    .bounding_range()
+                    .iter()
+                    .filter_map(|(lowest, _highest)| match lowest {
+                        Bound::Included(version) => Some(*version),
+                        Bound::Excluded(_) | Bound::Unbounded => None,
+                    })
+                    .any(|version| version >= &package_version);
+                if self_update_might_help {
+                    format!(
+                        "\n {} Update `uv` by running `{}`.",
+                        "hint:".green(),
+                        "uv self update".cyan()
+                    )
+                } else {
+                    String::new()
+                }
+            };
+            #[cfg(not(feature = "self-update"))]
+            let hint = "";
             return Err(anyhow::anyhow!(
-                "Required uv version `{required_version}` does not match the running version `{package_version}`",
+                "Required uv version `{required_version}` does not match the running version `{package_version}`.{hint}",
             ));
         }
     }
