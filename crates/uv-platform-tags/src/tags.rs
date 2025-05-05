@@ -466,8 +466,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
         }
         (Os::Musllinux { major, minor }, _) => {
             let mut platform_tags = vec![PlatformTag::Linux { arch }];
-            // musl 1.1 is the lowest supported version in musllinux
-            platform_tags.extend((1..=*minor).map(|minor| PlatformTag::Musllinux {
+            platform_tags.extend((0..=*minor).map(|minor| PlatformTag::Musllinux {
                 major: *major,
                 minor,
                 arch,
