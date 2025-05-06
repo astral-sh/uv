@@ -1,4 +1,5 @@
-//! Cross-language glob syntax from [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).
+//! Cross-language glob syntax from
+//! [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).
 
 use globset::{Glob, GlobBuilder};
 use thiserror::Error;
@@ -28,99 +29,106 @@ pub enum PortableGlobError {
     TooManyStars { glob: String, pos: usize },
 }
 
-/// Parse cross-language glob syntax from [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/):
-///
-/// - Alphanumeric characters, underscores (`_`), hyphens (`-`) and dots (`.`) are matched verbatim.
-/// - The special glob characters are:
-///   - `*`: Matches any number of characters except path separators
-///   - `?`: Matches a single character except the path separator
-///   - `**`: Matches any number of characters including path separators
-///   - `[]`, containing only the verbatim matched characters: Matches a single of the characters contained. Within
-///     `[...]`, the hyphen indicates a locale-agnostic range (e.g. `a-z`, order based on Unicode code points). Hyphens at
-///     the start or end are matched literally.
-/// - The path separator is the forward slash character (`/`). Patterns are relative to the given directory, a leading slash
-///   character for absolute paths is not supported.
-/// - Parent directory indicators (`..`) are not allowed.
-///
-/// These rules mean that matching the backslash (`\`) is forbidden, which avoid collisions with the windows path separator.
-pub fn parse_portable_glob(glob: &str) -> Result<Glob, PortableGlobError> {
-    check_portable_glob(glob)?;
-    Ok(GlobBuilder::new(glob).literal_separator(true).build()?)
-}
+/// Cross-language glob parser with the glob syntax from
+/// [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct PortableGlobParser;
 
-/// See [`parse_portable_glob`].
-pub fn check_portable_glob(glob: &str) -> Result<(), PortableGlobError> {
-    let mut chars = glob.chars().enumerate().peekable();
-    // A `..` is on a parent directory indicator at the start of the string or after a directory
-    // separator.
-    let mut start_or_slash = true;
-    // The number of consecutive stars before the current character.
-    while let Some((pos, c)) = chars.next() {
-        // `***` or `**literals` can be correctly represented with less stars. They are banned by
-        // `glob`, they are allowed by `globset` and PEP 639 is ambiguous, so we're filtering them
-        // out.
-        if c == '*' {
-            let mut star_run = 1;
-            while let Some((_, c)) = chars.peek() {
-                if *c == '*' {
-                    star_run += 1;
-                    chars.next();
-                } else {
-                    break;
+impl PortableGlobParser {
+    /// Parse cross-language glob syntax from [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/):
+    ///
+    /// - Alphanumeric characters, underscores (`_`), hyphens (`-`) and dots (`.`) are matched verbatim.
+    /// - The special glob characters are:
+    ///   - `*`: Matches any number of characters except path separators
+    ///   - `?`: Matches a single character except the path separator
+    ///   - `**`: Matches any number of characters including path separators
+    ///   - `[]`, containing only the verbatim matched characters: Matches a single of the characters contained. Within
+    ///     `[...]`, the hyphen indicates a locale-agnostic range (e.g. `a-z`, order based on Unicode code points). Hyphens at
+    ///     the start or end are matched literally.
+    /// - The path separator is the forward slash character (`/`). Patterns are relative to the given directory, a leading slash
+    ///   character for absolute paths is not supported.
+    /// - Parent directory indicators (`..`) are not allowed.
+    ///
+    /// These rules mean that matching the backslash (`\`) is forbidden, which avoid collisions with the windows path separator.
+    pub fn parse(&self, glob: &str) -> Result<Glob, PortableGlobError> {
+        self.check(glob)?;
+        Ok(GlobBuilder::new(glob).literal_separator(true).build()?)
+    }
+
+    /// See [`Self::parse`].
+    pub fn check(&self, glob: &str) -> Result<(), PortableGlobError> {
+        let mut chars = glob.chars().enumerate().peekable();
+        // A `..` is on a parent directory indicator at the start of the string or after a directory
+        // separator.
+        let mut start_or_slash = true;
+        // The number of consecutive stars before the current character.
+        while let Some((pos, c)) = chars.next() {
+            // `***` or `**literals` can be correctly represented with less stars. They are banned by
+            // `glob`, they are allowed by `globset` and PEP 639 is ambiguous, so we're filtering them
+            // out.
+            if c == '*' {
+                let mut star_run = 1;
+                while let Some((_, c)) = chars.peek() {
+                    if *c == '*' {
+                        star_run += 1;
+                        chars.next();
+                    } else {
+                        break;
+                    }
                 }
-            }
-            if star_run >= 3 {
-                return Err(PortableGlobError::TooManyStars {
-                    glob: glob.to_string(),
-                    // We don't update pos for the stars.
-                    pos,
-                });
-            } else if star_run == 2 {
-                if chars.peek().is_some_and(|(_, c)| *c != '/') {
+                if star_run >= 3 {
                     return Err(PortableGlobError::TooManyStars {
                         glob: glob.to_string(),
                         // We don't update pos for the stars.
                         pos,
                     });
+                } else if star_run == 2 {
+                    if chars.peek().is_some_and(|(_, c)| *c != '/') {
+                        return Err(PortableGlobError::TooManyStars {
+                            glob: glob.to_string(),
+                            // We don't update pos for the stars.
+                            pos,
+                        });
+                    }
                 }
-            }
-            start_or_slash = false;
-        } else if c.is_alphanumeric() || matches!(c, '_' | '-' | '?') {
-            start_or_slash = false;
-        } else if c == '.' {
-            if start_or_slash && matches!(chars.peek(), Some((_, '.'))) {
-                return Err(PortableGlobError::ParentDirectory {
-                    pos,
-                    glob: glob.to_string(),
-                });
-            }
-            start_or_slash = false;
-        } else if c == '/' {
-            start_or_slash = true;
-        } else if c == '[' {
-            for (pos, c) in chars.by_ref() {
-                if c.is_alphanumeric() || matches!(c, '_' | '-' | '.') {
-                    // Allowed.
-                } else if c == ']' {
-                    break;
-                } else {
-                    return Err(PortableGlobError::InvalidCharacterRange {
-                        glob: glob.to_string(),
+                start_or_slash = false;
+            } else if c.is_alphanumeric() || matches!(c, '_' | '-' | '?') {
+                start_or_slash = false;
+            } else if c == '.' {
+                if start_or_slash && matches!(chars.peek(), Some((_, '.'))) {
+                    return Err(PortableGlobError::ParentDirectory {
                         pos,
-                        invalid: c,
+                        glob: glob.to_string(),
                     });
                 }
+                start_or_slash = false;
+            } else if c == '/' {
+                start_or_slash = true;
+            } else if c == '[' {
+                for (pos, c) in chars.by_ref() {
+                    if c.is_alphanumeric() || matches!(c, '_' | '-' | '.') {
+                        // Allowed.
+                    } else if c == ']' {
+                        break;
+                    } else {
+                        return Err(PortableGlobError::InvalidCharacterRange {
+                            glob: glob.to_string(),
+                            pos,
+                            invalid: c,
+                        });
+                    }
+                }
+                start_or_slash = false;
+            } else {
+                return Err(PortableGlobError::InvalidCharacter {
+                    glob: glob.to_string(),
+                    pos,
+                    invalid: c,
+                });
             }
-            start_or_slash = false;
-        } else {
-            return Err(PortableGlobError::InvalidCharacter {
-                glob: glob.to_string(),
-                pos,
-                invalid: c,
-            });
         }
+        Ok(())
     }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -130,7 +138,7 @@ mod tests {
 
     #[test]
     fn test_error() {
-        let parse_err = |glob| parse_portable_glob(glob).unwrap_err().to_string();
+        let parse_err = |glob| PortableGlobParser.parse(glob).unwrap_err().to_string();
         assert_snapshot!(
             parse_err(".."),
             @"The parent directory operator (`..`) at position 0 is not allowed in glob: `..`"
@@ -188,7 +196,7 @@ mod tests {
             "src/**",
         ];
         for case in cases {
-            parse_portable_glob(case).unwrap();
+            PortableGlobParser.parse(case).unwrap();
         }
     }
 }

@@ -12,7 +12,7 @@ use zip::{CompressionMethod, ZipWriter};
 
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
-use uv_globfilter::{parse_portable_glob, GlobDirFilter};
+use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 use uv_pypi_types::Identifier;
 use uv_warnings::warn_user_once;
@@ -432,10 +432,12 @@ pub(crate) fn build_exclude_matcher(
         } else {
             format!("**/{exclude}").to_string()
         };
-        let glob = parse_portable_glob(&exclude).map_err(|err| Error::PortableGlob {
-            field: "tool.uv.build-backend.*-exclude".to_string(),
-            source: err,
-        })?;
+        let glob = PortableGlobParser
+            .parse(&exclude)
+            .map_err(|err| Error::PortableGlob {
+                field: "tool.uv.build-backend.*-exclude".to_string(),
+                source: err,
+            })?;
         exclude_builder.add(glob);
     }
     let exclude_matcher = exclude_builder
@@ -467,7 +469,7 @@ fn wheel_subdir_from_globs(
                 src.user_display(),
                 license_files
             );
-            parse_portable_glob(license_files)
+            PortableGlobParser.parse(license_files)
         })
         .collect::<Result<_, _>>()
         .map_err(|err| Error::PortableGlob {
