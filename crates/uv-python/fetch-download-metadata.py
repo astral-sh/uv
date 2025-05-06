@@ -137,6 +137,7 @@ class Version(NamedTuple):
 class ImplementationName(StrEnum):
     CPYTHON = "cpython"
     PYPY = "pypy"
+    GRAALPY = "graalpy"
 
 
 class Variant(StrEnum):
@@ -540,6 +541,105 @@ class PyPyFinder(Finder):
             download.sha256 = checksums.get(download.filename)
 
 
+class GraalPyFinder(Finder):
+    implementation = ImplementationName.GRAALPY
+
+    RELEASE_URL = "https://api.github.com/repos/oracle/graalpython/releases"
+
+    PLATFORM_MAPPING = {
+        "windows": "windows",
+        "linux": "linux",
+        "macos": "darwin",
+    }
+
+    ARCH_MAPPING = {
+        "amd64": "x86_64",
+        "aarch64": "aarch64",
+    }
+
+    GRAALPY_VERSION_RE = re.compile(r"-(\d+\.\d+\.\d+)$", re.ASCII)
+    CPY_VERSION_RE = re.compile(r"Python (\d+\.\d+(\.\d+)?)", re.ASCII)
+    PLATFORM_RE = re.compile(r"(\w+)-(\w+)\.(?:zip|tar\.gz)$", re.ASCII)
+
+    def __init__(self, client: httpx.AsyncClient):
+        self.client = client
+
+    async def find(self) -> list[PythonDownload]:
+        downloads = await self._fetch_downloads()
+        await self._fetch_checksums(downloads, n=10)
+        return downloads
+
+    async def _fetch_downloads(self) -> list[PythonDownload]:
+        # This will only download the first page, i.e., ~30 releases of
+        # GraalPy. Since GraalPy releases 6 times a year and has a support
+        # window of 2 years this is plenty.
+        resp = await self.client.get(self.RELEASE_URL)
+        resp.raise_for_status()
+        releases = resp.json()
+
+        results = {}
+        for release in releases:
+            m = self.GRAALPY_VERSION_RE.search(release["tag_name"])
+            if not m:
+                continue
+            graalpy_version = m.group(1)
+            m = self.CPY_VERSION_RE.search(release["body"])
+            if not m:
+                continue
+            python_version_str = m.group(1)
+            if not m.group(2):
+                python_version_str += ".0"
+            python_version = Version.from_str(python_version_str)
+            for asset in release["assets"]:
+                url = asset["browser_download_url"]
+                m = self.PLATFORM_RE.search(url)
+                if not m:
+                    continue
+                platform = self._normalize_os(m.group(1))
+                arch = self._normalize_arch(m.group(2))
+                libc = "gnu" if platform == "linux" else "none"
+                download = PythonDownload(
+                    release=0,
+                    version=python_version,
+                    triple=PlatformTriple(
+                        platform=platform,
+                        arch=arch,
+                        libc=libc,
+                    ),
+                    flavor=graalpy_version,
+                    implementation=self.implementation,
+                    filename=asset["name"],
+                    url=url,
+                )
+                # Only keep the latest GraalPy version of each arch/platform
+                if (python_version, arch, platform) not in results:
+                    results[(python_version, arch, platform)] = download
+
+        return list(results.values())
+
+    def _normalize_arch(self, arch: str) -> Arch:
+        return Arch(self.ARCH_MAPPING.get(arch, arch), None)
+
+    def _normalize_os(self, os: str) -> str:
+        return self.PLATFORM_MAPPING.get(os, os)
+
+    async def _fetch_checksums(self, downloads: list[PythonDownload], n: int) -> None:
+        for idx, batch in enumerate(batched(downloads, n)):
+            logging.info("Fetching GraalPy checksums: %d/%d", idx * n, len(downloads))
+            checksum_requests = []
+            for download in batch:
+                url = download.url + ".sha256"
+                checksum_requests.append(self.client.get(url))
+            for download, resp in zip(batch, await asyncio.gather(*checksum_requests)):
+                try:
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 404:
+                        continue
+                    raise
+                download.sha256 = resp.text.strip()
+
+
 def render(downloads: list[PythonDownload]) -> None:
     """Render `download-metadata.json`."""
 
@@ -564,7 +664,11 @@ def render(downloads: list[PythonDownload]) -> None:
 
     def sort_key(download: PythonDownload) -> tuple:
         # Sort by implementation, version (latest first), and then by triple.
-        impl_order = [ImplementationName.CPYTHON, ImplementationName.PYPY]
+        impl_order = [
+            ImplementationName.CPYTHON,
+            ImplementationName.PYPY,
+            ImplementationName.GRAALPY,
+        ]
         prerelease = prerelease_sort_key(download.version.prerelease)
         return (
             impl_order.index(download.implementation),
@@ -630,6 +734,7 @@ async def find() -> None:
     finders = [
         CPythonFinder(client),
         PyPyFinder(client),
+        GraalPyFinder(client),
     ]
     downloads = []
 
