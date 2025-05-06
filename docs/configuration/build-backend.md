@@ -19,7 +19,7 @@ existing project, add it to the `[build-system]` section in your `pyproject.toml
 
 ```toml
 [build-system]
-requires = ["uv_build>=0.6.13,<0.7"]
+requires = ["uv_build>=0.7.2,<0.8.0"]
 build-backend = "uv_build"
 ```
 
@@ -89,4 +89,5 @@ Excludes are not anchored, which means that `__pycache__` excludes all directori
 exclude only `<project root>/dist`.
 
 All fields accepting patterns use the reduced portable glob syntax from
-[PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key).
+[PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key), with the addition that
+characters can be escaped with a backslash.

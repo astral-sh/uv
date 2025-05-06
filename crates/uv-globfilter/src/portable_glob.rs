@@ -2,6 +2,7 @@
 //! [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).
 
 use globset::{Glob, GlobBuilder};
+use owo_colors::OwoColorize;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -19,6 +20,24 @@ pub enum PortableGlobError {
         pos: usize,
         invalid: char,
     },
+    #[error(
+        "Invalid character `{invalid}` at position {pos} in glob: `{glob}`. {}{} Characters can be escaped with a backslash",
+        "hint".bold().cyan(),
+        ":".bold()
+    )]
+    InvalidCharacterUv {
+        glob: String,
+        pos: usize,
+        invalid: char,
+    },
+    #[error(
+        "Only forward slashes are allowed as path separator, invalid character at position {pos} in glob: `{glob}`"
+    )]
+    InvalidBackslash { glob: String, pos: usize },
+    #[error(
+        "Path separators can't be escaped, invalid character at position {pos} in glob: `{glob}`"
+    )]
+    InvalidEscapee { glob: String, pos: usize },
     #[error("Invalid character `{invalid}` in range at position {pos} in glob: `{glob}`")]
     InvalidCharacterRange {
         glob: String,
@@ -27,15 +46,35 @@ pub enum PortableGlobError {
     },
     #[error("Too many at stars at position {pos} in glob: `{glob}`")]
     TooManyStars { glob: String, pos: usize },
+    #[error("Trailing backslash at position {pos} in glob: `{glob}`")]
+    TrailingEscape { glob: String, pos: usize },
 }
 
-/// Cross-language glob parser with the glob syntax from
+/// Cross-language glob syntax from
 /// [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).
+///
+/// The variant determines whether the parser strictly adheres to PEP 639 rules or allows extensions
+/// such as backslash escapes.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct PortableGlobParser;
+pub enum PortableGlobParser {
+    /// Follow the PEP 639 rules strictly.
+    Pep639,
+    /// In addition to the PEP 639 syntax, allow escaping characters with backslashes.
+    ///
+    /// For cross-platform compatibility, escaping path separators is not allowed, i.e., forward
+    /// slashes and backslashes can't be escaped.
+    Uv,
+}
 
 impl PortableGlobParser {
-    /// Parse cross-language glob syntax from [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/):
+    fn backslash_escape(self) -> bool {
+        match self {
+            PortableGlobParser::Pep639 => false,
+            PortableGlobParser::Uv => true,
+        }
+    }
+
+    /// Parse cross-language glob syntax based on [PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/):
     ///
     /// - Alphanumeric characters, underscores (`_`), hyphens (`-`) and dots (`.`) are matched verbatim.
     /// - The special glob characters are:
@@ -45,6 +84,7 @@ impl PortableGlobParser {
     ///   - `[]`, containing only the verbatim matched characters: Matches a single of the characters contained. Within
     ///     `[...]`, the hyphen indicates a locale-agnostic range (e.g. `a-z`, order based on Unicode code points). Hyphens at
     ///     the start or end are matched literally.
+    ///   - `\`: Disallowed in PEP 639 mode. In uv mode, it escapes the following character to be matched verbatim.
     /// - The path separator is the forward slash character (`/`). Patterns are relative to the given directory, a leading slash
     ///   character for absolute paths is not supported.
     /// - Parent directory indicators (`..`) are not allowed.
@@ -52,10 +92,13 @@ impl PortableGlobParser {
     /// These rules mean that matching the backslash (`\`) is forbidden, which avoid collisions with the windows path separator.
     pub fn parse(&self, glob: &str) -> Result<Glob, PortableGlobError> {
         self.check(glob)?;
-        Ok(GlobBuilder::new(glob).literal_separator(true).build()?)
+        Ok(GlobBuilder::new(glob)
+            .literal_separator(true)
+            .backslash_escape(self.backslash_escape())
+            .build()?)
     }
 
-    /// See [`Self::parse`].
+    /// See [`parse_portable_glob`].
     pub fn check(&self, glob: &str) -> Result<(), PortableGlobError> {
         let mut chars = glob.chars().enumerate().peekable();
         // A `..` is on a parent directory indicator at the start of the string or after a directory
@@ -119,12 +162,50 @@ impl PortableGlobParser {
                     }
                 }
                 start_or_slash = false;
+            } else if c == '\\' {
+                match *self {
+                    PortableGlobParser::Pep639 => {
+                        return Err(PortableGlobError::InvalidBackslash {
+                            glob: glob.to_string(),
+                            pos,
+                        });
+                    }
+                    PortableGlobParser::Uv => {
+                        match chars.next() {
+                            Some((pos, '/' | '\\')) => {
+                                // For cross-platform compatibility, we don't allow forward slashes or
+                                // backslashes to be escaped.
+                                return Err(PortableGlobError::InvalidEscapee {
+                                    glob: glob.to_string(),
+                                    pos,
+                                });
+                            }
+                            Some(_) => {
+                                // Escaped character
+                            }
+                            None => {
+                                return Err(PortableGlobError::TrailingEscape {
+                                    glob: glob.to_string(),
+                                    pos,
+                                });
+                            }
+                        }
+                    }
+                }
             } else {
-                return Err(PortableGlobError::InvalidCharacter {
-                    glob: glob.to_string(),
-                    pos,
-                    invalid: c,
-                });
+                let err = match *self {
+                    PortableGlobParser::Pep639 => PortableGlobError::InvalidCharacter {
+                        glob: glob.to_string(),
+                        pos,
+                        invalid: c,
+                    },
+                    PortableGlobParser::Uv => PortableGlobError::InvalidCharacterUv {
+                        glob: glob.to_string(),
+                        pos,
+                        invalid: c,
+                    },
+                };
+                return Err(err);
             }
         }
         Ok(())
@@ -138,7 +219,10 @@ mod tests {
 
     #[test]
     fn test_error() {
-        let parse_err = |glob| PortableGlobParser.parse(glob).unwrap_err().to_string();
+        let parse_err = |glob| {
+            let error = PortableGlobParser::Pep639.parse(glob).unwrap_err();
+            anstream::adapter::strip_str(&error.to_string()).to_string()
+        };
         assert_snapshot!(
             parse_err(".."),
             @"The parent directory operator (`..`) at position 0 is not allowed in glob: `..`"
@@ -173,30 +257,64 @@ mod tests {
         );
         assert_snapshot!(
             parse_err(r"licenses\eula.txt"),
-            @r"Invalid character `\` at position 8 in glob: `licenses\eula.txt`"
+            @r"Only forward slashes are allowed as path separator, invalid character at position 8 in glob: `licenses\eula.txt`"
+        );
+        assert_snapshot!(
+            parse_err(r"**/@test"),
+            @"Invalid character `@` at position 3 in glob: `**/@test`"
+        );
+        // Escapes are not allowed in strict PEP 639 mode
+        assert_snapshot!(
+            parse_err(r"public domain/Gulliver\\’s Travels.txt"),
+            @r"Invalid character ` ` at position 6 in glob: `public domain/Gulliver\\’s Travels.txt`"
+        );
+        let parse_err_uv = |glob| {
+            let error = PortableGlobParser::Uv.parse(glob).unwrap_err();
+            anstream::adapter::strip_str(&error.to_string()).to_string()
+        };
+        assert_snapshot!(
+            parse_err_uv(r"**/@test"),
+            @"Invalid character `@` at position 3 in glob: `**/@test`. hint: Characters can be escaped with a backslash"
+        );
+        // Escaping slashes is not allowed.
+        assert_snapshot!(
+            parse_err_uv(r"licenses\\MIT.txt"),
+            @r"Path separators can't be escaped, invalid character at position 9 in glob: `licenses\\MIT.txt`"
+        );
+        assert_snapshot!(
+            parse_err_uv(r"licenses\/MIT.txt"),
+            @r"Path separators can't be escaped, invalid character at position 9 in glob: `licenses\/MIT.txt`"
         );
     }
 
     #[test]
     fn test_valid() {
         let cases = [
-            "licenses/*.txt",
-            "licenses/**/*.txt",
-            "LICEN[CS]E.txt",
-            "LICEN?E.txt",
-            "[a-z].txt",
-            "[a-z._-].txt",
-            "*/**",
-            "LICENSE..txt",
-            "LICENSE_file-1.txt",
+            r"licenses/*.txt",
+            r"licenses/**/*.txt",
+            r"LICEN[CS]E.txt",
+            r"LICEN?E.txt",
+            r"[a-z].txt",
+            r"[a-z._-].txt",
+            r"*/**",
+            r"LICENSE..txt",
+            r"LICENSE_file-1.txt",
             // (google translate)
-            "licenses/라이센스*.txt",
-            "licenses/ライセンス*.txt",
-            "licenses/执照*.txt",
-            "src/**",
+            r"licenses/라이센스*.txt",
+            r"licenses/ライセンス*.txt",
+            r"licenses/执照*.txt",
+            r"src/**",
+        ];
+        let cases_uv = [
+            r"public-domain/Gulliver\’s\ Travels.txt",
+            // https://github.com/astral-sh/uv/issues/13280
+            r"**/\@test",
         ];
         for case in cases {
-            PortableGlobParser.parse(case).unwrap();
+            PortableGlobParser::Pep639.parse(case).unwrap();
+        }
+        for case in cases.iter().chain(cases_uv.iter()) {
+            PortableGlobParser::Uv.parse(case).unwrap();
         }
     }
 }

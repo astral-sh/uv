@@ -432,7 +432,7 @@ pub(crate) fn build_exclude_matcher(
         } else {
             format!("**/{exclude}").to_string()
         };
-        let glob = PortableGlobParser
+        let glob = PortableGlobParser::Uv
             .parse(&exclude)
             .map_err(|err| Error::PortableGlob {
                 field: "tool.uv.build-backend.*-exclude".to_string(),
@@ -469,7 +469,7 @@ fn wheel_subdir_from_globs(
                 src.user_display(),
                 license_files
             );
-            PortableGlobParser.parse(license_files)
+            PortableGlobParser::Pep639.parse(license_files)
         })
         .collect::<Result<_, _>>()
         .map_err(|err| Error::PortableGlob {
