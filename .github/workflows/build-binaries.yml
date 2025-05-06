@@ -425,7 +425,8 @@ jobs:
           githubToken: ${{ github.token }}
           install: |
             apt-get update
-            apt-get install -y --no-install-recommends curl
+            apt-get install -y --no-install-recommends python3 python3-distutils curl
+            export CURL_SSL_NO_VERIFY=1
             curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
           run: |
             ~/.local/bin/uv venv
@@ -476,11 +477,13 @@ jobs:
           githubToken: ${{ github.token }}
           install: |
             apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install -U pip
+            apt-get install -y --no-install-recommends python3 python3-distutils curl
+            export CURL_SSL_NO_VERIFY=1
+            curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
           run: |
-            pip install ${{ env.PACKAGE_NAME }}_build --no-index --find-links crates/uv-build/dist --force-reinstall
-            ${{ env.MODULE_NAME }}-build --help
+            ~/.local/bin/uv venv
+            ~/.local/bin/uv pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist/ --force-reinstall
+            ~/.local/bin/uv run -- ${{ env.MODULE_NAME }}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${{ env.MODULE_NAME }}_build --help
       - name: "Upload wheels uv-build"
@@ -525,11 +528,13 @@ jobs:
           githubToken: ${{ github.token }}
           install: |
             apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install -U pip
+            apt-get install -y --no-install-recommends python3 python3-distutils curl
+            export CURL_SSL_NO_VERIFY=1
+            curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
           run: |
-            pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            ${{ env.MODULE_NAME }} --help
+            ~/.local/bin/uv venv
+            ~/.local/bin/uv pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            ~/.local/bin/uv run -- ${{ env.MODULE_NAME }} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${{ env.MODULE_NAME }} --help
             uvx --help
@@ -575,11 +580,13 @@ jobs:
           githubToken: ${{ github.token }}
           install: |
             apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install -U pip
+            apt-get install -y --no-install-recommends python3 python3-distutils curl
+            export CURL_SSL_NO_VERIFY=1
+            curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
           run: |
-            pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
-            ${{ env.MODULE_NAME }}-build --help
+            ~/.local/bin/uv venv
+            ~/.local/bin/uv pip install ${{ env.PACKAGE_NAME }} --no-index --find-links crates/uv-build/dist/ --force-reinstall
+            ~/.local/bin/uv run -- ${{ env.MODULE_NAME }} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${{ env.MODULE_NAME }}-build --help
       - name: "Upload wheels uv-build"
@@ -836,11 +843,13 @@ jobs:
           githubToken: ${{ github.token }}
           install: |
             apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install -U pip
+            apt-get install -y --no-install-recommends python3 python3-distutils curl
+            export CURL_SSL_NO_VERIFY=1
+            curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
           run: |
-            pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            ${{ env.MODULE_NAME }} --help
+            ~/.local/bin/uv venv
+            ~/.local/bin/uv pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            ~/.local/bin/uv run -- ${{ env.MODULE_NAME }} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${{ env.MODULE_NAME }} --help
             uvx --help
@@ -902,11 +911,13 @@ jobs:
           githubToken: ${{ github.token }}
           install: |
             apt-get update
-            apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
-            pip3 install -U pip
+            apt-get install -y --no-install-recommends python3 python3-distutils curl
+            export CURL_SSL_NO_VERIFY=1
+            curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
           run: |
-            pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist --force-reinstall
-            ${{ env.MODULE_NAME }}-build --help
+            ~/.local/bin/uv venv
+            ~/.local/bin/uv pip install ${{ env.PACKAGE_NAME }}-build --no-index --find-links crates/uv-build/dist/ --force-reinstall
+            ~/.local/bin/uv run -- ${{ env.MODULE_NAME }}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # python -m ${{ env.MODULE_NAME }}_build --help
       - name: "Upload wheels"
