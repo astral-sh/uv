@@ -64,36 +64,32 @@ pub(crate) async fn list(
             }
         };
 
-        let version_specifier = if show_version_specifiers {
-            let specifiers = tool
-                .requirements()
-                .iter()
-                .filter(|req| req.name == name)
-                .map(|req| req.source.to_string())
-                .filter(|s| !s.is_empty())
-                .join(", ");
-            if specifiers.is_empty() {
-                String::new()
-            } else {
-                format!(" [required: {specifiers}]")
-            }
-        } else {
-            String::new()
-        };
+        let tool_requirements = (show_version_specifiers | show_with)
+            .then(|| tool.requirements())
+            .unwrap_or_default();
 
-        let with_requirements = (show_with && !tool.requirements().is_empty())
+        let version_specifier = show_version_specifiers
             .then(|| {
-                let requirements = tool
-                    .requirements()
+                let specifiers = tool_requirements
+                    .iter()
+                    .filter(|req| req.name == name)
+                    .map(|req| req.source.to_string())
+                    .filter(|s| !s.is_empty())
+                    .join(", ");
+                (!specifiers.is_empty())
+                    .then(|| format!(" [required: {specifiers}]"))
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+
+        let with_requirements = (show_with && tool_requirements.len() > 1)
+            .then(|| {
+                let requirements = tool_requirements
                     .iter()
                     .filter(|req| req.name != name)
                     .map(|req| format!("{}{}", req.name, req.source))
                     .join(", ");
-                if requirements.is_empty() {
-                    String::new()
-                } else {
-                    format!(" [with: {requirements}]")
-                }
+                format!(" [with: {requirements}]")
             })
             .unwrap_or_default();
 
