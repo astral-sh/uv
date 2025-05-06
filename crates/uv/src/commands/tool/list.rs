@@ -81,8 +81,8 @@ pub(crate) async fn list(
             String::new()
         };
 
-        let extra_requirements = if show_with {
-            let extra_requirements = tool
+        let with_requirements = if show_with {
+            let with_requirements = tool
                 .requirements()
                 .iter()
                 .filter(|req| req.name != name)
@@ -95,10 +95,10 @@ pub(crate) async fn list(
                 })
                 .filter(|s| !s.is_empty())
                 .join(", ");
-            if extra_requirements.is_empty() {
+            if with_requirements.is_empty() {
                 String::new()
             } else {
-                format!(" [with: {extra_requirements}]")
+                format!(" [with: {with_requirements}]")
             }
         } else {
             String::new()
@@ -108,14 +108,14 @@ pub(crate) async fn list(
             writeln!(
                 printer.stdout(),
                 "{} ({})",
-                format!("{name} v{version}{version_specifier}{extra_requirements}").bold(),
+                format!("{name} v{version}{version_specifier}{with_requirements}").bold(),
                 installed_tools.tool_dir(&name).simplified_display().cyan(),
             )?;
         } else {
             writeln!(
                 printer.stdout(),
                 "{}",
-                format!("{name} v{version}{version_specifier}{extra_requirements}").bold()
+                format!("{name} v{version}{version_specifier}{with_requirements}").bold()
             )?;
         }
 
