@@ -64,29 +64,32 @@ pub(crate) async fn list(
             }
         };
 
-        let tool_requirements = (show_version_specifiers | show_with)
-            .then(|| tool.requirements())
-            .unwrap_or_default();
-
         let version_specifier = show_version_specifiers
             .then(|| {
-                let specifiers = tool_requirements
+                tool.requirements()
                     .iter()
                     .filter(|req| req.name == name)
                     .map(|req| req.source.to_string())
                     .filter(|s| !s.is_empty())
-                    .join(", ");
-                (!specifiers.is_empty())
-                    .then(|| format!(" [required: {specifiers}]"))
-                    .unwrap_or_default()
+                    .peekable()
+            })
+            .take_if(|specifiers| specifiers.peek().is_some())
+            .map(|mut specifiers| {
+                let specifiers = specifiers.join(", ");
+                format!(" [required: {specifiers}]")
             })
             .unwrap_or_default();
 
-        let with_requirements = (show_with && tool_requirements.len() > 1)
+        let with_requirements = show_with
             .then(|| {
-                let requirements = tool_requirements
+                tool.requirements()
                     .iter()
                     .filter(|req| req.name != name)
+                    .peekable()
+            })
+            .take_if(|requirements| requirements.peek().is_some())
+            .map(|requirements| {
+                let requirements = requirements
                     .map(|req| format!("{}{}", req.name, req.source))
                     .join(", ");
                 format!(" [with: {requirements}]")
