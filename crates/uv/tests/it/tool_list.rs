@@ -344,7 +344,7 @@ fn tool_list_show_with() {
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `black` without extra requirements
+    // Install `black` without additional requirements
     context
         .tool_install()
         .arg("black==24.2.0")
@@ -353,7 +353,7 @@ fn tool_list_show_with() {
         .assert()
         .success();
 
-    // Install `flask` with extra requirements
+    // Install `flask` with additional requirements
     context
         .tool_install()
         .arg("flask")
@@ -366,7 +366,7 @@ fn tool_list_show_with() {
         .assert()
         .success();
 
-    // Install `ruff` with version specifier and extra requirements
+    // Install `ruff` with version specifier and additional requirements
     context
         .tool_install()
         .arg("ruff==0.3.4")

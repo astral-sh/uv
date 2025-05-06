@@ -4246,11 +4246,11 @@ pub struct ToolInstallArgs {
     #[arg(long, hide = true)]
     pub from: Option<String>,
 
-    /// Include the following extra requirements.
+    /// Include the following additional requirements.
     #[arg(long)]
     pub with: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Run all requirements listed in the given `requirements.txt` files.
+    /// Include all requirements listed in the given `requirements.txt` files.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
@@ -4334,7 +4334,7 @@ pub struct ToolListArgs {
     #[arg(long)]
     pub show_version_specifiers: bool,
 
-    /// Whether to display the extra requirements(s) installed with each tool.
+    /// Whether to display the additional requirements installed with each tool.
     #[arg(long)]
     pub show_with: bool,
 

@@ -1711,7 +1711,7 @@ fn tool_install_uninstallable() {
           We are sorry, but this package is not installable with pip.
 
           Please read the installation instructions at:
-     
+
           https://github.com/pyenv/pyenv#installation
           #
 
@@ -2021,7 +2021,7 @@ fn tool_install_unnamed_with() {
     "###);
 }
 
-/// Test installing a tool with extra requirements from a `requirements.txt` file.
+/// Test installing a tool with additional requirements from a `requirements.txt` file.
 #[test]
 fn tool_install_requirements_txt() {
     let context = TestContext::new("3.12")
