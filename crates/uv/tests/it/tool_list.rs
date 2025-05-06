@@ -361,6 +361,8 @@ fn tool_list_show_with() {
     context
         .tool_install()
         .arg("black==24.2.0")
+        .arg("--with")
+        .arg("requests")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
         .assert()
@@ -373,7 +375,7 @@ fn tool_list_show_with() {
     success: true
     exit_code: 0
     ----- stdout -----
-    black v24.2.0
+    black v24.2.0 [with: requests]
     - black
     - blackd
     flask v3.0.2 [with: requests, black==24.2.0]
@@ -389,7 +391,7 @@ fn tool_list_show_with() {
     success: true
     exit_code: 0
     ----- stdout -----
-    black v24.2.0 ([TEMP_DIR]/tools/black)
+    black v24.2.0 [with: requests] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
     flask v3.0.2 [with: requests, black==24.2.0] ([TEMP_DIR]/tools/flask)
@@ -405,7 +407,7 @@ fn tool_list_show_with() {
     success: true
     exit_code: 0
     ----- stdout -----
-    black v24.2.0 [required: ==24.2.0]
+    black v24.2.0 [required: ==24.2.0] [with: requests]
     - black
     - blackd
     flask v3.0.2 [with: requests, black==24.2.0]
@@ -424,7 +426,7 @@ fn tool_list_show_with() {
     success: true
     exit_code: 0
     ----- stdout -----
-    black v24.2.0 [required: ==24.2.0] ([TEMP_DIR]/tools/black)
+    black v24.2.0 [required: ==24.2.0] [with: requests] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
     flask v3.0.2 [with: requests, black==24.2.0] ([TEMP_DIR]/tools/flask)
