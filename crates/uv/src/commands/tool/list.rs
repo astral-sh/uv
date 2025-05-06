@@ -81,28 +81,18 @@ pub(crate) async fn list(
             String::new()
         };
 
-        let with_requirements = if show_with {
-            let with_requirements = tool
-                .requirements()
-                .iter()
-                .filter(|req| req.name != name)
-                .map(|req| {
-                    if !req.source.to_string().is_empty() {
-                        format!("{}{}", req.name, req.source)
-                    } else {
-                        req.name.to_string()
-                    }
-                })
-                .filter(|s| !s.is_empty())
-                .join(", ");
-            if with_requirements.is_empty() {
-                String::new()
-            } else {
-                format!(" [with: {with_requirements}]")
-            }
-        } else {
-            String::new()
-        };
+        let with_requirements = (show_with && !tool.requirements().is_empty())
+            .then(|| {
+                let requirements = tool
+                    .requirements()
+                    .iter()
+                    // Exclude the package itself
+                    .filter(|req| req.name != name)
+                    .map(|req| format!("{}{}", req.name, req.source))
+                    .join(", ");
+                format!(" [with: {requirements}]")
+            })
+            .unwrap_or_default();
 
         if show_paths {
             writeln!(
