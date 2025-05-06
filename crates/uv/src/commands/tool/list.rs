@@ -86,11 +86,14 @@ pub(crate) async fn list(
                 let requirements = tool
                     .requirements()
                     .iter()
-                    // Exclude the package itself
                     .filter(|req| req.name != name)
                     .map(|req| format!("{}{}", req.name, req.source))
                     .join(", ");
-                format!(" [with: {requirements}]")
+                if requirements.is_empty() {
+                    String::new()
+                } else {
+                    format!(" [with: {requirements}]")
+                }
             })
             .unwrap_or_default();
 
