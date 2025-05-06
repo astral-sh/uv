@@ -15,7 +15,7 @@ use tar::{EntryType, Header};
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::Simplified;
-use uv_globfilter::{parse_portable_glob, GlobDirFilter};
+use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_pypi_types::Identifier;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
@@ -88,10 +88,12 @@ fn source_dist_matcher(
         .to_string();
     includes.push(format!("{}/**", globset::escape(import_path)));
     for include in includes {
-        let glob = parse_portable_glob(&include).map_err(|err| Error::PortableGlob {
-            field: "tool.uv.build-backend.source-include".to_string(),
-            source: err,
-        })?;
+        let glob = PortableGlobParser
+            .parse(&include)
+            .map_err(|err| Error::PortableGlob {
+                field: "tool.uv.build-backend.source-include".to_string(),
+                source: err,
+            })?;
         include_globs.push(glob.clone());
     }
 
@@ -111,21 +113,22 @@ fn source_dist_matcher(
     // Include the license files
     for license_files in pyproject_toml.license_files_source_dist() {
         trace!("Including license files at: `{license_files}`");
-        let glob = parse_portable_glob(license_files).map_err(|err| Error::PortableGlob {
-            field: "project.license-files".to_string(),
-            source: err,
-        })?;
+        let glob = PortableGlobParser
+            .parse(license_files)
+            .map_err(|err| Error::PortableGlob {
+                field: "project.license-files".to_string(),
+                source: err,
+            })?;
         include_globs.push(glob);
     }
 
     // Include the data files
     for (name, directory) in settings.data.iter() {
-        let glob =
-            parse_portable_glob(&format!("{}/**", globset::escape(directory))).map_err(|err| {
-                Error::PortableGlob {
-                    field: format!("tool.uv.build-backend.data.{name}"),
-                    source: err,
-                }
+        let glob = PortableGlobParser
+            .parse(&format!("{}/**", globset::escape(directory)))
+            .map_err(|err| Error::PortableGlob {
+                field: format!("tool.uv.build-backend.data.{name}"),
+                source: err,
             })?;
         trace!("Including data ({name}) at: `{directory}`");
         include_globs.push(glob);
