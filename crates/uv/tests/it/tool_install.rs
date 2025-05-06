@@ -1711,7 +1711,7 @@ fn tool_install_uninstallable() {
           We are sorry, but this package is not installable with pip.
 
           Please read the installation instructions at:
-
+     
           https://github.com/pyenv/pyenv#installation
           #
 
