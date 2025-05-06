@@ -339,12 +339,12 @@ fn tool_list_show_version_specifiers() {
 }
 
 #[test]
-fn tool_list_show_extras() {
+fn tool_list_show_with() {
     let context = TestContext::new("3.12").with_filtered_exe_suffix();
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // Install `flask` with extras
+    // Install `flask` with extra requirements
     context
         .tool_install()
         .arg("flask")
@@ -357,7 +357,7 @@ fn tool_list_show_extras() {
         .assert()
         .success();
 
-    // Install `black` without extras
+    // Install `black` without extra requirements
     context
         .tool_install()
         .arg("black==24.2.0")
@@ -366,8 +366,8 @@ fn tool_list_show_extras() {
         .assert()
         .success();
 
-    // Test with --show-extras
-    uv_snapshot!(context.filters(), context.tool_list().arg("--show-extras")
+    // Test with --show-with
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-with")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
@@ -376,14 +376,14 @@ fn tool_list_show_extras() {
     black v24.2.0
     - black
     - blackd
-    flask v3.0.2 [extras: requests, black==24.2.0]
+    flask v3.0.2 [with: requests, black==24.2.0]
     - flask
 
     ----- stderr -----
     "###);
 
-    // Test with both --show-extras and --show-paths
-    uv_snapshot!(context.filters(), context.tool_list().arg("--show-extras").arg("--show-paths")
+    // Test with both --show-with and --show-paths
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-with").arg("--show-paths")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
@@ -392,14 +392,14 @@ fn tool_list_show_extras() {
     black v24.2.0 ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
-    flask v3.0.2 [extras: requests, black==24.2.0] ([TEMP_DIR]/tools/flask)
+    flask v3.0.2 [with: requests, black==24.2.0] ([TEMP_DIR]/tools/flask)
     - flask ([TEMP_DIR]/bin/flask)
 
     ----- stderr -----
     "###);
 
-    // Test with both --show-extras and --show-version-specifiers
-    uv_snapshot!(context.filters(), context.tool_list().arg("--show-extras").arg("--show-version-specifiers")
+    // Test with both --show-with and --show-version-specifiers
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-with").arg("--show-version-specifiers")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
     success: true
@@ -408,7 +408,7 @@ fn tool_list_show_extras() {
     black v24.2.0 [required: ==24.2.0]
     - black
     - blackd
-    flask v3.0.2 [extras: requests, black==24.2.0]
+    flask v3.0.2 [with: requests, black==24.2.0]
     - flask
 
     ----- stderr -----
@@ -416,7 +416,7 @@ fn tool_list_show_extras() {
 
     // Test with all flags
     uv_snapshot!(context.filters(), context.tool_list()
-    .arg("--show-extras")
+    .arg("--show-with")
     .arg("--show-version-specifiers")
     .arg("--show-paths")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
@@ -427,7 +427,7 @@ fn tool_list_show_extras() {
     black v24.2.0 [required: ==24.2.0] ([TEMP_DIR]/tools/black)
     - black ([TEMP_DIR]/bin/black)
     - blackd ([TEMP_DIR]/bin/blackd)
-    flask v3.0.2 [extras: requests, black==24.2.0] ([TEMP_DIR]/tools/flask)
+    flask v3.0.2 [with: requests, black==24.2.0] ([TEMP_DIR]/tools/flask)
     - flask ([TEMP_DIR]/bin/flask)
 
     ----- stderr -----

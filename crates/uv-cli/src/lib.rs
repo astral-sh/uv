@@ -4334,9 +4334,9 @@ pub struct ToolListArgs {
     #[arg(long)]
     pub show_version_specifiers: bool,
 
-    /// Whether to display the extra package(s) installed with each tool.
+    /// Whether to display the extra requirements(s) installed with each tool.
     #[arg(long)]
-    pub show_extras: bool,
+    pub show_with: bool,
 
     // Hide unused global Python options.
     #[arg(long, hide = true)]

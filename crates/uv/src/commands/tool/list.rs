@@ -16,7 +16,7 @@ use crate::printer::Printer;
 pub(crate) async fn list(
     show_paths: bool,
     show_version_specifiers: bool,
-    show_extras: bool,
+    show_with: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -81,8 +81,8 @@ pub(crate) async fn list(
             String::new()
         };
 
-        let extras = if show_extras {
-            let extras = tool
+        let extra_requirements = if show_with {
+            let extra_requirements = tool
                 .requirements()
                 .iter()
                 .filter(|req| req.name != name)
@@ -95,10 +95,10 @@ pub(crate) async fn list(
                 })
                 .filter(|s| !s.is_empty())
                 .join(", ");
-            if extras.is_empty() {
+            if extra_requirements.is_empty() {
                 String::new()
             } else {
-                format!(" [extras: {extras}]")
+                format!(" [with: {extra_requirements}]")
             }
         } else {
             String::new()
@@ -108,14 +108,14 @@ pub(crate) async fn list(
             writeln!(
                 printer.stdout(),
                 "{} ({})",
-                format!("{name} v{version}{version_specifier}{extras}").bold(),
+                format!("{name} v{version}{version_specifier}{extra_requirements}").bold(),
                 installed_tools.tool_dir(&name).simplified_display().cyan(),
             )?;
         } else {
             writeln!(
                 printer.stdout(),
                 "{}",
-                format!("{name} v{version}{version_specifier}{extras}").bold()
+                format!("{name} v{version}{version_specifier}{extra_requirements}").bold()
             )?;
         }
 
