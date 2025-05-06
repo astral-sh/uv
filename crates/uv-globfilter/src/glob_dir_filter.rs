@@ -174,7 +174,8 @@ mod tests {
         let matcher = GlobDirFilter::from_globs(&patterns).unwrap();
 
         // Test the prefix filtering
-        let mut visited: Vec<_> = WalkDir::new(dir.path())
+        let visited: Vec<_> = WalkDir::new(dir.path())
+            .sort_by_file_name()
             .into_iter()
             .filter_entry(|entry| {
                 let relative = entry
@@ -196,7 +197,6 @@ mod tests {
                 relative.replace(MAIN_SEPARATOR, "/")
             })
             .collect();
-        visited.sort();
         assert_eq!(
             visited,
             [
@@ -234,6 +234,7 @@ mod tests {
 
         let walkdir_root = dir.path();
         let mut matches: Vec<_> = WalkDir::new(walkdir_root)
+            .sort_by_file_name()
             .into_iter()
             .filter_entry(|entry| {
                 // TODO(konsti): This should be prettier.

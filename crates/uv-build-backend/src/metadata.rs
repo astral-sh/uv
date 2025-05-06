@@ -411,14 +411,18 @@ impl PyProjectToml {
                         }
                     })?;
 
-                for entry in WalkDir::new(root).into_iter().filter_entry(|entry| {
-                    license_globs.match_directory(
-                        entry
-                            .path()
-                            .strip_prefix(root)
-                            .expect("walkdir starts with root"),
-                    )
-                }) {
+                for entry in WalkDir::new(root)
+                    .sort_by_file_name()
+                    .into_iter()
+                    .filter_entry(|entry| {
+                        license_globs.match_directory(
+                            entry
+                                .path()
+                                .strip_prefix(root)
+                                .expect("walkdir starts with root"),
+                        )
+                    })
+                {
                     let entry = entry.map_err(|err| Error::WalkDir {
                         root: root.to_path_buf(),
                         err,
