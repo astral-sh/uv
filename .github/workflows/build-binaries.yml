@@ -428,12 +428,12 @@ jobs:
             apt-get install -y --no-install-recommends curl
             curl -LsSf https://astral.sh/uv/0.6.17/install.sh | sh
           run: |
-            uv venv
-            uv pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
-            uv run -- ${{ env.MODULE_NAME }} --help
+            ~/.local/bin/uv venv
+            ~/.local/bin/uv pip install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            ~/.local/bin/uv run -- ${{ env.MODULE_NAME }} --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # uv run -- python -m ${{ env.MODULE_NAME }} --help
-            uv run -- uvx --help
+            ~/.local/bin/uv run -- uvx --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
