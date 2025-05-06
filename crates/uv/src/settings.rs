@@ -14,6 +14,7 @@ use uv_cli::{
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonListFormat, PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs,
     ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
+    VersionArgs, VersionBump, VersionFormat,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
@@ -1476,6 +1477,75 @@ impl RemoveSettings {
             dependency_type,
             package,
             script,
+            python: python.and_then(Maybe::into_option),
+            refresh: Refresh::from(refresh),
+            settings: ResolverInstallerSettings::combine(
+                resolver_installer_options(installer, build),
+                filesystem,
+            ),
+            install_mirrors,
+        }
+    }
+}
+
+/// The resolved settings to use for a `version` invocation.
+#[allow(clippy::struct_excessive_bools, dead_code)]
+#[derive(Debug, Clone)]
+pub(crate) struct VersionSettings {
+    pub(crate) value: Option<String>,
+    pub(crate) bump: Option<VersionBump>,
+    pub(crate) short: bool,
+    pub(crate) output_format: VersionFormat,
+    pub(crate) dry_run: bool,
+    pub(crate) locked: bool,
+    pub(crate) frozen: bool,
+    pub(crate) active: Option<bool>,
+    pub(crate) no_sync: bool,
+    pub(crate) package: Option<PackageName>,
+    pub(crate) python: Option<String>,
+    pub(crate) install_mirrors: PythonInstallMirrors,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: ResolverInstallerSettings,
+}
+
+impl VersionSettings {
+    /// Resolve the [`RemoveSettings`] from the CLI and filesystem configuration.
+    #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn resolve(args: VersionArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let VersionArgs {
+            value,
+            bump,
+            short,
+            output_format,
+            dry_run,
+            no_sync,
+            locked,
+            frozen,
+            active,
+            no_active,
+            installer,
+            build,
+            refresh,
+            package,
+            python,
+        } = args;
+
+        let install_mirrors = filesystem
+            .clone()
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
+        Self {
+            value,
+            bump,
+            short,
+            output_format,
+            dry_run,
+            locked,
+            frozen,
+            active: flag(active, no_active),
+            no_sync,
+            package,
             python: python.and_then(Maybe::into_option),
             refresh: Refresh::from(refresh),
             settings: ResolverInstallerSettings::combine(

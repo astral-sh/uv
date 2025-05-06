@@ -25,9 +25,9 @@ use uv_cache_info::Timestamp;
 #[cfg(feature = "self-update")]
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
-    BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
-    ProjectCommand, PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand,
-    ToolNamespace, TopLevelArgs, VersionArgs, compat::CompatArgs,
+    compat::CompatArgs, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
+    PipCommand, PipNamespace, ProjectCommand, PythonCommand, PythonNamespace, SelfCommand,
+    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs,
 };
 use uv_configuration::min_stack_size;
 use uv_fs::{CWD, Simplified};
@@ -1046,6 +1046,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Project(project) => {
             Box::pin(run_project(
+                cli.top_level.global_args.project.is_some(),
                 project,
                 &project_dir,
                 run_command,
@@ -1084,33 +1085,6 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 is not available. Please use your package manager to update uv."
             );
         }
-        Commands::Version(VersionArgs {
-            value,
-            bump,
-            dry_run,
-            short,
-            output_format,
-        }) => {
-            // If they specified any of these flags, they probably don't mean `uv self version`
-            let strict = cli.top_level.global_args.project.is_some()
-                || globals.preview.is_enabled()
-                || dry_run
-                || bump.is_some()
-                || value.is_some();
-            commands::project_version(
-                &project_dir,
-                value,
-                bump,
-                dry_run,
-                short,
-                output_format,
-                strict,
-                &workspace_cache,
-                printer,
-            )
-            .await
-        }
-
         Commands::GenerateShellCompletion(args) => {
             args.shell.generate(&mut Cli::command(), &mut stdout());
             Ok(ExitStatus::Success)
@@ -1614,6 +1588,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
 /// Run a [`ProjectCommand`].
 async fn run_project(
+    project_was_explicit: bool,
     project_command: Box<ProjectCommand>,
     project_dir: &Path,
     command: Option<RunCommand>,
@@ -1978,6 +1953,53 @@ async fn run_project(
                 args.settings,
                 globals.network_settings,
                 script,
+                globals.python_preference,
+                globals.python_downloads,
+                globals.installer_metadata,
+                globals.concurrency,
+                no_config,
+                &cache,
+                printer,
+                globals.preview,
+            ))
+            .await
+        }
+        ProjectCommand::Version(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::VersionSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
+            );
+
+            // If they specified any of these flags, they probably don't mean `uv self version`
+            let strict = project_was_explicit
+                || globals.preview.is_enabled()
+                || args.dry_run
+                || args.bump.is_some()
+                || args.value.is_some()
+                || args.package.is_some();
+            Box::pin(commands::project_version(
+                args.value,
+                args.bump,
+                args.short,
+                args.output_format,
+                strict,
+                project_dir,
+                args.package,
+                args.dry_run,
+                args.locked,
+                args.frozen,
+                args.active,
+                args.no_sync,
+                args.python,
+                args.install_mirrors,
+                args.settings,
+                globals.network_settings,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,

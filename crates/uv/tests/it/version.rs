@@ -147,6 +147,8 @@ requires-python = ">=3.12"
     myproject 1.10.31 => 1.1.1
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -187,6 +189,8 @@ requires-python = ">=3.12"
     1.1.1
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -226,6 +230,8 @@ requires-python = ">=3.12"
     myproject 1.10.31 => 1.10.32
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -265,6 +271,8 @@ requires-python = ">=3.12"
     1.10.32
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -303,6 +311,8 @@ requires-python = ">=3.12"
     myproject 1.10.31 => 1.11.0
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -341,6 +351,8 @@ requires-python = ">=3.12"
     myproject 1.10.31 => 2.0.0
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -379,6 +391,8 @@ requires-python = ">=3.12"
     myproject 0.1 => 0.1.1
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -417,6 +431,8 @@ requires-python = ">=3.12"
     myproject 0.1 => 0.2
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -455,6 +471,8 @@ requires-python = ">=3.12"
     myproject 0.1 => 1.0
 
     ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -494,6 +512,8 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     warning: prerelease information will be cleared as part of the version bump
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -533,6 +553,8 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     warning: prerelease information will be cleared as part of the version bump
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -572,6 +594,8 @@ requires-python = ">=3.12"
 
     ----- stderr -----
     warning: prerelease information will be cleared as part of the version bump
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -1264,7 +1288,7 @@ fn version_get_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: No `project` table found in: `[TEMP_DIR]/pyproject.toml`
+    error: There is no 'project.version' field in: pyproject.toml
     ");
 
     Ok(())
