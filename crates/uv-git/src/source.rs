@@ -11,6 +11,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, instrument};
 use url::Url;
 
+use uv_auth::redacted_url;
 use uv_cache_key::{cache_digest, RepositoryUrl};
 use uv_git_types::GitUrl;
 
@@ -100,7 +101,10 @@ impl GitSource {
             // situation that we have a locked revision but the database
             // doesn't have it.
             (locked_rev, db) => {
-                debug!("Updating Git source `{}`", self.git.repository());
+                debug!(
+                    "Updating Git source `{}`",
+                    redacted_url(self.git.repository())
+                );
 
                 // Report the checkout operation to the reporter.
                 let task = self.reporter.as_ref().map(|reporter| {

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 pub use crate::github::GitHubRepository;
 pub use crate::oid::{GitOid, OidParseError};
 pub use crate::reference::GitReference;
@@ -151,6 +153,32 @@ impl From<GitUrl> for Url {
 
 impl std::fmt::Display for GitUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.repository)
+        write!(f, "{}", redacted_url(&self.repository))
+    }
+}
+
+/// Return a version of the URL with redacted credentials, allowing the generic `git` username (without a password)
+/// in SSH URLs, as in, `ssh://git@github.com/...`.
+// TODO(john): This code is a duplicate of the function in `uv-auth`.
+// It's here to avoid importing `uv-auth` into this crate. Consolidate these
+// once we use a `RedactedUrl` type.
+pub fn redacted_url(url: &Url) -> Cow<'_, Url> {
+    if !tracing::enabled!(tracing::Level::DEBUG) {
+        return Cow::Borrowed(url);
+    }
+    let no_credentials = url.username().is_empty() && url.password().is_none();
+    let generic_git_username =
+        url.scheme() == "ssh" && url.username() == "git" && url.password().is_none();
+    if no_credentials || generic_git_username {
+        Cow::Borrowed(url)
+    } else {
+        let mut url = url.clone();
+        if url.password().is_some() {
+            let _ = url.set_password(Some("****"));
+        // A username on its own might be a secret token.
+        } else if url.username() != "" {
+            let _ = url.set_username("****");
+        }
+        Cow::Owned(url)
     }
 }

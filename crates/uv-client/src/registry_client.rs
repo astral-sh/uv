@@ -16,7 +16,7 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
-use uv_auth::Indexes;
+use uv_auth::{redacted_url, Indexes};
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
@@ -484,7 +484,10 @@ impl RegistryClient {
             // ref https://github.com/servo/rust-url/issues/333
             .push("");
 
-        trace!("Fetching metadata for {package_name} from {url}");
+        trace!(
+            "Fetching metadata for {package_name} from {}",
+            redacted_url(&url)
+        );
 
         let cache_entry = self.cache.entry(
             CacheBucket::Simple,

@@ -11,6 +11,7 @@ use url::Url;
 use uv_once_map::OnceMap;
 
 use crate::credentials::{Credentials, Username};
+use crate::redacted_url;
 use crate::Realm;
 
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
@@ -93,8 +94,9 @@ impl CredentialsCache {
     /// cached credentials have a username equal to the provided one — otherwise `None` is returned.
     /// If multiple usernames are used per URL, the realm cache should be queried instead.
     pub(crate) fn get_url(&self, url: &Url, username: &Username) -> Option<Arc<Credentials>> {
+        let url = redacted_url(url);
         let urls = self.urls.read().unwrap();
-        let credentials = urls.get(url);
+        let credentials = urls.get(&url);
         if let Some(credentials) = credentials {
             if username.is_none() || username.as_deref() == credentials.username() {
                 if username.is_some() && credentials.password().is_none() {
@@ -112,6 +114,7 @@ impl CredentialsCache {
 
     /// Update the cache with the given credentials.
     pub(crate) fn insert(&self, url: &Url, credentials: Arc<Credentials>) {
+        let url = redacted_url(url);
         // Do not cache empty credentials
         if credentials.is_empty() {
             return;
@@ -120,16 +123,16 @@ impl CredentialsCache {
         // Insert an entry for requests including the username
         let username = credentials.to_username();
         if username.is_some() {
-            let realm = (Realm::from(url), username);
+            let realm = (Realm::from(url.as_ref()), username);
             self.insert_realm(realm, &credentials);
         }
 
         // Insert an entry for requests with no username
-        self.insert_realm((Realm::from(url), Username::none()), &credentials);
+        self.insert_realm((Realm::from(url.as_ref()), Username::none()), &credentials);
 
         // Insert an entry for the URL
         let mut urls = self.urls.write().unwrap();
-        urls.insert(url, credentials);
+        urls.insert(&url, credentials);
     }
 
     /// Private interface to update a realm cache entry.
