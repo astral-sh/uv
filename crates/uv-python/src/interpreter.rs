@@ -677,14 +677,8 @@ impl Display for StatusCodeError {
 pub enum Error {
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
-    #[error(
-        "Broken symlink at `{}`, was the underlying Python interpreter removed?\n\n{}{} Consider recreating the environment (e.g., with `{}`)",
-        _0.user_display(),
-        "hint".bold().cyan(),
-        ":".bold(),
-        "uv venv".green(),
-    )]
-    BrokenVenvSymlink(PathBuf),
+    #[error(transparent)]
+    BrokenSymlink(BrokenSymlink),
     #[error("Python interpreter not found at `{0}`")]
     NotFound(PathBuf),
     #[error("Failed to query Python interpreter at `{path}`")]
@@ -705,6 +699,33 @@ pub enum Error {
     },
     #[error("Failed to write to cache")]
     Encode(#[from] rmp_serde::encode::Error),
+}
+
+#[derive(Debug, Error)]
+pub struct BrokenSymlink {
+    pub path: PathBuf,
+    /// Whether the interpreter path looks like a virtual environment.
+    pub venv: bool,
+}
+
+impl Display for BrokenSymlink {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Broken symlink at `{}`, was the underlying Python interpreter removed?",
+            self.path.user_display()
+        )?;
+        if self.venv {
+            writeln!(
+                f,
+                "\n\n{}{} Consider recreating the environment (e.g., with `{}`)",
+                "hint".bold().cyan(),
+                ":".bold(),
+                "uv venv".green()
+            )?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -892,13 +913,16 @@ impl InterpreterInfo {
                     if absolute
                         .symlink_metadata()
                         .is_ok_and(|metadata| metadata.is_symlink())
-                        && executable
+                    {
+                        let venv = executable
                             .parent()
                             .and_then(Path::parent)
                             .map(|path| path.join("pyvenv.cfg").is_file())
-                            .unwrap_or(false)
-                    {
-                        Error::BrokenVenvSymlink(executable.to_path_buf())
+                            .unwrap_or(false);
+                        Error::BrokenSymlink(BrokenSymlink {
+                            path: executable.to_path_buf(),
+                            venv,
+                        })
                     } else {
                         Error::NotFound(executable.to_path_buf())
                     }

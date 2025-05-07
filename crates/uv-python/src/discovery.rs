@@ -35,7 +35,7 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{registry_pythons, WindowsPython};
-use crate::{Interpreter, PythonVersion};
+use crate::{BrokenSymlink, Interpreter, PythonVersion};
 
 /// A request to find a Python installation.
 ///
@@ -815,7 +815,8 @@ impl Error {
                     );
                     false
                 }
-                InterpreterError::NotFound(path) | InterpreterError::BrokenVenvSymlink(path) => {
+                InterpreterError::NotFound(path)
+                | InterpreterError::BrokenSymlink(BrokenSymlink { path, .. }) => {
                     // If the interpreter is from an active, valid virtual environment, we should
                     // fail because it's broken
                     if let Some(Ok(true)) = matches!(source, PythonSource::ActiveEnvironment)
@@ -894,7 +895,7 @@ pub fn find_python_installations<'a>(
                 debug!("Checking for Python interpreter at {request}");
                 match python_installation_from_executable(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenVenvSymlink(_)) => {
+                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
                         Ok(Err(PythonNotFound {
                             request: request.clone(),
                             python_preference: preference,
@@ -920,7 +921,7 @@ pub fn find_python_installations<'a>(
                 debug!("Checking for Python interpreter in {request}");
                 match python_installation_from_directory(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenVenvSymlink(_)) => {
+                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
                         Ok(Err(PythonNotFound {
                             request: request.clone(),
                             python_preference: preference,

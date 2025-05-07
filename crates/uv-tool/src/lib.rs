@@ -234,13 +234,13 @@ impl InstalledTools {
 
                 Ok(None)
             }
-            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenVenvSymlink(
-                interpreter_path,
+            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenSymlink(
+                broken_symlink,
             ))) => {
-                let target_path = fs_err::read_link(&interpreter_path)?;
+                let target_path = fs_err::read_link(&broken_symlink.path)?;
                 warn!(
                     "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
-                    interpreter_path.user_display(),
+                    broken_symlink.path.user_display(),
                     target_path.user_display()
                 );
 
