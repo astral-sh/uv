@@ -481,7 +481,7 @@ impl RetryableStrategy for UvRetryableStrategy {
 /// These cases should be safe to retry with [`Retryable::Transient`].
 pub fn is_extended_transient_error(err: &dyn Error) -> bool {
     // First, try to show a nice trace log
-    if let Some((Some(status), Some(url))) = find_source::<reqwest::Error>(&err)
+    if let Some((Some(status), Some(url))) = find_source::<crate::WrappedReqwestError>(&err)
         .map(|request_err| (request_err.status(), request_err.url()))
     {
         let status = status
