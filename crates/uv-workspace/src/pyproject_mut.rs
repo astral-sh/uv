@@ -1009,8 +1009,12 @@ pub fn add_dependency(
             enum Sort {
                 /// The list is sorted in a case-insensitive manner.
                 CaseInsensitive,
+                /// The list is sorted naively in a case-insensitive manner.
+                CaseInsensitiveNaive,
                 /// The list is sorted in a case-sensitive manner.
                 CaseSensitive,
+                /// The list is sorted naively in a case-sensitive manner.
+                CaseSensitiveNaive,
                 /// The list is unsorted.
                 Unsorted,
             }
@@ -1029,11 +1033,23 @@ pub fn add_dependency(
                     )
             }
 
+            /// Naively compare two [`Value`] requirements case-insensitively.
+            fn case_insensitive_naive(a: &Value, b: &Value) -> Ordering {
+                a.as_str()
+                    .map(str::to_lowercase)
+                    .cmp(&b.as_str().map(str::to_lowercase))
+            }
+
             /// Compare two [`Value`] requirements case-sensitively.
             fn case_sensitive(a: &Value, b: &Value) -> Ordering {
                 a.as_str()
                     .map(split_specifiers)
                     .cmp(&b.as_str().map(split_specifiers))
+            }
+
+            /// Naively compare two [`Value`] requirements case-sensitively.
+            fn case_sensitive_naive(a: &Value, b: &Value) -> Ordering {
+                a.as_str().cmp(&b.as_str())
             }
 
             // Determine if the dependency list is sorted prior to
@@ -1057,6 +1073,17 @@ pub fn add_dependency(
                         matches!(case_sensitive(a, b), Ordering::Less | Ordering::Equal)
                     }) {
                         Some(Sort::CaseSensitive)
+                    } else if deps.iter().tuple_windows().all(|(a, b)| {
+                        matches!(
+                            case_insensitive_naive(a, b),
+                            Ordering::Less | Ordering::Equal
+                        )
+                    }) {
+                        Some(Sort::CaseInsensitiveNaive)
+                    } else if deps.iter().tuple_windows().all(|(a, b)| {
+                        matches!(case_sensitive_naive(a, b), Ordering::Less | Ordering::Equal)
+                    }) {
+                        Some(Sort::CaseSensitiveNaive)
                     } else {
                         None
                     }
@@ -1069,8 +1096,15 @@ pub fn add_dependency(
                 Sort::CaseInsensitive => deps.iter().position(|d| {
                     case_insensitive(d, &Value::from(req_string.as_str())) == Ordering::Greater
                 }),
+                Sort::CaseInsensitiveNaive => deps.iter().position(|d| {
+                    case_insensitive_naive(d, &Value::from(req_string.as_str()))
+                        == Ordering::Greater
+                }),
                 Sort::CaseSensitive => deps.iter().position(|d| {
                     case_sensitive(d, &Value::from(req_string.as_str())) == Ordering::Greater
+                }),
+                Sort::CaseSensitiveNaive => deps.iter().position(|d| {
+                    case_sensitive_naive(d, &Value::from(req_string.as_str())) == Ordering::Greater
                 }),
                 Sort::Unsorted => None,
             };

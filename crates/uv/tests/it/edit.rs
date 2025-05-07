@@ -7240,6 +7240,63 @@ fn sorted_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that if the dependencies are sorted naively (i.e. by the whole
+/// requirement specifier), that added dependencies are sorted in the same way.
+#[test]
+fn naive_sorted_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "pytest-mock>=3.14",
+        "pytest>=8.1.1",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["pytest-randomly"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-mock==3.14.0
+     + pytest-randomly==3.15.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "pytest-mock>=3.14",
+            "pytest-randomly>=3.15.0",
+            "pytest>=8.1.1",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
 /// Ensure that the added dependencies are case sensitive sorted if the dependency list was already
 /// case sensitive sorted prior to the operation.
 #[test]
@@ -7300,6 +7357,66 @@ fn case_sensitive_sorted_dependencies() -> Result<()> {
             "anyio>=4.3.0",
             "iniconfig",
             "typing-extensions>=4.10.0",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
+/// Ensure that if the dependencies are sorted naively (i.e. by the whole
+/// requirement specifier), that added dependencies are sorted in the same way.
+#[test]
+fn case_sensitive_naive_sorted_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "Typing-extensions>=4.10.0",
+        "pytest-mock>=3.14",
+        "pytest>=8.1.1",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["pytest-randomly"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-mock==3.14.0
+     + pytest-randomly==3.15.0
+     + typing-extensions==4.10.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "Typing-extensions>=4.10.0",
+            "pytest-mock>=3.14",
+            "pytest-randomly>=3.15.0",
+            "pytest>=8.1.1",
         ]
         "###
         );
