@@ -293,6 +293,19 @@ impl TestContext {
         self
     }
 
+    /// Adds a filter for platform-specific errors when a file is not executable.
+    #[inline]
+    pub fn with_filtered_not_executable(mut self) -> Self {
+        let pattern = if cfg!(unix) {
+            r"Permission denied \(os error 13\)"
+        } else {
+            r"\%1 is not a valid Win32 application. \(os error 193\)"
+        };
+        self.filters
+            .push((pattern.to_string(), "[PERMISSION DENIED]".to_string()));
+        self
+    }
+
     /// Adds a filter that ignores platform information in a Python installation key.
     pub fn with_filtered_python_keys(mut self) -> Self {
         // Filter platform keys

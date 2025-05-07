@@ -17381,7 +17381,7 @@ fn compile_broken_active_venv() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × No interpreter found for path `python3.14159` in managed installations or search path
+      × No interpreter found at path `python3.14159`
     ");
 
     // Simulate a removed Python interpreter
