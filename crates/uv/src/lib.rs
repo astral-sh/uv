@@ -3,18 +3,13 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
+#[cfg(feature = "self-update")]
+use std::ops::Bound;
 use std::path::Path;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
-use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
-use crate::printer::Printer;
-use crate::settings::{
-    CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
-    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
-    PublishSettings,
-};
 use anstream::eprintln;
 use anyhow::{bail, Context, Result};
 use clap::error::{ContextKind, ContextValue};
@@ -22,10 +17,9 @@ use clap::{CommandFactory, Parser};
 use futures::FutureExt;
 use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
-#[cfg(feature = "self-update")]
-use std::ops::Bound;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument};
+
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 #[cfg(feature = "self-update")]
@@ -37,6 +31,8 @@ use uv_cli::{
 };
 use uv_configuration::min_stack_size;
 use uv_fs::{Simplified, CWD};
+#[cfg(feature = "self-update")]
+use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_requirements::RequirementsSource;
@@ -46,8 +42,14 @@ use uv_settings::{Combine, FilesystemOptions, Options};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
-#[cfg(feature = "self-update")]
-use version_ranges::Ranges;
+
+use crate::commands::{ExitStatus, RunCommand, ScriptPath, ToolRunCommand};
+use crate::printer::Printer;
+use crate::settings::{
+    CacheSettings, GlobalSettings, PipCheckSettings, PipCompileSettings, PipFreezeSettings,
+    PipInstallSettings, PipListSettings, PipShowSettings, PipSyncSettings, PipUninstallSettings,
+    PublishSettings,
+};
 
 pub(crate) mod commands;
 pub(crate) mod logging;
@@ -304,21 +306,25 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             let hint = {
                 // If the required version range includes a lower bound that's higher than
                 // the current version, suggest `uv self update`.
-                let ranges = Ranges::from(required_version.version_sepcifiers().to_owned());
-                let self_update_might_help = ranges
+                let ranges = release_specifiers_to_ranges(required_version.specifiers().clone());
+
+                if let Some(singleton) = ranges.as_singleton() {
+                    // E.g., `==1.0.0`
+                    format!(
+                        ". Update `uv` by running `{}`.",
+                        format!("uv self update {singleton}").green()
+                    )
+                } else if ranges
                     .bounding_range()
                     .iter()
-                    .filter_map(|(lowest, _highest)| match lowest {
-                        Bound::Included(version) => Some(*version),
-                        Bound::Excluded(_) | Bound::Unbounded => None,
+                    .any(|(lowest, _highest)| match lowest {
+                        Bound::Included(version) => **version > package_version,
+                        Bound::Excluded(version) => **version > package_version,
+                        Bound::Unbounded => false,
                     })
-                    .any(|version| version >= &package_version);
-                if self_update_might_help {
-                    format!(
-                        "\n {} Update `uv` by running `{}`.",
-                        "hint:".green(),
-                        "uv self update".cyan()
-                    )
+                {
+                    // E.g., `>=1.0.0`
+                    format!(". Update `uv` by running `{}`.", "uv self update".cyan())
                 } else {
                     String::new()
                 }
@@ -326,7 +332,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             #[cfg(not(feature = "self-update"))]
             let hint = "";
             return Err(anyhow::anyhow!(
-                "Required uv version `{required_version}` does not match the running version `{package_version}`.{hint}",
+                "Required uv version `{required_version}` does not match the running version `{package_version}`{hint}",
             ));
         }
     }

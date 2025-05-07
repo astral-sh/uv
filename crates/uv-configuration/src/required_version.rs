@@ -14,7 +14,7 @@ impl RequiredVersion {
     }
 
     /// Returns the underlying [`VersionSpecifiers`].
-    pub fn version_sepcifiers(&self) -> &VersionSpecifiers {
+    pub fn specifiers(&self) -> &VersionSpecifiers {
         &self.0
     }
 }
