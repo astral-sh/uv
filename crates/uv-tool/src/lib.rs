@@ -234,7 +234,7 @@ impl InstalledTools {
 
                 Ok(None)
             }
-            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenSymlink(
+            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenVenvSymlink(
                 interpreter_path,
             ))) => {
                 let target_path = fs_err::read_link(&interpreter_path)?;

@@ -17370,7 +17370,7 @@ fn compile_broken_active_venv() -> Result<()> {
 
     // Simulate a removed Python interpreter
     fs_err::remove_file(context.interpreter())?;
-    std::os::unix::fs::symlink("/removed/python/interpreter", context.interpreter())?;
+    fs_err::os::unix::fs::symlink("/removed/python/interpreter", context.interpreter())?;
 
     uv_snapshot!(context
         .pip_compile()
@@ -17383,7 +17383,7 @@ fn compile_broken_active_venv() -> Result<()> {
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python3`
       Caused by: Broken symlink at `.venv/bin/python3`, was the underlying Python interpreter removed?
 
-    hint: To recreate the virtual environment, run `uv venv`
+    hint: Consider recreating the environment (e.g., with `uv venv`)
     ");
 
     Ok(())

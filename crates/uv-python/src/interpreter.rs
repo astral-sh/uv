@@ -678,13 +678,13 @@ pub enum Error {
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
     #[error(
-        "Broken symlink at `{}`, was the underlying Python interpreter removed?\n\n{}{} To recreate the virtual environment, run `{}`",
+        "Broken symlink at `{}`, was the underlying Python interpreter removed?\n\n{}{} Consider recreating the environment (e.g., with `{}`)",
         _0.user_display(),
         "hint".bold().cyan(),
         ":".bold(),
         "uv venv".green(),
     )]
-    BrokenSymlink(PathBuf),
+    BrokenVenvSymlink(PathBuf),
     #[error("Python interpreter not found at `{0}`")]
     NotFound(PathBuf),
     #[error("Failed to query Python interpreter at `{path}`")]
@@ -887,11 +887,18 @@ impl InterpreterInfo {
             .and_then(Timestamp::from_path)
             .map_err(|err| {
                 if err.kind() == io::ErrorKind::NotFound {
+                    // Check if it looks like a venv interpreter where the underlying Python
+                    // installation was removed.
                     if absolute
                         .symlink_metadata()
                         .is_ok_and(|metadata| metadata.is_symlink())
+                        && executable
+                            .parent()
+                            .and_then(Path::parent)
+                            .map(|path| path.join("pyvenv.cfg").is_file())
+                            .unwrap_or(false)
                     {
-                        Error::BrokenSymlink(executable.to_path_buf())
+                        Error::BrokenVenvSymlink(executable.to_path_buf())
                     } else {
                         Error::NotFound(executable.to_path_buf())
                     }
