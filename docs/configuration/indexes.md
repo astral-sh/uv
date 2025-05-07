@@ -207,9 +207,7 @@ authenticate = "always"
 ```
 
 When `authenticate` is set to `always`, uv will eagerly search for credentials and error if
-credentials cannot be found. If the discovered credentials are not valid (i.e., the index returns a
-HTTP 401 or 403), then uv will treat packages as unavailable and query the next configured index as
-described in the [index strategy](#searching-across-multiple-indexes) section.
+credentials cannot be found.
 
 ### Ignoring error codes when searching across indexes
 
