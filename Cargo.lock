@@ -5258,9 +5258,11 @@ dependencies = [
 name = "uv-globfilter"
 version = "0.1.0"
 dependencies = [
+ "anstream",
  "fs-err 3.1.0",
  "globset",
  "insta",
+ "owo-colors",
  "regex",
  "regex-automata 0.4.9",
  "tempfile",

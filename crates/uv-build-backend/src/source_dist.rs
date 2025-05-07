@@ -86,7 +86,7 @@ fn source_dist_matcher(
         .to_string();
     includes.push(format!("{}/**", globset::escape(import_path)));
     for include in includes {
-        let glob = PortableGlobParser
+        let glob = PortableGlobParser::Uv
             .parse(&include)
             .map_err(|err| Error::PortableGlob {
                 field: "tool.uv.build-backend.source-include".to_string(),
@@ -111,7 +111,7 @@ fn source_dist_matcher(
     // Include the license files
     for license_files in pyproject_toml.license_files_source_dist() {
         trace!("Including license files at: `{license_files}`");
-        let glob = PortableGlobParser
+        let glob = PortableGlobParser::Pep639
             .parse(license_files)
             .map_err(|err| Error::PortableGlob {
                 field: "project.license-files".to_string(),
@@ -122,7 +122,7 @@ fn source_dist_matcher(
 
     // Include the data files
     for (name, directory) in settings.data.iter() {
-        let glob = PortableGlobParser
+        let glob = PortableGlobParser::Uv
             .parse(&format!("{}/**", globset::escape(directory)))
             .map_err(|err| Error::PortableGlob {
                 field: format!("tool.uv.build-backend.data.{name}"),

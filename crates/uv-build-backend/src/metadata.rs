@@ -395,12 +395,13 @@ impl PyProjectToml {
                 let mut license_files = Vec::new();
                 let mut license_globs_parsed = Vec::new();
                 for license_glob in license_globs {
-                    let pep639_glob = PortableGlobParser.parse(license_glob).map_err(|err| {
-                        Error::PortableGlob {
-                            field: license_glob.to_string(),
-                            source: err,
-                        }
-                    })?;
+                    let pep639_glob =
+                        PortableGlobParser::Pep639
+                            .parse(license_glob)
+                            .map_err(|err| Error::PortableGlob {
+                                field: license_glob.to_string(),
+                                source: err,
+                            })?;
                     license_globs_parsed.push(pep639_glob);
                 }
                 let license_globs =
