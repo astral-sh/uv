@@ -17368,10 +17368,25 @@ fn compile_broken_active_venv() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio==3.7.0")?;
 
+    // A broken system Python
+    let broken_system_python = context.temp_dir.join("python3.14159");
+    fs_err::os::unix::fs::symlink("/does/not/exist", &broken_system_python)?;
+    uv_snapshot!(context
+        .venv()
+        .arg("--python")
+        .arg(&broken_system_python)
+        .arg("venv2"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No interpreter found for path `python3.14159` in managed installations or search path
+    ");
+
     // Simulate a removed Python interpreter
     fs_err::remove_file(context.interpreter())?;
     fs_err::os::unix::fs::symlink("/removed/python/interpreter", context.interpreter())?;
-
     uv_snapshot!(context
         .pip_compile()
         .arg("requirements.in"), @r"
