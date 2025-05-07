@@ -1248,12 +1248,12 @@ fn python_install_314() {
 
     // This also applies to `>=` requests, even though pre-releases aren't technically in the range
     uv_snapshot!(context.filters(), context.python_find().arg(">=3.14"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14.0a6-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
-    error: No interpreter found for Python >=3.14 in virtual environments, managed installations, or search path
     ");
 
     uv_snapshot!(context.filters(), context.python_find().arg("3"), @r"

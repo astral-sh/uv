@@ -2177,7 +2177,7 @@ impl VersionRequest {
                 (version.major(), version.minor(), version.patch())
                     == (*major, *minor, Some(*patch))
             }
-            Self::Range(specifiers, _) => specifiers.contains(&version.version),
+            Self::Range(specifiers, _) => specifiers.contains(&version.version.only_release()),
             Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
                 (version.major(), version.minor(), version.pre())
                     == (*major, *minor, Some(*prerelease))
