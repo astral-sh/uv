@@ -1246,6 +1246,16 @@ fn python_install_314() {
     ----- stderr -----
     ");
 
+    // This also applies to `>=` requests, even though pre-releases aren't technically in the range
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.14"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.14.0a6-[PLATFORM]/[INSTALL-BIN]/python
+
+    ----- stderr -----
+    ");
+
     uv_snapshot!(context.filters(), context.python_find().arg("3"), @r"
     success: true
     exit_code: 0

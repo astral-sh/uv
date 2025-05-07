@@ -1,4 +1,4 @@
-use assert_fs::prelude::PathChild;
+use assert_fs::prelude::{FileTouch, PathChild};
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
 use indoc::indoc;
 
@@ -746,7 +746,8 @@ fn python_required_python_major_minor() {
 
     // Symlink it to `python3.11`.
     fs_err::create_dir_all(context.temp_dir.child("child")).unwrap();
-    std::os::unix::fs::symlink(path, context.temp_dir.child("child").join("python3.11")).unwrap();
+    fs_err::os::unix::fs::symlink(path, context.temp_dir.child("child").join("python3.11"))
+        .unwrap();
 
     // Find `python3.11`, which is `>=3.11.4`.
     uv_snapshot!(context.filters(), context.python_find().arg(">=3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"
@@ -974,5 +975,45 @@ fn python_find_show_version() {
     3.11.[X]
 
     ----- stderr -----
+    ");
+}
+
+#[test]
+fn python_find_path() {
+    let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_not_executable();
+
+    context.temp_dir.child("foo").create_dir_all().unwrap();
+    context.temp_dir.child("bar").touch().unwrap();
+
+    // No interpreter in a directory
+    uv_snapshot!(context.filters(), context.python_find().arg(context.temp_dir.child("foo").as_os_str()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found in directory `foo`
+    ");
+
+    // No interpreter at a file
+    uv_snapshot!(context.filters(), context.python_find().arg(context.temp_dir.child("bar").as_os_str()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from provided path at `bar`
+      Caused by: Failed to query Python interpreter at `[TEMP_DIR]/bar`
+      Caused by: [PERMISSION DENIED]
+    ");
+
+    // No interpreter at a file that does not exist
+    uv_snapshot!(context.filters(), context.python_find().arg(context.temp_dir.child("foobar").as_os_str()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found at path `foobar`
     ");
 }

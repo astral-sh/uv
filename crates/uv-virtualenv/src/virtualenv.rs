@@ -384,7 +384,7 @@ pub(crate) fn create(
         && interpreter.markers().os_name() == "posix"
         && interpreter.markers().sys_platform() != "darwin"
     {
-        match std::os::unix::fs::symlink("lib", location.join("lib64")) {
+        match fs_err::os::unix::fs::symlink("lib", location.join("lib64")) {
             Ok(()) => {}
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
             Err(err) => {

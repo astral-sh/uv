@@ -15,7 +15,7 @@ use tar::{EntryType, Header};
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::Simplified;
-use uv_globfilter::{parse_portable_glob, GlobDirFilter};
+use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_pypi_types::Identifier;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
@@ -54,8 +54,6 @@ pub fn list_source_dist(
     let mut files = FileList::new();
     let writer = ListWriter::new(&mut files);
     write_source_dist(source_tree, writer, uv_version)?;
-    // Ensure a deterministic order even when file walking changes
-    files.sort_unstable();
     Ok((filename, files))
 }
 
@@ -88,10 +86,12 @@ fn source_dist_matcher(
         .to_string();
     includes.push(format!("{}/**", globset::escape(import_path)));
     for include in includes {
-        let glob = parse_portable_glob(&include).map_err(|err| Error::PortableGlob {
-            field: "tool.uv.build-backend.source-include".to_string(),
-            source: err,
-        })?;
+        let glob = PortableGlobParser::Uv
+            .parse(&include)
+            .map_err(|err| Error::PortableGlob {
+                field: "tool.uv.build-backend.source-include".to_string(),
+                source: err,
+            })?;
         include_globs.push(glob.clone());
     }
 
@@ -111,21 +111,22 @@ fn source_dist_matcher(
     // Include the license files
     for license_files in pyproject_toml.license_files_source_dist() {
         trace!("Including license files at: `{license_files}`");
-        let glob = parse_portable_glob(license_files).map_err(|err| Error::PortableGlob {
-            field: "project.license-files".to_string(),
-            source: err,
-        })?;
+        let glob = PortableGlobParser::Pep639
+            .parse(license_files)
+            .map_err(|err| Error::PortableGlob {
+                field: "project.license-files".to_string(),
+                source: err,
+            })?;
         include_globs.push(glob);
     }
 
     // Include the data files
     for (name, directory) in settings.data.iter() {
-        let glob =
-            parse_portable_glob(&format!("{}/**", globset::escape(directory))).map_err(|err| {
-                Error::PortableGlob {
-                    field: format!("tool.uv.build-backend.data.{name}"),
-                    source: err,
-                }
+        let glob = PortableGlobParser::Uv
+            .parse(&format!("{}/**", globset::escape(directory)))
+            .map_err(|err| Error::PortableGlob {
+                field: format!("tool.uv.build-backend.data.{name}"),
+                source: err,
             })?;
         trace!("Including data ({name}) at: `{directory}`");
         include_globs.push(glob);
@@ -206,21 +207,25 @@ fn write_source_dist(
     let (include_matcher, exclude_matcher) = source_dist_matcher(&pyproject_toml, settings)?;
 
     let mut files_visited = 0;
-    for entry in WalkDir::new(source_tree).into_iter().filter_entry(|entry| {
-        // TODO(konsti): This should be prettier.
-        let relative = entry
-            .path()
-            .strip_prefix(source_tree)
-            .expect("walkdir starts with root");
+    for entry in WalkDir::new(source_tree)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_entry(|entry| {
+            // TODO(konsti): This should be prettier.
+            let relative = entry
+                .path()
+                .strip_prefix(source_tree)
+                .expect("walkdir starts with root");
 
-        // Fast path: Don't descend into a directory that can't be included. This is the most
-        // important performance optimization, it avoids descending into directories such as
-        // `.venv`. While walkdir is generally cheap, we still avoid traversing large data
-        // directories that often exist on the top level of a project. This is especially noticeable
-        // on network file systems with high latencies per operation (while contiguous reading may
-        // still be fast).
-        include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
-    }) {
+            // Fast path: Don't descend into a directory that can't be included. This is the most
+            // important performance optimization, it avoids descending into directories such as
+            // `.venv`. While walkdir is generally cheap, we still avoid traversing large data
+            // directories that often exist on the top level of a project. This is especially noticeable
+            // on network file systems with high latencies per operation (while contiguous reading may
+            // still be fast).
+            include_matcher.match_directory(relative) && !exclude_matcher.is_match(relative)
+        })
+    {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: source_tree.to_path_buf(),
             err,
@@ -305,15 +310,22 @@ impl DirectoryWriter for TarGzWriter {
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         let metadata = fs_err::metadata(file)?;
         let mut header = Header::new_gnu();
+        // Preserve the executable bit, especially for scripts
         #[cfg(unix)]
-        {
-            // Preserve for example an executable bit.
-            header.set_mode(std::os::unix::fs::MetadataExt::mode(&metadata));
-        }
+        let executable_bit = {
+            use std::os::unix::fs::PermissionsExt;
+            file.metadata()?.permissions().mode() & 0o111 != 0
+        };
+        // Windows has no executable bit
         #[cfg(not(unix))]
-        {
-            // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
-            // unpacking.
+        let executable_bit = false;
+
+        // Set reasonable defaults to avoid 0o000 permissions, while avoiding adding the exact
+        // filesystem permissions to the archive for reproducibility. Where applicable, the
+        // operating system filters the stored permission by the user's umask when unpacking.
+        if executable_bit {
+            header.set_mode(0o755);
+        } else {
             header.set_mode(0o644);
         }
         header.set_size(metadata.len());

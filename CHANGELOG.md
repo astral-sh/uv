@@ -3,6 +3,45 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.3
+
+### Enhancements
+
+- Add `--dry-run` support to `uv self update` ([#9829](https://github.com/astral-sh/uv/pull/9829))
+- Add `--show-with` to `uv tool list` to list packages included by `--with` ([#13264](https://github.com/astral-sh/uv/pull/13264))
+- De-duplicate fetched index URLs ([#13205](https://github.com/astral-sh/uv/pull/13205))
+- Support more zip compression formats: bzip2, lzma, xz, zstd ([#13285](https://github.com/astral-sh/uv/pull/13285))
+- Add support for downloading GraalPy ([#13172](https://github.com/astral-sh/uv/pull/13172))
+- Improve error message when a virtual environment Python symlink is broken ([#12168](https://github.com/astral-sh/uv/pull/12168))
+- Use `fs_err` for paths in symlinking errors ([#13303](https://github.com/astral-sh/uv/pull/13303))
+- Minify and embed managed Python JSON at compile time ([#12967](https://github.com/astral-sh/uv/pull/12967))
+
+### Preview features
+
+- Build backend: Make preview default and add configuration docs ([#12804](https://github.com/astral-sh/uv/pull/12804))
+- Build backend: Allow escaping in globs ([#13313](https://github.com/astral-sh/uv/pull/13313))
+- Build backend: Make builds reproducible across operating systems ([#13171](https://github.com/astral-sh/uv/pull/13171))
+
+### Configuration
+
+- Add `python-downloads-json-url` option for `uv.toml` to configure custom Python installations via JSON URL ([#12974](https://github.com/astral-sh/uv/pull/12974))
+
+### Bug fixes
+
+- Check nested IO errors for retries ([#13260](https://github.com/astral-sh/uv/pull/13260))
+- Accept `musllinux_1_0` as a valid platform tag ([#13289](https://github.com/astral-sh/uv/pull/13289))
+- Fix discovery of pre-release managed Python versions in range requests ([#13330](https://github.com/astral-sh/uv/pull/13330))
+- Respect locked script preferences in `uv run --with` ([#13283](https://github.com/astral-sh/uv/pull/13283))
+- Retry streaming downloads on broken pipe errors ([#13281](https://github.com/astral-sh/uv/pull/13281))
+- Treat already-installed base environment packages as preferences in `uv run --with` ([#13284](https://github.com/astral-sh/uv/pull/13284))
+- Avoid enumerating sources in errors for path Python requests ([#13335](https://github.com/astral-sh/uv/pull/13335))
+- Avoid re-creating virtual environment with `--no-sync` ([#13287](https://github.com/astral-sh/uv/pull/13287))
+
+### Documentation
+
+- Remove outdated description of index strategy ([#13326](https://github.com/astral-sh/uv/pull/13326))
+- Update "Viewing the version" docs ([#13241](https://github.com/astral-sh/uv/pull/13241))
+
 ## 0.7.2
 
 ### Enhancements

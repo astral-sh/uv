@@ -493,14 +493,14 @@ fn synchronized_copy(from: &Path, to: &Path, locks: &Locks) -> std::io::Result<(
 
 #[cfg(unix)]
 fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
-    std::os::unix::fs::symlink(original, link)
+    fs_err::os::unix::fs::symlink(original, link)
 }
 
 #[cfg(windows)]
 fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
     if original.as_ref().is_dir() {
-        std::os::windows::fs::symlink_dir(original, link)
+        fs_err::os::windows::fs::symlink_dir(original, link)
     } else {
-        std::os::windows::fs::symlink_file(original, link)
+        fs_err::os::windows::fs::symlink_file(original, link)
     }
 }

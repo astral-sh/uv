@@ -337,3 +337,118 @@ fn tool_list_show_version_specifiers() {
     ----- stderr -----
     "###);
 }
+
+#[test]
+fn tool_list_show_with() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` without additional requirements
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Install `flask` with additional requirements
+    context
+        .tool_install()
+        .arg("flask")
+        .arg("--with")
+        .arg("requests")
+        .arg("--with")
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Install `ruff` with version specifier and additional requirements
+    context
+        .tool_install()
+        .arg("ruff==0.3.4")
+        .arg("--with")
+        .arg("requests")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Test with --show-with
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-with")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0
+    - black
+    - blackd
+    flask v3.0.2 [with: requests, black==24.2.0]
+    - flask
+    ruff v0.3.4 [with: requests]
+    - ruff
+
+    ----- stderr -----
+    "###);
+
+    // Test with both --show-with and --show-paths
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-with").arg("--show-paths")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 ([TEMP_DIR]/tools/black)
+    - black ([TEMP_DIR]/bin/black)
+    - blackd ([TEMP_DIR]/bin/blackd)
+    flask v3.0.2 [with: requests, black==24.2.0] ([TEMP_DIR]/tools/flask)
+    - flask ([TEMP_DIR]/bin/flask)
+    ruff v0.3.4 [with: requests] ([TEMP_DIR]/tools/ruff)
+    - ruff ([TEMP_DIR]/bin/ruff)
+
+    ----- stderr -----
+    "###);
+
+    // Test with both --show-with and --show-version-specifiers
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-with").arg("--show-version-specifiers")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 [required: ==24.2.0]
+    - black
+    - blackd
+    flask v3.0.2 [with: requests, black==24.2.0]
+    - flask
+    ruff v0.3.4 [required: ==0.3.4] [with: requests]
+    - ruff
+
+    ----- stderr -----
+    "###);
+
+    // Test with all flags
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--show-with")
+    .arg("--show-version-specifiers")
+    .arg("--show-paths")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 [required: ==24.2.0] ([TEMP_DIR]/tools/black)
+    - black ([TEMP_DIR]/bin/black)
+    - blackd ([TEMP_DIR]/bin/blackd)
+    flask v3.0.2 [with: requests, black==24.2.0] ([TEMP_DIR]/tools/flask)
+    - flask ([TEMP_DIR]/bin/flask)
+    ruff v0.3.4 [required: ==0.3.4] [with: requests] ([TEMP_DIR]/tools/ruff)
+    - ruff ([TEMP_DIR]/bin/ruff)
+
+    ----- stderr -----
+    "###);
+}

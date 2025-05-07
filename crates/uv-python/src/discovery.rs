@@ -35,7 +35,7 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{registry_pythons, WindowsPython};
-use crate::{Interpreter, PythonVersion};
+use crate::{BrokenSymlink, Interpreter, PythonVersion};
 
 /// A request to find a Python installation.
 ///
@@ -815,7 +815,8 @@ impl Error {
                     );
                     false
                 }
-                InterpreterError::NotFound(path) => {
+                InterpreterError::NotFound(path)
+                | InterpreterError::BrokenSymlink(BrokenSymlink { path, .. }) => {
                     // If the interpreter is from an active, valid virtual environment, we should
                     // fail because it's broken
                     if let Some(Ok(true)) = matches!(source, PythonSource::ActiveEnvironment)
@@ -894,11 +895,13 @@ pub fn find_python_installations<'a>(
                 debug!("Checking for Python interpreter at {request}");
                 match python_installation_from_executable(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_)) => Ok(Err(PythonNotFound {
-                        request: request.clone(),
-                        python_preference: preference,
-                        environment_preference: environments,
-                    })),
+                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
+                        Ok(Err(PythonNotFound {
+                            request: request.clone(),
+                            python_preference: preference,
+                            environment_preference: environments,
+                        }))
+                    }
                     Err(err) => Err(Error::Query(
                         Box::new(err),
                         path.clone(),
@@ -918,11 +921,13 @@ pub fn find_python_installations<'a>(
                 debug!("Checking for Python interpreter in {request}");
                 match python_installation_from_directory(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_)) => Ok(Err(PythonNotFound {
-                        request: request.clone(),
-                        python_preference: preference,
-                        environment_preference: environments,
-                    })),
+                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
+                        Ok(Err(PythonNotFound {
+                            request: request.clone(),
+                            python_preference: preference,
+                            environment_preference: environments,
+                        }))
+                    }
                     Err(err) => Err(Error::Query(
                         Box::new(err),
                         path.clone(),
@@ -2177,7 +2182,7 @@ impl VersionRequest {
                 (version.major(), version.minor(), version.patch())
                     == (*major, *minor, Some(*patch))
             }
-            Self::Range(specifiers, _) => specifiers.contains(&version.version),
+            Self::Range(specifiers, _) => specifiers.contains(&version.version.only_release()),
             Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
                 (version.major(), version.minor(), version.pre())
                     == (*major, *minor, Some(*prerelease))
@@ -2640,6 +2645,12 @@ impl fmt::Display for PythonNotFound {
         match self.request {
             PythonRequest::Default | PythonRequest::Any => {
                 write!(f, "No interpreter found in {sources}")
+            }
+            PythonRequest::File(_) => {
+                write!(f, "No interpreter found at {}", self.request)
+            }
+            PythonRequest::Directory(_) => {
+                write!(f, "No interpreter found in {}", self.request)
             }
             _ => {
                 write!(f, "No interpreter found for {} in {sources}", self.request)

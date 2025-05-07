@@ -278,12 +278,18 @@ mod tests {
     use indoc::indoc;
     use insta::assert_snapshot;
     use itertools::Itertools;
+    use sha2::Digest;
     use std::io::{BufReader, Read};
     use tempfile::TempDir;
     use uv_fs::{copy_dir_all, relative_to};
 
-    /// Test that source tree -> source dist -> wheel includes the right files and is stable and
-    /// deterministic in dependent of the build path.
+    /// Tests that builds are stable and include the right files and.
+    ///
+    /// Tests that both source tree -> source dist -> wheel and source tree -> wheel include the
+    /// right files. Also checks that the resulting archives are byte-by-byte identical
+    /// independent of the build path or platform, with the caveat that we cannot serialize an
+    /// executable bit on Window. This ensures reproducible builds and best-effort
+    /// platform-independent deterministic builds.
     #[test]
     fn built_by_uv_building() {
         let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
@@ -307,6 +313,20 @@ mod tests {
             "LICENSE-MIT",
         ] {
             fs_err::copy(built_by_uv.join(dir), src.path().join(dir)).unwrap();
+        }
+
+        // Clear executable bit on Unix to build the same archive between Unix and Windows.
+        // This is a caveat to the determinism of the uv build backend: When a file has the
+        // executable in the source repository, it only has the executable bit on Unix, as Windows
+        // does not have the concept of the executable bit.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let path = src.path().join("scripts").join("whoami.sh");
+            let metadata = fs_err::metadata(&path).unwrap();
+            let mut perms = metadata.permissions();
+            perms.set_mode(perms.mode() & !0o111);
+            fs_err::set_permissions(&path, perms).unwrap();
         }
 
         // Add some files to be excluded
@@ -336,10 +356,15 @@ mod tests {
         let source_dist_dir = TempDir::new().unwrap();
         let (_name, source_dist_list_files) = list_source_dist(src.path(), "1.0.0+test").unwrap();
         build_source_dist(src.path(), source_dist_dir.path(), "1.0.0+test").unwrap();
+        let source_dist_path = source_dist_dir.path().join("built_by_uv-0.1.0.tar.gz");
+        // Check that the source dist is reproducible across platforms.
+        assert_snapshot!(
+            format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
+            @"dab46bcc4d66960a11cfdc19604512a8e1a3241a67536f7e962166760e9c575c"
+        );
 
         // Build a wheel from the source dist
         let sdist_tree = TempDir::new().unwrap();
-        let source_dist_path = source_dist_dir.path().join("built_by_uv-0.1.0.tar.gz");
         let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
         let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
         let mut source_dist_contents: Vec<_> = source_dist
@@ -419,10 +444,10 @@ mod tests {
         built_by_uv-0.1.0/third-party-licenses
         built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
         "###);
-        assert_snapshot!(format_file_list(source_dist_list_files), @r###"
+        assert_snapshot!(format_file_list(source_dist_list_files), @r"
+        built_by_uv-0.1.0/PKG-INFO (generated)
         built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
         built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
-        built_by_uv-0.1.0/PKG-INFO (generated)
         built_by_uv-0.1.0/README.md (README.md)
         built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
         built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
@@ -435,7 +460,7 @@ mod tests {
         built_by_uv-0.1.0/src/built_by_uv/build-only.h (src/built_by_uv/build-only.h)
         built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
         built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
-        "###);
+        ");
 
         assert_snapshot!(indirect_wheel_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r###"
         built_by_uv-0.1.0.data/data/
@@ -463,28 +488,34 @@ mod tests {
         built_by_uv/cli.py
         "###);
 
-        assert_snapshot!(format_file_list(wheel_list_files), @r###"
-        built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
-        built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
-        built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
-        built_by_uv-0.1.0.dist-info/METADATA (generated)
-        built_by_uv-0.1.0.dist-info/WHEEL (generated)
-        built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
-        built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
-        built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
-        built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+        assert_snapshot!(format_file_list(wheel_list_files), @r"
         built_by_uv/__init__.py (src/built_by_uv/__init__.py)
         built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
         built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
         built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
         built_by_uv/cli.py (src/built_by_uv/cli.py)
-        "###);
+        built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
+        built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
+        built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+        built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
+        built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
+        built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
+        built_by_uv-0.1.0.dist-info/WHEEL (generated)
+        built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
+        built_by_uv-0.1.0.dist-info/METADATA (generated)
+        ");
 
-        // Check that we write deterministic wheels.
+        // Check that the wheel is the same for both build paths and reproducible across platforms.
         let wheel_filename = "built_by_uv-0.1.0-py3-none-any.whl";
+        let index_wheel_contents =
+            fs_err::read(indirect_output_dir.path().join(wheel_filename)).unwrap();
         assert_eq!(
             fs_err::read(direct_output_dir.path().join(wheel_filename)).unwrap(),
-            fs_err::read(indirect_output_dir.path().join(wheel_filename)).unwrap()
+            index_wheel_contents
+        );
+        assert_snapshot!(
+            format!("{:x}", sha2::Sha256::digest(&index_wheel_contents)),
+            @"ac3f68ac448023bca26de689d80401bff57f764396ae802bf4666234740ffbe3"
         );
     }
 

@@ -761,7 +761,7 @@ impl ManagedPythonDownload {
         // to that date do not.
         #[cfg(unix)]
         {
-            match std::os::unix::fs::symlink(
+            match fs_err::os::unix::fs::symlink(
                 format!("python{}.{}", self.key.major, self.key.minor),
                 extracted.join("bin").join("python"),
             ) {
@@ -933,6 +933,7 @@ fn parse_json_downloads(
             let implementation = match entry.name.as_str() {
                 "cpython" => LenientImplementationName::Known(ImplementationName::CPython),
                 "pypy" => LenientImplementationName::Known(ImplementationName::PyPy),
+                "graalpy" => LenientImplementationName::Known(ImplementationName::GraalPy),
                 _ => LenientImplementationName::Unknown(entry.name.clone()),
             };
 

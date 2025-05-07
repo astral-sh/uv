@@ -197,8 +197,8 @@ if __name__ == "__main__":
         # Attempt to install NumPy.
         # This ensures that we can successfully install a package with native libraries.
         #
-        # NumPy doesn't distribute wheels for Python 3.13 (at time of writing).
-        if sys.version_info < (3, 13):
+        # NumPy doesn't distribute wheels for Python 3.13 or GraalPy (at time of writing).
+        if sys.version_info < (3, 13) and sys.implementation.name != "graalpy":
             install_package(uv=uv, package="numpy")
 
         # Attempt to install `pydantic_core`.

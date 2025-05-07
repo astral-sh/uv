@@ -4572,7 +4572,7 @@ dependencies = [
 
 [[package]]
 name = "uv"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "anstream",
  "anyhow",
@@ -4734,7 +4734,7 @@ dependencies = [
 
 [[package]]
 name = "uv-build"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "anyhow",
  "uv-build-backend",
@@ -5258,9 +5258,11 @@ dependencies = [
 name = "uv-globfilter"
 version = "0.1.0"
 dependencies = [
+ "anstream",
  "fs-err 3.1.0",
  "globset",
  "insta",
+ "owo-colors",
  "regex",
  "regex-automata 0.4.9",
  "tempfile",
@@ -5881,7 +5883,7 @@ dependencies = [
 
 [[package]]
 name = "uv-version"
-version = "0.7.2"
+version = "0.7.3"
 
 [[package]]
 name = "uv-virtualenv"

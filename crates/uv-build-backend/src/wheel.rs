@@ -12,7 +12,7 @@ use zip::{CompressionMethod, ZipWriter};
 
 use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
-use uv_globfilter::{parse_portable_glob, GlobDirFilter};
+use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
 use uv_pypi_types::Identifier;
 use uv_warnings::warn_user_once;
@@ -87,8 +87,6 @@ pub fn list_wheel(
     let mut files = FileList::new();
     let writer = ListWriter::new(&mut files);
     write_wheel(source_tree, &pyproject_toml, &filename, uv_version, writer)?;
-    // Ensure a deterministic order even when file walking changes
-    files.sort_unstable();
     Ok((filename, files))
 }
 
@@ -136,6 +134,7 @@ fn write_wheel(
 
     let mut files_visited = 0;
     for entry in WalkDir::new(module_root)
+        .sort_by_file_name()
         .into_iter()
         .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
     {
@@ -432,10 +431,12 @@ pub(crate) fn build_exclude_matcher(
         } else {
             format!("**/{exclude}").to_string()
         };
-        let glob = parse_portable_glob(&exclude).map_err(|err| Error::PortableGlob {
-            field: "tool.uv.build-backend.*-exclude".to_string(),
-            source: err,
-        })?;
+        let glob = PortableGlobParser::Uv
+            .parse(&exclude)
+            .map_err(|err| Error::PortableGlob {
+                field: "tool.uv.build-backend.*-exclude".to_string(),
+                source: err,
+            })?;
         exclude_builder.add(glob);
     }
     let exclude_matcher = exclude_builder
@@ -467,7 +468,7 @@ fn wheel_subdir_from_globs(
                 src.user_display(),
                 license_files
             );
-            parse_portable_glob(license_files)
+            PortableGlobParser::Pep639.parse(license_files)
         })
         .collect::<Result<_, _>>()
         .map_err(|err| Error::PortableGlob {
@@ -482,16 +483,20 @@ fn wheel_subdir_from_globs(
 
     wheel_writer.write_directory(target)?;
 
-    for entry in WalkDir::new(src).into_iter().filter_entry(|entry| {
-        // TODO(konsti): This should be prettier.
-        let relative = entry
-            .path()
-            .strip_prefix(src)
-            .expect("walkdir starts with root");
+    for entry in WalkDir::new(src)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_entry(|entry| {
+            // TODO(konsti): This should be prettier.
+            let relative = entry
+                .path()
+                .strip_prefix(src)
+                .expect("walkdir starts with root");
 
-        // Fast path: Don't descend into a directory that can't be included.
-        matcher.match_directory(relative)
-    }) {
+            // Fast path: Don't descend into a directory that can't be included.
+            matcher.match_directory(relative)
+        })
+    {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: src.to_path_buf(),
             err,
@@ -823,6 +828,7 @@ mod test {
         metadata(built_by_uv, metadata_dir.path(), "1.0.0+test").unwrap();
 
         let mut files: Vec<_> = WalkDir::new(metadata_dir.path())
+            .sort_by_file_name()
             .into_iter()
             .map(|entry| {
                 entry
