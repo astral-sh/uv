@@ -1068,9 +1068,11 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 
-</dd><dt id="uv-add--raw-sources"><a href="#uv-add--raw-sources"><code>--raw-sources</code></a></dt><dd><p>Add source requirements to <code>project.dependencies</code>, rather than <code>tool.uv.sources</code>.</p>
+</dd><dt id="uv-add--raw"><a href="#uv-add--raw"><code>--raw</code></a>, <code>--raw-sources</code></dt><dd><p>Add a dependency as provided.</p>
 
-<p>By default, uv will use the <code>tool.uv.sources</code> section to record source information for Git, local, editable, and direct URL requirements.</p>
+<p>By default, uv will use the <code>tool.uv.sources</code> section to record source information for Git, local, editable, and direct URL requirements. When <code>--raw</code> is provided, uv will add source requirements to <code>project.dependencies</code>, rather than <code>tool.uv.sources</code>.</p>
+
+<p>Additionally, by default, uv will add bounds to your dependency, e.g., <code>foo&gt;=1.0.0</code>. When <code>--raw</code> is provided, uv will add the dependency without bounds.</p>
 
 </dd><dt id="uv-add--refresh"><a href="#uv-add--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
