@@ -1291,6 +1291,47 @@ jobs:
         run: |
           .\uv.exe pip install anyio
 
+  integration-test-pyodide-linux:
+    timeout-minutes: 10
+    needs: build-binary-linux-libc
+    name: "integration test | pyodide on ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: "Download binary"
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          name: uv-linux-libc-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create a native virtual environment"
+        run: |
+          ./uv venv venv-native -p 3.12
+          ./uv pip install -p venv-native/bin/python pyodide-build
+
+      - name: "Install pyodide interpreter"
+        run: |
+          source ./venv-native/bin/activate
+          pyodide xbuildenv install 0.27.5
+          # TODO: merge https://github.com/pyodide/pyodide-build/pull/199
+          # and use `pyodide config get interpreter` here.
+          PYODIDE_PYTHON=$(pyodide config get pyodide_root)/dist/python
+          PYODIDE_INDEX=$(pyodide config get pyodide_root)/package_index
+          echo "PYODIDE_PYTHON=$PYODIDE_PYTHON"
+          echo "PYODIDE_PYTHON=$PYODIDE_PYTHON" >> $GITHUB_ENV
+          echo "PYODIDE_INDEX=$PYODIDE_INDEX" >> $GITHUB_ENV
+          $PYODIDE_PYTHON -c 'from pyodide import __version__; print("pyodide version", __version__)'
+
+      - name: "Create pyodide virtual environment"
+        run: |
+          ./uv venv -p $PYODIDE_PYTHON venv-pyodide
+          source ./venv-pyodide/bin/activate
+          ./uv pip install --extra-index-url=$PYODIDE_INDEX --no-build numpy
+          python -c 'import numpy'
+
   integration-test-github-actions:
     timeout-minutes: 10
     needs: build-binary-linux-libc
