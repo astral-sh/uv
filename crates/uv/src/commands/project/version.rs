@@ -377,7 +377,7 @@ async fn lock_and_sync(
         &DependencyGroups::default().with_defaults(default_groups),
         EditableMode::Editable,
         install_options,
-        Modifications::Exact,
+        Modifications::Sufficient,
         settings.into(),
         &network_settings,
         &state,
