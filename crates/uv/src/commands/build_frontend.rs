@@ -260,8 +260,7 @@ async fn build_impl(
         let workspace = match workspace {
             Ok(ref workspace) => workspace,
             Err(err) => {
-                return Err(anyhow::Error::from(err)
-                    .context("`--package` was provided, but no workspace was found"));
+                return Err(err).context("`--package` was provided, but no workspace was found");
             }
         };
 
@@ -289,8 +288,8 @@ async fn build_impl(
         let workspace = match workspace {
             Ok(ref workspace) => workspace,
             Err(err) => {
-                return Err(anyhow::Error::from(err)
-                    .context("`--all-packages` was provided, but no workspace was found"));
+                return Err(err)
+                    .context("`--all-packages` was provided, but no workspace was found");
             }
         };
 

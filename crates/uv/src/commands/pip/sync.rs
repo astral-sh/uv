@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
@@ -372,7 +372,8 @@ pub(crate) async fn pip_sync(
         let install_path = std::path::absolute(&pylock)?;
         let install_path = install_path.parent().unwrap();
         let content = fs_err::tokio::read_to_string(&pylock).await?;
-        let lock = toml::from_str::<PylockToml>(&content)?;
+        let lock = toml::from_str::<PylockToml>(&content)
+            .with_context(|| format!("Not a valid pylock.toml file: {}", pylock.user_display()))?;
 
         let resolution =
             lock.to_resolution(install_path, marker_env.markers(), &tags, &build_options)?;

@@ -1,6 +1,7 @@
-use crate::commands::ExitStatus;
 use tokio::process::Child;
 use tracing::debug;
+
+use crate::commands::ExitStatus;
 
 /// Wait for the child process to complete, handling signals and error codes.
 ///
@@ -39,6 +40,7 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
     let status = {
         use std::ops::Deref;
 
+        use anyhow::Context;
         use nix::sys::signal;
         use nix::unistd::{getpgid, Pid};
         use tokio::select;
@@ -85,7 +87,7 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
         }
 
         // Get the parent PGID
-        let parent_pgid = getpgid(None)?;
+        let parent_pgid = getpgid(None).context("Failed to get current PID")?;
         if let Some(child_pid) = *ChildPid::from(&handle) {
             debug!("Spawned child {child_pid} in process group {parent_pgid}");
         }
@@ -147,7 +149,7 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
                     };
 
                     // Check if the child pgid has changed
-                    let child_pgid = getpgid(Some(child_pid))?;
+                    let child_pgid = getpgid(Some(child_pid)).context("Failed to get PID of child process")?;
 
                     // Increment the number of interrupts seen
                     sigint_count += 1;

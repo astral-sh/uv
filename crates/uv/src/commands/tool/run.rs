@@ -357,7 +357,8 @@ pub(crate) async fn run(
                 .iter()
                 .flat_map(std::env::split_paths),
         ),
-    )?;
+    )
+    .context("Failed to build new PATH variable")?;
     process.env(EnvVars::PATH, new_path);
 
     // Spawn and wait for completion
