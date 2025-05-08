@@ -125,6 +125,16 @@ pub(crate) async fn self_update(
     // available version of uv.
     match updater.run().await {
         Ok(Some(result)) => {
+            let direction = if result
+                .old_version
+                .as_ref()
+                .is_some_and(|old_version| *old_version > result.new_version)
+            {
+                "Downgraded"
+            } else {
+                "Upgraded"
+            };
+
             let version_information = if let Some(old_version) = result.old_version {
                 format!(
                     "from {} to {}",
@@ -139,7 +149,7 @@ pub(crate) async fn self_update(
                 printer.stderr(),
                 "{}",
                 format_args!(
-                    "{}{} Upgraded uv {}! {}",
+                    "{}{} {direction} uv {}! {}",
                     "success".green().bold(),
                     ":".bold(),
                     version_information,
