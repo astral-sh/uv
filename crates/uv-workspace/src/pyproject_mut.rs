@@ -1021,7 +1021,7 @@ pub fn add_dependency(
             fn is_sorted<T, I>(items: I) -> bool
             where
                 I: IntoIterator<Item = T>,
-                T: PartialOrd + Clone,
+                T: PartialOrd + Copy,
             {
                 items.into_iter().tuple_windows().all(|(a, b)| a <= b)
             }
@@ -1044,7 +1044,7 @@ pub fn add_dependency(
                 Sort::CaseInsensitive
             } else if is_sorted(reqs.iter().map(|d| split_specifiers(d))) {
                 Sort::CaseSensitive
-            } else if is_sorted(reqs_lowercase) {
+            } else if is_sorted(reqs_lowercase.iter().map(String::as_str)) {
                 Sort::CaseInsensitiveNaive
             } else if is_sorted(reqs) {
                 Sort::CaseSensitiveNaive
