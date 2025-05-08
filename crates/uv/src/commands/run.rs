@@ -1,4 +1,3 @@
-use anyhow::Context;
 use tokio::process::Child;
 use tracing::debug;
 
@@ -41,6 +40,7 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
     let status = {
         use std::ops::Deref;
 
+        use anyhow::Context;
         use nix::sys::signal;
         use nix::unistd::{getpgid, Pid};
         use tokio::select;

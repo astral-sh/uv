@@ -171,7 +171,7 @@ impl RequirementsSource {
                     "`{name}` looks like a local requirements file but was passed as a package name. Did you mean `-r {name}`?"
                 );
                 let confirmation =
-                    uv_console::confirm(&prompt, &term, true).context("Comfirm prompt failed")?;
+                    uv_console::confirm(&prompt, &term, true).context("Confirm prompt failed")?;
                 if confirmation {
                     return Self::from_requirements_file(name.into());
                 }
@@ -192,7 +192,7 @@ impl RequirementsSource {
                     "`{name}` looks like a local metadata file but was passed as a package name. Did you mean `-r {name}`?"
                 );
                 let confirmation =
-                    uv_console::confirm(&prompt, &term, true).context("Comfirm prompt failed")?;
+                    uv_console::confirm(&prompt, &term, true).context("Confirm prompt failed")?;
                 if confirmation {
                     return Self::from_requirements_file(name.into());
                 }
@@ -221,7 +221,7 @@ impl RequirementsSource {
                     "`{name}` looks like a local requirements file but was passed as a package name. Did you mean `--with-requirements {name}`?"
                 );
                 let confirmation =
-                    uv_console::confirm(&prompt, &term, true).context("Comfirm prompt failed")?;
+                    uv_console::confirm(&prompt, &term, true).context("Confirm prompt failed")?;
                 if confirmation {
                     return Self::from_requirements_file(name.into());
                 }
@@ -242,7 +242,7 @@ impl RequirementsSource {
                     "`{name}` looks like a local metadata file but was passed as a package name. Did you mean `--with-requirements {name}`?"
                 );
                 let confirmation =
-                    uv_console::confirm(&prompt, &term, true).context("Comfirm prompt failed")?;
+                    uv_console::confirm(&prompt, &term, true).context("Confirm prompt failed")?;
                 if confirmation {
                     return Self::from_requirements_file(name.into());
                 }
