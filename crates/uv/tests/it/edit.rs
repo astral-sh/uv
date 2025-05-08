@@ -7514,6 +7514,201 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn sorted_dependencies_with_include_group() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+
+    [dependency-groups]
+    dev = [
+        { include-group = "coverage" },
+        "pytest-mock>=3.14",
+        "pytest>=8.1.1",
+    ]
+    coverage = [
+        "coverage>=7.4.4",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest-randomly"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + coverage==7.4.4
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-mock==3.14.0
+     + pytest-randomly==3.15.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = [
+            { include-group = "coverage" },
+            "pytest-mock>=3.14",
+            "pytest-randomly>=3.15.0",
+            "pytest>=8.1.1",
+        ]
+        coverage = [
+            "coverage>=7.4.4",
+        ]
+        "#
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn sorted_dependencies_new_dependency_after_include_group() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+
+    [dependency-groups]
+    dev = [
+        { include-group = "coverage" },
+    ]
+    coverage = [
+        "coverage>=7.4.4",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + coverage==7.4.4
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = [
+            { include-group = "coverage" },
+            "pytest>=8.1.1",
+        ]
+        coverage = [
+            "coverage>=7.4.4",
+        ]
+        "#
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn sorted_dependencies_include_group_kept_at_bottom() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+
+    [dependency-groups]
+    dev = [
+        "pytest>=8.1.1",
+        { include-group = "coverage" },
+    ]
+    coverage = [
+        "coverage>=7.4.4",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest-randomly"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + coverage==7.4.4
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-randomly==3.15.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = [
+            "pytest>=8.1.1",
+            "pytest-randomly>=3.15.0",
+            { include-group = "coverage" },
+        ]
+        coverage = [
+            "coverage>=7.4.4",
+        ]
+        "#
+        );
+    });
+    Ok(())
+}
+
 /// Ensure that the custom ordering of the dependencies is preserved
 /// after adding a package.
 #[test]
