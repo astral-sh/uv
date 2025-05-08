@@ -577,7 +577,7 @@ pub struct VersionArgs {
     #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
     pub locked: bool,
 
-    /// Remove dependencies without re-locking the project.
+    /// Update the version without re-locking the project.
     ///
     /// The project environment will not be synced.
     #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
@@ -592,7 +592,7 @@ pub struct VersionArgs {
     #[command(flatten)]
     pub refresh: RefreshArgs,
 
-    /// Remove the dependencies from a specific package in the workspace.
+    /// Update the version of a specific package in the workspace.
     #[arg(long, conflicts_with = "isolated")]
     pub package: Option<PackageName>,
 

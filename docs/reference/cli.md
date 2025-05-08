@@ -1590,7 +1590,7 @@ uv version [OPTIONS] [VALUE]
 
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
 </ul>
-</dd><dt id="uv-version--frozen"><a href="#uv-version--frozen"><code>--frozen</code></a></dt><dd><p>Remove dependencies without re-locking the project.</p>
+</dd><dt id="uv-version--frozen"><a href="#uv-version--frozen"><code>--frozen</code></a></dt><dd><p>Update the version without re-locking the project.</p>
 
 <p>The project environment will not be synced.</p>
 
@@ -1739,7 +1739,7 @@ uv version [OPTIONS] [VALUE]
 
 <li><code>json</code>:  Display the version as JSON</li>
 </ul>
-</dd><dt id="uv-version--package"><a href="#uv-version--package"><code>--package</code></a> <i>package</i></dt><dd><p>Remove the dependencies from a specific package in the workspace</p>
+</dd><dt id="uv-version--package"><a href="#uv-version--package"><code>--package</code></a> <i>package</i></dt><dd><p>Update the version of a specific package in the workspace</p>
 
 </dd><dt id="uv-version--prerelease"><a href="#uv-version--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 
