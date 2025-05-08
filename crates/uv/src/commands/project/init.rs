@@ -236,10 +236,12 @@ async fn init_script(
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
         Err(err) => {
-            return Err(anyhow::Error::from(err).context(format!(
-                "Failed to read script at `{}`",
-                script_path.simplified_display().cyan()
-            )));
+            return Err(err).with_context(|| {
+                format!(
+                    "Failed to read script at `{}`",
+                    script_path.simplified_display().cyan()
+                )
+            });
         }
     };
 
@@ -328,10 +330,12 @@ async fn init_project(
                     warn!("Ignoring workspace discovery error due to `--no-workspace`: {err}");
                     None
                 } else {
-                    return Err(anyhow::Error::from(err).context(format!(
-                        "Failed to discover parent workspace; use `{}` to ignore",
-                        "uv init --no-workspace".green()
-                    )));
+                    return Err(err).with_context(|| {
+                        format!(
+                            "Failed to discover parent workspace; use `{}` to ignore",
+                            "uv init --no-workspace".green()
+                        )
+                    });
                 }
             }
         }

@@ -3,10 +3,10 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use anyhow::anyhow_original::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use tracing::{debug, enabled, Level};
-
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -437,7 +437,8 @@ pub(crate) async fn pip_install(
         let install_path = std::path::absolute(&pylock)?;
         let install_path = install_path.parent().unwrap();
         let content = fs_err::tokio::read_to_string(&pylock).await?;
-        let lock = toml::from_str::<PylockToml>(&content)?;
+        let lock = toml::from_str::<PylockToml>(&content)
+            .with_context(|| format!("Not a valid pylock.toml file: {}", pylock.user_display()))?;
 
         let resolution =
             lock.to_resolution(install_path, marker_env.markers(), &tags, &build_options)?;
