@@ -1870,6 +1870,7 @@ async fn run_project(
                 args.editable,
                 args.dependency_type,
                 args.raw_sources,
+                args.bounds,
                 args.indexes,
                 args.rev,
                 args.tag,

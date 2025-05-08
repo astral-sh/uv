@@ -40,7 +40,7 @@ use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::{DependencyType, Source, SourceError, Sources, ToolUvSources};
-use uv_workspace::pyproject_mut::{ArrayEdit, DependencyTarget, PyProjectTomlMut};
+use uv_workspace::pyproject_mut::{AddBoundsKind, ArrayEdit, DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::{
@@ -73,6 +73,7 @@ pub(crate) async fn add(
     editable: Option<bool>,
     dependency_type: DependencyType,
     raw_sources: bool,
+    bounds: Option<AddBoundsKind>,
     indexes: Vec<Index>,
     rev: Option<String>,
     tag: Option<String>,
@@ -93,6 +94,12 @@ pub(crate) async fn add(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
+    if bounds.is_some() && preview.is_disabled() {
+        warn_user_once!(
+            "The bounds option is in preview and its configuration may change in any future release."
+        );
+    }
+
     for source in &requirements {
         match source {
             RequirementsSource::PyprojectToml(_) => {
@@ -520,6 +527,7 @@ pub(crate) async fn add(
         locked,
         &dependency_type,
         raw_sources,
+        &bounds.unwrap_or_default(),
         constraints,
         &settings,
         &network_settings,
@@ -744,6 +752,7 @@ async fn lock_and_sync(
     locked: bool,
     dependency_type: &DependencyType,
     raw_sources: bool,
+    bound_kind: &AddBoundsKind,
     constraints: Vec<NameRequirementSpecification>,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
@@ -831,7 +840,7 @@ async fn lock_and_sync(
             // For example, convert `1.2.3+local` to `1.2.3`.
             let minimum = (*minimum).clone().without_local();
 
-            toml.set_dependency_minimum_version(&edit.dependency_type, *index, minimum)?;
+            toml.set_dependency_bound(&edit.dependency_type, *index, minimum, bound_kind)?;
 
             modified = true;
         }
