@@ -540,7 +540,7 @@ impl hashbrown::Equivalent<ConflictPackage> for ConflictPackageRef<'_> {
 }
 
 /// An error that occurs when the given conflicting set is invalid somehow.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum ConflictError {
     /// An error for when there are zero conflicting items.
     #[error("Each set of conflicts must have at least two entries, but found none")]

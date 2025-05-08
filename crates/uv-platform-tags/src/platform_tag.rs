@@ -620,7 +620,7 @@ impl FromStr for PlatformTag {
     }
 }
 
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error, PartialEq, Eq)]
 pub enum ParsePlatformTagError {
     #[error("Unknown platform tag format: {0}")]
     UnknownFormat(String),

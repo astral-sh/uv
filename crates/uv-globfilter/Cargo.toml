@@ -16,6 +16,7 @@ owo-colors = { workspace = true }
 regex = { workspace = true }
 regex-automata = { workspace = true }
 thiserror = { workspace = true }
+traversable-error = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
 

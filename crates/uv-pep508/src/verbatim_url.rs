@@ -317,7 +317,7 @@ impl Pep508Url for VerbatimUrl {
 }
 
 /// An error that can occur when parsing a [`VerbatimUrl`].
-#[derive(Error, traversable_error::TraversableError, Debug)]
+#[derive(traversable_error::TraversableError, Error, Debug)]
 pub enum VerbatimUrlError {
     /// Failed to parse a URL.
     #[error(transparent)]

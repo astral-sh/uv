@@ -15,7 +15,7 @@ use crate::lock::PylockTomlPackage;
 use crate::universal_marker::UniversalMarker;
 use crate::{LockError, ResolverEnvironment};
 
-#[derive(thiserror::Error, Debug)]
+#[derive(traversable_error::TraversableError, thiserror::Error, Debug)]
 pub enum PreferenceError {
     #[error(transparent)]
     Hash(#[from] HashError),

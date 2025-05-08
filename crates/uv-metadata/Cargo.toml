@@ -21,6 +21,7 @@ async_zip = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
+traversable-error = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }

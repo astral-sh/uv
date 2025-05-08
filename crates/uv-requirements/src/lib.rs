@@ -17,7 +17,7 @@ mod specification;
 mod unnamed;
 pub mod upgrade;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum Error {
     #[error("{0} `{1}`")]
     Dist(DistErrorKind, Box<Dist>, #[source] uv_distribution::Error),

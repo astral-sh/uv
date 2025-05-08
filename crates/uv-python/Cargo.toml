@@ -56,6 +56,7 @@ sys-info = { workspace = true }
 target-lexicon = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
+traversable-error = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }

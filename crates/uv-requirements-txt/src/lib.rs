@@ -41,9 +41,9 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use tracing::instrument;
+use traversable_error::TraversableError;
 use unscanny::{Pattern, Scanner};
 use url::Url;
-
 #[cfg(feature = "http")]
 use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
@@ -206,10 +206,10 @@ impl RequirementsTxt {
                     .await
                     .map_err(RequirementsTxtParserError::Io)
             }
-            .map_err(|err| RequirementsTxtFileError {
-                file: requirements_txt.to_path_buf(),
-                error: err,
-            })?;
+                .map_err(|err| RequirementsTxtFileError {
+                    file: requirements_txt.to_path_buf(),
+                    error: err,
+                })?;
 
         let requirements_dir = requirements_txt.parent().unwrap_or(working_dir);
         let data = Self::parse_inner(
@@ -960,7 +960,7 @@ async fn read_url_to_string(
 }
 
 /// Error parsing requirements.txt, wrapper with filename
-#[derive(Debug)]
+#[derive(Debug, TraversableError)]
 pub struct RequirementsTxtFileError {
     file: PathBuf,
     error: RequirementsTxtParserError,

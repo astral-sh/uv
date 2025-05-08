@@ -12,7 +12,7 @@ use uv_pep508::{
 
 use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};
 
-#[derive(Debug, Error)]
+#[derive(Debug, traversable_error::TraversableError, Error)]
 pub enum ParsedUrlError {
     #[error("Unsupported URL prefix `{prefix}` in URL: `{url}` ({message})")]
     UnsupportedUrlPrefix {

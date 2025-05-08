@@ -368,7 +368,7 @@ pub struct ToolUv {
     pub sources: Option<BTreeMap<PackageName, Sources>>,
 }
 
-#[derive(Debug, Error, traversable_error::TraversableError)]
+#[derive(Debug, traversable_error::TraversableError, Error)]
 pub enum Pep723Error {
     #[error("An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`.")]
     UnclosedBlock,

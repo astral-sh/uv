@@ -14,7 +14,7 @@ use tracing::{debug, trace};
 use url::Url;
 use uv_static::EnvVars;
 
-#[derive(Debug, Error, traversable_error::TraversableError)]
+#[derive(Debug, traversable_error::TraversableError, Error)]
 pub enum TrustedPublishingError {
     #[error("Environment variable {0} not set, is the `id-token: write` permission missing?")]
     MissingEnvVar(&'static str),

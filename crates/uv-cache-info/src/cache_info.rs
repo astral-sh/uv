@@ -9,7 +9,7 @@ use tracing::{debug, warn};
 use crate::git_info::{Commit, Tags};
 use crate::timestamp::Timestamp;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum CacheInfoError {
     #[error("Failed to parse glob patterns for `cache-keys`: {0}")]
     Glob(#[from] globwalk::GlobError),

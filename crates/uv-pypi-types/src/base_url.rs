@@ -20,7 +20,7 @@ pub fn base_url_join_relative(base: &str, relative: &str) -> Result<Url, JoinRel
 ///
 /// The error message includes the URL (`base` or `maybe_relative`) passed to
 /// `base_url_join_relative` that provoked the error.
-#[derive(Clone, Debug, thiserror::Error)]
+#[derive(Clone, Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum JoinRelativeError {
     #[error("Failed to parse URL: `{original}`")]
     ParseError {

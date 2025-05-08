@@ -15,7 +15,7 @@ use uv_pypi_types::ResolutionMetadata;
 use zip::ZipArchive;
 
 /// The caller is responsible for attaching the path or url we failed to read.
-#[derive(Debug, Error, traversable_error::TraversableError)]
+#[derive(Debug, traversable_error::TraversableError, Error)]
 pub enum Error {
     #[error("Failed to read `dist-info` metadata from built wheel")]
     DistInfo,

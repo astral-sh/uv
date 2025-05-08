@@ -11,7 +11,7 @@ use uv_normalize::PackageName;
 use crate::middleware::OfflineError;
 use crate::{html, FlatIndexError};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 #[error(transparent)]
 pub struct Error {
     kind: Box<ErrorKind>,
@@ -147,7 +147,7 @@ impl From<ErrorKind> for Error {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum ErrorKind {
     #[error(transparent)]
     InvalidUrl(#[from] uv_distribution_types::ToUrlError),

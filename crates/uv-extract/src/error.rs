@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::PathBuf};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
     Zip(#[from] zip::result::ZipError),

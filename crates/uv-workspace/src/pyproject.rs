@@ -30,7 +30,7 @@ use uv_pypi_types::{
     Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
 };
 
-#[derive(Error, traversable_error::TraversableError, Debug)]
+#[derive(traversable_error::TraversableError, Error, Debug)]
 pub enum PyprojectTomlError {
     #[error(transparent)]
     TomlSyntax(#[from] toml_edit::TomlError),
@@ -1331,7 +1331,7 @@ impl<'de> Deserialize<'de> for Source {
     }
 }
 
-#[derive(Error, traversable_error::TraversableError, Debug)]
+#[derive(traversable_error::TraversableError, Error, Debug)]
 pub enum SourceError {
     #[error("Failed to resolve Git reference: `{0}`")]
     UnresolvedReference(String),

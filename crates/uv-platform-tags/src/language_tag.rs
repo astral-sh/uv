@@ -206,7 +206,7 @@ impl FromStr for LanguageTag {
     }
 }
 
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error, PartialEq, Eq)]
 pub enum ParseLanguageTagError {
     #[error("Unknown language tag format: {0}")]
     UnknownFormat(String),

@@ -40,7 +40,7 @@ use crate::lock::{each_element_on_its_line_array, Source, WheelTagHint};
 use crate::resolution::ResolutionGraphNode;
 use crate::{Installable, LockError, RequiresPython, ResolverOutput};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum PylockTomlErrorKind {
     #[error("Package `{0}` includes both a registry (`packages.wheels`) and a directory source (`packages.directory`)")]
     WheelWithDirectory(PackageName),
@@ -114,7 +114,7 @@ pub enum PylockTomlErrorKind {
     Deserialize(#[from] toml::de::Error),
 }
 
-#[derive(Debug)]
+#[derive(Debug, traversable_error::TraversableError)]
 pub struct PylockTomlError {
     kind: Box<PylockTomlErrorKind>,
     hint: Option<WheelTagHint>,

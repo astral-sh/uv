@@ -11,7 +11,7 @@ use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
 use uv_small_str::SmallString;
 
 /// Error converting [`uv_pypi_types::File`] to [`distribution_type::File`].
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum FileConversionError {
     #[error("Failed to parse `requires-python`: `{0}`")]
     RequiresPython(String, #[source] VersionSpecifiersParseError),
@@ -197,7 +197,7 @@ impl Display for UrlString {
 }
 
 /// An error that occurs when a [`FileLocation`] is not a valid URL.
-#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+#[derive(Clone, Debug, Eq, PartialEq, traversable_error::TraversableError, thiserror::Error)]
 pub enum ToUrlError {
     /// An error that occurs when the base URL in [`FileLocation::Relative`]
     /// could not be parsed as a valid URL.

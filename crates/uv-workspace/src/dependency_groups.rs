@@ -141,7 +141,7 @@ impl IntoIterator for FlatDependencyGroups {
     }
 }
 
-#[derive(Debug, Error, traversable_error::TraversableError)]
+#[derive(Debug, traversable_error::TraversableError, Error)]
 pub enum DependencyGroupError {
     #[error("Failed to parse entry in group `{0}`: `{1}`")]
     GroupParseError(

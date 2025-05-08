@@ -30,7 +30,7 @@ use crate::resolver::{
 };
 use crate::{InMemoryIndex, Options};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum ResolveError {
     #[error(transparent)]
     Client(#[from] uv_client::Error),

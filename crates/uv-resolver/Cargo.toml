@@ -61,6 +61,7 @@ serde = { workspace = true }
 smallvec = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
+traversable-error = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 toml = { workspace = true }

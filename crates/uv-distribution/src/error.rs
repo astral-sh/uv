@@ -15,7 +15,7 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_types::AnyErrorBuild;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum Error {
     #[error("Building source distributions is disabled")]
     NoBuild,
@@ -162,7 +162,9 @@ impl From<reqwest::Error> for Error {
 impl From<reqwest_middleware::Error> for Error {
     fn from(error: reqwest_middleware::Error) -> Self {
         match error {
-            reqwest_middleware::Error::Middleware(error) => Self::ReqwestMiddlewareError(error),
+            reqwest_middleware::Error::Middleware(error) => {
+                Self::ReqwestMiddlewareError(error.into())
+            }
             reqwest_middleware::Error::Reqwest(error) => {
                 Self::Reqwest(WrappedReqwestError::from(error))
             }

@@ -31,7 +31,7 @@ pub fn patch_dylib_install_name(dylib: PathBuf) -> Result<(), Error> {
     Ok(())
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(traversable_error::TraversableError, thiserror::Error, Debug)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),

@@ -90,6 +90,13 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
+version = "0.1.0"
+dependencies = [
+ "anyhow 1.0.98",
+]
+
+[[package]]
+name = "anyhow"
 version = "1.0.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
@@ -509,7 +516,7 @@ version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "527f6e2a4e80492e90628052be879a5996c2453ad5ec745bfa310a80b7eca20a"
 dependencies = [
- "anyhow",
+ "anyhow 1.0.98",
  "core-foundation",
  "filetime",
  "hex",
@@ -3113,7 +3120,7 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57f17d28a6e6acfe1733fe24bcd30774d13bffa4b8a22535b4c8c98423088d4e"
 dependencies = [
- "anyhow",
+ "anyhow 1.0.98",
  "async-trait",
  "http",
  "reqwest",
@@ -3128,7 +3135,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29c73e4195a6bfbcb174b790d9b3407ab90646976c55de58a6515da25d851178"
 dependencies = [
- "anyhow",
+ "anyhow 1.0.98",
  "async-trait",
  "futures",
  "getrandom 0.2.15",
@@ -4297,7 +4304,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "382e025ef8e0db646343dd2cf56af9d7fe6f5eabce5f388f8e5ec7234f555a0f"
 dependencies = [
- "anyhow",
+ "anyhow 1.0.98",
  "fs-err 2.11.0",
  "itertools 0.13.0",
  "once_cell",
@@ -4382,6 +4389,22 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "traversable-derive"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "traversable-error"
+version = "0.1.0"
+dependencies = [
+ "anyhow 0.1.0",
+ "traversable-derive",
 ]
 
 [[package]]
@@ -4575,7 +4598,7 @@ name = "uv"
 version = "0.7.2"
 dependencies = [
  "anstream",
- "anyhow",
+ "anyhow 0.1.0",
  "assert_cmd",
  "assert_fs",
  "axoupdater",
@@ -4621,6 +4644,7 @@ dependencies = [
  "tracing-durations-export",
  "tracing-subscriber",
  "tracing-tree",
+ "traversable-error",
  "unicode-width 0.2.0",
  "url",
  "uv-auth",
@@ -4678,7 +4702,7 @@ dependencies = [
 name = "uv-auth"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "async-trait",
  "base64 0.22.1",
  "futures",
@@ -4708,7 +4732,7 @@ dependencies = [
 name = "uv-bench"
 version = "0.0.0"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "codspeed-criterion-compat",
  "criterion",
  "jiff",
@@ -4736,7 +4760,7 @@ dependencies = [
 name = "uv-build"
 version = "0.7.2"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "uv-build-backend",
  "uv-version",
 ]
@@ -4761,6 +4785,7 @@ dependencies = [
  "thiserror 2.0.12",
  "toml",
  "tracing",
+ "traversable-error",
  "uv-distribution-filename",
  "uv-fs",
  "uv-globfilter",
@@ -4797,6 +4822,7 @@ dependencies = [
  "tokio",
  "toml_edit",
  "tracing",
+ "traversable-error",
  "uv-configuration",
  "uv-distribution",
  "uv-distribution-types",
@@ -4849,6 +4875,7 @@ dependencies = [
  "thiserror 2.0.12",
  "toml",
  "tracing",
+ "traversable-error",
  "walkdir",
 ]
 
@@ -4868,7 +4895,7 @@ name = "uv-cli"
 version = "0.0.1"
 dependencies = [
  "anstream",
- "anyhow",
+ "anyhow 0.1.0",
  "clap",
  "clap_complete_command",
  "fs-err 3.1.0",
@@ -4895,7 +4922,7 @@ dependencies = [
 name = "uv-client"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "async-trait",
  "async_http_range_reader",
  "async_zip",
@@ -4925,6 +4952,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "traversable-error",
  "url",
  "uv-auth",
  "uv-cache",
@@ -4950,7 +4978,7 @@ dependencies = [
 name = "uv-configuration"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "clap",
  "either",
  "fs-err 3.1.0",
@@ -4963,6 +4991,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.12",
  "tracing",
+ "traversable-error",
  "url",
  "uv-auth",
  "uv-cache",
@@ -4989,7 +5018,7 @@ name = "uv-dev"
 version = "0.0.1"
 dependencies = [
  "anstream",
- "anyhow",
+ "anyhow 0.1.0",
  "clap",
  "fs-err 3.1.0",
  "itertools 0.14.0",
@@ -5043,13 +5072,14 @@ dependencies = [
 name = "uv-dispatch"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "futures",
  "itertools 0.14.0",
  "rustc-hash",
  "thiserror 2.0.12",
  "tokio",
  "tracing",
+ "traversable-error",
  "uv-build-backend",
  "uv-build-frontend",
  "uv-cache",
@@ -5074,7 +5104,7 @@ dependencies = [
 name = "uv-distribution"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "either",
  "fs-err 3.1.0",
  "futures",
@@ -5093,6 +5123,7 @@ dependencies = [
  "tokio-util",
  "toml",
  "tracing",
+ "traversable-error",
  "url",
  "uv-cache",
  "uv-cache-info",
@@ -5127,6 +5158,7 @@ dependencies = [
  "serde",
  "smallvec",
  "thiserror 2.0.12",
+ "traversable-error",
  "url",
  "uv-cache-key",
  "uv-normalize",
@@ -5156,6 +5188,7 @@ dependencies = [
  "thiserror 2.0.12",
  "toml",
  "tracing",
+ "traversable-error",
  "url",
  "uv-auth",
  "uv-cache-info",
@@ -5191,6 +5224,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "traversable-error",
  "uv-configuration",
  "uv-distribution-filename",
  "uv-pypi-types",
@@ -5225,7 +5259,8 @@ dependencies = [
 name = "uv-git"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
+ "anyhow 1.0.98",
  "cargo-util",
  "dashmap",
  "fs-err 3.1.0",
@@ -5234,6 +5269,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tracing",
+ "traversable-error",
  "url",
  "uv-auth",
  "uv-cache-key",
@@ -5251,6 +5287,7 @@ dependencies = [
  "serde",
  "thiserror 2.0.12",
  "tracing",
+ "traversable-error",
  "url",
 ]
 
@@ -5268,6 +5305,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.12",
  "tracing",
+ "traversable-error",
  "walkdir",
 ]
 
@@ -5275,7 +5313,7 @@ dependencies = [
 name = "uv-install-wheel"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "assert_fs",
  "clap",
  "configparser",
@@ -5297,6 +5335,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.12",
  "tracing",
+ "traversable-error",
  "uv-cache-info",
  "uv-distribution-filename",
  "uv-fs",
@@ -5313,7 +5352,7 @@ dependencies = [
 name = "uv-installer"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "async-channel",
  "fs-err 3.1.0",
  "futures",
@@ -5324,6 +5363,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tracing",
+ "traversable-error",
  "url",
  "uv-cache",
  "uv-cache-info",
@@ -5367,6 +5407,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "traversable-error",
  "uv-distribution-filename",
  "uv-normalize",
  "uv-pypi-types",
@@ -5430,6 +5471,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "tracing-test",
+ "traversable-error",
  "unicode-width 0.2.0",
  "url",
  "uv-fs",
@@ -5456,6 +5498,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "thiserror 2.0.12",
+ "traversable-error",
  "uv-small-str",
 ]
 
@@ -5481,6 +5524,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "traversable-error",
  "url",
  "uv-auth",
  "uv-cache",
@@ -5500,7 +5544,7 @@ dependencies = [
 name = "uv-pypi-types"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "hashbrown 0.15.3",
  "indexmap",
  "insta",
@@ -5517,6 +5561,7 @@ dependencies = [
  "thiserror 2.0.12",
  "toml_edit",
  "tracing",
+ "traversable-error",
  "url",
  "uv-distribution-filename",
  "uv-git-types",
@@ -5530,7 +5575,7 @@ dependencies = [
 name = "uv-python"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "assert_fs",
  "clap",
  "configparser",
@@ -5562,6 +5607,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "traversable-error",
  "url",
  "uv-cache",
  "uv-cache-info",
@@ -5590,7 +5636,7 @@ dependencies = [
 name = "uv-requirements"
 version = "0.1.0"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "configparser",
  "console",
  "fs-err 3.1.0",
@@ -5600,6 +5646,7 @@ dependencies = [
  "thiserror 2.0.12",
  "toml",
  "tracing",
+ "traversable-error",
  "url",
  "uv-cache-key",
  "uv-client",
@@ -5624,7 +5671,7 @@ dependencies = [
 name = "uv-requirements-txt"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "assert_fs",
  "fs-err 3.1.0",
  "indoc",
@@ -5639,6 +5686,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tracing",
+ "traversable-error",
  "unscanny",
  "url",
  "uv-client",
@@ -5681,6 +5729,7 @@ dependencies = [
  "toml",
  "toml_edit",
  "tracing",
+ "traversable-error",
  "url",
  "uv-cache-key",
  "uv-client",
@@ -5718,6 +5767,7 @@ dependencies = [
  "serde",
  "thiserror 2.0.12",
  "toml",
+ "traversable-error",
  "url",
  "uv-pep440",
  "uv-pep508",
@@ -5738,6 +5788,7 @@ dependencies = [
  "thiserror 2.0.12",
  "toml",
  "tracing",
+ "traversable-error",
  "url",
  "uv-cache-info",
  "uv-configuration",
@@ -5761,7 +5812,7 @@ dependencies = [
 name = "uv-shell"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "home",
  "same-file",
  "tracing",
@@ -5810,6 +5861,7 @@ dependencies = [
  "toml",
  "toml_edit",
  "tracing",
+ "traversable-error",
  "uv-cache",
  "uv-dirs",
  "uv-distribution-types",
@@ -5837,6 +5889,7 @@ dependencies = [
  "serde",
  "thiserror 2.0.12",
  "tracing",
+ "traversable-error",
  "url",
  "uv-distribution-types",
  "uv-normalize",
@@ -5849,11 +5902,12 @@ dependencies = [
 name = "uv-trampoline-builder"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "assert_cmd",
  "assert_fs",
  "fs-err 3.1.0",
  "thiserror 2.0.12",
+ "traversable-error",
  "uv-fs",
  "which",
  "zip",
@@ -5863,9 +5917,10 @@ dependencies = [
 name = "uv-types"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "rustc-hash",
  "thiserror 2.0.12",
+ "traversable-error",
  "url",
  "uv-cache",
  "uv-configuration",
@@ -5895,6 +5950,7 @@ dependencies = [
  "self-replace",
  "thiserror 2.0.12",
  "tracing",
+ "traversable-error",
  "uv-fs",
  "uv-pypi-types",
  "uv-python",
@@ -5915,7 +5971,7 @@ dependencies = [
 name = "uv-workspace"
 version = "0.0.1"
 dependencies = [
- "anyhow",
+ "anyhow 0.1.0",
  "assert_fs",
  "fs-err 3.1.0",
  "glob",
@@ -5932,6 +5988,7 @@ dependencies = [
  "toml",
  "toml_edit",
  "tracing",
+ "traversable-error",
  "url",
  "uv-build-backend",
  "uv-cache-key",

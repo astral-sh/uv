@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use tracing::warn;
 use walkdir::WalkDir;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub(crate) enum GitInfoError {
     #[error("The repository at {0} is missing a `.git` directory")]
     MissingGitDir(PathBuf),

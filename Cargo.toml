@@ -20,6 +20,8 @@ authors = ["uv"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+traversable-error = { path = "crates/traversable-error" }
+traversable-derive = { path = "crates/traversable-derive" }
 uv-auth = { path = "crates/uv-auth" }
 uv-build-backend = { path = "crates/uv-build-backend" }
 uv-build-frontend = { path = "crates/uv-build-frontend" }
@@ -72,7 +74,8 @@ uv-warnings = { path = "crates/uv-warnings" }
 uv-workspace = { path = "crates/uv-workspace" }
 
 anstream = { version = "0.6.15" }
-anyhow = { version = "1.0.89" }
+anyhow = { path = "crates/anyhow-wrapper" }
+anyhow-original = { package = "anyhow", version = "1.0.89" }
 arcstr = { version = "1.2.0" }
 astral-tokio-tar = { version = "0.5.1" }
 async-channel = { version = "2.3.1" }

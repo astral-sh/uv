@@ -24,7 +24,7 @@ pub async fn uninstall(
     Ok(uninstall)
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(traversable_error::TraversableError, thiserror::Error, Debug)]
 pub enum UninstallError {
     #[error("Unable to uninstall `{0}`. distutils-installed distributions do not include the metadata required to uninstall safely.")]
     Distutils(InstalledEggInfoFile),

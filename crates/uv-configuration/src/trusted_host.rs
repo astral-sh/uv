@@ -73,7 +73,7 @@ impl serde::Serialize for TrustedHost {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum TrustedHostError {
     #[error("missing host for `--trusted-host`: `{0}`")]
     MissingHost(String),

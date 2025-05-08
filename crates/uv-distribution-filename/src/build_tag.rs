@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use uv_small_str::SmallString;
 
-#[derive(thiserror::Error, Debug)]
+#[derive(traversable_error::TraversableError, thiserror::Error, Debug)]
 pub enum BuildTagError {
     #[error("must not be empty")]
     Empty,

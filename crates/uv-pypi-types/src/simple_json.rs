@@ -570,7 +570,7 @@ impl IntoIterator for HashDigests {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(traversable_error::TraversableError, thiserror::Error, Debug)]
 pub enum HashError {
     #[error("Unexpected hash (expected `<algorithm>:<hash>`): {0}")]
     InvalidStructure(String),

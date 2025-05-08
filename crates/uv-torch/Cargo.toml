@@ -22,6 +22,7 @@ fs-err = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+traversable-error = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 

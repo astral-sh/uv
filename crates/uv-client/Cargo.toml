@@ -51,6 +51,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sys-info = { workspace = true }
 thiserror = { workspace = true }
+traversable-error = { workspace = true }
 tl = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }

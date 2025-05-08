@@ -41,5 +41,6 @@ futures = { workspace = true }
 itertools = { workspace = true }
 rustc-hash = { workspace = true }
 thiserror = { workspace = true }
+traversable-error = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

@@ -40,7 +40,7 @@ struct WorkspaceCacheKey {
 #[derive(Debug, Default, Clone)]
 pub struct WorkspaceCache(Arc<Mutex<FxHashMap<WorkspaceCacheKey, WorkspaceMembers>>>);
 
-#[derive(thiserror::Error, Debug)]
+#[derive(traversable_error::TraversableError, thiserror::Error, Debug)]
 pub enum WorkspaceError {
     // Workspace structure errors.
     #[error("No `pyproject.toml` found in current directory or any parent directory")]

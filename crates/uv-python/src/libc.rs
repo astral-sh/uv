@@ -14,7 +14,7 @@ use thiserror::Error;
 use tracing::trace;
 use uv_fs::Simplified;
 
-#[derive(Debug, Error, traversable_error::TraversableError)]
+#[derive(Debug, traversable_error::TraversableError, Error)]
 pub enum LibcDetectionError {
     #[error("Could not detect either glibc version nor musl libc version, at least one of which is required")]
     NoLibcFound,

@@ -280,7 +280,7 @@ impl FromStr for AbiTag {
     }
 }
 
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error, PartialEq, Eq)]
 pub enum ParseAbiTagError {
     #[error("Unknown ABI tag format: {0}")]
     UnknownFormat(String),

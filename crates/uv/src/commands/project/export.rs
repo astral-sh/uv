@@ -341,7 +341,7 @@ pub(crate) async fn export(
                 )?;
                 writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
             }
-            write!(writer, "{}", export.to_toml()?)?;
+            write!(writer, "{}", export.to_toml().map_err(anyhow::Error::new)?)?;
         }
     }
 

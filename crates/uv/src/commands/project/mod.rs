@@ -68,7 +68,7 @@ pub(crate) mod run;
 pub(crate) mod sync;
 pub(crate) mod tree;
 
-#[derive(thiserror::Error, Debug)]
+#[derive(traversable_error::TraversableError, thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
     #[error("The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.")]
     LockMismatch(Box<Lock>),
@@ -777,7 +777,7 @@ impl std::fmt::Display for EnvironmentKind {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub(crate) enum EnvironmentIncompatibilityError {
     #[error("The {0} environment's Python version does not satisfy the request: `{1}`")]
     PythonRequest(EnvironmentKind, PythonRequest),

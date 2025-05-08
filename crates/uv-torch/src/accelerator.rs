@@ -5,7 +5,7 @@ use tracing::debug;
 use uv_pep440::Version;
 use uv_static::EnvVars;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum AcceleratorError {
     #[error(transparent)]
     Io(#[from] std::io::Error),

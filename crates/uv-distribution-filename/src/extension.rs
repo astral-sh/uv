@@ -104,7 +104,7 @@ impl Display for SourceDistExtension {
     }
 }
 
-#[derive(Error, traversable_error::TraversableError, Debug)]
+#[derive(traversable_error::TraversableError, Error, Debug)]
 pub enum ExtensionError {
     #[error("`.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`")]
     Dist,

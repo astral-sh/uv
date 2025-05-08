@@ -4,7 +4,7 @@ use std::{
 };
 use thiserror::Error;
 
-#[derive(Error, traversable_error::TraversableError, Debug)]
+#[derive(traversable_error::TraversableError, Error, Debug)]
 pub enum Error {
     #[error("Unknown Python implementation `{0}`")]
     UnknownImplementation(String),

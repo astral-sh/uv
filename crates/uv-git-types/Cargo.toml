@@ -18,5 +18,6 @@ workspace = true
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }
+traversable-error = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }

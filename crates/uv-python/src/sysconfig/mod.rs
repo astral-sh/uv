@@ -381,7 +381,7 @@ fn patch_pkgconfig(contents: &str) -> Option<String> {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(traversable_error::TraversableError, thiserror::Error, Debug)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),

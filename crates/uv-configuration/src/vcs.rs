@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 use serde::Deserialize;
 use uv_git::GIT;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum VersionControlError {
     #[error("Attempted to initialize a Git repository, but `git` was not found in PATH")]
     GitNotInstalled,

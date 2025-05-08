@@ -210,7 +210,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(traversable_error::TraversableError, thiserror::Error, Debug)]
 pub enum Error {
     #[error("Building source distributions is disabled, but attempted to build `{0}`")]
     NoBuild(PackageName),

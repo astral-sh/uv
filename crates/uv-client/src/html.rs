@@ -224,7 +224,7 @@ impl SimpleHtml {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
     Utf8(#[from] std::str::Utf8Error),

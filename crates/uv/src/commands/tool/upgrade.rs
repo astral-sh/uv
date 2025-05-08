@@ -64,7 +64,9 @@ pub(crate) async fn upgrade(
         } else {
             let mut map = BTreeMap::new();
             for name in names {
-                let requirement = Requirement::from(uv_pep508::Requirement::parse(&name, &*CWD)?);
+                let requirement = Requirement::from(
+                    uv_pep508::Requirement::parse(&name, &*CWD).map_err(anyhow::Error::new)?,
+                );
                 map.entry(requirement.name.clone())
                     .or_insert_with(Vec::new)
                     .push(requirement);

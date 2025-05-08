@@ -7,7 +7,7 @@ use uv_python::{Interpreter, PythonEnvironment};
 
 mod virtualenv;
 
-#[derive(Debug, Error, traversable_error::TraversableError)]
+#[derive(Debug, traversable_error::TraversableError, Error)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),

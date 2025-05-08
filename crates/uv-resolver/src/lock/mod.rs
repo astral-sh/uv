@@ -17,8 +17,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serializer;
 use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
 use tracing::debug;
+use traversable_error::TraversableError;
 use url::Url;
-
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{BuildOptions, Constraints};
 use uv_distribution::{DistributionDatabase, FlatRequiresDist};
@@ -4704,7 +4704,7 @@ fn normalize_requirement(
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, TraversableError)]
 pub struct LockError {
     kind: Box<LockErrorKind>,
     hint: Option<WheelTagHint>,
@@ -5103,7 +5103,7 @@ impl std::fmt::Display for WheelTagHint {
 /// For example, if there are two or more duplicative distributions given
 /// to `Lock::new`, then an error is returned. It's likely that the fault
 /// is with the caller somewhere in such cases.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 enum LockErrorKind {
     /// An error that occurs when multiple packages with the same
     /// ID were found.
@@ -5411,7 +5411,7 @@ enum LockErrorKind {
 }
 
 /// An error that occurs when a source string could not be parsed.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 enum SourceParseError {
     /// An error that occurs when the URL in the source is invalid.
     #[error("Invalid URL in source `{given}`")]

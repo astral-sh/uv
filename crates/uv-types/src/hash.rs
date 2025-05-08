@@ -323,7 +323,7 @@ impl HashStrategy {
     }
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(traversable_error::TraversableError, thiserror::Error, Debug)]
 pub enum HashStrategyError {
     #[error(transparent)]
     Hash(#[from] HashError),

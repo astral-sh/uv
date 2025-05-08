@@ -23,6 +23,7 @@ rkyv = { workspace = true}
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+traversable-error = { workspace = true }
 
 [dev-dependencies]
 insta = { version = "1.40.0" }

@@ -26,6 +26,7 @@ uv-fs = { workspace = true }
 
 fs-err = {workspace = true }
 thiserror = { workspace = true }
+traversable-error = { workspace = true }
 zip = { workspace = true }
 
 [dev-dependencies]

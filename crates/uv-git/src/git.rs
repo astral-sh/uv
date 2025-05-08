@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::str::{self};
 use std::sync::LazyLock;
 
-use anyhow::{Context, Result};
+use anyhow_original::{Context, Result};
 use cargo_util::{paths, ProcessBuilder};
 use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
@@ -23,7 +23,7 @@ use uv_version::version;
 /// checkout is ready to go. See [`GitCheckout::reset`] for why we need this.
 const CHECKOUT_READY_LOCK: &str = ".ok";
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum GitError {
     #[error("Git executable not found. Ensure that Git is installed and available.")]
     GitNotFound,
@@ -97,7 +97,7 @@ impl ReferenceOrOid<'_> {
             Self::Oid(s) => repo.rev_parse(&format!("{s}^0")),
         };
 
-        result.with_context(|| anyhow::format_err!("failed to find {refkind} `{self}`"))
+        result.with_context(|| anyhow_original::format_err!("failed to find {refkind} `{self}`"))
     }
 
     /// Returns the kind of this [`ReferenceOrOid`].

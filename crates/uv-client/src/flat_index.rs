@@ -16,7 +16,7 @@ use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
 use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum FlatIndexError {
     #[error("Expected a file URL, but received: {0}")]
     NonFileUrl(Url),
@@ -28,7 +28,7 @@ pub enum FlatIndexError {
     FindLinksUrl(Url, #[source] Error),
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum FindLinksDirectoryError {
     #[error(transparent)]
     Io(#[from] std::io::Error),

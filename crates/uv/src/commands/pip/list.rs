@@ -177,7 +177,7 @@ pub(crate) async fn pip_list(
                         .map(|url| url.to_file_path().unwrap().simplified_display().to_string()),
                 })
                 .collect_vec();
-            let output = serde_json::to_string(&rows)?;
+            let output = serde_json::to_string(&rows).map_err(anyhow::Error::new)?;
             println!("{output}");
         }
         ListFormat::Columns if results.is_empty() => {}

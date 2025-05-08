@@ -1110,7 +1110,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     .iter()
                     .flat_map(std::env::split_paths),
             ),
-    )?;
+    )
+    .context("Failed to build new PATH variable")?;
     process.env(EnvVars::PATH, new_path);
 
     // Increment recursion depth counter.
@@ -1466,7 +1467,9 @@ impl RunCommand {
             // We don't do this check on Windows since the file path would
             // be invalid anyway, and thus couldn't refer to a local file.
             if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
-                let url = Url::parse(&target.to_string_lossy())?;
+                let url = Url::parse(&target.to_string_lossy()).with_context(|| {
+                    format!("Failed to parse as URL: {}", target.user_display())
+                })?;
 
                 let file_stem = url
                     .path_segments()
@@ -1483,14 +1486,22 @@ impl RunCommand {
                     .native_tls(network_settings.native_tls)
                     .allow_insecure_host(network_settings.allow_insecure_host.clone())
                     .build();
-                let response = client.for_host(&url).get(url.clone()).send().await?;
+                let response = client
+                    .for_host(&url)
+                    .get(url.clone())
+                    .send()
+                    .await
+                    .map_err(anyhow::Error::new)?;
 
                 // Stream the response to the file.
                 let mut writer = file.as_file();
                 let mut reader = response.bytes_stream();
                 while let Some(chunk) = reader.next().await {
                     use std::io::Write;
-                    writer.write_all(&chunk?)?;
+                    let chunk = chunk.with_context(|| format!("Failed to download: {url}"))?;
+                    writer
+                        .write_all(&chunk)
+                        .with_context(|| format!("Failed to write to temporary file"))?;
                 }
 
                 return Ok(Self::PythonRemote(url, file, args.to_vec()));

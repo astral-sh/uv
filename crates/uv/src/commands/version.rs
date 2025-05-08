@@ -103,7 +103,7 @@ pub(crate) async fn project_version(
                     ));
                 }
                 _ => {
-                    return Err(err)?;
+                    return Err(err).map_err(anyhow::Error::new)?;
                 }
             },
         }
@@ -160,7 +160,8 @@ fn print_version(
         }
         VersionFormat::Json => {
             let final_version = new_version.unwrap_or(old_version);
-            let string = serde_json::to_string_pretty(&final_version)?;
+            let string =
+                serde_json::to_string_pretty(&final_version).map_err(anyhow::Error::new)?;
             writeln!(printer.stdout(), "{string}")?;
         }
     }

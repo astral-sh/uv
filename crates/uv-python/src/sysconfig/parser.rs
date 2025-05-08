@@ -249,7 +249,7 @@ const fn is_python_whitespace(c: char) -> bool {
     )
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(traversable_error::TraversableError, thiserror::Error, Debug)]
 pub enum Error {
     #[error("Missing opening brace")]
     MissingOpenBrace,

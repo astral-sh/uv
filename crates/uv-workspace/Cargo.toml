@@ -38,6 +38,7 @@ rustc-hash = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
+traversable-error = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }

@@ -164,7 +164,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
                 path.user_display()
             )
         })?;
-        let source_tree = source_tree.parent().ok_or_else(|| {
+        let source_tree = source_tree.parent().ok_or_else(|| -> anyhow::Error {
             anyhow::anyhow!(
                 "The file `{}` appears to be a `pyproject.toml`, `setup.py`, or `setup.cfg` file, which must be in a directory",
                 path.user_display()

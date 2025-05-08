@@ -2,7 +2,7 @@ use url::Url;
 
 use uv_normalize::PackageName;
 
-#[derive(thiserror::Error, Debug)]
+#[derive(traversable_error::TraversableError, thiserror::Error, Debug)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),

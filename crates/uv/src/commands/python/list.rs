@@ -249,7 +249,11 @@ pub(crate) async fn list(
                     })
                 })
                 .collect::<Result<Vec<_>>>()?;
-            writeln!(printer.stdout(), "{}", serde_json::to_string(&data)?)?;
+            writeln!(
+                printer.stdout(),
+                "{}",
+                serde_json::to_string(&data).map_err(anyhow::Error::new)?
+            )?;
         }
         PythonListFormat::Text => {
             // Compute the width of the first column.

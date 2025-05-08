@@ -686,7 +686,7 @@ pub(crate) async fn pip_compile(
 
             // Convert the resolution to a `pylock.toml` file.
             let export = PylockToml::from_resolution(&resolution, &no_emit_packages, install_path)?;
-            write!(writer, "{}", export.to_toml()?)?;
+            write!(writer, "{}", export.to_toml().map_err(anyhow::Error::new)?)?;
         }
     }
 

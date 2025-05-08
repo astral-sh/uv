@@ -37,6 +37,7 @@ sha2 = { workspace = true }
 spdx = { workspace = true }
 tar = { workspace = true }
 thiserror = { workspace = true }
+traversable-error = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 version-ranges = { workspace = true }

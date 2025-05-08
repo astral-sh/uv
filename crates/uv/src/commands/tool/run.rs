@@ -167,7 +167,7 @@ pub(crate) async fn run(
 
     if let Some(ref from) = from {
         if has_python_script_ext(Path::new(from)) {
-            let package_name = PackageName::from_str(from)?;
+            let package_name = PackageName::from_str(from).map_err(anyhow::Error::new)?;
             return Err(anyhow::anyhow!(
                 "It looks you provided a Python script to `--from`, which is not supported\n\n{}{} If you meant to run a command from the `{}` package, use the normalized package name instead to disambiguate, e.g., `{}`",
                 "hint".bold().cyan(),
@@ -191,7 +191,7 @@ pub(crate) async fn run(
                     format!("uv run {}", target_path.user_display().cyan()),
                 ))
             } else {
-                let package_name = PackageName::from_str(target)?;
+                let package_name = PackageName::from_str(target).map_err(anyhow::Error::new)?;
                 Err(anyhow::anyhow!(
                     "It looks you provided a Python script to run, which is not supported supported by `{}`\n\n{}{} We did not find a script at the requested path. If you meant to run a command from the `{}` package, pass the normalized package name to `--from` to disambiguate, e.g., `{}`",
                     invocation_source,

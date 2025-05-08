@@ -16,14 +16,14 @@ use uv_version::version;
 
 use crate::{Fetch, GitSource, Reporter};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum GitResolverError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
     #[error("Git operation failed")]
-    Git(#[source] anyhow::Error),
+    Git(#[source] anyhow_original::Error),
     #[error(transparent)]
     Reqwest(#[from] reqwest::Error),
     #[error(transparent)]
@@ -158,7 +158,7 @@ impl GitResolver {
 
         let fetch = tokio::task::spawn_blocking(move || source.fetch())
             .await?
-            .map_err(GitResolverError::Git)?;
+            .map_err(|err: anyhow::Error| GitResolverError::Git(err.into()))?;
 
         // Insert the resolved URL into the in-memory cache. This ensures that subsequent fetches
         // resolve to the same precise commit.

@@ -43,7 +43,7 @@ use uv_warnings::{warn_user, warn_user_once};
 
 use crate::trusted_publishing::TrustedPublishingError;
 
-#[derive(Error, traversable_error::TraversableError, Debug)]
+#[derive(traversable_error::TraversableError, Error, Debug)]
 pub enum PublishError {
     #[error("The publish path is not a valid glob pattern: `{0}`")]
     Pattern(String, #[source] PatternError),
@@ -81,7 +81,7 @@ pub enum PublishError {
 }
 
 /// Failure to get the metadata for a specific file.
-#[derive(Error, traversable_error::TraversableError, Debug)]
+#[derive(traversable_error::TraversableError, Error, Debug)]
 pub enum PublishPrepareError {
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -100,7 +100,7 @@ pub enum PublishPrepareError {
 }
 
 /// Failure in or after (HTTP) transport for a specific file.
-#[derive(Error, traversable_error::TraversableError, Debug)]
+#[derive(traversable_error::TraversableError, Error, Debug)]
 pub enum PublishSendError {
     #[error("Failed to send POST request")]
     ReqwestMiddleware(#[source] reqwest_middleware::Error),

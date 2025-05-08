@@ -41,6 +41,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
+traversable-error = { workspace = true }
 tokio = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }

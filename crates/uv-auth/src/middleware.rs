@@ -243,10 +243,13 @@ impl Middleware for AuthMiddleware {
             // <https://github.com/TrueLayer/reqwest-middleware/blob/abdf1844c37092d323683c2396b7eefda1418d3c/reqwest-retry/src/middleware.rs#L141-L149>
             // Clone the request so we can retry it on authentication failure
             let retry_request = request.try_clone().ok_or_else(|| {
-                Error::Middleware(anyhow!(
-                    "Request object is not cloneable. Are you passing a streaming body?"
-                        .to_string()
-                ))
+                Error::Middleware(
+                    anyhow!(
+                        "Request object is not cloneable. Are you passing a streaming body?"
+                            .to_string()
+                    )
+                    .into(),
+                )
             })?;
 
             let response = next.clone().run(request, extensions).await?;
@@ -336,9 +339,9 @@ impl Middleware for AuthMiddleware {
         if let Some(response) = response {
             Ok(response)
         } else {
-            Err(Error::Middleware(format_err!(
-                "Missing credentials for {url}"
-            )))
+            Err(Error::Middleware(
+                format_err!("Missing credentials for {url}").into(),
+            ))
         }
     }
 }
@@ -361,7 +364,9 @@ impl AuthMiddleware {
         };
         let url = request.url().clone();
         if matches!(auth_policy, AuthPolicy::Always) && credentials.password().is_none() {
-            return Err(Error::Middleware(format_err!("Missing password for {url}")));
+            return Err(Error::Middleware(
+                format_err!("Missing password for {url}").into(),
+            ));
         }
         let result = next.run(request, extensions).await;
 

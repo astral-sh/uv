@@ -140,7 +140,7 @@ pub(crate) fn dist_error(
     cause: Arc<uv_distribution::Error>,
     help: Option<String>,
 ) {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
+    #[derive(Debug, miette::Diagnostic, traversable_error::TraversableError, thiserror::Error)]
     #[error("{kind} `{dist}`")]
     #[diagnostic()]
     struct Diagnostic {
@@ -188,7 +188,7 @@ pub(crate) fn requested_dist_error(
     cause: Arc<uv_distribution::Error>,
     help: Option<String>,
 ) {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
+    #[derive(Debug, miette::Diagnostic, traversable_error::TraversableError, thiserror::Error)]
     #[error("{kind} `{dist}`")]
     #[diagnostic()]
     struct Diagnostic {
@@ -242,7 +242,7 @@ pub(crate) fn no_solution_context(err: &uv_resolver::NoSolutionError, context: &
 
 /// Render a [`uv_resolver::NoSolutionError`] with a help message.
 pub(crate) fn no_solution_hint(err: uv_resolver::NoSolutionError, help: String) {
-    #[derive(Debug, miette::Diagnostic, thiserror::Error)]
+    #[derive(Debug, miette::Diagnostic, traversable_error::TraversableError, thiserror::Error)]
     #[error("{header}")]
     #[diagnostic()]
     struct Error {

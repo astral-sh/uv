@@ -45,7 +45,7 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverSettings};
 
-#[derive(Debug, Error)]
+#[derive(Debug, traversable_error::TraversableError, Error)]
 enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -369,7 +369,9 @@ async fn build_impl(
                 }
             }
             Err(err) => {
-                #[derive(Debug, miette::Diagnostic, thiserror::Error)]
+                #[derive(
+                    Debug, miette::Diagnostic, traversable_error::TraversableError, thiserror::Error,
+                )]
                 #[error("Failed to build `{source}`", source = source.cyan())]
                 #[diagnostic()]
                 struct Diagnostic {

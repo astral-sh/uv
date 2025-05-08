@@ -28,7 +28,7 @@ pub struct PyProjectTomlMut {
     target: DependencyTarget,
 }
 
-#[derive(Error, traversable_error::TraversableError, Debug)]
+#[derive(traversable_error::TraversableError, Error, Debug)]
 pub enum Error {
     #[error("Failed to parse `pyproject.toml`")]
     Parse(#[from] Box<TomlError>),

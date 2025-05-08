@@ -48,7 +48,7 @@ pub struct PyVenvConfiguration {
     pub(crate) version: Option<PythonVersion>,
 }
 
-#[derive(Debug, Error, traversable_error::TraversableError)]
+#[derive(Debug, traversable_error::TraversableError, Error)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),

@@ -24,7 +24,7 @@ use uv_pypi_types::{Identifier, IdentifierParseError};
 
 use crate::metadata::ValidationError;
 
-#[derive(Debug, Error)]
+#[derive(Debug, traversable_error::TraversableError, Error)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),

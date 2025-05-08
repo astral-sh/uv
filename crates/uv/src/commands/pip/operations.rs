@@ -837,7 +837,7 @@ pub(crate) fn diagnose_environment(
     Ok(())
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(traversable_error::TraversableError, thiserror::Error, Debug)]
 pub(crate) enum Error {
     #[error("Failed to prepare distributions")]
     Prepare(#[from] uv_installer::PrepareError),

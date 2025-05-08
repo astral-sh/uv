@@ -5,7 +5,7 @@ use std::ops::Deref;
 use std::{fmt, str::FromStr};
 use thiserror::Error;
 
-#[derive(Error, traversable_error::TraversableError, Debug)]
+#[derive(traversable_error::TraversableError, Error, Debug)]
 pub enum Error {
     #[error("Unknown operating system: {0}")]
     UnknownOs(String),

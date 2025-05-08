@@ -2,7 +2,7 @@ use reqwest::Identity;
 use std::ffi::OsStr;
 use std::io::Read;
 
-#[derive(thiserror::Error, Debug)]
+#[derive(traversable_error::TraversableError, thiserror::Error, Debug)]
 pub(crate) enum CertificateError {
     #[error(transparent)]
     Io(#[from] std::io::Error),

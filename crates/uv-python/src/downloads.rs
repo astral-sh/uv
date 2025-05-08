@@ -38,7 +38,7 @@ use crate::platform::{self, Arch, Libc, Os};
 use crate::PythonVariant;
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
-#[derive(Error, Debug)]
+#[derive(traversable_error::TraversableError, Error, Debug)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -1042,7 +1042,7 @@ impl Error {
     pub(crate) fn from_reqwest_middleware(url: Url, err: reqwest_middleware::Error) -> Self {
         match err {
             reqwest_middleware::Error::Middleware(error) => {
-                Self::NetworkMiddlewareError(url, error)
+                Self::NetworkMiddlewareError(url, error.into())
             }
             reqwest_middleware::Error::Reqwest(error) => {
                 Self::NetworkError(url, WrappedReqwestError::from(error))

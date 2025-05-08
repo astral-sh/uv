@@ -123,7 +123,7 @@ pub(crate) async fn init(
                     // Pre-normalize the package name by removing any leading or trailing
                     // whitespace, and replacing any internal whitespace with hyphens.
                     let name = name.trim().replace(' ', "-");
-                    PackageName::from_owned(name)?
+                    PackageName::from_owned(name).map_err(anyhow::Error::new)?
                 }
             };
 
@@ -611,7 +611,10 @@ async fn init_project(
                 &workspace.pyproject_toml().raw,
                 DependencyTarget::PyProjectToml,
             )?;
-            pyproject.add_workspace(path.strip_prefix(workspace.install_path())?)?;
+            pyproject.add_workspace(
+                path.strip_prefix(workspace.install_path())
+                    .map_err(anyhow::Error::new)?,
+            )?;
 
             // Save the modified `pyproject.toml`.
             fs_err::write(

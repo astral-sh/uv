@@ -375,7 +375,7 @@ impl<'a> From<&'a IndexUrl> for IndexMetadataRef<'a> {
 }
 
 /// An error that can occur when parsing an [`Index`].
-#[derive(Error, traversable_error::TraversableError, Debug)]
+#[derive(traversable_error::TraversableError, Error, Debug)]
 pub enum IndexSourceError {
     #[error(transparent)]
     Url(#[from] IndexUrlError),

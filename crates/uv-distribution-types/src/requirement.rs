@@ -22,7 +22,7 @@ use uv_pypi_types::{
     ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
 };
 
-#[derive(Debug, Error, traversable_error::TraversableError)]
+#[derive(Debug, traversable_error::TraversableError, Error)]
 pub enum RequirementError {
     #[error(transparent)]
     VerbatimUrlError(#[from] uv_pep508::VerbatimUrlError),

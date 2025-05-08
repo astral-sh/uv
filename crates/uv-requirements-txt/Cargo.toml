@@ -30,6 +30,7 @@ memchr = { workspace = true }
 reqwest = { workspace = true, optional = true }
 reqwest-middleware = { workspace = true, optional = true }
 thiserror = { workspace = true }
+traversable-error = { workspace = true }
 tracing = { workspace = true }
 unscanny = { workspace = true }
 url = { workspace = true }

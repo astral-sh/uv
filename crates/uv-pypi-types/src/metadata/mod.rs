@@ -28,7 +28,7 @@ pub use requires_txt::RequiresTxt;
 /// <https://github.com/PyO3/python-pkginfo-rs/blob/d719988323a0cfea86d4737116d7917f30e819e2/src/error.rs>
 ///
 /// The error type
-#[derive(Error, traversable_error::TraversableError, Debug)]
+#[derive(traversable_error::TraversableError, Error, Debug)]
 pub enum MetadataError {
     #[error(transparent)]
     MailParse(#[from] MailParseError),

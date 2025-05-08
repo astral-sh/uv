@@ -6,7 +6,7 @@ use uv_pep508::{
 };
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl, VerbatimParsedUrl};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, traversable_error::TraversableError, thiserror::Error)]
 pub enum EditableError {
     #[error("Editable `{0}` must refer to a local directory")]
     MissingVersion(PackageName),

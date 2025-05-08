@@ -295,7 +295,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
     // Enforce the required version.
     if let Some(required_version) = globals.required_version.as_ref() {
-        let package_version = uv_pep440::Version::from_str(uv_version::version())?;
+        let package_version =
+            uv_pep440::Version::from_str(uv_version::version()).map_err(anyhow::Error::new)?;
         if !required_version.contains(&package_version) {
             return Err(anyhow::anyhow!(
                 "Required uv version `{required_version}` does not match the running version `{package_version}`",
@@ -354,7 +355,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 )
                 .build(),
         )
-    }))?;
+    }))
+    .map_err(anyhow::Error::new)?;
 
     // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
     uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::SeqCst);

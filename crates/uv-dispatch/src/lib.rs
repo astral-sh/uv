@@ -40,7 +40,7 @@ use uv_types::{
 };
 use uv_workspace::WorkspaceCache;
 
-#[derive(Debug, Error, traversable_error::TraversableError)]
+#[derive(Debug, traversable_error::TraversableError, Error)]
 pub enum BuildDispatchError {
     #[error(transparent)]
     BuildFrontend(#[from] AnyErrorBuild),

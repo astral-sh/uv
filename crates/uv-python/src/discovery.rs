@@ -175,7 +175,7 @@ type FindPythonResult = Result<PythonInstallation, PythonNotFound>;
 /// The result of failed Python installation discovery.
 ///
 /// See [`FindPythonResult`].
-#[derive(Clone, Debug, Error, traversable_error::TraversableError)]
+#[derive(Clone, Debug, traversable_error::TraversableError, Error)]
 pub struct PythonNotFound {
     pub request: PythonRequest,
     pub python_preference: PythonPreference,
@@ -209,7 +209,7 @@ pub enum PythonSource {
     ParentInterpreter,
 }
 
-#[derive(Error, traversable_error::TraversableError, Debug)]
+#[derive(traversable_error::TraversableError, Error, Debug)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
