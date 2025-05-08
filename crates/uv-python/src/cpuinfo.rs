@@ -1,9 +1,7 @@
 //! Fetches CPU information.
 
-use anyhow::Error;
-
 #[cfg(target_os = "linux")]
-use procfs::{CpuInfo, Current};
+use procfs::{CpuInfo, Current, ProcError};
 
 /// Detects whether the hardware supports floating-point operations using ARM's Vector Floating Point (VFP) hardware.
 ///
@@ -13,7 +11,7 @@ use procfs::{CpuInfo, Current};
 ///
 /// More information on this can be found in the [Debian ARM Hard Float Port documentation](https://wiki.debian.org/ArmHardFloatPort#VFP).
 #[cfg(target_os = "linux")]
-pub(crate) fn detect_hardware_floating_point_support() -> Result<bool, Error> {
+pub(crate) fn detect_hardware_floating_point_support() -> Result<bool, ProcError> {
     let cpu_info = CpuInfo::current()?;
     if let Some(features) = cpu_info.fields.get("Features") {
         if features.contains("vfp") {
@@ -28,6 +26,6 @@ pub(crate) fn detect_hardware_floating_point_support() -> Result<bool, Error> {
 /// is not applicable outside of Linux ARM architectures.
 #[cfg(not(target_os = "linux"))]
 #[allow(clippy::unnecessary_wraps)]
-pub(crate) fn detect_hardware_floating_point_support() -> Result<bool, Error> {
+pub(crate) fn detect_hardware_floating_point_support() -> Result<bool, ProcError> {
     Ok(false) // Non-Linux or non-ARM systems: hardware floating-point detection is not applicable
 }
