@@ -33,13 +33,13 @@ struct PythonEnvironmentShared {
 /// The result of failed environment discovery.
 ///
 /// Generally this is cast from [`PythonNotFound`] by [`PythonEnvironment::find`].
-#[derive(Clone, Debug, Error)]
+#[derive(Clone, Debug, Error, traversable_error::TraversableError)]
 pub struct EnvironmentNotFound {
     request: PythonRequest,
     preference: EnvironmentPreference,
 }
 
-#[derive(Clone, Debug, Error)]
+#[derive(Clone, Debug, Error, traversable_error::TraversableError)]
 pub struct InvalidEnvironment {
     path: PathBuf,
     pub kind: InvalidEnvironmentKind,

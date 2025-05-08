@@ -26,7 +26,7 @@ use crate::{BuildBackendSettings, Error};
 /// By default, we ignore generated python files.
 pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub enum ValidationError {
     /// The spec isn't clear about what the values in that field would be, and we only support the
     /// default value (UTF-8).

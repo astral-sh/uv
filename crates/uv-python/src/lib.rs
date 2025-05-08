@@ -63,7 +63,7 @@ pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
         .unwrap_or(std::env::current_dir())
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),

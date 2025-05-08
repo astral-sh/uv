@@ -171,7 +171,7 @@ impl LauncherKind {
 }
 
 /// Note: The caller is responsible for adding the path of the wheel we're installing.
-#[derive(Error, Debug)]
+#[derive(Error, traversable_error::TraversableError, Debug)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),

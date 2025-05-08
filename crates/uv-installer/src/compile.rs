@@ -22,7 +22,7 @@ const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
 /// This is longer than any compilation should ever take.
 const COMPILE_TIMEOUT: Duration = Duration::from_secs(60);
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub enum CompileError {
     #[error("Failed to list files in `site-packages`")]
     Walkdir(#[from] walkdir::Error),

@@ -87,7 +87,7 @@ impl Deref for IndexName {
 }
 
 /// An error that can occur when parsing an [`IndexName`].
-#[derive(Error, Debug)]
+#[derive(Error, traversable_error::TraversableError, Debug)]
 pub enum IndexNameError {
     #[error("Index included a name, but the name was empty")]
     EmptyName,

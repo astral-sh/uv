@@ -9,7 +9,7 @@ mod github;
 mod oid;
 mod reference;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub enum GitUrlParseError {
     #[error(
         "Unsupported Git URL scheme `{0}:` in `{1}` (expected one of `https:`, `ssh:`, or `file:`)"

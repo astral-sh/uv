@@ -125,7 +125,7 @@ fn read_registry_entry(company: &str, tag: &str, tag_key: &Key) -> Option<Window
     })
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub enum ManagedPep514Error {
     #[error("Windows has an unknown pointer width for arch: `{_0}`")]
     InvalidPointerSize(Arch),

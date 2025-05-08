@@ -253,7 +253,7 @@ impl PythonInstallation {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, traversable_error::TraversableError, Debug)]
 pub enum PythonInstallationKeyError {
     #[error("Failed to parse Python installation key `{0}`: {1}")]
     ParseError(String, String),

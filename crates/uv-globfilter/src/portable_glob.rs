@@ -5,7 +5,7 @@ use globset::{Glob, GlobBuilder};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub enum PortableGlobError {
     /// Shows the failing glob in the error message.
     #[error(transparent)]

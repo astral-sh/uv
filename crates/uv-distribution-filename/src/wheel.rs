@@ -355,7 +355,7 @@ impl Serialize for WheelFilename {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, traversable_error::TraversableError, Debug)]
 pub enum WheelFilenameError {
     #[error("The wheel filename \"{0}\" is invalid: {1}")]
     InvalidWheelFileName(String, String),

@@ -27,7 +27,7 @@ use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
 use crate::{macos_dylib, sysconfig, PythonRequest, PythonVariant};
 
-#[derive(Error, Debug)]
+#[derive(Error, traversable_error::TraversableError, Debug)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),

@@ -24,7 +24,7 @@ impl GitOid {
     }
 }
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error, traversable_error::TraversableError, PartialEq)]
 pub enum OidParseError {
     #[error("Object ID can be at most 40 hex characters")]
     TooLong,

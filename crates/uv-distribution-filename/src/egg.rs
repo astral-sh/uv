@@ -5,7 +5,7 @@ use thiserror::Error;
 use uv_normalize::{InvalidNameError, PackageName};
 use uv_pep440::{Version, VersionParseError};
 
-#[derive(Error, Debug)]
+#[derive(Error, traversable_error::TraversableError, Debug)]
 pub enum EggInfoFilenameError {
     #[error("The filename \"{0}\" does not end in `.egg-info`")]
     InvalidExtension(String),

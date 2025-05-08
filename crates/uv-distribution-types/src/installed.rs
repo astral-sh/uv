@@ -17,7 +17,7 @@ use uv_pypi_types::{DirectUrl, MetadataError};
 
 use crate::{DistributionMetadata, InstalledMetadata, InstalledVersion, Name, VersionOrUrlRef};
 
-#[derive(Error, Debug)]
+#[derive(Error, traversable_error::TraversableError, Debug)]
 pub enum InstalledDistError {
     #[error(transparent)]
     Io(#[from] std::io::Error),

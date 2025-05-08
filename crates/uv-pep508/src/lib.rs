@@ -67,7 +67,7 @@ pub struct Pep508Error<T: Pep508Url = VerbatimUrl> {
 }
 
 /// Either we have an error string from our parser or an upstream error from `url`
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub enum Pep508ErrorSource<T: Pep508Url = VerbatimUrl> {
     /// An error from our parser.
     #[error("{0}")]

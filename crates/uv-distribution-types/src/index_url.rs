@@ -160,7 +160,7 @@ impl Verbatim for IndexUrl {
 }
 
 /// An error that can occur when parsing an [`IndexUrl`].
-#[derive(Error, Debug)]
+#[derive(Error, traversable_error::TraversableError, Debug)]
 pub enum IndexUrlError {
     #[error(transparent)]
     Io(#[from] std::io::Error),

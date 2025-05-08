@@ -103,7 +103,7 @@ pub(crate) async fn venv(
     }
 }
 
-#[derive(Error, Debug, Diagnostic)]
+#[derive(Error, traversable_error::TraversableError, Debug, Diagnostic)]
 enum VenvError {
     #[error("Failed to create virtualenv")]
     #[diagnostic(code(uv::venv::creation))]

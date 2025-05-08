@@ -20,7 +20,7 @@ mod build_requires;
 mod lowering;
 mod requires_dist;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub enum MetadataError {
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),

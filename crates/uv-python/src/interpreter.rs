@@ -598,7 +598,7 @@ impl ExternallyManaged {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub struct UnexpectedResponseError {
     #[source]
     pub(super) err: serde_json::Error,
@@ -636,7 +636,7 @@ impl Display for UnexpectedResponseError {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub struct StatusCodeError {
     pub(super) code: ExitStatus,
     pub(super) stdout: String,
@@ -673,7 +673,7 @@ impl Display for StatusCodeError {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub enum Error {
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
@@ -701,7 +701,7 @@ pub enum Error {
     Encode(#[from] rmp_serde::encode::Error),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub struct BrokenSymlink {
     pub path: PathBuf,
     /// Whether the interpreter path looks like a virtual environment.
@@ -735,7 +735,7 @@ enum InterpreterInfoResult {
     Success(Box<InterpreterInfo>),
 }
 
-#[derive(Debug, Error, Deserialize, Serialize)]
+#[derive(Debug, Error, traversable_error::TraversableError, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum InterpreterInfoError {
     #[error("Could not detect a glibc or a musl libc (while running on Linux)")]

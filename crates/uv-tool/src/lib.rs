@@ -27,7 +27,7 @@ use uv_static::EnvVars;
 mod receipt;
 mod tool;
 
-#[derive(Error, Debug)]
+#[derive(Error, traversable_error::TraversableError, Debug)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),

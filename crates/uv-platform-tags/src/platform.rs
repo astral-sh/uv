@@ -5,7 +5,7 @@ use std::{fmt, io};
 
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, traversable_error::TraversableError, Debug)]
 pub enum PlatformError {
     #[error(transparent)]
     IOError(#[from] io::Error),

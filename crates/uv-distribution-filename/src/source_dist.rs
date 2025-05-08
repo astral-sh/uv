@@ -141,7 +141,7 @@ impl Display for SourceDistFilename {
     }
 }
 
-#[derive(Error, Debug, Clone)]
+#[derive(Error, traversable_error::TraversableError, Debug, Clone)]
 pub struct SourceDistFilenameError {
     filename: String,
     kind: SourceDistFilenameErrorKind,
@@ -157,7 +157,7 @@ impl Display for SourceDistFilenameError {
     }
 }
 
-#[derive(Error, Debug, Clone)]
+#[derive(Error, traversable_error::TraversableError, Debug, Clone)]
 enum SourceDistFilenameErrorKind {
     #[error("Name doesn't start with package name {0}")]
     Filename(PackageName),

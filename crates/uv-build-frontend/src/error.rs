@@ -54,7 +54,7 @@ static TORCH_NOT_FOUND_RE: LazyLock<Regex> =
 static DISTUTILS_NOT_FOUND_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"ModuleNotFoundError: No module named 'distutils'").unwrap());
 
-#[derive(Error, Debug)]
+#[derive(Error, traversable_error::TraversableError, Debug)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
@@ -120,7 +120,7 @@ enum MissingLibrary {
     DeprecatedModule(String, Version),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub struct MissingHeaderCause {
     missing_library: MissingLibrary,
     package_name: Option<PackageName>,
@@ -248,7 +248,7 @@ impl Display for MissingHeaderCause {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub struct BuildBackendError {
     message: String,
     exit_code: ExitStatus,
@@ -287,7 +287,7 @@ impl Display for BuildBackendError {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, traversable_error::TraversableError)]
 pub struct MissingHeaderError {
     message: String,
     exit_code: ExitStatus,

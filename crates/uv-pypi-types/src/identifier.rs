@@ -12,7 +12,7 @@ use thiserror::Error;
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Identifier(Box<str>);
 
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, Error, traversable_error::TraversableError)]
 pub enum IdentifierParseError {
     #[error("An identifier must not be empty")]
     Empty,
