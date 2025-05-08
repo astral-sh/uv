@@ -1310,7 +1310,7 @@ jobs:
       - name: "Create a native virtual environment"
         run: |
           ./uv venv venv-native -p 3.12
-          ./uv pip install -p venv-native/bin/python pyodide-build
+          ./uv pip install -p venv-native/bin/python pyodide-build pip
 
       - name: "Install pyodide interpreter"
         run: |
