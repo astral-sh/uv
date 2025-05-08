@@ -949,7 +949,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::build_frontend(
                 &project_dir,
                 args.src,
-                args.package,
+                &args.packages,
                 args.all_packages,
                 args.out_dir,
                 args.sdist,
