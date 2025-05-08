@@ -249,6 +249,7 @@ impl Interpreter {
     ///
     /// See: <https://github.com/pypa/pip/blob/0ad4c94be74cc24874c6feb5bb3c2152c398a18e/src/pip/_internal/utils/virtualenv.py#L14>
     pub fn is_virtualenv(&self) -> bool {
+        dbg!("sys_prefix: {:?}, sys_base_prefix: {:?}", &self.sys_prefix, &self.sys_base_prefix);
         // Maybe this should return `false` if it's a target?
         self.sys_prefix != self.sys_base_prefix
     }
