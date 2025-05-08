@@ -695,6 +695,7 @@ fn interpreter_satisfies_environment_preference(
     interpreter: &Interpreter,
     preference: EnvironmentPreference,
 ) -> bool {
+    dbg!("source: {:?}, preference: {:?}, sys_executable: {:?}", &source, &preference, &interpreter.sys_executable());
     match (
         preference,
         // Conda environments are not conformant virtual environments but we treat them as such.
