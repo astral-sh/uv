@@ -278,7 +278,7 @@ impl Interpreter {
             .into_iter()
             .flatten()
             .any(|install| {
-                dbg!("install_path: {:?}, sys_base_prefix: {:?}", install.path(), self.sys_base_prefix);
+                dbg!("install_path: {:?}, sys_base_prefix: {:?}", install.path(), &self.sys_base_prefix);
                 install.path() == self.sys_base_prefix
             })
     }
