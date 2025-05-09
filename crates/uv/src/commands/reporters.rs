@@ -43,7 +43,7 @@ enum ProgressMode {
     },
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 struct BarState {
     /// The number of bars that precede any download bars (i.e. build/checkout status).
     headers: usize,
@@ -55,6 +55,21 @@ struct BarState {
     size: FxHashMap<usize, Option<u64>>,
     /// A monotonic counter for bar IDs.
     id: usize,
+    /// The maximum length of all bar names encountered.
+    max_len: usize,
+}
+
+impl Default for BarState {
+    fn default() -> Self {
+        Self {
+            headers: usize::default(),
+            sizes: Vec::<_>::default(),
+            bars: std::collections::HashMap::<_, _, _>::default(),
+            size: std::collections::HashMap::<_, _, _>::default(),
+            id: usize::default(),
+            max_len: 10,
+        }
+    }
 }
 
 impl BarState {
@@ -62,6 +77,12 @@ impl BarState {
     fn id(&mut self) -> usize {
         self.id += 1;
         self.id
+    }
+
+    fn update_max_len(&mut self, len: usize) {
+        if len > self.max_len {
+            self.max_len = len;
+        }
     }
 }
 
@@ -185,6 +206,7 @@ impl ProgressReporter {
         // Preserve ascending order.
         let position = size.map_or(0, |size| state.sizes.partition_point(|&len| len < size));
         state.sizes.insert(position, size.unwrap_or(0));
+        state.update_max_len(name.len());
 
         let progress = multi_progress.insert(
             // Make sure not to reorder the initial "Preparing..." bar, or any previous bars.
@@ -196,7 +218,9 @@ impl ProgressReporter {
             // We're using binary bytes to match `human_readable_bytes`.
             progress.set_style(
                 ProgressStyle::with_template(
-                    "{msg:10.dim} {bar:30.green/dim} {binary_bytes:>7}/{binary_total_bytes:7}",
+                    &format!(
+                        "{{msg:{}.dim}} {{bar:30.green/dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}", state.max_len
+                    ),
                 )
                 .unwrap()
                 .progress_chars("--"),
