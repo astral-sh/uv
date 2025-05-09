@@ -933,15 +933,26 @@ fn version_get_fallback_unmanaged_json() -> Result<()> {
         .chain([
             (r#"version": "\d+.\d+.\d+""#, r#"version": "[VERSION]""#),
             (
-                r#"short_commit_hash": ".*""#,
-                r#"short_commit_hash": "[HASH]""#,
+                r#""short_commit_hash": ".*""#,
+                r#""short_commit_hash": "[HASH]""#,
             ),
-            (r#"commit_hash": ".*""#, r#"commit_hash": "[LONGHASH]""#),
-            (r#"commit_date": ".*""#, r#"commit_date": "[DATE]""#),
-            (r#"last_tag": (".*"|null)"#, r#"last_tag": "[TAG]""#),
+            (r#""commit_hash": ".*""#, r#""commit_hash": "[LONGHASH]""#),
+            (r#""commit_date": ".*""#, r#""commit_date": "[DATE]""#),
+            (r#""last_tag": (".*"|null)"#, r#""last_tag": "[TAG]""#),
             (
-                r#"commits_since_last_tag": .*"#,
-                r#"commits_since_last_tag": [COUNT]"#,
+                r#""commits_since_last_tag": .*"#,
+                r#""commits_since_last_tag": [COUNT]"#,
+            ),
+            // This last filter normalizes output for tarball builds of uv that lack commit info
+            (
+                r#""commit_info": null"#,
+                r#""commit_info": {
+    "short_commit_hash": "[HASH]",
+    "commit_hash": "[LONGHASH]",
+    "commit_date": "[DATE]",
+    "last_tag": "[TAG]",
+    "commits_since_last_tag": [COUNT]
+  }"#,
             ),
         ])
         .collect::<Vec<_>>();
@@ -954,7 +965,7 @@ fn version_get_fallback_unmanaged_json() -> Result<()> {
       "package_name": "uv",
       "version": "[VERSION]",
       "commit_info": {
-        "short_commit_hash": "[LONGHASH]",
+        "short_commit_hash": "[HASH]",
         "commit_hash": "[LONGHASH]",
         "commit_date": "[DATE]",
         "last_tag": "[TAG]",
@@ -1164,15 +1175,26 @@ fn self_version_json() -> Result<()> {
         .chain([
             (r#"version": "\d+.\d+.\d+""#, r#"version": "[VERSION]""#),
             (
-                r#"short_commit_hash": ".*""#,
-                r#"short_commit_hash": "[HASH]""#,
+                r#""short_commit_hash": ".*""#,
+                r#""short_commit_hash": "[HASH]""#,
             ),
-            (r#"commit_hash": ".*""#, r#"commit_hash": "[LONGHASH]""#),
-            (r#"commit_date": ".*""#, r#"commit_date": "[DATE]""#),
-            (r#"last_tag": (".*"|null)"#, r#"last_tag": "[TAG]""#),
+            (r#""commit_hash": ".*""#, r#""commit_hash": "[LONGHASH]""#),
+            (r#""commit_date": ".*""#, r#""commit_date": "[DATE]""#),
+            (r#""last_tag": (".*"|null)"#, r#""last_tag": "[TAG]""#),
             (
-                r#"commits_since_last_tag": .*"#,
-                r#"commits_since_last_tag": [COUNT]"#,
+                r#""commits_since_last_tag": .*"#,
+                r#""commits_since_last_tag": [COUNT]"#,
+            ),
+            // This last filter normalizes output for tarball builds of uv that lack commit info
+            (
+                r#""commit_info": null"#,
+                r#""commit_info": {
+    "short_commit_hash": "[HASH]",
+    "commit_hash": "[LONGHASH]",
+    "commit_date": "[DATE]",
+    "last_tag": "[TAG]",
+    "commits_since_last_tag": [COUNT]
+  }"#,
             ),
         ])
         .collect::<Vec<_>>();
@@ -1185,7 +1207,7 @@ fn self_version_json() -> Result<()> {
       "package_name": "uv",
       "version": "[VERSION]",
       "commit_info": {
-        "short_commit_hash": "[LONGHASH]",
+        "short_commit_hash": "[HASH]",
         "commit_hash": "[LONGHASH]",
         "commit_date": "[DATE]",
         "last_tag": "[TAG]",
