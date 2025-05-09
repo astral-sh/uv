@@ -3,9 +3,7 @@ pub use crate::oid::{GitOid, OidParseError};
 pub use crate::reference::GitReference;
 
 use thiserror::Error;
-use url::Url;
-
-use uv_redacted::redacted_url;
+use uv_redacted::LogSafeUrl;
 
 mod github;
 mod oid;
@@ -16,7 +14,7 @@ pub enum GitUrlParseError {
     #[error(
         "Unsupported Git URL scheme `{0}:` in `{1}` (expected one of `https:`, `ssh:`, or `file:`)"
     )]
-    UnsupportedGitScheme(String, Url),
+    UnsupportedGitScheme(String, LogSafeUrl),
 }
 
 /// A URL reference to a Git repository.
@@ -24,7 +22,7 @@ pub enum GitUrlParseError {
 pub struct GitUrl {
     /// The URL of the Git repository, with any query parameters, fragments, and leading `git+`
     /// removed.
-    repository: Url,
+    repository: LogSafeUrl,
     /// The reference to the commit to use, which could be a branch, tag or revision.
     reference: GitReference,
     /// The precise commit to use, if known.
@@ -34,7 +32,7 @@ pub struct GitUrl {
 impl GitUrl {
     /// Create a new [`GitUrl`] from a repository URL and a reference.
     pub fn from_reference(
-        repository: Url,
+        repository: LogSafeUrl,
         reference: GitReference,
     ) -> Result<Self, GitUrlParseError> {
         Self::from_fields(repository, reference, None)
@@ -42,7 +40,7 @@ impl GitUrl {
 
     /// Create a new [`GitUrl`] from a repository URL and a precise commit.
     pub fn from_commit(
-        repository: Url,
+        repository: LogSafeUrl,
         reference: GitReference,
         precise: GitOid,
     ) -> Result<Self, GitUrlParseError> {
@@ -51,7 +49,7 @@ impl GitUrl {
 
     /// Create a new [`GitUrl`] from a repository URL and a precise commit, if known.
     pub fn from_fields(
-        repository: Url,
+        repository: LogSafeUrl,
         reference: GitReference,
         precise: Option<GitOid>,
     ) -> Result<Self, GitUrlParseError> {
@@ -86,7 +84,7 @@ impl GitUrl {
     }
 
     /// Return the [`Url`] of the Git repository.
-    pub fn repository(&self) -> &Url {
+    pub fn repository(&self) -> &LogSafeUrl {
         &self.repository
     }
 
@@ -101,11 +99,11 @@ impl GitUrl {
     }
 }
 
-impl TryFrom<Url> for GitUrl {
+impl TryFrom<LogSafeUrl> for GitUrl {
     type Error = GitUrlParseError;
 
     /// Initialize a [`GitUrl`] source from a URL.
-    fn try_from(mut url: Url) -> Result<Self, Self::Error> {
+    fn try_from(mut url: LogSafeUrl) -> Result<Self, Self::Error> {
         // Remove any query parameters and fragments.
         url.set_fragment(None);
         url.set_query(None);
@@ -126,13 +124,14 @@ impl TryFrom<Url> for GitUrl {
     }
 }
 
-impl From<GitUrl> for Url {
+impl From<GitUrl> for LogSafeUrl {
     fn from(git: GitUrl) -> Self {
         let mut url = git.repository;
 
         // If we have a precise commit, add `@` and the commit hash to the URL.
         if let Some(precise) = git.precise {
-            url.set_path(&format!("{}@{}", url.path(), precise));
+            let path = format!("{}@{}", url.path(), precise);
+            url.set_path(&path);
         } else {
             // Otherwise, add the branch or tag name.
             match git.reference {
@@ -141,7 +140,8 @@ impl From<GitUrl> for Url {
                 | GitReference::BranchOrTag(rev)
                 | GitReference::NamedRef(rev)
                 | GitReference::BranchOrTagOrCommit(rev) => {
-                    url.set_path(&format!("{}@{}", url.path(), rev));
+                    let path = format!("{}@{}", url.path(), rev);
+                    url.set_path(&path);
                 }
                 GitReference::DefaultBranch => {}
             }
@@ -153,6 +153,6 @@ impl From<GitUrl> for Url {
 
 impl std::fmt::Display for GitUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", redacted_url(&self.repository))
+        write!(f, "{}", &self.repository)
     }
 }

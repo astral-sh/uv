@@ -407,11 +407,14 @@
     },
     "publish-url": {
       "description": "The URL for publishing packages to the Python package index (by default: <https://upload.pypi.org/legacy/>).",
-      "type": [
-        "string",
-        "null"
-      ],
-      "format": "uri"
+      "anyOf": [
+        {
+          "$ref": "#/definitions/LogSafeUrl"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "pypy-install-mirror": {
       "description": "Mirror URL to use for downloading managed PyPy installations.\n\nBy default, managed PyPy installations are downloaded from [downloads.python.org](https://downloads.python.org/). This variable can be set to a mirror URL to use a different source for PyPy installations. The provided URL will replace `https://downloads.python.org/pypy` in, e.g., `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
@@ -901,11 +904,14 @@
         },
         "publish-url": {
           "description": "The URL of the upload endpoint.\n\nWhen using `uv publish --index <name>`, this URL is used for publishing.\n\nA configuration for the default index PyPI would look as follows:\n\n```toml [[tool.uv.index]] name = \"pypi\" url = \"https://pypi.org/simple\" publish-url = \"https://upload.pypi.org/legacy/\" ```",
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "uri"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LogSafeUrl"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "url": {
           "description": "The URL of the index.\n\nExpects to receive a URL (e.g., `https://pypi.org/simple`) or a local path.",
@@ -1018,6 +1024,11 @@
           ]
         }
       ]
+    },
+    "LogSafeUrl": {
+      "description": "A URL wrapper that safely handles credentials for logging purposes.\n\n`LogSafeUrl` wraps the standard [`url::Url`] type, providing functionality to mask secrets by default when the URL is displayed or logged. This helps prevent accidental exposure of sensitive information in logs and debug output.\n\n# Examples\n\n``` use log_safe_url::LogSafeUrl; use std::str::FromStr;\n\n// Create from a string let url = LogSafeUrl::parse(\"https://user:password@example.com\").unwrap();\n\n// Display will mask secrets assert_eq!(url.to_string(), \"https://user:****@example.com\");\n\n// Since `LogSafeUrl` provides full access to the underlying `Url` through a // `Deref` implementation, you can still access the username and password assert_eq!(url.username(), \"user\"); assert_eq!(url.password(), Some(\"password\"));\n\n// It is also possible to remove credentials entirely url.remove_credentials(); assert_eq!(url.username(), \"\"); assert_eq!(url.password(), None); ```",
+      "type": "string",
+      "format": "uri"
     },
     "MarkerTree": {
       "description": "A PEP 508-compliant marker expression, e.g., `sys_platform == 'Darwin'`",
@@ -1752,8 +1763,11 @@
             },
             "git": {
               "description": "The repository URL (without the `git+` prefix).",
-              "type": "string",
-              "format": "uri"
+              "allOf": [
+                {
+                  "$ref": "#/definitions/LogSafeUrl"
+                }
+              ]
             },
             "group": {
               "anyOf": [
@@ -1836,8 +1850,7 @@
               ]
             },
             "url": {
-              "type": "string",
-              "format": "uri"
+              "$ref": "#/definitions/LogSafeUrl"
             }
           },
           "additionalProperties": false

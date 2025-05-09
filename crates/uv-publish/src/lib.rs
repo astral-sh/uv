@@ -38,6 +38,7 @@ use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
+use uv_redacted::LogSafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 
@@ -59,7 +60,7 @@ pub enum PublishError {
     #[error("Failed to publish: `{}`", _0.user_display())]
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
-    PublishSend(PathBuf, Url, #[source] PublishSendError),
+    PublishSend(PathBuf, LogSafeUrl, #[source] PublishSendError),
     #[error("Failed to obtain token for trusted publishing")]
     TrustedPublishing(#[from] TrustedPublishingError),
     #[error("{0} are not allowed when using trusted publishing")]
@@ -308,7 +309,7 @@ pub async fn check_trusted_publishing(
     password: Option<&str>,
     keyring_provider: KeyringProviderType,
     trusted_publishing: TrustedPublishing,
-    registry: &Url,
+    registry: &LogSafeUrl,
     client: &BaseClient,
 ) -> Result<TrustedPublishResult, PublishError> {
     match trusted_publishing {
@@ -379,7 +380,7 @@ pub async fn upload(
     file: &Path,
     raw_filename: &str,
     filename: &DistFilename,
-    registry: &Url,
+    registry: &LogSafeUrl,
     client: &BaseClient,
     credentials: &Credentials,
     check_url_client: Option<&CheckUrlClient<'_>>,
@@ -751,7 +752,7 @@ async fn build_request(
     file: &Path,
     raw_filename: &str,
     filename: &DistFilename,
-    registry: &Url,
+    registry: &LogSafeUrl,
     client: &BaseClient,
     credentials: &Credentials,
     form_metadata: &[(&'static str, String)],
@@ -790,7 +791,7 @@ async fn build_request(
 
     let mut request = client
         .for_host(&url)
-        .post(url)
+        .post(Url::from(url))
         .multipart(form)
         // Ask PyPI for a structured error messages instead of HTML-markup error messages.
         // For other registries, we ask them to return plain text over HTML. See
@@ -889,10 +890,10 @@ mod tests {
     use itertools::Itertools;
     use std::path::PathBuf;
     use std::sync::Arc;
-    use url::Url;
     use uv_auth::Credentials;
     use uv_client::BaseClientBuilder;
     use uv_distribution_filename::DistFilename;
+    use uv_redacted::LogSafeUrl;
 
     struct DummyReporter;
 
@@ -972,7 +973,7 @@ mod tests {
             &file,
             raw_filename,
             &filename,
-            &Url::parse("https://example.org/upload").unwrap(),
+            &LogSafeUrl::parse("https://example.org/upload").unwrap(),
             &BaseClientBuilder::new().build(),
             &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
             &form_metadata,
@@ -1121,7 +1122,7 @@ mod tests {
             &file,
             raw_filename,
             &filename,
-            &Url::parse("https://example.org/upload").unwrap(),
+            &LogSafeUrl::parse("https://example.org/upload").unwrap(),
             &BaseClientBuilder::new().build(),
             &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
             &form_metadata,

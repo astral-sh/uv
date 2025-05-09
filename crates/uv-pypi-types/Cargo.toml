@@ -21,6 +21,7 @@ uv-git-types = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
+uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
 
 hashbrown = { workspace = true }

@@ -23,6 +23,7 @@ uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-metadata = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 

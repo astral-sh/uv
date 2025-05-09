@@ -11,10 +11,12 @@ use thiserror::Error;
 use url::{ParseError, Url};
 
 use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
+use uv_redacted::LogSafeUrl;
 
 use crate::{Index, IndexStatusCodeStrategy, Verbatim};
 
-static PYPI_URL: LazyLock<Url> = LazyLock::new(|| Url::parse("https://pypi.org/simple").unwrap());
+static PYPI_URL: LazyLock<LogSafeUrl> =
+    LazyLock::new(|| LogSafeUrl::parse("https://pypi.org/simple").unwrap());
 
 static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     Index::from_index_url(IndexUrl::Pypi(Arc::new(VerbatimUrl::from_url(
@@ -69,7 +71,7 @@ impl IndexUrl {
     ///
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
-    pub fn root(&self) -> Option<Url> {
+    pub fn root(&self) -> Option<LogSafeUrl> {
         let mut segments = self.url().path_segments()?;
         let last = match segments.next_back()? {
             // If the last segment is empty due to a trailing `/`, skip it (as in `pop_if_empty`)
@@ -108,7 +110,7 @@ impl schemars::JsonSchema for IndexUrl {
 
 impl IndexUrl {
     /// Return the raw URL for the index.
-    pub fn url(&self) -> &Url {
+    pub fn url(&self) -> &LogSafeUrl {
         match self {
             Self::Pypi(url) => url.raw(),
             Self::Url(url) => url.raw(),
@@ -116,8 +118,8 @@ impl IndexUrl {
         }
     }
 
-    /// Convert the index URL into a [`Url`].
-    pub fn into_url(self) -> Url {
+    /// Convert the index URL into a [`LogSafeUrl`].
+    pub fn into_url(self) -> LogSafeUrl {
         match self {
             Self::Pypi(url) => url.to_url(),
             Self::Url(url) => url.to_url(),
@@ -126,7 +128,7 @@ impl IndexUrl {
     }
 
     /// Return the redacted URL for the index, omitting any sensitive credentials.
-    pub fn redacted(&self) -> Cow<'_, Url> {
+    pub fn removed_credentials(&self) -> Cow<'_, LogSafeUrl> {
         let url = self.url();
         if url.username().is_empty() && url.password().is_none() {
             Cow::Borrowed(url)
@@ -222,7 +224,7 @@ impl From<VerbatimUrl> for IndexUrl {
     }
 }
 
-impl From<IndexUrl> for Url {
+impl From<IndexUrl> for LogSafeUrl {
     fn from(index: IndexUrl) -> Self {
         match index {
             IndexUrl::Pypi(url) => url.to_url(),
@@ -420,8 +422,8 @@ impl From<&IndexLocations> for uv_auth::Indexes {
             root_url.set_username("").ok();
             root_url.set_password(None).ok();
             uv_auth::Index {
-                url,
-                root_url,
+                url: Url::from(url),
+                root_url: Url::from(root_url),
                 auth_policy: index.authenticate,
             }
         }))

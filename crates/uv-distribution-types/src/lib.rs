@@ -50,6 +50,7 @@ use uv_pep508::{Pep508Url, VerbatimUrl};
 use uv_pypi_types::{
     ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
 };
+use uv_redacted::LogSafeUrl;
 
 pub use crate::annotation::*;
 pub use crate::any::*;
@@ -147,12 +148,12 @@ pub enum InstalledVersion<'a> {
     Version(&'a Version),
     /// A URL, used to identify a distribution at an arbitrary location, along with the version
     /// specifier to which it resolved.
-    Url(&'a Url, &'a Version),
+    Url(&'a LogSafeUrl, &'a Version),
 }
 
 impl InstalledVersion<'_> {
     /// If it is a URL, return its value.
-    pub fn url(&self) -> Option<&Url> {
+    pub fn url(&self) -> Option<&LogSafeUrl> {
         match self {
             InstalledVersion::Version(_) => None,
             InstalledVersion::Url(url, _) => Some(url),
@@ -258,7 +259,7 @@ pub struct DirectUrlBuiltDist {
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
     /// The URL without the subdirectory fragment.
-    pub location: Box<Url>,
+    pub location: Box<LogSafeUrl>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -299,7 +300,7 @@ pub struct DirectUrlSourceDist {
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
     /// The URL without the subdirectory fragment.
-    pub location: Box<Url>,
+    pub location: Box<LogSafeUrl>,
     /// The subdirectory within the archive in which the source distribution is located.
     pub subdirectory: Option<Box<Path>>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
@@ -353,7 +354,7 @@ impl Dist {
     pub fn from_http_url(
         name: PackageName,
         url: VerbatimUrl,
-        location: Url,
+        location: LogSafeUrl,
         subdirectory: Option<Box<Path>>,
         ext: DistExtension,
     ) -> Result<Dist, Error> {
@@ -1168,7 +1169,7 @@ impl RemoteSource for Dist {
     }
 }
 
-impl Identifier for Url {
+impl Identifier for LogSafeUrl {
     fn distribution_id(&self) -> DistributionId {
         DistributionId::Url(uv_cache_key::CanonicalUrl::new(self))
     }

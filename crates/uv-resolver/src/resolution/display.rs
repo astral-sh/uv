@@ -290,7 +290,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             // `# from https://pypi.org/simple`).
             if self.include_index_annotation {
                 if let Some(index) = node.dist.index() {
-                    let url = index.redacted();
+                    let url = index.removed_credentials();
                     writeln!(f, "{}", format!("    # from {url}").green())?;
                 }
             }

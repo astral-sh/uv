@@ -9,11 +9,11 @@ use std::sync::Arc;
 use anyhow::Result;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, instrument};
-use url::Url;
 
+use url::Url;
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_git_types::GitUrl;
-use uv_redacted::redacted_url;
+use uv_redacted::LogSafeUrl;
 
 use crate::GIT_STORE;
 use crate::git::GitRemote;
@@ -82,7 +82,9 @@ impl GitSource {
 
         // Authenticate the URL, if necessary.
         let remote = if let Some(credentials) = GIT_STORE.get(&canonical) {
-            Cow::Owned(credentials.apply(self.git.repository().clone()))
+            Cow::Owned(LogSafeUrl::from(
+                credentials.apply(Url::from(self.git.repository().clone())),
+            ))
         } else {
             Cow::Borrowed(self.git.repository())
         };
@@ -101,10 +103,7 @@ impl GitSource {
             // situation that we have a locked revision but the database
             // doesn't have it.
             (locked_rev, db) => {
-                debug!(
-                    "Updating Git source `{}`",
-                    redacted_url(self.git.repository())
-                );
+                debug!("Updating Git source `{}`", self.git.repository());
 
                 // Report the checkout operation to the reporter.
                 let task = self.reporter.as_ref().map(|reporter| {
@@ -181,8 +180,8 @@ impl Fetch {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a repository checkout begins.
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
+    fn on_checkout_start(&self, url: &LogSafeUrl, rev: &str) -> usize;
 
     /// Callback to invoke when a repository checkout completes.
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
+    fn on_checkout_complete(&self, url: &LogSafeUrl, rev: &str, index: usize);
 }

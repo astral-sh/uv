@@ -33,6 +33,7 @@ use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{HashDigests, Hashes, ParsedGitUrl, VcsKind};
+use uv_redacted::LogSafeUrl;
 use uv_small_str::SmallString;
 
 use crate::lock::export::ExportableRequirements;
@@ -93,7 +94,7 @@ pub enum PylockTomlErrorKind {
     #[error("`packages.vcs` entry for `{0}` must have a `url` or `path`")]
     VcsMissingPathUrl(PackageName),
     #[error("URL must end in a valid wheel filename: `{0}`")]
-    UrlMissingFilename(Url),
+    UrlMissingFilename(LogSafeUrl),
     #[error("Path must end in a valid wheel filename: `{0}`")]
     PathMissingFilename(Box<Path>),
     #[error("Failed to convert path to URL")]
@@ -204,7 +205,7 @@ pub struct PylockTomlPackage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<Version>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub index: Option<Url>,
+    pub index: Option<LogSafeUrl>,
     #[serde(
         skip_serializing_if = "uv_pep508::marker::ser::is_empty",
         serialize_with = "uv_pep508::marker::ser::serialize",
@@ -247,7 +248,7 @@ struct PylockTomlDirectory {
 struct PylockTomlVcs {
     r#type: VcsKind,
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<Url>,
+    url: Option<LogSafeUrl>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -261,7 +262,7 @@ struct PylockTomlVcs {
 #[serde(rename_all = "kebab-case")]
 struct PylockTomlArchive {
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<Url>,
+    url: Option<LogSafeUrl>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -284,7 +285,7 @@ struct PylockTomlSdist {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<SmallString>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<Url>,
+    url: Option<LogSafeUrl>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(
@@ -305,7 +306,7 @@ struct PylockTomlWheel {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<WheelFilename>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<Url>,
+    url: Option<LogSafeUrl>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(
@@ -1324,7 +1325,7 @@ impl PylockTomlWheel {
         &self,
         install_path: &Path,
         name: &PackageName,
-        index: Option<&Url>,
+        index: Option<&LogSafeUrl>,
     ) -> Result<RegistryBuiltWheel, PylockTomlErrorKind> {
         let filename = self.filename(name)?.into_owned();
 
@@ -1408,8 +1409,10 @@ impl PylockTomlVcs {
             let mut url = if let Some(url) = self.url.as_ref() {
                 url.clone()
             } else if let Some(path) = self.path.as_ref() {
-                Url::from_directory_path(install_path.join(path))
-                    .map_err(|()| PylockTomlErrorKind::PathToUrl)?
+                LogSafeUrl::from(
+                    Url::from_directory_path(install_path.join(path))
+                        .map_err(|()| PylockTomlErrorKind::PathToUrl)?,
+                )
             } else {
                 return Err(PylockTomlErrorKind::VcsMissingPathUrl(name.clone()));
             };
@@ -1427,7 +1430,7 @@ impl PylockTomlVcs {
         };
 
         // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-        let url = Url::from(ParsedGitUrl {
+        let url = LogSafeUrl::from(ParsedGitUrl {
             url: git_url.clone(),
             subdirectory: subdirectory.clone(),
         });
@@ -1469,7 +1472,7 @@ impl PylockTomlSdist {
         install_path: &Path,
         name: &PackageName,
         version: Option<&Version>,
-        index: Option<&Url>,
+        index: Option<&LogSafeUrl>,
     ) -> Result<RegistrySourceDist, PylockTomlErrorKind> {
         let filename = self.filename(name)?.into_owned();
         let ext = SourceDistExtension::from_path(filename.as_ref())?;

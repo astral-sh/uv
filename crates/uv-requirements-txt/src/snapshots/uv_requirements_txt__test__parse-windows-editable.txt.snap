@@ -12,34 +12,14 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
-                                    scheme: "file",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: None,
-                                    port: None,
-                                    path: "/<REQUIREMENTS_DIR>/editable",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: file:///<REQUIREMENTS_DIR>/editable,
                                 install_path: "<REQUIREMENTS_DIR>/editable",
                                 editable: true,
                                 virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
-                                scheme: "file",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: None,
-                                port: None,
-                                path: "/<REQUIREMENTS_DIR>/editable",
-                                query: None,
-                                fragment: None,
-                            },
+                            url: file:///<REQUIREMENTS_DIR>/editable,
                             given: Some(
                                 "./editable",
                             ),
@@ -69,34 +49,14 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
-                                    scheme: "file",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: None,
-                                    port: None,
-                                    path: "/<REQUIREMENTS_DIR>/editable",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: file:///<REQUIREMENTS_DIR>/editable,
                                 install_path: "<REQUIREMENTS_DIR>/editable",
                                 editable: true,
                                 virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
-                                scheme: "file",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: None,
-                                port: None,
-                                path: "/<REQUIREMENTS_DIR>/editable",
-                                query: None,
-                                fragment: None,
-                            },
+                            url: file:///<REQUIREMENTS_DIR>/editable,
                             given: Some(
                                 "./editable",
                             ),
@@ -126,34 +86,14 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
-                                    scheme: "file",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: None,
-                                    port: None,
-                                    path: "/<REQUIREMENTS_DIR>/editable",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: file:///<REQUIREMENTS_DIR>/editable,
                                 install_path: "<REQUIREMENTS_DIR>/editable",
                                 editable: true,
                                 virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
-                                scheme: "file",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: None,
-                                port: None,
-                                path: "/<REQUIREMENTS_DIR>/editable",
-                                query: None,
-                                fragment: None,
-                            },
+                            url: file:///<REQUIREMENTS_DIR>/editable,
                             given: Some(
                                 "./editable",
                             ),
@@ -183,34 +123,14 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
-                                    scheme: "file",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: None,
-                                    port: None,
-                                    path: "/<REQUIREMENTS_DIR>/editable",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: file:///<REQUIREMENTS_DIR>/editable,
                                 install_path: "<REQUIREMENTS_DIR>/editable",
                                 editable: true,
                                 virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
-                                scheme: "file",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: None,
-                                port: None,
-                                path: "/<REQUIREMENTS_DIR>/editable",
-                                query: None,
-                                fragment: None,
-                            },
+                            url: file:///<REQUIREMENTS_DIR>/editable,
                             given: Some(
                                 "./editable",
                             ),
@@ -240,34 +160,14 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
-                                    scheme: "file",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: None,
-                                    port: None,
-                                    path: "/<REQUIREMENTS_DIR>/editable",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: file:///<REQUIREMENTS_DIR>/editable,
                                 install_path: "<REQUIREMENTS_DIR>/editable",
                                 editable: true,
                                 virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
-                                scheme: "file",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: None,
-                                port: None,
-                                path: "/<REQUIREMENTS_DIR>/editable",
-                                query: None,
-                                fragment: None,
-                            },
+                            url: file:///<REQUIREMENTS_DIR>/editable,
                             given: Some(
                                 "./editable",
                             ),
@@ -290,34 +190,14 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
-                                    scheme: "file",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: None,
-                                    port: None,
-                                    path: "/<REQUIREMENTS_DIR>/editable[d",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: file:///<REQUIREMENTS_DIR>/editable[d,
                                 install_path: "<REQUIREMENTS_DIR>/editable[d",
                                 editable: true,
                                 virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
-                                scheme: "file",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: None,
-                                port: None,
-                                path: "/<REQUIREMENTS_DIR>/editable[d",
-                                query: None,
-                                fragment: None,
-                            },
+                            url: file:///<REQUIREMENTS_DIR>/editable[d,
                             given: Some(
                                 "./editable[d",
                             ),
@@ -340,34 +220,14 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
-                                    scheme: "file",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: None,
-                                    port: None,
-                                    path: "/<REQUIREMENTS_DIR>/editable",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: file:///<REQUIREMENTS_DIR>/editable,
                                 install_path: "<REQUIREMENTS_DIR>/editable",
                                 editable: true,
                                 virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
-                                scheme: "file",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: None,
-                                port: None,
-                                path: "/<REQUIREMENTS_DIR>/editable",
-                                query: None,
-                                fragment: None,
-                            },
+                            url: file:///<REQUIREMENTS_DIR>/editable,
                             given: Some(
                                 "./editable",
                             ),
@@ -390,34 +250,14 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: Url {
-                                    scheme: "file",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: None,
-                                    port: None,
-                                    path: "/<REQUIREMENTS_DIR>/editable",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: file:///<REQUIREMENTS_DIR>/editable,
                                 install_path: "<REQUIREMENTS_DIR>/editable",
                                 editable: true,
                                 virtual: false,
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: Url {
-                                scheme: "file",
-                                cannot_be_a_base: false,
-                                username: "",
-                                password: None,
-                                host: None,
-                                port: None,
-                                path: "/<REQUIREMENTS_DIR>/editable",
-                                query: None,
-                                fragment: None,
-                            },
+                            url: file:///<REQUIREMENTS_DIR>/editable,
                             given: Some(
                                 "./editable",
                             ),
