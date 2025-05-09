@@ -324,15 +324,21 @@ impl RegistryClient {
 
         let mut results = Vec::new();
 
-        match self.index_strategy_for(package_name) {
+        let index_strategy = self.index_strategy_for(package_name);
+        match index_strategy {
             // If we're searching for the first index that contains the package, fetch serially.
-            IndexStrategy::FirstIndex => {
+            IndexStrategy::FirstIndex | IndexStrategy::UnsafeFirstIndex => {
                 for index in indexes {
                     let _permit = download_concurrency.acquire().await;
                     match index.format {
                         IndexFormat::Simple => {
-                            let status_code_strategy =
-                                self.index_urls.status_code_strategy_for(index.url);
+                            let status_code_strategy = match index_strategy {
+                                IndexStrategy::UnsafeFirstIndex => {
+                                    IndexStatusCodeStrategy::ignore_authentication_error_codes()
+                                }
+                                _ => self.index_urls.status_code_strategy_for(index.url),
+                            };
+
                             match self
                                 .simple_single_index(
                                     package_name,
