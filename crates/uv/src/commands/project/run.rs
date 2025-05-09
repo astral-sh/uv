@@ -1259,8 +1259,10 @@ impl RunCommand {
         match self {
             Self::Python(args) => {
                 let mut process = if is_patch_request || !interpreter.is_standalone() {
+                    dbg!("Not Coo");
                     Command::new(interpreter.sys_executable())
                 } else {
+                    dbg!("Coo");
                     let executable = StandaloneInterpreter::try_from(interpreter)
                         .and_then(|standalone| {
                             standalone.symlink_path_from_base_python(interpreter.sys_executable())
@@ -1274,6 +1276,7 @@ impl RunCommand {
                             .is_some_and(|directory_symlink| directory_symlink.symlink_exists())
                         })
                         .unwrap_or_else(|| PathBuf::from(interpreter.sys_executable()));
+                    dbg!("executable: {:?}", &executable);
                     Command::new(executable)
                 };
                 process.args(args);
