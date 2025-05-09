@@ -17404,11 +17404,11 @@ fn compile_broken_active_venv() -> Result<()> {
     Ok(())
 }
 
-/// https://github.com/astral-sh/uv/issues/13344
+/// <https://github.com/astral-sh/uv/issues/13344>
 #[test]
 fn pubgrub_panic_twice_self_dep() -> Result<()> {
     let context = TestContext::new("3.12");
-    let requirements_in = context
+    context
         .temp_dir
         .child("pyproject.toml")
         .write_str(indoc! {r#"
