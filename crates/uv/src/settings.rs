@@ -43,6 +43,7 @@ use uv_settings::{
 };
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
+use uv_virtualenv::VenvForceMode;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 
@@ -2426,6 +2427,7 @@ impl BuildSettings {
 #[derive(Debug, Clone)]
 pub(crate) struct VenvSettings {
     pub(crate) seed: bool,
+    pub(crate) force: VenvForceMode,
     pub(crate) allow_existing: bool,
     pub(crate) path: Option<PathBuf>,
     pub(crate) prompt: Option<String>,
@@ -2444,6 +2446,7 @@ impl VenvSettings {
             system,
             no_system,
             seed,
+            force,
             allow_existing,
             path,
             prompt,
@@ -2461,6 +2464,7 @@ impl VenvSettings {
 
         Self {
             seed,
+            force: VenvForceMode::from_args(force),
             allow_existing,
             path,
             prompt,
