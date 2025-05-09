@@ -17,6 +17,7 @@ pub(crate) mod show;
 pub(crate) mod sync;
 pub(crate) mod tree;
 pub(crate) mod uninstall;
+pub(crate) mod wheel;
 
 pub(crate) fn resolution_markers(
     python_version: Option<&PythonVersion>,
