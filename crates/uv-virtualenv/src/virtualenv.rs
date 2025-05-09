@@ -12,7 +12,8 @@ use tracing::debug;
 
 use uv_fs::{cachedir, Simplified, CWD};
 use uv_pypi_types::Scheme;
-use uv_python::{Interpreter, VirtualEnvironment};
+use uv_python::managed::{create_bin_link, create_symlink_directory, DirectorySymlink};
+use uv_python::{Interpreter, StandaloneInterpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
 
@@ -53,6 +54,7 @@ pub(crate) fn create(
     allow_existing: bool,
     relocatable: bool,
     seed: bool,
+    upgradeable: bool,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment.
@@ -143,21 +145,58 @@ pub(crate) fn create(
     // Create a `.gitignore` file to ignore all files in the venv.
     fs::write(location.join(".gitignore"), "*")?;
 
+    let mut using_symlink_path = false;
+    let executable_target = if upgradeable {
+        if let Some(standalone_interpreter) = StandaloneInterpreter::try_from(interpreter) {
+            standalone_interpreter
+                .symlink_path_from_base_python(base_python.as_path())
+                .inspect(|_| using_symlink_path = true)
+                .unwrap_or_else(|| base_python.clone())
+        } else {
+            base_python.clone()
+        }
+    } else {
+        base_python.clone()
+    };
+
     // Per PEP 405, the Python `home` is the parent directory of the interpreter.
-    let python_home = base_python.parent().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::NotFound,
-            "The Python interpreter needs to have a parent directory",
-        )
-    })?;
+    // For standalone interpreters, this `home` value will include a symlink directory
+    // on Unix or junction on Windows to enable transparent Python patch upgrades.
+    let python_home = executable_target
+        .parent()
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "The Python interpreter needs to have a parent directory",
+            )
+        })?
+        .to_path_buf();
+    let python_home = python_home.as_path();
 
     // Different names for the python interpreter
     fs::create_dir_all(&scripts)?;
     let executable = scripts.join(format!("python{EXE_SUFFIX}"));
 
+    if using_symlink_path {
+        if DirectorySymlink::try_from(
+            interpreter.python_major(),
+            interpreter.python_minor(),
+            executable_target.as_path(),
+        )
+        .is_some_and(|directory_symlink| !directory_symlink.symlink_exists())
+        {
+            create_symlink_directory(
+                interpreter.python_major(),
+                interpreter.python_minor(),
+                base_python.as_path(),
+            )
+            .map_err(Error::Python)?;
+        }
+    }
+
     #[cfg(unix)]
     {
-        uv_fs::replace_symlink(&base_python, &executable)?;
+        uv_fs::replace_symlink(&executable_target, &executable)?;
         uv_fs::replace_symlink(
             "python",
             scripts.join(format!("python{}", interpreter.python_major())),
@@ -184,91 +223,100 @@ pub(crate) fn create(
         }
     }
 
-    // No symlinking on Windows, at least not on a regular non-dev non-admin Windows install.
+    // On Windows, we use trampolines that point to an executable target. For standalone
+    // interpreters, this target path includes a minor version junction to enable
+    // transparent upgrades.
     if cfg!(windows) {
-        copy_launcher_windows(
-            WindowsExecutable::Python,
-            interpreter,
-            &base_python,
-            &scripts,
-            python_home,
-        )?;
-
-        if interpreter.markers().implementation_name() == "graalpy" {
-            copy_launcher_windows(
-                WindowsExecutable::GraalPy,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
-            copy_launcher_windows(
-                WindowsExecutable::PythonMajor,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
+        if interpreter.is_standalone() {
+            let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
+            create_bin_link(target.as_path(), executable_target.clone()).map_err(Error::Python)?;
+            let targetw = scripts.join(WindowsExecutable::Pythonw.exe(interpreter));
+            create_bin_link(targetw.as_path(), executable_target).map_err(Error::Python)?;
         } else {
             copy_launcher_windows(
-                WindowsExecutable::Pythonw,
+                WindowsExecutable::Python,
                 interpreter,
                 &base_python,
                 &scripts,
                 python_home,
             )?;
-        }
 
-        if interpreter.markers().implementation_name() == "pypy" {
-            copy_launcher_windows(
-                WindowsExecutable::PythonMajor,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
-            copy_launcher_windows(
-                WindowsExecutable::PythonMajorMinor,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
-            copy_launcher_windows(
-                WindowsExecutable::PyPy,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
-            copy_launcher_windows(
-                WindowsExecutable::PyPyMajor,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
-            copy_launcher_windows(
-                WindowsExecutable::PyPyMajorMinor,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
-            copy_launcher_windows(
-                WindowsExecutable::PyPyw,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
-            copy_launcher_windows(
-                WindowsExecutable::PyPyMajorMinorw,
-                interpreter,
-                &base_python,
-                &scripts,
-                python_home,
-            )?;
+            if interpreter.markers().implementation_name() == "graalpy" {
+                copy_launcher_windows(
+                    WindowsExecutable::GraalPy,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+                copy_launcher_windows(
+                    WindowsExecutable::PythonMajor,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+            } else {
+                copy_launcher_windows(
+                    WindowsExecutable::Pythonw,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+            }
+
+            if interpreter.markers().implementation_name() == "pypy" {
+                copy_launcher_windows(
+                    WindowsExecutable::PythonMajor,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+                copy_launcher_windows(
+                    WindowsExecutable::PythonMajorMinor,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+                copy_launcher_windows(
+                    WindowsExecutable::PyPy,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+                copy_launcher_windows(
+                    WindowsExecutable::PyPyMajor,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+                copy_launcher_windows(
+                    WindowsExecutable::PyPyMajorMinor,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+                copy_launcher_windows(
+                    WindowsExecutable::PyPyw,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+                copy_launcher_windows(
+                    WindowsExecutable::PyPyMajorMinorw,
+                    interpreter,
+                    &base_python,
+                    &scripts,
+                    python_home,
+                )?;
+            }
         }
     }
 

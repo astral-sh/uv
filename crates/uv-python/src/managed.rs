@@ -2,8 +2,12 @@ use core::fmt;
 use std::cmp::Reverse;
 use std::ffi::OsStr;
 use std::io::{self, Write};
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+#[cfg(windows)]
+use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 use fs_err as fs;
 use itertools::Itertools;
@@ -11,7 +15,7 @@ use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
 
-use uv_fs::{symlink_or_copy_file, LockedFile, Simplified};
+use uv_fs::{replace_symlink, symlink_or_copy_file, LockedFile, Simplified};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_trampoline_builder::{windows_python_launcher, Launcher};
@@ -51,6 +55,8 @@ pub enum Error {
     },
     #[error("Missing expected Python executable at {}", _0.user_display())]
     MissingExecutable(PathBuf),
+    #[error("Missing expected target directory for link at {}", _0.user_display())]
+    MissingLinkTargetDirectory(PathBuf),
     #[error("Failed to create canonical Python executable at {} from {}", to.user_display(), from.user_display())]
     CanonicalizeExecutable {
         from: PathBuf,
@@ -60,6 +66,13 @@ pub enum Error {
     },
     #[error("Failed to create Python executable link at {} from {}", to.user_display(), from.user_display())]
     LinkExecutable {
+        from: PathBuf,
+        to: PathBuf,
+        #[source]
+        err: io::Error,
+    },
+    #[error("Failed to create Python executable link directory at {} from {}", to.user_display(), from.user_display())]
+    ExecutableLinkDirectory {
         from: PathBuf,
         to: PathBuf,
         #[source]
@@ -503,6 +516,24 @@ impl ManagedPythonInstallation {
         Ok(())
     }
 
+    /// Ensure the environment contains the symlink directory (or junction on Windows)
+    /// pointing to the patch directory for this minor version.
+    pub fn ensure_minor_version_link(&self) -> Result<(), Error> {
+        // We don't currently support transparent upgrades for PyPy or GraalPy
+        // so we don't create a symlink directory (or junction on Windows).
+        if !matches!(
+            self.key.implementation(),
+            LenientImplementationName::Known(ImplementationName::CPython)
+        ) {
+            return Ok(());
+        }
+        create_symlink_directory(
+            self.key.major,
+            self.key.minor,
+            self.executable(false).as_path(),
+        )
+    }
+
     /// Ensure the environment is marked as externally managed with the
     /// standard `EXTERNALLY-MANAGED` file.
     pub fn ensure_externally_managed(&self) -> Result<(), Error> {
@@ -571,46 +602,7 @@ impl ManagedPythonInstallation {
     ///
     /// If the file already exists at the target path, an error will be returned.
     pub fn create_bin_link(&self, target: &Path) -> Result<(), Error> {
-        let python = self.executable(false);
-
-        let bin = target.parent().ok_or(Error::NoExecutableDirectory)?;
-        fs_err::create_dir_all(bin).map_err(|err| Error::ExecutableDirectory {
-            to: bin.to_path_buf(),
-            err,
-        })?;
-
-        if cfg!(unix) {
-            // Note this will never copy on Unix — we use it here to allow compilation on Windows
-            match symlink_or_copy_file(&python, target) {
-                Ok(()) => Ok(()),
-                Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    Err(Error::MissingExecutable(python.clone()))
-                }
-                Err(err) => Err(Error::LinkExecutable {
-                    from: python,
-                    to: target.to_path_buf(),
-                    err,
-                }),
-            }
-        } else if cfg!(windows) {
-            // TODO(zanieb): Install GUI launchers as well
-            let launcher = windows_python_launcher(&python, false)?;
-
-            // OK to use `std::fs` here, `fs_err` does not support `File::create_new` and we attach
-            // error context anyway
-            #[allow(clippy::disallowed_types)]
-            {
-                std::fs::File::create_new(target)
-                    .and_then(|mut file| file.write_all(launcher.as_ref()))
-                    .map_err(|err| Error::LinkExecutable {
-                        from: python,
-                        to: target.to_path_buf(),
-                        err,
-                    })
-            }
-        } else {
-            unimplemented!("Only Windows and Unix systems are supported.")
-        }
+        create_bin_link(target, self.executable(false))
     }
 
     /// Returns `true` if the path is a link to this installation's binary, e.g., as created by
@@ -666,6 +658,145 @@ impl ManagedPythonInstallation {
 
     pub fn sha256(&self) -> Option<&'static str> {
         self.sha256
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct DirectorySymlink {
+    pub symlink: PathBuf,
+    pub target_directory: PathBuf,
+}
+
+impl DirectorySymlink {
+    pub fn try_from(major: u8, minor: u8, executable: &Path) -> Option<Self> {
+        let symlink_directory_name = format!("python{major}.{minor}-dir");
+        let parent = executable.parent()?;
+        #[cfg(unix)]
+        if parent
+            .components()
+            .next_back()
+            .is_some_and(|c| c.as_os_str() == "bin")
+        {
+            let target_directory = parent.parent()?.to_path_buf();
+            let symlink = target_directory.with_file_name(symlink_directory_name);
+            Some(Self {
+                symlink,
+                target_directory,
+            })
+        } else {
+            None
+        }
+        #[cfg(windows)]
+        {
+            let target_directory = parent.to_path_buf();
+            let symlink = target_directory.with_file_name(symlink_directory_name);
+            Some(Self {
+                symlink,
+                target_directory,
+            })
+        }
+    }
+
+    pub fn is_self_link(&self) -> bool {
+        self.symlink == self.target_directory
+    }
+
+    pub fn symlink_exists(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.symlink
+                .symlink_metadata()
+                .map(|metadata| metadata.file_type().is_symlink())
+                .unwrap_or(false)
+        }
+        #[cfg(windows)]
+        {
+            self.symlink.symlink_metadata().is_ok_and(|metadata| {
+                // Check that this is a reparse point, which indicates this
+                // is a symlink or junction.
+                (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0
+            })
+        }
+    }
+}
+
+pub fn create_symlink_directory(major: u8, minor: u8, executable: &Path) -> Result<(), Error> {
+    let Some(directory_symlink) = DirectorySymlink::try_from(major, minor, executable) else {
+        return Ok(());
+    };
+    if directory_symlink.is_self_link() {
+        return Ok(());
+    }
+
+    match replace_symlink(
+        directory_symlink.target_directory.as_path(),
+        directory_symlink.symlink.as_path(),
+    ) {
+        Ok(()) => {
+            debug!(
+                "Created link {} -> {}",
+                &directory_symlink.symlink.user_display(),
+                &directory_symlink.target_directory.user_display(),
+            );
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            return Err(Error::MissingLinkTargetDirectory(
+                directory_symlink.target_directory.clone(),
+            ))
+        }
+        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(err) => {
+            return Err(Error::ExecutableLinkDirectory {
+                from: directory_symlink.symlink,
+                to: directory_symlink.target_directory,
+                err,
+            })
+        }
+    }
+    Ok(())
+}
+
+/// Create a link to the managed Python executable.
+///
+/// If the file already exists at the target path, an error will be returned.
+pub fn create_bin_link(target: &Path, executable: PathBuf) -> Result<(), Error> {
+    let bin = target.parent().ok_or(Error::NoExecutableDirectory)?;
+    fs_err::create_dir_all(bin).map_err(|err| Error::ExecutableDirectory {
+        to: bin.to_path_buf(),
+        err,
+    })?;
+
+    if cfg!(unix) {
+        // Note this will never copy on Unix — we use it here to allow compilation on Windows
+        match symlink_or_copy_file(&executable, target) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                Err(Error::MissingExecutable(executable.clone()))
+            }
+            Err(err) => Err(Error::LinkExecutable {
+                from: executable,
+                to: target.to_path_buf(),
+                err,
+            }),
+        }
+    } else if cfg!(windows) {
+        // TODO(zanieb): Install GUI launchers as well
+        let launcher = windows_python_launcher(&executable, false)?;
+
+        // OK to use `std::fs` here, `fs_err` does not support `File::create_new` and we attach
+        // error context anyway
+        #[allow(clippy::disallowed_types)]
+        {
+            std::fs::File::create_new(target)
+                .and_then(|mut file| file.write_all(launcher.as_ref()))
+                .map_err(|err| Error::LinkExecutable {
+                    from: executable,
+                    to: target.to_path_buf(),
+                    err,
+                })
+        }
+    } else {
+        unimplemented!("Only Windows and Unix systems are supported.")
     }
 }
 

@@ -218,6 +218,42 @@ async fn do_uninstall(
         uv_python::windows_registry::remove_orphan_registry_entries(&installed_installations);
     }
 
+    // Read all existing installations and find the highest installed patch
+    // for each installed minor version. Ensure the minor version link directory
+    // is still valid.
+    // TODO(john): If there are no remaining installations for a minor version,
+    // remove the symlink directory (or junction on Windows).
+    let uninstalled_minor_versions =
+        &uninstalled
+            .iter()
+            .fold(FxHashSet::default(), |mut minor_versions, key| {
+                minor_versions.insert(key.version().python_version());
+                minor_versions
+            });
+    let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
+    let remaining_installations: Vec<_> = installations.find_all()?.collect();
+    let mut remaining_minor_versions = FxHashMap::default();
+    for installation in remaining_installations {
+        // Add to minor versions map if this installation has the highest
+        // patch seen for a minor version so far.
+        let minor_version = installation.version().python_version();
+        if !uninstalled_minor_versions.contains(&minor_version) {
+            continue;
+        }
+        if let Some(patch) = installation.version().patch() {
+            if let Some((current_patch, _)) = remaining_minor_versions.get(&minor_version) {
+                if patch >= *current_patch {
+                    remaining_minor_versions.insert(minor_version, (patch, installation));
+                }
+            } else {
+                remaining_minor_versions.insert(minor_version, (patch, installation));
+            }
+        }
+    }
+    for (_, installation) in remaining_minor_versions.values() {
+        installation.ensure_minor_version_link()?;
+    }
+
     // Report on any uninstalled installations.
     if !uninstalled.is_empty() {
         if let [uninstalled] = uninstalled.as_slice() {

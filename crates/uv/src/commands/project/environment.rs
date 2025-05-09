@@ -94,6 +94,7 @@ impl CachedEnvironment {
             false,
             true,
             false,
+            false,
         )?;
 
         sync_environment(

@@ -9331,9 +9331,7 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     }, {
         let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
         let lines: Vec<&str> = contents.split('\n').collect();
-        assert_snapshot!(lines[3], @r###"
-        version_info = 3.12.[X]
-        "###);
+        assert_snapshot!(lines[3], @"version_info = 3.12.[X]");
     });
 
     // Simulate an incompatible `pyvenv.cfg:version_info` value created
@@ -9372,9 +9370,7 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
     }, {
         let contents = fs_err::read_to_string(&pyvenv_cfg).unwrap();
         let lines: Vec<&str> = contents.split('\n').collect();
-        assert_snapshot!(lines[3], @r###"
-        version_info = 3.12.[X]
-        "###);
+        assert_snapshot!(lines[3], @"version_info = 3.12.[X]");
     });
 
     Ok(())

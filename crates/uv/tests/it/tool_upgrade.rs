@@ -741,9 +741,7 @@ fn tool_upgrade_python() {
     }, {
         let content = fs_err::read_to_string(tool_dir.join("babel").join("pyvenv.cfg")).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();
-        assert_snapshot!(lines[lines.len() - 3], @r###"
-        version_info = 3.12.[X]
-        "###);
+        assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
 }
 
@@ -826,9 +824,7 @@ fn tool_upgrade_python_with_all() {
     }, {
         let content = fs_err::read_to_string(tool_dir.join("babel").join("pyvenv.cfg")).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();
-        assert_snapshot!(lines[lines.len() - 3], @r###"
-        version_info = 3.12.[X]
-        "###);
+        assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
 
     insta::with_settings!({
@@ -836,8 +832,6 @@ fn tool_upgrade_python_with_all() {
     }, {
         let content = fs_err::read_to_string(tool_dir.join("python-dotenv").join("pyvenv.cfg")).unwrap();
         let lines: Vec<&str> = content.split('\n').collect();
-        assert_snapshot!(lines[lines.len() - 3], @r###"
-        version_info = 3.12.[X]
-        "###);
+        assert_snapshot!(lines[lines.len() - 3], @"version_info = 3.12.[X]");
     });
 }
