@@ -5,6 +5,7 @@ use reqwest::Response;
 use tracing::{debug, info_span, warn, Instrument};
 use url::Url;
 
+use uv_auth::redacted_url;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_distribution_filename::DistFilename;
@@ -207,7 +208,7 @@ impl<'a> FlatIndexClient<'a> {
                             Ok(file) => Some(file),
                             Err(err) => {
                                 // Ignore files with unparsable version specifiers.
-                                warn!("Skipping file in {url}: {err}");
+                                warn!("Skipping file in {}: {err}", redacted_url(&url));
                                 None
                             }
                         }

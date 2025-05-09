@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
 use tracing::trace;
 use url::Url;
-use uv_auth::Credentials;
+use uv_auth::{redacted_url, Credentials};
 use uv_cache_key::RepositoryUrl;
 
 /// Global authentication cache for a uv invocation.
@@ -31,7 +31,7 @@ impl GitStore {
 /// Returns `true` if the store was updated.
 pub fn store_credentials_from_url(url: &Url) -> bool {
     if let Some(credentials) = Credentials::from_url(url) {
-        trace!("Caching credentials for {url}");
+        trace!("Caching credentials for {}", redacted_url(url));
         GIT_STORE.insert(RepositoryUrl::new(url), credentials);
         true
     } else {

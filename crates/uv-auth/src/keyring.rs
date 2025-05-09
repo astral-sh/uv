@@ -4,7 +4,7 @@ use tracing::{instrument, trace, warn};
 use url::Url;
 use uv_warnings::warn_user_once;
 
-use crate::credentials::Credentials;
+use crate::{credentials::Credentials, redacted_url};
 
 /// A backend for retrieving credentials from a keyring.
 ///
@@ -53,7 +53,7 @@ impl KeyringProvider {
 
         // Check the full URL first
         // <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L376C1-L379C14>
-        trace!("Checking keyring for URL {url}");
+        trace!("Checking keyring for URL {}", redacted_url(url));
         let mut credentials = match self.backend {
             KeyringProviderBackend::Subprocess => {
                 self.fetch_subprocess(url.as_str(), username).await
