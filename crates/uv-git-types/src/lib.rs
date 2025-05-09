@@ -163,9 +163,6 @@ impl std::fmt::Display for GitUrl {
 // It's here to avoid importing `uv-auth` into this crate. Consolidate these
 // once we use a `RedactedUrl` type.
 pub fn redacted_url(url: &Url) -> Cow<'_, Url> {
-    if !tracing::enabled!(tracing::Level::DEBUG) {
-        return Cow::Borrowed(url);
-    }
     let no_credentials = url.username().is_empty() && url.password().is_none();
     let generic_git_username =
         url.scheme() == "ssh" && url.username() == "git" && url.password().is_none();

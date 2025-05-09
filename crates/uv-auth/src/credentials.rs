@@ -324,9 +324,6 @@ impl Credentials {
 /// Return a version of the URL with redacted credentials, allowing the generic `git` username (without a password)
 /// in SSH URLs, as in, `ssh://git@github.com/...`.
 pub fn redacted_url(url: &Url) -> Cow<'_, Url> {
-    if !tracing::enabled!(tracing::Level::DEBUG) {
-        return Cow::Borrowed(url);
-    }
     let no_credentials = url.username().is_empty() && url.password().is_none();
     let generic_git_username =
         url.scheme() == "ssh" && url.username() == "git" && url.password().is_none();
