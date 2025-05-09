@@ -1259,7 +1259,7 @@ impl RunCommand {
         match self {
             Self::Python(args) => {
                 let mut process = if is_patch_request || !interpreter.is_standalone() {
-                    dbg!("Not Coo");
+                    dbg!("Not Coo: is_patch_request: {}, interpreter.is_standalone: {}", is_patch_request, interpreter.is_standalone());
                     Command::new(interpreter.sys_executable())
                 } else {
                     dbg!("Coo");
