@@ -269,6 +269,7 @@ impl Interpreter {
     /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
     pub fn is_managed(&self) -> bool {
         let Ok(installations) = ManagedPythonInstallations::from_settings(None) else {
+            dbg!("Couldn't find installations!");
             return false;
         };
 
@@ -276,7 +277,10 @@ impl Interpreter {
             .find_all()
             .into_iter()
             .flatten()
-            .any(|install| install.path() == self.sys_base_prefix)
+            .any(|install| {
+                dbg!("install_path: {:?}, sys_base_prefix: {:?}", install.path(), self.sys_base_prefix);
+                install.path() == self.sys_base_prefix
+            })
     }
 
     /// Returns `Some` if the environment is externally managed, optionally including an error
@@ -509,6 +513,7 @@ impl Interpreter {
     // set `PYTHON_BUILD_STANDALONE=1`.`
     #[cfg(windows)]
     pub fn is_standalone(&self) -> bool {
+        dbg!("impl: {:?}", self.markers().implementation_name());
         self.standalone || (self.is_managed() && self.markers().implementation_name() == "cpython")
     }
 
