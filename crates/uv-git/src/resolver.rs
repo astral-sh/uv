@@ -6,6 +6,7 @@ use std::sync::Arc;
 use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
 use fs_err::tokio as fs;
+use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 
@@ -86,13 +87,20 @@ impl GitResolver {
         );
 
         let response = request.send().await?;
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() {
             // Returns a 404 if the repository does not exist, and a 422 if GitHub is unable to
             // resolve the requested rev.
-            debug!(
-                "GitHub API request failed for: {url} ({})",
-                response.status()
-            );
+            debug!("GitHub API request failed for: {url} ({})", status);
+
+            // Return error for 429 as not only is there no fast path,
+            // subsequent git operations by the caller should be skipped.
+            if status == StatusCode::TOO_MANY_REQUESTS {
+                // Unwrap won't panic on a 429.
+                let err = response.error_for_status().unwrap_err();
+                return Err(err.into());
+            }
+
             return Ok(None);
         }
 
