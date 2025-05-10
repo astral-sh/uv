@@ -8801,6 +8801,8 @@ uv publish [OPTIONS] [FILES]...
 
 <p>See <code>--project</code> to only change the project root directory.</p>
 
+</dd><dt id="uv-publish--force"><a href="#uv-publish--force"><code>--force</code></a></dt><dd><p>Force the publication for existing files if they exists but have different hashes</p>
+
 </dd><dt id="uv-publish--help"><a href="#uv-publish--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
 </dd><dt id="uv-publish--index"><a href="#uv-publish--index"><code>--index</code></a> <i>index</i></dt><dd><p>The name of an index in the configuration to use for publishing.</p>
