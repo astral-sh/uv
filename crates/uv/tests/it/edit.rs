@@ -799,18 +799,18 @@ fn add_raw_error() -> Result<()> {
     "#})?;
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: the argument '--tag <TAG>' cannot be used with '--raw-sources'
+    error: the argument '--tag <TAG>' cannot be used with '--raw'
 
     Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
-    "###);
+    ");
 
     Ok(())
 }
@@ -3959,7 +3959,7 @@ fn add_lower_bound_existing() -> Result<()> {
     Ok(())
 }
 
-/// Avoid setting a lower bound with `--raw-sources`.
+/// Avoid setting a lower bound with `--raw`.
 #[test]
 fn add_lower_bound_raw() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -3973,8 +3973,8 @@ fn add_lower_bound_raw() -> Result<()> {
         dependencies = ["anyio"]
     "#})?;
 
-    // Adding `anyio` should _not_ set a lower-bound when using `--raw-sources`.
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--raw-sources"), @r"
+    // Adding `anyio` should _not_ set a lower-bound when using `--raw`.
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--raw"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
