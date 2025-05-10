@@ -1029,7 +1029,7 @@ pub fn add_dependency(
             // `deps` are either requirements (strings) or include groups (inline tables).
             // Here we pull out just the requirements for determining the sort.
             let reqs: Vec<_> = deps.iter().filter_map(Value::as_str).collect();
-            let reqs_lowercase: Vec<_> = reqs.iter().map(|d| d.to_lowercase()).collect();
+            let reqs_lowercase: Vec<_> = reqs.iter().copied().map(str::to_lowercase).collect();
 
             // Determine if the dependency list is sorted prior to
             // adding the new dependency; the new dependency list
@@ -1037,12 +1037,17 @@ pub fn add_dependency(
             // so that user's custom dependency ordering is preserved.
             //
             // Any items which aren't strings are ignored, e.g.
-            // { include-group = "..." } in dependency-groups.
+            // `{ include-group = "..." }` in dependency-groups.
             //
             // We account for both case-sensitive and case-insensitive sorting.
-            let sort = if is_sorted(reqs_lowercase.iter().map(|d| split_specifiers(d))) {
+            let sort = if is_sorted(
+                reqs_lowercase
+                    .iter()
+                    .map(String::as_str)
+                    .map(split_specifiers),
+            ) {
                 Sort::CaseInsensitive
-            } else if is_sorted(reqs.iter().map(|d| split_specifiers(d))) {
+            } else if is_sorted(reqs.iter().copied().map(split_specifiers)) {
                 Sort::CaseSensitive
             } else if is_sorted(reqs_lowercase.iter().map(String::as_str)) {
                 Sort::CaseInsensitiveNaive
@@ -1054,32 +1059,32 @@ pub fn add_dependency(
 
             let req_string = req.to_string();
             let index = match sort {
-                Sort::CaseInsensitive => deps.iter().position(|d| {
-                    let Some(d) = d.as_str() else { return false };
-                    split_specifiers(&d.to_lowercase())
-                        > split_specifiers(&req_string.to_lowercase())
+                Sort::CaseInsensitive => deps.iter().position(|dep| {
+                    dep.as_str().is_some_and(|dep| {
+                        split_specifiers(&dep.to_lowercase())
+                            > split_specifiers(&req_string.to_lowercase())
+                    })
                 }),
-                Sort::CaseInsensitiveNaive => deps.iter().position(|d| {
-                    let Some(d) = d.as_str() else { return false };
-                    d.to_lowercase() > req_string.to_lowercase()
+                Sort::CaseInsensitiveNaive => deps.iter().position(|dep| {
+                    dep.as_str()
+                        .is_some_and(|dep| dep.to_lowercase() > req_string.to_lowercase())
                 }),
-                Sort::CaseSensitive => deps.iter().position(|d| {
-                    let Some(d) = d.as_str() else { return false };
-                    split_specifiers(d) > split_specifiers(&req_string)
+                Sort::CaseSensitive => deps.iter().position(|dep| {
+                    dep.as_str()
+                        .is_some_and(|dep| split_specifiers(dep) > split_specifiers(&req_string))
                 }),
-                Sort::CaseSensitiveNaive => deps.iter().position(|d| {
-                    let Some(d) = d.as_str() else { return false };
-                    *d > *req_string
-                }),
+                Sort::CaseSensitiveNaive => deps
+                    .iter()
+                    .position(|dep| dep.as_str().is_some_and(|dep| *dep > *req_string)),
                 Sort::Unsorted => None,
             };
             let index = index.unwrap_or_else(|| {
                 // The dependency should be added to the end, ignoring any
-                // include-group items. This preserves the order for users who
-                // keep their include-groups at the bottom.
+                // `include-group` items. This preserves the order for users who
+                // keep their `include-groups` at the bottom.
                 deps.iter()
                     .enumerate()
-                    .filter_map(|(i, d)| if d.is_str() { Some(i + 1) } else { None })
+                    .filter_map(|(i, dep)| if dep.is_str() { Some(i + 1) } else { None })
                     .last()
                     .unwrap_or(deps.len())
             });
