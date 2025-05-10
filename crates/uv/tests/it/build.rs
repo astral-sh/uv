@@ -662,6 +662,7 @@ fn build_workspace() -> Result<()> {
     ----- stderr -----
     error: `--package` was provided, but no workspace was found
       Caused by: No `pyproject.toml` found in current directory or any parent directory
+    hint: To create one run `uv init`
     "###);
 
     // Fail when `--all` is provided without a workspace.
@@ -673,6 +674,7 @@ fn build_workspace() -> Result<()> {
     ----- stderr -----
     error: `--all-packages` was provided, but no workspace was found
       Caused by: No `pyproject.toml` found in current directory or any parent directory
+    hint: To create one run `uv init`
     "###);
 
     // Fail when `--package` is a non-existent member without a workspace.
