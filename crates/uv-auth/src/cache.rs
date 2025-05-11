@@ -11,7 +11,6 @@ use url::Url;
 use uv_once_map::OnceMap;
 
 use crate::credentials::{Credentials, Username};
-use crate::redacted_url;
 use crate::Realm;
 
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
@@ -94,9 +93,8 @@ impl CredentialsCache {
     /// cached credentials have a username equal to the provided one — otherwise `None` is returned.
     /// If multiple usernames are used per URL, the realm cache should be queried instead.
     pub(crate) fn get_url(&self, url: &Url, username: &Username) -> Option<Arc<Credentials>> {
-        let url = redacted_url(url);
         let urls = self.urls.read().unwrap();
-        let credentials = urls.get(&url);
+        let credentials = urls.get(url);
         if let Some(credentials) = credentials {
             if username.is_none() || username.as_deref() == credentials.username() {
                 if username.is_some() && credentials.password().is_none() {
@@ -114,7 +112,6 @@ impl CredentialsCache {
 
     /// Update the cache with the given credentials.
     pub(crate) fn insert(&self, url: &Url, credentials: Arc<Credentials>) {
-        let url = redacted_url(url);
         // Do not cache empty credentials
         if credentials.is_empty() {
             return;
@@ -123,16 +120,16 @@ impl CredentialsCache {
         // Insert an entry for requests including the username
         let username = credentials.to_username();
         if username.is_some() {
-            let realm = (Realm::from(url.as_ref()), username);
+            let realm = (Realm::from(url), username);
             self.insert_realm(realm, &credentials);
         }
 
         // Insert an entry for requests with no username
-        self.insert_realm((Realm::from(url.as_ref()), Username::none()), &credentials);
+        self.insert_realm((Realm::from(url), Username::none()), &credentials);
 
         // Insert an entry for the URL
         let mut urls = self.urls.write().unwrap();
-        urls.insert(&url, credentials);
+        urls.insert(url, credentials);
     }
 
     /// Private interface to update a realm cache entry.
@@ -349,13 +346,10 @@ mod tests {
         // Insert with URL with credentials and get with redacted URL.
         let url = Url::parse("https://username:password@example.com/foobar").unwrap();
         cache.insert(&url, credentials.clone());
-        assert_eq!(
-            cache.get_url(&redacted_url(&url), &username),
-            Some(credentials.clone())
-        );
+        assert_eq!(cache.get_url(&url, &username), Some(credentials.clone()));
         // Insert with redacted URL and get with URL with credentials.
         let url = Url::parse("https://username:password@second-example.com/foobar").unwrap();
-        cache.insert(&redacted_url(&url), credentials.clone());
+        cache.insert(&url, credentials.clone());
         assert_eq!(cache.get_url(&url, &username), Some(credentials.clone()));
     }
 }

@@ -5,9 +5,9 @@ use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
 use url::Url;
 
-use uv_auth::redacted_url;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_normalize::PackageName;
+use uv_redacted::redacted_url;
 
 use crate::middleware::OfflineError;
 use crate::{html, FlatIndexError};

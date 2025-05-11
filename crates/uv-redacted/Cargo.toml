@@ -1,5 +1,5 @@
 [package]
-name = "uv-git-types"
+name = "uv-redacted"
 version = "0.0.1"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -16,9 +16,4 @@ doctest = false
 workspace = true
 
 [dependencies]
-serde = { workspace = true }
-thiserror = { workspace = true }
-tracing = { workspace = true }
 url = { workspace = true }
-
-uv-redacted = { workspace = true }

@@ -16,7 +16,7 @@ use tokio::sync::{Mutex, Semaphore};
 use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
-use uv_auth::{redacted_url, Indexes};
+use uv_auth::Indexes;
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
@@ -31,6 +31,7 @@ use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_pypi_types::{ResolutionMetadata, SimpleJson};
+use uv_redacted::redacted_url;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 

@@ -8,7 +8,7 @@ use crate::{
     credentials::{Credentials, Username},
     index::{AuthPolicy, Indexes},
     realm::Realm,
-    redacted_url, CredentialsCache, KeyringProvider, CREDENTIALS_CACHE,
+    CredentialsCache, KeyringProvider, CREDENTIALS_CACHE,
 };
 use anyhow::{anyhow, format_err};
 use netrc::Netrc;
@@ -360,7 +360,6 @@ impl AuthMiddleware {
             return next.run(request, extensions).await;
         };
         let url = request.url().clone();
-        let url = redacted_url(&url);
         if matches!(auth_policy, AuthPolicy::Always) && credentials.password().is_none() {
             return Err(Error::Middleware(format_err!("Missing password for {url}")));
         }
@@ -458,7 +457,6 @@ impl AuthMiddleware {
         maybe_index_url: Option<&Url>,
         auth_policy: AuthPolicy,
     ) -> Option<Arc<Credentials>> {
-        let url = redacted_url(url);
         let username = Username::from(
             credentials.map(|credentials| credentials.username().unwrap_or_default().to_string()),
         );
@@ -468,7 +466,7 @@ impl AuthMiddleware {
         let key = if let Some(index_url) = maybe_index_url {
             (FetchUrl::Index(index_url.clone()), username)
         } else {
-            (FetchUrl::Realm(Realm::from(url.as_ref())), username)
+            (FetchUrl::Realm(Realm::from(url)), username)
         };
         if !self.cache().fetches.register(key.clone()) {
             let credentials = self
@@ -495,7 +493,7 @@ impl AuthMiddleware {
             debug!("Checking netrc for credentials for {url}");
             Credentials::from_netrc(
                 netrc,
-                &url,
+                url,
                 credentials
                     .as_ref()
                     .and_then(|credentials| credentials.username()),
@@ -519,7 +517,7 @@ impl AuthMiddleware {
                         keyring.fetch(index_url, Some(username)).await
                     } else {
                         debug!("Checking keyring for credentials for full URL {}@{}", username, url);
-                        keyring.fetch(&url, Some(username)).await
+                        keyring.fetch(url, Some(username)).await
                     }
                 } else if matches!(auth_policy, AuthPolicy::Always) {
                     if let Some(index_url) = maybe_index_url {

@@ -8,7 +8,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use url::Url;
-use uv_auth::redacted_url;
+use uv_redacted::redacted_url;
 
 use crate::commands::human_readable_bytes;
 use crate::printer::Printer;

@@ -5,12 +5,12 @@ use reqwest::Response;
 use tracing::{debug, info_span, warn, Instrument};
 use url::Url;
 
-use uv_auth::redacted_url;
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{File, FileLocation, IndexUrl, UrlString};
 use uv_pypi_types::HashDigests;
+use uv_redacted::redacted_url;
 use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};

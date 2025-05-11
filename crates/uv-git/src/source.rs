@@ -11,9 +11,9 @@ use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, instrument};
 use url::Url;
 
-use uv_auth::redacted_url;
 use uv_cache_key::{cache_digest, RepositoryUrl};
 use uv_git_types::GitUrl;
+use uv_redacted::redacted_url;
 
 use crate::git::GitRemote;
 use crate::GIT_STORE;

@@ -4,7 +4,7 @@ use tracing::trace;
 use url::Url;
 
 use cache::CredentialsCache;
-pub use credentials::{redacted_url, Credentials};
+pub use credentials::Credentials;
 pub use index::{AuthPolicy, Index, Indexes};
 pub use keyring::KeyringProvider;
 pub use middleware::AuthMiddleware;
@@ -30,9 +30,8 @@ pub(crate) static CREDENTIALS_CACHE: LazyLock<CredentialsCache> =
 /// Returns `true` if the store was updated.
 pub fn store_credentials_from_url(url: &Url) -> bool {
     if let Some(credentials) = Credentials::from_url(url) {
-        let url = redacted_url(url);
         trace!("Caching credentials for {url}");
-        CREDENTIALS_CACHE.insert(&url, Arc::new(credentials));
+        CREDENTIALS_CACHE.insert(url, Arc::new(credentials));
         true
     } else {
         false
@@ -43,7 +42,6 @@ pub fn store_credentials_from_url(url: &Url) -> bool {
 ///
 /// Returns `true` if the store was updated.
 pub fn store_credentials(url: &Url, credentials: Arc<Credentials>) {
-    let url = redacted_url(url);
     trace!("Caching credentials for {url}");
-    CREDENTIALS_CACHE.insert(&url, credentials);
+    CREDENTIALS_CACHE.insert(url, credentials);
 }

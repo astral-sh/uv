@@ -4652,6 +4652,7 @@ dependencies = [
  "uv-publish",
  "uv-pypi-types",
  "uv-python",
+ "uv-redacted",
  "uv-requirements",
  "uv-requirements-txt",
  "uv-resolver",
@@ -4939,6 +4940,7 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-pypi-types",
+ "uv-redacted",
  "uv-small-str",
  "uv-static",
  "uv-torch",
@@ -5239,6 +5241,7 @@ dependencies = [
  "uv-cache-key",
  "uv-fs",
  "uv-git-types",
+ "uv-redacted",
  "uv-static",
  "uv-version",
  "which",
@@ -5252,6 +5255,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "url",
+ "uv-redacted",
 ]
 
 [[package]]
@@ -5584,6 +5588,13 @@ dependencies = [
  "windows-registry 0.5.1",
  "windows-result 0.3.2",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "uv-redacted"
+version = "0.0.1"
+dependencies = [
+ "url",
 ]
 
 [[package]]
