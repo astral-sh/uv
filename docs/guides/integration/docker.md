@@ -38,9 +38,9 @@ The following distroless images are available:
 And the following derived images are available:
 
 <!-- prettier-ignore -->
-- Based on `alpine:3.20`:
+- Based on `alpine:3.21`:
     - `ghcr.io/astral-sh/uv:alpine`
-    - `ghcr.io/astral-sh/uv:alpine3.20`
+    - `ghcr.io/astral-sh/uv:alpine3.21`
 - Based on `debian:bookworm-slim`:
     - `ghcr.io/astral-sh/uv:debian-slim`
     - `ghcr.io/astral-sh/uv:bookworm-slim`
@@ -48,6 +48,7 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:debian`
     - `ghcr.io/astral-sh/uv:bookworm`
 - Based on `python3.x-alpine`:
+    - `ghcr.io/astral-sh/uv:python3.14-alpine`
     - `ghcr.io/astral-sh/uv:python3.13-alpine`
     - `ghcr.io/astral-sh/uv:python3.12-alpine`
     - `ghcr.io/astral-sh/uv:python3.11-alpine`
@@ -55,6 +56,7 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:python3.9-alpine`
     - `ghcr.io/astral-sh/uv:python3.8-alpine`
 - Based on `python3.x-bookworm`:
+    - `ghcr.io/astral-sh/uv:python3.14-bookworm`
     - `ghcr.io/astral-sh/uv:python3.13-bookworm`
     - `ghcr.io/astral-sh/uv:python3.12-bookworm`
     - `ghcr.io/astral-sh/uv:python3.11-bookworm`
@@ -62,6 +64,7 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:python3.9-bookworm`
     - `ghcr.io/astral-sh/uv:python3.8-bookworm`
 - Based on `python3.x-slim-bookworm`:
+    - `ghcr.io/astral-sh/uv:python3.14-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.13-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.12-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.11-bookworm-slim`
