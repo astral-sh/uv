@@ -10,6 +10,7 @@ use uv_cache_key::cache_digest;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{File, FileLocation, IndexUrl, UrlString};
 use uv_pypi_types::HashDigests;
+use uv_redacted::redacted_url;
 use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};
@@ -207,7 +208,7 @@ impl<'a> FlatIndexClient<'a> {
                             Ok(file) => Some(file),
                             Err(err) => {
                                 // Ignore files with unparsable version specifiers.
-                                warn!("Skipping file in {url}: {err}");
+                                warn!("Skipping file in {}: {err}", redacted_url(&url));
                                 None
                             }
                         }

@@ -31,6 +31,7 @@ use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_pypi_types::{ResolutionMetadata, SimpleJson};
+use uv_redacted::redacted_url;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
@@ -484,7 +485,10 @@ impl RegistryClient {
             // ref https://github.com/servo/rust-url/issues/333
             .push("");
 
-        trace!("Fetching metadata for {package_name} from {url}");
+        trace!(
+            "Fetching metadata for {package_name} from {}",
+            redacted_url(&url)
+        );
 
         let cache_entry = self.cache.entry(
             CacheBucket::Simple,

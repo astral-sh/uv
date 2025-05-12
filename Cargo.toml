@@ -53,6 +53,7 @@ uv-platform-tags = { path = "crates/uv-platform-tags" }
 uv-publish = { path = "crates/uv-publish" }
 uv-pypi-types = { path = "crates/uv-pypi-types" }
 uv-python = { path = "crates/uv-python" }
+uv-redacted = { path = "crates/uv-redacted" }
 uv-requirements = { path = "crates/uv-requirements" }
 uv-requirements-txt = { path = "crates/uv-requirements-txt" }
 uv-resolver = { path = "crates/uv-resolver" }

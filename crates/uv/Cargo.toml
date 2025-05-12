@@ -43,6 +43,7 @@ uv-platform-tags = { workspace = true }
 uv-publish = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["schemars"] }
+uv-redacted = { workspace = true }
 uv-requirements = { workspace = true }
 uv-requirements-txt = { workspace = true }
 uv-resolver = { workspace = true }

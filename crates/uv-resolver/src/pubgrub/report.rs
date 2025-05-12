@@ -1515,7 +1515,7 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     name.cyan(),
-                    found_index.cyan(),
+                    found_index.redacted().cyan(),
                     PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
                     next_index.cyan(),
                     "--index-strategy unsafe-best-match".green(),
