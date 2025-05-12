@@ -11842,7 +11842,7 @@ fn add_optional_normalize() -> Result<()> {
     Ok(())
 }
 
-/// Add a PyPI requirement with the given bounds.
+/// Test `uv add` with different kinds of bounds and constraints.
 #[test]
 fn add_bounds() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -12015,6 +12015,56 @@ fn add_bounds() -> Result<()> {
 
     [tool.uv]
     add-bounds = "major"
+    "#
+    );
+
+    Ok(())
+}
+
+/// Hint that we're using an explicit bound over the preferred bounds.
+#[test]
+fn add_bounds_requirement_over_bounds_kind() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Set bounds in `uv.toml`
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r#"
+        add-bounds = "exact"
+    "#})?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==4.2").arg("idna").arg("--bounds").arg("minor").arg("--preview"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    note: Using explicit requirement `anyio==4.2` over bounds preference `minor`
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.2.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio==4.2",
+        "idna>=3.6,<3.7",
+    ]
     "#
     );
 

@@ -1,9 +1,9 @@
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, iter, mem};
-
-use itertools::Itertools;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use toml_edit::{
     Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
@@ -110,6 +110,17 @@ pub enum AddBoundsKind {
     ///
     /// This option is not recommended, as versions are already pinned in the uv lockfile.
     Exact,
+}
+
+impl Display for AddBoundsKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Lower => write!(f, "lower"),
+            Self::Major => write!(f, "major"),
+            Self::Minor => write!(f, "minor"),
+            Self::Exact => write!(f, "exact"),
+        }
+    }
 }
 
 impl AddBoundsKind {
@@ -684,7 +695,7 @@ impl PyProjectTomlMut {
         dependency_type: &DependencyType,
         index: usize,
         version: Version,
-        bound_kind: &AddBoundsKind,
+        bound_kind: AddBoundsKind,
     ) -> Result<(), Error> {
         let group = match dependency_type {
             DependencyType::Production => self.dependencies_array()?,
