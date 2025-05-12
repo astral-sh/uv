@@ -66,6 +66,8 @@ pub enum Error {
     },
     #[error("Invalid download URL")]
     InvalidUrl(#[from] url::ParseError),
+    #[error("Invalid download URL: {0}")]
+    InvalidUrlFormat(Url),
     #[error("Invalid path in file URL: `{0}`")]
     InvalidFileUrl(String),
     #[error("Failed to create download directory")]
@@ -643,9 +645,9 @@ impl ManagedPythonDownload {
         // decodes to.
         let filename = url
             .path_segments()
-            .unwrap()
+            .ok_or_else(|| Error::InvalidUrlFormat(url.clone()))?
             .next_back()
-            .unwrap()
+            .ok_or_else(|| Error::InvalidUrlFormat(url.clone()))?
             .replace("%2B", "-");
         debug_assert!(
             filename
