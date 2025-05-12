@@ -221,6 +221,7 @@ jobs:
           cat <<EOF > Dockerfile
           FROM ${BASE_IMAGE}
           COPY --from=${{ env.UV_GHCR_IMAGE }}:latest /uv /uvx /usr/local/bin/
+          ENV UV_TOOL_BIN_DIR="/usr/local/bin"
           ENTRYPOINT []
           CMD ["/usr/local/bin/uv"]
           EOF
