@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
@@ -1009,72 +1008,86 @@ pub fn add_dependency(
             enum Sort {
                 /// The list is sorted in a case-insensitive manner.
                 CaseInsensitive,
+                /// The list is sorted naively in a case-insensitive manner.
+                CaseInsensitiveNaive,
                 /// The list is sorted in a case-sensitive manner.
                 CaseSensitive,
+                /// The list is sorted naively in a case-sensitive manner.
+                CaseSensitiveNaive,
                 /// The list is unsorted.
                 Unsorted,
             }
 
-            /// Compare two [`Value`] requirements case-insensitively.
-            fn case_insensitive(a: &Value, b: &Value) -> Ordering {
-                a.as_str()
-                    .map(str::to_lowercase)
-                    .as_deref()
-                    .map(split_specifiers)
-                    .cmp(
-                        &b.as_str()
-                            .map(str::to_lowercase)
-                            .as_deref()
-                            .map(split_specifiers),
-                    )
+            fn is_sorted<T, I>(items: I) -> bool
+            where
+                I: IntoIterator<Item = T>,
+                T: PartialOrd + Copy,
+            {
+                items.into_iter().tuple_windows().all(|(a, b)| a <= b)
             }
 
-            /// Compare two [`Value`] requirements case-sensitively.
-            fn case_sensitive(a: &Value, b: &Value) -> Ordering {
-                a.as_str()
-                    .map(split_specifiers)
-                    .cmp(&b.as_str().map(split_specifiers))
-            }
+            // `deps` are either requirements (strings) or include groups (inline tables).
+            // Here we pull out just the requirements for determining the sort.
+            let reqs: Vec<_> = deps.iter().filter_map(Value::as_str).collect();
+            let reqs_lowercase: Vec<_> = reqs.iter().copied().map(str::to_lowercase).collect();
 
             // Determine if the dependency list is sorted prior to
             // adding the new dependency; the new dependency list
             // will be sorted only when the original list is sorted
             // so that user's custom dependency ordering is preserved.
             //
-            // Additionally, if the table is invalid (i.e. contains non-string values)
-            // we still treat it as unsorted for the sake of simplicity.
+            // Any items which aren't strings are ignored, e.g.
+            // `{ include-group = "..." }` in dependency-groups.
             //
             // We account for both case-sensitive and case-insensitive sorting.
-            let sort = deps
-                .iter()
-                .all(Value::is_str)
-                .then(|| {
-                    if deps.iter().tuple_windows().all(|(a, b)| {
-                        matches!(case_insensitive(a, b), Ordering::Less | Ordering::Equal)
-                    }) {
-                        Some(Sort::CaseInsensitive)
-                    } else if deps.iter().tuple_windows().all(|(a, b)| {
-                        matches!(case_sensitive(a, b), Ordering::Less | Ordering::Equal)
-                    }) {
-                        Some(Sort::CaseSensitive)
-                    } else {
-                        None
-                    }
-                })
-                .flatten()
-                .unwrap_or(Sort::Unsorted);
+            let sort = if is_sorted(
+                reqs_lowercase
+                    .iter()
+                    .map(String::as_str)
+                    .map(split_specifiers),
+            ) {
+                Sort::CaseInsensitive
+            } else if is_sorted(reqs.iter().copied().map(split_specifiers)) {
+                Sort::CaseSensitive
+            } else if is_sorted(reqs_lowercase.iter().map(String::as_str)) {
+                Sort::CaseInsensitiveNaive
+            } else if is_sorted(reqs) {
+                Sort::CaseSensitiveNaive
+            } else {
+                Sort::Unsorted
+            };
 
             let req_string = req.to_string();
             let index = match sort {
-                Sort::CaseInsensitive => deps.iter().position(|d| {
-                    case_insensitive(d, &Value::from(req_string.as_str())) == Ordering::Greater
+                Sort::CaseInsensitive => deps.iter().position(|dep| {
+                    dep.as_str().is_some_and(|dep| {
+                        split_specifiers(&dep.to_lowercase())
+                            > split_specifiers(&req_string.to_lowercase())
+                    })
                 }),
-                Sort::CaseSensitive => deps.iter().position(|d| {
-                    case_sensitive(d, &Value::from(req_string.as_str())) == Ordering::Greater
+                Sort::CaseInsensitiveNaive => deps.iter().position(|dep| {
+                    dep.as_str()
+                        .is_some_and(|dep| dep.to_lowercase() > req_string.to_lowercase())
                 }),
+                Sort::CaseSensitive => deps.iter().position(|dep| {
+                    dep.as_str()
+                        .is_some_and(|dep| split_specifiers(dep) > split_specifiers(&req_string))
+                }),
+                Sort::CaseSensitiveNaive => deps
+                    .iter()
+                    .position(|dep| dep.as_str().is_some_and(|dep| *dep > *req_string)),
                 Sort::Unsorted => None,
             };
-            let index = index.unwrap_or(deps.len());
+            let index = index.unwrap_or_else(|| {
+                // The dependency should be added to the end, ignoring any
+                // `include-group` items. This preserves the order for users who
+                // keep their `include-groups` at the bottom.
+                deps.iter()
+                    .enumerate()
+                    .filter_map(|(i, dep)| if dep.is_str() { Some(i + 1) } else { None })
+                    .last()
+                    .unwrap_or(deps.len())
+            });
 
             let mut value = Value::from(req_string.as_str());
 

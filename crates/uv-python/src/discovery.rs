@@ -2646,6 +2646,12 @@ impl fmt::Display for PythonNotFound {
             PythonRequest::Default | PythonRequest::Any => {
                 write!(f, "No interpreter found in {sources}")
             }
+            PythonRequest::File(_) => {
+                write!(f, "No interpreter found at {}", self.request)
+            }
+            PythonRequest::Directory(_) => {
+                write!(f, "No interpreter found in {}", self.request)
+            }
             _ => {
                 write!(f, "No interpreter found for {} in {sources}", self.request)
             }

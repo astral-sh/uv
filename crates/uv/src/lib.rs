@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
+#[cfg(feature = "self-update")]
+use std::ops::Bound;
 use std::path::Path;
 use std::process::ExitCode;
 use std::str::FromStr;
@@ -17,6 +19,7 @@ use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument};
+
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 #[cfg(feature = "self-update")]
@@ -28,6 +31,8 @@ use uv_cli::{
 };
 use uv_configuration::min_stack_size;
 use uv_fs::{Simplified, CWD};
+#[cfg(feature = "self-update")]
+use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_requirements::RequirementsSource;
@@ -297,8 +302,37 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     if let Some(required_version) = globals.required_version.as_ref() {
         let package_version = uv_pep440::Version::from_str(uv_version::version())?;
         if !required_version.contains(&package_version) {
+            #[cfg(feature = "self-update")]
+            let hint = {
+                // If the required version range includes a lower bound that's higher than
+                // the current version, suggest `uv self update`.
+                let ranges = release_specifiers_to_ranges(required_version.specifiers().clone());
+
+                if let Some(singleton) = ranges.as_singleton() {
+                    // E.g., `==1.0.0`
+                    format!(
+                        ". Update `uv` by running `{}`.",
+                        format!("uv self update {singleton}").green()
+                    )
+                } else if ranges
+                    .bounding_range()
+                    .iter()
+                    .any(|(lowest, _highest)| match lowest {
+                        Bound::Included(version) => **version > package_version,
+                        Bound::Excluded(version) => **version > package_version,
+                        Bound::Unbounded => false,
+                    })
+                {
+                    // E.g., `>=1.0.0`
+                    format!(". Update `uv` by running `{}`.", "uv self update".cyan())
+                } else {
+                    String::new()
+                }
+            };
+            #[cfg(not(feature = "self-update"))]
+            let hint = "";
             return Err(anyhow::anyhow!(
-                "Required uv version `{required_version}` does not match the running version `{package_version}`",
+                "Required uv version `{required_version}` does not match the running version `{package_version}`{hint}",
             ));
         }
     }
@@ -1835,7 +1869,7 @@ async fn run_project(
                 args.marker,
                 args.editable,
                 args.dependency_type,
-                args.raw_sources,
+                args.raw,
                 args.indexes,
                 args.rev,
                 args.tag,

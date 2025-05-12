@@ -330,13 +330,17 @@ pub async fn archive<R: tokio::io::AsyncRead + Unpin>(
         SourceDistExtension::Tar => {
             untar(reader, target).await?;
         }
-        SourceDistExtension::TarGz => {
+        SourceDistExtension::Tgz | SourceDistExtension::TarGz => {
             untar_gz(reader, target).await?;
         }
-        SourceDistExtension::TarBz2 => {
+        SourceDistExtension::Tbz | SourceDistExtension::TarBz2 => {
             untar_bz2(reader, target).await?;
         }
-        SourceDistExtension::TarXz | SourceDistExtension::TarLzma => {
+        SourceDistExtension::Txz
+        | SourceDistExtension::TarXz
+        | SourceDistExtension::Tlz
+        | SourceDistExtension::TarLz
+        | SourceDistExtension::TarLzma => {
             untar_xz(reader, target).await?;
         }
         SourceDistExtension::TarZst => {

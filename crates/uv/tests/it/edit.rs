@@ -799,18 +799,18 @@ fn add_raw_error() -> Result<()> {
     "#})?;
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: the argument '--tag <TAG>' cannot be used with '--raw-sources'
+    error: the argument '--tag <TAG>' cannot be used with '--raw'
 
     Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
-    "###);
+    ");
 
     Ok(())
 }
@@ -3959,7 +3959,7 @@ fn add_lower_bound_existing() -> Result<()> {
     Ok(())
 }
 
-/// Avoid setting a lower bound with `--raw-sources`.
+/// Avoid setting a lower bound with `--raw`.
 #[test]
 fn add_lower_bound_raw() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -3973,8 +3973,8 @@ fn add_lower_bound_raw() -> Result<()> {
         dependencies = ["anyio"]
     "#})?;
 
-    // Adding `anyio` should _not_ set a lower-bound when using `--raw-sources`.
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--raw-sources"), @r"
+    // Adding `anyio` should _not_ set a lower-bound when using `--raw`.
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--raw"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -7240,6 +7240,63 @@ fn sorted_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that if the dependencies are sorted naively (i.e. by the whole
+/// requirement specifier), that added dependencies are sorted in the same way.
+#[test]
+fn naive_sorted_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "pytest-mock>=3.14",
+        "pytest>=8.1.1",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["pytest-randomly"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-mock==3.14.0
+     + pytest-randomly==3.15.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "pytest-mock>=3.14",
+            "pytest-randomly>=3.15.0",
+            "pytest>=8.1.1",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
 /// Ensure that the added dependencies are case sensitive sorted if the dependency list was already
 /// case sensitive sorted prior to the operation.
 #[test]
@@ -7300,6 +7357,66 @@ fn case_sensitive_sorted_dependencies() -> Result<()> {
             "anyio>=4.3.0",
             "iniconfig",
             "typing-extensions>=4.10.0",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
+/// Ensure that if the dependencies are sorted naively (i.e. by the whole
+/// requirement specifier), that added dependencies are sorted in the same way.
+#[test]
+fn case_sensitive_naive_sorted_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "Typing-extensions>=4.10.0",
+        "pytest-mock>=3.14",
+        "pytest>=8.1.1",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["pytest-randomly"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-mock==3.14.0
+     + pytest-randomly==3.15.0
+     + typing-extensions==4.10.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "Typing-extensions>=4.10.0",
+            "pytest-mock>=3.14",
+            "pytest-randomly>=3.15.0",
+            "pytest>=8.1.1",
         ]
         "###
         );
@@ -7394,6 +7511,201 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
         );
     });
 
+    Ok(())
+}
+
+#[test]
+fn sorted_dependencies_with_include_group() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+
+    [dependency-groups]
+    dev = [
+        { include-group = "coverage" },
+        "pytest-mock>=3.14",
+        "pytest>=8.1.1",
+    ]
+    coverage = [
+        "coverage>=7.4.4",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest-randomly"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + coverage==7.4.4
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-mock==3.14.0
+     + pytest-randomly==3.15.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = [
+            { include-group = "coverage" },
+            "pytest-mock>=3.14",
+            "pytest-randomly>=3.15.0",
+            "pytest>=8.1.1",
+        ]
+        coverage = [
+            "coverage>=7.4.4",
+        ]
+        "#
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn sorted_dependencies_new_dependency_after_include_group() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+
+    [dependency-groups]
+    dev = [
+        { include-group = "coverage" },
+    ]
+    coverage = [
+        "coverage>=7.4.4",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + coverage==7.4.4
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = [
+            { include-group = "coverage" },
+            "pytest>=8.1.1",
+        ]
+        coverage = [
+            "coverage>=7.4.4",
+        ]
+        "#
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn sorted_dependencies_include_group_kept_at_bottom() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+
+    [dependency-groups]
+    dev = [
+        "pytest>=8.1.1",
+        { include-group = "coverage" },
+    ]
+    coverage = [
+        "coverage>=7.4.4",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest-randomly"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + coverage==7.4.4
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-randomly==3.15.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = [
+            "pytest>=8.1.1",
+            "pytest-randomly>=3.15.0",
+            { include-group = "coverage" },
+        ]
+        coverage = [
+            "coverage>=7.4.4",
+        ]
+        "#
+        );
+    });
     Ok(())
 }
 
