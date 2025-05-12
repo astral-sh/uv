@@ -527,7 +527,7 @@ pub(crate) async fn add(
         locked,
         &dependency_type,
         raw,
-        &bounds.unwrap_or_default(),
+        bounds,
         constraints,
         &settings,
         &network_settings,
@@ -752,7 +752,7 @@ async fn lock_and_sync(
     locked: bool,
     dependency_type: &DependencyType,
     raw: bool,
-    bound_kind: &AddBoundsKind,
+    bound_kind: Option<AddBoundsKind>,
     constraints: Vec<NameRequirementSpecification>,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
@@ -828,6 +828,15 @@ async fn lock_and_sync(
                 None => true,
             };
             if !is_empty {
+                if let Some(bound_kind) = bound_kind {
+                    writeln!(
+                        printer.stderr(),
+                        "{} Using explicit requirement `{}` over bounds preference `{}`",
+                        "note:".bold(),
+                        edit.requirement,
+                        bound_kind
+                    )?;
+                }
                 continue;
             }
 
@@ -840,7 +849,12 @@ async fn lock_and_sync(
             // For example, convert `1.2.3+local` to `1.2.3`.
             let minimum = (*minimum).clone().without_local();
 
-            toml.set_dependency_bound(&edit.dependency_type, *index, minimum, bound_kind)?;
+            toml.set_dependency_bound(
+                &edit.dependency_type,
+                *index,
+                minimum,
+                bound_kind.unwrap_or_default(),
+            )?;
 
             modified = true;
         }
