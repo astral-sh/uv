@@ -7,13 +7,14 @@ use console::Term;
 use owo_colors::{AnsiColors, OwoColorize};
 use tokio::sync::Semaphore;
 use tracing::{debug, info, trace};
-use uv_auth::Credentials;
+use uv_auth::{Credentials, PyxTokenStore};
 use uv_cache::Cache;
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{IndexCapabilities, IndexLocations, IndexUrl};
 use uv_publish::{
-    CheckUrlClient, TrustedPublishResult, check_trusted_publishing, files_for_publishing, upload,
+    CheckUrlClient, FormMetadata, PublishError, TrustedPublishResult, check_trusted_publishing,
+    files_for_publishing, upload,
 };
 use uv_redacted::DisplaySafeUrl;
 use uv_warnings::{warn_user_once, write_error_chain};
@@ -32,6 +33,7 @@ pub(crate) async fn publish(
     password: Option<String>,
     check_url: Option<IndexUrl>,
     index_locations: IndexLocations,
+    dry_run: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -42,8 +44,20 @@ pub(crate) async fn publish(
     let files = files_for_publishing(paths)?;
     match files.len() {
         0 => bail!("No files found to publish"),
-        1 => writeln!(printer.stderr(), "Publishing 1 file to {publish_url}")?,
-        n => writeln!(printer.stderr(), "Publishing {n} files {publish_url}")?,
+        1 => {
+            if dry_run {
+                writeln!(printer.stderr(), "Checking 1 file against {publish_url}")?;
+            } else {
+                writeln!(printer.stderr(), "Publishing 1 file to {publish_url}")?;
+            }
+        }
+        n => {
+            if dry_run {
+                writeln!(printer.stderr(), "Checking {n} files against {publish_url}")?;
+            } else {
+                writeln!(printer.stderr(), "Publishing {n} files to {publish_url}")?;
+            }
+        }
     }
 
     // * For the uploads themselves, we roll our own retries due to
@@ -115,15 +129,48 @@ pub(crate) async fn publish(
 
         let size = fs_err::metadata(&file)?.len();
         let (bytes, unit) = human_readable_bytes(size);
-        writeln!(
-            printer.stderr(),
-            "{} {filename} {}",
-            "Uploading".bold().green(),
-            format!("({bytes:.1}{unit})").dimmed()
-        )?;
+        if dry_run {
+            writeln!(
+                printer.stderr(),
+                "{} {filename} {}",
+                "Checking".bold().cyan(),
+                format!("({bytes:.1}{unit})").dimmed()
+            )?;
+        } else {
+            writeln!(
+                printer.stderr(),
+                "{} {filename} {}",
+                "Uploading".bold().green(),
+                format!("({bytes:.1}{unit})").dimmed()
+            )?;
+        }
+
+        // Collect the metadata for the file.
+        let form_metadata = FormMetadata::read_from_file(&file, &filename)
+            .await
+            .map_err(|err| PublishError::PublishPrepare(file.clone(), Box::new(err)))?;
+
+        // Run validation checks on the file, but don't upload it (if possible).
+        let store = PyxTokenStore::from_settings()?;
+        uv_publish::validate(
+            &file,
+            &form_metadata,
+            &raw_filename,
+            &publish_url,
+            &store,
+            &upload_client,
+            &credentials,
+        )
+        .await?;
+
+        if dry_run {
+            continue;
+        }
+
         let reporter = PublishReporter::single(printer);
         let uploaded = upload(
             &file,
+            &form_metadata,
             &raw_filename,
             &filename,
             &publish_url,
@@ -136,6 +183,7 @@ pub(crate) async fn publish(
         )
         .await?; // Filename and/or URL are already attached, if applicable.
         info!("Upload succeeded");
+
         if !uploaded {
             writeln!(
                 printer.stderr(),

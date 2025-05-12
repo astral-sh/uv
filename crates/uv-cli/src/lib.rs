@@ -6572,6 +6572,13 @@ pub struct PublishArgs {
 
     #[arg(long, hide = true)]
     pub skip_existing: bool,
+
+    /// Perform a dry run without uploading files.
+    ///
+    /// When enabled, the command will check for existing files if `--check-url` is provided,
+    /// and will perform validation against the index if supported, but will not upload any files.
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 /// See [PEP 517](https://peps.python.org/pep-0517/) and
