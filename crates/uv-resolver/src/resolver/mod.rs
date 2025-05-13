@@ -2785,7 +2785,7 @@ impl ForkState {
                     warn_user_once!(
                         "The direct dependency `{name}` is unpinned. \
                         Consider setting a lower bound when using `--resolution lowest` \
-                        to avoid using outdated versions.",
+                        or `--resolution lowest-direct` to avoid using outdated versions.",
                         name = package.name_no_root().unwrap(),
                     );
                 }

@@ -7036,15 +7036,15 @@ fn lock_unsafe_lowest() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    warning: The direct dependency `iniconfig` is unpinned. Consider setting a lower bound when using `--resolution lowest` to avoid using outdated versions.
+    warning: The direct dependency `iniconfig` is unpinned. Consider setting a lower bound when using `--resolution lowest` or `--resolution lowest-direct` to avoid using outdated versions.
     Resolved 2 packages in [TIME]
-    "###);
+    ");
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--resolution").arg("lowest-direct").arg("--locked"), @r###"
