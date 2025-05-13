@@ -3941,7 +3941,7 @@ pub struct ExportArgs {
     #[arg(long, overrides_with("no_header"), hide = true)]
     pub header: bool,
 
-    /// Install any editable dependencies, including the project and any workspace members, as
+    /// Export any editable dependencies, including the project and any workspace members, as
     /// non-editable.
     #[arg(long)]
     pub no_editable: bool,
@@ -3977,7 +3977,7 @@ pub struct ExportArgs {
     /// Do not emit the given package(s).
     ///
     /// By default, all of the project's dependencies are included in the exported requirements
-    /// file. The `--no-install-package` option allows exclusion of specific packages.
+    /// file. The `--no-emit-package` option allows exclusion of specific packages.
     #[arg(long, alias = "no-install-package")]
     pub no_emit_package: Vec<PackageName>,
 
