@@ -1616,7 +1616,7 @@ jobs:
     needs: build-binary-linux-libc
     name: "check system | python on fedora"
     runs-on: ubuntu-latest
-    container: fedora:42
+    container: fedora:43
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
