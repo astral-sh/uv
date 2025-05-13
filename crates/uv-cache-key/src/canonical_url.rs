@@ -65,6 +65,8 @@ impl CanonicalUrl {
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("git"));
             if needs_chopping {
                 let last = {
+                    // Unwrap safety: We checked `url.cannot_be_a_base()`, and `url.path()` having
+                    // an extension implies at least one segment.
                     let last = url.path_segments().unwrap().next_back().unwrap();
                     last[..last.len() - 4].to_owned()
                 };
@@ -74,6 +76,7 @@ impl CanonicalUrl {
 
         // Decode any percent-encoded characters in the path.
         if memchr::memchr(b'%', url.path().as_bytes()).is_some() {
+            // Unwrap safety: We checked `url.cannot_be_a_base()`.
             let decoded = url
                 .path_segments()
                 .unwrap()

@@ -8,6 +8,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
 use url::Url;
+use uv_redacted::redacted_url;
 
 use crate::commands::human_readable_bytes;
 use crate::printer::Printer;
@@ -300,6 +301,7 @@ impl ProgressReporter {
     }
 
     fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+        let url = redacted_url(url);
         let ProgressMode::Multi {
             multi_progress,
             state,
@@ -330,6 +332,7 @@ impl ProgressReporter {
     }
 
     fn on_checkout_complete(&self, url: &Url, rev: &str, id: usize) {
+        let url = redacted_url(url);
         let ProgressMode::Multi {
             state,
             multi_progress,

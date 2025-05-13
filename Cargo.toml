@@ -53,6 +53,7 @@ uv-platform-tags = { path = "crates/uv-platform-tags" }
 uv-publish = { path = "crates/uv-publish" }
 uv-pypi-types = { path = "crates/uv-pypi-types" }
 uv-python = { path = "crates/uv-python" }
+uv-redacted = { path = "crates/uv-redacted" }
 uv-requirements = { path = "crates/uv-requirements" }
 uv-requirements-txt = { path = "crates/uv-requirements-txt" }
 uv-resolver = { path = "crates/uv-resolver" }
@@ -125,7 +126,7 @@ md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
 miette = { version = "7.2.0", features = ["fancy-no-backtrace"] }
 nanoid = { version = "0.4.0" }
-nix = { version = "0.29.0" }
+nix = { version = "0.29.0", features = ["signal"] }
 once_cell = { version = "1.20.2" }
 owo-colors = { version = "4.1.0" }
 path-slash = { version = "0.2.1" }

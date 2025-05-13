@@ -20,6 +20,7 @@ uv-auth = { workspace = true }
 uv-cache-key = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-git-types = { workspace = true }
+uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-version = { workspace = true }
 

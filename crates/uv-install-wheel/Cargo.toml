@@ -55,6 +55,6 @@ same-file = { workspace = true }
 self-replace = { workspace = true }
 
 [dev-dependencies]
-anyhow = { version = "1.0.89" }
+anyhow = { workspace = true }
 assert_fs = { version = "1.1.2" }
 indoc = { workspace = true }

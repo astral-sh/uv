@@ -199,7 +199,8 @@ pub struct PylockTomlPackage {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct PylockTomlDependency;
+#[allow(clippy::empty_structs_with_brackets)]
+struct PylockTomlDependency {}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]

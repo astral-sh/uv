@@ -72,7 +72,7 @@ windows-result = { workspace = true }
 windows-sys = { workspace = true }
 
 [dev-dependencies]
-anyhow = { version = "1.0.89" }
+anyhow = { workspace = true }
 assert_fs = { version = "1.1.2" }
 indoc = { workspace = true }
 insta = { version = "1.40.0" }
