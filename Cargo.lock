@@ -4580,6 +4580,7 @@ dependencies = [
  "console",
  "ctrlc",
  "dotenvy",
+ "dunce",
  "etcetera",
  "filetime",
  "flate2",
@@ -5219,6 +5220,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "windows-sys 0.59.0",
  "winsafe 0.0.23",
 ]
 

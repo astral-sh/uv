@@ -1,10 +1,14 @@
 use std::fmt::Display;
 use std::io;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
 use tempfile::NamedTempFile;
 use tracing::{debug, error, info, trace, warn};
+#[cfg(windows)]
+use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 pub use crate::path::*;
 
@@ -141,6 +145,21 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 #[cfg(unix)]
 pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
     fs_err::remove_file(path.as_ref())
+}
+
+#[cfg(unix)]
+pub fn is_symlink(path: &Path) -> bool {
+    path.symlink_metadata()
+        .is_ok_and(|metadata| metadata.is_symlink())
+}
+
+#[cfg(windows)]
+pub fn is_symlink(path: &Path) -> bool {
+    path.symlink_metadata().is_ok_and(|metadata| {
+        // Check that this is a reparse point, which indicates this
+        // is a symlink or junction.
+        (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0
+    })
 }
 
 /// Create a symlink at `dst` pointing to `src` on Unix or copy `src` to `dst` on Windows
