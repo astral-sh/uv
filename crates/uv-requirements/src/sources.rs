@@ -23,8 +23,6 @@ pub enum RequirementsSource {
     SetupPy(PathBuf),
     /// Dependencies were provided via a `setup.cfg` file (e.g., `pip-compile setup.cfg`).
     SetupCfg(PathBuf),
-    /// Dependencies were provided via a path to a source tree (e.g., `pip install .`).
-    SourceTree(PathBuf),
     /// Dependencies were provided via an unsupported Conda `environment.yml` file (e.g., `pip install -r environment.yml`).
     EnvironmentYml(PathBuf),
 }
@@ -271,12 +269,6 @@ impl RequirementsSource {
         Ok(Self::Package(requirement))
     }
 
-    /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a path to a source
-    /// tree.
-    pub fn from_source_tree(path: PathBuf) -> Self {
-        Self::SourceTree(path)
-    }
-
     /// Returns `true` if the source allows extras to be specified.
     pub fn allows_extras(&self) -> bool {
         matches!(
@@ -301,8 +293,7 @@ impl std::fmt::Display for RequirementsSource {
             | Self::PyprojectToml(path)
             | Self::SetupPy(path)
             | Self::SetupCfg(path)
-            | Self::EnvironmentYml(path)
-            | Self::SourceTree(path) => {
+            | Self::EnvironmentYml(path) => {
                 write!(f, "{}", path.simplified_display())
             }
         }

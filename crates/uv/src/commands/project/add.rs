@@ -110,8 +110,7 @@ pub(crate) async fn add(
             RequirementsSource::Package(_)
             | RequirementsSource::Editable(_)
             | RequirementsSource::RequirementsTxt(_)
-            | RequirementsSource::EnvironmentYml(_)
-            | RequirementsSource::SourceTree(_) => {}
+            | RequirementsSource::EnvironmentYml(_) => {}
         }
     }
 

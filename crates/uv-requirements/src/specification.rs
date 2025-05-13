@@ -33,6 +33,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
+
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{DependencyGroups, NoBinary, NoBuild};
@@ -43,8 +44,6 @@ use uv_distribution_types::{
 };
 use uv_fs::{Simplified, CWD};
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{MarkerTree, UnnamedRequirement, UnnamedRequirementUrl};
-use uv_pypi_types::VerbatimParsedUrl;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::PyProjectToml;
@@ -199,28 +198,6 @@ impl RequirementsSpecification {
 
                 Self {
                     pylock: Some(path.clone()),
-                    ..Self::default()
-                }
-            }
-            RequirementsSource::SourceTree(path) => {
-                if !path.is_dir() {
-                    return Err(anyhow::anyhow!(
-                        "Directory not found: `{}`",
-                        path.user_display()
-                    ));
-                }
-
-                Self {
-                    project: None,
-                    requirements: vec![UnresolvedRequirementSpecification {
-                        requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
-                            url: VerbatimParsedUrl::parse_absolute_path(path)?,
-                            extras: Box::new([]),
-                            marker: MarkerTree::TRUE,
-                            origin: None,
-                        }),
-                        hashes: vec![],
-                    }],
                     ..Self::default()
                 }
             }
