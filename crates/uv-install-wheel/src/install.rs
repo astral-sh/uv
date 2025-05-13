@@ -75,7 +75,7 @@ pub fn install_wheel(
         LibKind::Pure => &layout.scheme.purelib,
         LibKind::Plat => &layout.scheme.platlib,
     };
-    let num_unpacked = link_mode.link_wheel_files(site_packages, &wheel, locks)?;
+    let num_unpacked = link_mode.link_wheel_files(site_packages, &wheel, locks, filename)?;
     trace!(?name, "Extracted {num_unpacked} files");
 
     // Read the RECORD file.

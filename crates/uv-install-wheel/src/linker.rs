@@ -4,16 +4,47 @@ use fs_err::DirEntry;
 use reflink_copy as reflink;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use tempfile::tempdir_in;
 use tracing::{debug, instrument, trace};
-use uv_warnings::warn_user_once;
+use uv_distribution_filename::WheelFilename;
+use uv_fs::Simplified;
+use uv_warnings::{warn_user, warn_user_once};
 use walkdir::WalkDir;
 
 #[derive(Debug, Default)]
-pub struct Locks(Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>);
+pub struct Locks {
+    /// The parent directory of a file in a synchronized copy
+    copy_dir_locks: Mutex<FxHashMap<PathBuf, Arc<Mutex<()>>>>,
+    /// Top level modules (excluding namespaces) we write to.
+    modules: Mutex<FxHashMap<OsString, WheelFilename>>,
+}
+
+impl Locks {
+    /// Warn when a module exists in multiple packages.
+    fn warn_module_conflict(&self, module: &OsStr, filename: &WheelFilename) {
+        if let Some(existing) = self
+            .modules
+            .lock()
+            .unwrap()
+            .insert(module.to_os_string(), filename.clone())
+        {
+            warn_user!(
+                "The module {} exists in two packages! \
+                This leads to a race condition and likely to a broken installation. \
+                Consider removing either {} ({}) or {} ({}).",
+                module.simplified_display(),
+                existing.name,
+                existing,
+                filename.name,
+                filename,
+            );
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
@@ -53,12 +84,13 @@ impl LinkMode {
         site_packages: impl AsRef<Path>,
         wheel: impl AsRef<Path>,
         locks: &Locks,
+        filename: &WheelFilename,
     ) -> Result<usize, Error> {
         match self {
-            Self::Clone => clone_wheel_files(site_packages, wheel, locks),
-            Self::Copy => copy_wheel_files(site_packages, wheel, locks),
-            Self::Hardlink => hardlink_wheel_files(site_packages, wheel, locks),
-            Self::Symlink => symlink_wheel_files(site_packages, wheel, locks),
+            Self::Clone => clone_wheel_files(site_packages, wheel, locks, filename),
+            Self::Copy => copy_wheel_files(site_packages, wheel, locks, filename),
+            Self::Hardlink => hardlink_wheel_files(site_packages, wheel, locks, filename),
+            Self::Symlink => symlink_wheel_files(site_packages, wheel, locks, filename),
         }
     }
 
@@ -78,18 +110,25 @@ fn clone_wheel_files(
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
     locks: &Locks,
+    filename: &WheelFilename,
 ) -> Result<usize, Error> {
+    let wheel = wheel.as_ref();
     let mut count = 0usize;
     let mut attempt = Attempt::default();
 
-    for entry in fs::read_dir(wheel.as_ref())? {
-        clone_recursive(
-            site_packages.as_ref(),
-            wheel.as_ref(),
-            locks,
-            &entry?,
-            &mut attempt,
-        )?;
+    for entry in fs::read_dir(wheel)? {
+        let entry = entry?;
+        if entry.path().join("__init__.py").is_file() {
+            locks.warn_module_conflict(
+                entry
+                    .path()
+                    .strip_prefix(wheel)
+                    .expect("wheel path starts with wheel root")
+                    .as_os_str(),
+                filename,
+            );
+        }
+        clone_recursive(site_packages.as_ref(), wheel, locks, &entry, &mut attempt)?;
         count += 1;
     }
 
@@ -158,7 +197,10 @@ fn clone_recursive(
 ) -> Result<(), Error> {
     // Determine the existing and destination paths.
     let from = entry.path();
-    let to = site_packages.join(from.strip_prefix(wheel).unwrap());
+    let to = site_packages.join(
+        from.strip_prefix(wheel)
+            .expect("wheel path starts with wheel root"),
+    );
 
     trace!("Cloning {} to {}", from.display(), to.display());
 
@@ -254,6 +296,7 @@ fn copy_wheel_files(
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
     locks: &Locks,
+    filename: &WheelFilename,
 ) -> Result<usize, Error> {
     let mut count = 0usize;
 
@@ -261,9 +304,10 @@ fn copy_wheel_files(
     for entry in WalkDir::new(&wheel) {
         let entry = entry?;
         let path = entry.path();
-
         let relative = path.strip_prefix(&wheel).expect("walkdir starts with root");
         let out_path = site_packages.as_ref().join(relative);
+
+        warn_module_conflict(locks, filename, relative);
 
         if entry.file_type().is_dir() {
             fs::create_dir_all(&out_path)?;
@@ -283,6 +327,7 @@ fn hardlink_wheel_files(
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
     locks: &Locks,
+    filename: &WheelFilename,
 ) -> Result<usize, Error> {
     let mut attempt = Attempt::default();
     let mut count = 0usize;
@@ -291,9 +336,10 @@ fn hardlink_wheel_files(
     for entry in WalkDir::new(&wheel) {
         let entry = entry?;
         let path = entry.path();
-
         let relative = path.strip_prefix(&wheel).expect("walkdir starts with root");
         let out_path = site_packages.as_ref().join(relative);
+
+        warn_module_conflict(locks, filename, relative);
 
         if entry.file_type().is_dir() {
             fs::create_dir_all(&out_path)?;
@@ -381,6 +427,7 @@ fn symlink_wheel_files(
     site_packages: impl AsRef<Path>,
     wheel: impl AsRef<Path>,
     locks: &Locks,
+    filename: &WheelFilename,
 ) -> Result<usize, Error> {
     let mut attempt = Attempt::default();
     let mut count = 0usize;
@@ -389,9 +436,10 @@ fn symlink_wheel_files(
     for entry in WalkDir::new(&wheel) {
         let entry = entry?;
         let path = entry.path();
-
         let relative = path.strip_prefix(&wheel).unwrap();
         let out_path = site_packages.as_ref().join(relative);
+
+        warn_module_conflict(locks, filename, relative);
 
         if entry.file_type().is_dir() {
             fs::create_dir_all(&out_path)?;
@@ -481,7 +529,7 @@ fn symlink_wheel_files(
 fn synchronized_copy(from: &Path, to: &Path, locks: &Locks) -> std::io::Result<()> {
     // Ensure we have a lock for the directory.
     let dir_lock = {
-        let mut locks_guard = locks.0.lock().unwrap();
+        let mut locks_guard = locks.copy_dir_locks.lock().unwrap();
         locks_guard
             .entry(to.parent().unwrap().to_path_buf())
             .or_insert_with(|| Arc::new(Mutex::new(())))
@@ -495,6 +543,18 @@ fn synchronized_copy(from: &Path, to: &Path, locks: &Locks) -> std::io::Result<(
     fs::copy(from, to)?;
 
     Ok(())
+}
+
+/// Warn when a module exists in multiple packages.
+fn warn_module_conflict(locks: &Locks, filename: &WheelFilename, relative: &Path) {
+    // Check for `__init__.py` to account for namespace packages.
+    // TODO(konsti): We need to handle namespace packages, too.
+    if relative.components().count() == 2
+        && relative.components().next_back().unwrap().as_os_str() == "__init__.py"
+    {
+        // Modules must be UTF-8, but we can skip the conversion using OsStr.
+        locks.warn_module_conflict(relative.components().next().unwrap().as_os_str(), filename);
+    }
 }
 
 #[cfg(unix)]
