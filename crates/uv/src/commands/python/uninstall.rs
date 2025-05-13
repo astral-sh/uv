@@ -217,7 +217,7 @@ async fn do_uninstall(
         uv_python::windows_registry::remove_orphan_registry_entries(&installed_installations);
     }
 
-    // Read all existing installations and find the highest installed patch
+    // Read all existing managed installations and find the highest installed patch
     // for each installed minor version. Ensure the minor version link directory
     // is still valid.
     let uninstalled_minor_versions =
