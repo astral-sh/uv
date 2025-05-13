@@ -12620,7 +12620,7 @@ fn compile_index_url_unsafe_lowest() -> Result<()> {
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple")
         .arg("requirements.in")
-        .arg("--no-deps"), @r###"
+        .arg("--no-deps"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12630,9 +12630,9 @@ fn compile_index_url_unsafe_lowest() -> Result<()> {
         # via -r requirements.in
 
     ----- stderr -----
-    warning: The direct dependency `anyio` is unpinned. Consider setting a lower bound when using `--resolution lowest` to avoid using outdated versions.
+    warning: The direct dependency `anyio` is unpinned. Consider setting a lower bound when using `--resolution lowest` or `--resolution lowest-direct` to avoid using outdated versions.
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -14960,7 +14960,7 @@ fn compile_lowest_extra_unpinned_warning() -> Result<()> {
         .arg("--index-url")
         .arg(packse_index_url())
         .arg(requirements_in.path())
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14978,9 +14978,9 @@ fn compile_lowest_extra_unpinned_warning() -> Result<()> {
         #   all-extras-required-a
 
     ----- stderr -----
-    warning: The direct dependency `all-extras-required-a` is unpinned. Consider setting a lower bound when using `--resolution lowest` to avoid using outdated versions.
+    warning: The direct dependency `all-extras-required-a` is unpinned. Consider setting a lower bound when using `--resolution lowest` or `--resolution lowest-direct` to avoid using outdated versions.
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
