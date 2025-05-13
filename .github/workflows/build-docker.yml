@@ -191,18 +191,21 @@ jobs:
           - alpine:3.21,alpine3.21,alpine
           - debian:bookworm-slim,bookworm-slim,debian-slim
           - buildpack-deps:bookworm,bookworm,debian
+          - python:3.14-rc-alpine,python3.14-rc-alpine
           - python:3.13-alpine,python3.13-alpine
           - python:3.12-alpine,python3.12-alpine
           - python:3.11-alpine,python3.11-alpine
           - python:3.10-alpine,python3.10-alpine
           - python:3.9-alpine,python3.9-alpine
           - python:3.8-alpine,python3.8-alpine
+          - python:3.14-rc-bookworm,python3.14-rc-bookworm
           - python:3.13-bookworm,python3.13-bookworm
           - python:3.12-bookworm,python3.12-bookworm
           - python:3.11-bookworm,python3.11-bookworm
           - python:3.10-bookworm,python3.10-bookworm
           - python:3.9-bookworm,python3.9-bookworm
           - python:3.8-bookworm,python3.8-bookworm
+          - python:3.14-rc-slim-bookworm,python3.14-rc-bookworm-slim
           - python:3.13-slim-bookworm,python3.13-bookworm-slim
           - python:3.12-slim-bookworm,python3.12-bookworm-slim
           - python:3.11-slim-bookworm,python3.11-bookworm-slim
