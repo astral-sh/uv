@@ -246,8 +246,6 @@ fn python_upgrade_transparent_from_venv_with_minor_request() {
     );
 }
 
-// TODO(john): Add upgrade support for preview bin Python. After upgrade,
-// the bin Python version should be the latest patch.
 #[test]
 fn python_transparent_upgrade_with_preview_installation() {
     let context: TestContext = TestContext::new_with_versions(&["3.13"])
@@ -292,14 +290,12 @@ fn python_transparent_upgrade_with_preview_installation() {
      + cpython-3.10.17-[PLATFORM]
     ");
 
-    // TODO(john): Upgrades are not currently reflected for `--preview` bin Python,
-    // so we see the outdated patch version.
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
         .arg("--version"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.8
+    Python 3.10.17
 
     ----- stderr -----
     "

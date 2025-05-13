@@ -16,11 +16,11 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{
-    python_executable_dir, ManagedPythonInstallation, ManagedPythonInstallations,
+    create_bin_link, python_executable_dir, ManagedPythonInstallation, ManagedPythonInstallations,
 };
 use uv_python::platform::{Arch, Libc};
 use uv_python::{
-    PythonDownloads, PythonInstallationKey, PythonRequest, PythonVersionFile,
+    ImplementationName, PythonDownloads, PythonInstallationKey, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
 };
 use uv_shell::Shell;
@@ -437,12 +437,15 @@ pub(crate) async fn install(
         }
     }
 
-    // Read all existing installations and find the highest installed patch
+    // Read all existing managed installations and find the highest installed CPython patch
     // for each installed minor version.
     let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
     let existing_installations: Vec<_> = installations.find_all()?.collect();
     let mut minor_versions = FxHashMap::default();
     for installation in existing_installations {
+        if *installation.implementation() != ImplementationName::CPython {
+            continue;
+        }
         // Add to minor versions map if this installation has the highest
         // patch seen for a minor version so far.
         let minor_version = installation.version().python_version();
@@ -458,7 +461,26 @@ pub(crate) async fn install(
     }
 
     for (_, installation) in minor_versions.values() {
-        installation.ensure_minor_version_link()?;
+        let directory_symlink = installation.ensure_minor_version_link()?;
+        if preview.is_enabled() {
+            let bin = bin
+                .as_ref()
+                .expect("We should have a bin directory with preview enabled")
+                .as_path();
+            let bin = bin.join(format!(
+                "python{}.{}",
+                installation.version().major(),
+                installation.version().minor()
+            ));
+            // FIXME: Are we creating this file and then deleting it and recreating it?
+            if bin.exists() {
+                match fs_err::remove_file(&bin) {
+                    Ok(()) => trace!("Removed old symlink: {}", bin.display()),
+                    Err(err) => return Err(err.into()),
+                }
+            }
+            create_bin_link(bin.as_path(), directory_symlink.symlink_executable.clone())?;
+        }
     }
 
     if changelog.installed.is_empty() && errors.is_empty() {

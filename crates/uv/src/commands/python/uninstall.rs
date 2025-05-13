@@ -14,7 +14,7 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::{python_executable_dir, symlink_exists, ManagedPythonInstallations};
-use uv_python::{PythonInstallationKey, PythonRequest};
+use uv_python::{ImplementationName, PythonInstallationKey, PythonRequest};
 
 use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
@@ -217,7 +217,7 @@ async fn do_uninstall(
         uv_python::windows_registry::remove_orphan_registry_entries(&installed_installations);
     }
 
-    // Read all existing installations and find the highest installed patch
+    // Read all existing managed installations and find the highest installed CPython patch
     // for each installed minor version. Ensure the minor version link directory
     // is still valid.
     let uninstalled_minor_versions =
@@ -231,6 +231,9 @@ async fn do_uninstall(
     let remaining_installations: Vec<_> = installations.find_all()?.collect();
     let mut remaining_minor_versions = FxHashMap::default();
     for installation in remaining_installations {
+        if *installation.implementation() != ImplementationName::CPython {
+            continue;
+        }
         // Add to minor versions map if this installation has the highest
         // patch seen for a minor version so far.
         let minor_version = installation.version().python_version();

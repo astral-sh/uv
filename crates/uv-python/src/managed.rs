@@ -57,6 +57,8 @@ pub enum Error {
     MissingExecutable(PathBuf),
     #[error("Missing expected target directory for link at {}", _0.user_display())]
     MissingLinkTargetDirectory(PathBuf),
+    #[error("Unable to derive symlink directory from executable path {}", _0.user_display())]
+    ExecutablePath(PathBuf),
     #[error("Failed to create canonical Python executable at {} from {}", to.user_display(), from.user_display())]
     CanonicalizeExecutable {
         from: PathBuf,
@@ -516,7 +518,10 @@ impl ManagedPythonInstallation {
 
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
-    pub fn ensure_minor_version_link(&self) -> Result<(), Error> {
+    ///
+    /// If we can't create a symlink directory (for example, if this is a PyPy
+    /// impementation), then return [`None`].
+    pub fn ensure_minor_version_link(&self) -> Result<DirectorySymlink, Error> {
         if let Some(directory_symlink) = DirectorySymlink::try_from(
             self.key.major,
             self.key.minor,
@@ -524,8 +529,10 @@ impl ManagedPythonInstallation {
             self.key.implementation(),
         ) {
             directory_symlink.create_directory()?;
+            Ok(directory_symlink)
+        } else {
+            Err(Error::ExecutablePath(self.executable(false)))
         }
-        Ok(())
     }
 
     /// Ensure the environment is marked as externally managed with the

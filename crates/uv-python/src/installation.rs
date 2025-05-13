@@ -184,7 +184,10 @@ impl PythonInstallation {
         let minor_version = installed.version().python_version();
         let highest_patch = installations
             .find_all()?
-            .filter(|installation| installation.version().python_version() == minor_version)
+            .filter(|installation| {
+                *installation.implementation() == ImplementationName::CPython
+                    && installation.version().python_version() == minor_version
+            })
             .filter_map(|installation| installation.version().patch())
             .fold(0, std::cmp::max);
         if installed
