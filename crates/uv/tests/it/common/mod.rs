@@ -26,7 +26,7 @@ use uv_fs::Simplified;
 use uv_python::managed::{DirectorySymlink, ManagedPythonInstallations};
 use uv_python::{
     EnvironmentPreference, ImplementationName, LenientImplementationName, PythonInstallation,
-    PythonPreference, PythonRequest, PythonVersion,
+    PythonPreference, PythonRequest, PythonVariant, PythonVersion,
 };
 use uv_static::EnvVars;
 
@@ -536,6 +536,20 @@ impl TestContext {
                 version.minor(),
                 executable.as_path(),
                 &LenientImplementationName::from(ImplementationName::CPython),
+                &PythonVariant::default(),
+            ) {
+                filters.extend(
+                    Self::path_patterns(directory_symlink.symlink_directory)
+                        .into_iter()
+                        .map(|pattern| (pattern.to_string(), format!("[PYTHON-{version}]"))),
+                );
+            }
+            if let Some(directory_symlink) = DirectorySymlink::maybe_from(
+                version.major(),
+                version.minor(),
+                executable.as_path(),
+                &LenientImplementationName::from(ImplementationName::CPython),
+                &PythonVariant::Freethreaded,
             ) {
                 filters.extend(
                     Self::path_patterns(directory_symlink.symlink_directory)

@@ -352,7 +352,7 @@ impl ManagedPythonInstallation {
 
     /// The path to this managed installation's Python executable.
     ///
-    /// If the installation has multiple execututables i.e., `python`, `python3`, etc., this will
+    /// If the installation has multiple executables i.e., `python`, `python3`, etc., this will
     /// return the _canonical_ executable name which the other names link to. On Unix, this is
     /// `python{major}.{minor}{variant}` and on Windows, this is `python{exe}`.
     ///
@@ -517,12 +517,7 @@ impl ManagedPythonInstallation {
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
     pub fn ensure_minor_version_link(&self) -> Result<(), Error> {
-        if let Some(directory_symlink) = DirectorySymlink::maybe_from(
-            self.key.major,
-            self.key.minor,
-            self.executable(false).as_path(),
-            self.key.implementation(),
-        ) {
+        if let Some(directory_symlink) = DirectorySymlink::maybe_from_installation(self) {
             directory_symlink.create_directory()?;
         }
         Ok(())
@@ -592,13 +587,6 @@ impl ManagedPythonInstallation {
         Ok(())
     }
 
-    /// Create a link to the managed Python executable.
-    ///
-    /// If the file already exists at the target path, an error will be returned.
-    pub fn create_bin_link(&self, target: &Path) -> Result<(), Error> {
-        create_bin_link(target, self.executable(false))
-    }
-
     /// Returns `true` if the path is a link to this installation's binary, e.g., as created by
     /// [`ManagedPythonInstallation::create_bin_link`].
     pub fn is_bin_link(&self, path: &Path) -> bool {
@@ -611,7 +599,8 @@ impl ManagedPythonInstallation {
             if !matches!(launcher.kind, uv_trampoline_builder::LauncherKind::Python) {
                 return false;
             }
-            launcher.python_path == self.executable(false)
+            dunce::canonicalize(&launcher.python_path).unwrap_or(launcher.python_path)
+                == self.executable(false)
         } else {
             unreachable!("Only Windows and Unix are supported")
         }
@@ -694,6 +683,7 @@ impl DirectorySymlink {
         minor: u8,
         executable: &Path,
         implementation: &LenientImplementationName,
+        variant: &PythonVariant,
     ) -> Option<Self> {
         if !matches!(
             implementation,
@@ -705,7 +695,7 @@ impl DirectorySymlink {
         let executable_name = executable
             .file_name()
             .expect("Executable file name should exist");
-        let symlink_directory_name = format!("python{major}.{minor}");
+        let symlink_directory_name = format!("python{major}.{minor}{}", variant.suffix());
         let parent = executable
             .parent()
             .expect("Executable should have parent directory");
@@ -744,12 +734,23 @@ impl DirectorySymlink {
         })
     }
 
+    pub fn maybe_from_installation(installation: &ManagedPythonInstallation) -> Option<Self> {
+        DirectorySymlink::maybe_from(
+            installation.key().version().major(),
+            installation.key().version().minor(),
+            installation.executable(false).as_path(),
+            installation.key().implementation(),
+            installation.key().variant(),
+        )
+    }
+
     pub fn maybe_from_interpreter(interpreter: &Interpreter) -> Option<Self> {
         DirectorySymlink::maybe_from(
             interpreter.python_major(),
             interpreter.python_minor(),
             interpreter.sys_executable(),
             &LenientImplementationName::from(interpreter.implementation_name()),
+            &interpreter.variant(),
         )
     }
 
