@@ -5762,6 +5762,73 @@ fn add_script_settings() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn add_script_trailing_comment_lines() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "requests<3",
+        #   "rich",
+        # ]
+        # ///
+        #
+        # Additional description
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Updated `script.py`
+    "###);
+
+    let script_content = context.read("script.py");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r##"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        #   "requests<3",
+        #   "rich",
+        # ]
+        # ///
+        #
+        # Additional description
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+        "##
+        );
+    });
+
+    // Adding to a script without a lockfile shouldn't create a lockfile.
+    assert!(!context.temp_dir.join("script.py.lock").exists());
+
+    Ok(())
+}
+
 /// Add to a script without an existing metadata table.
 #[test]
 fn add_script_without_metadata_table() -> Result<()> {
