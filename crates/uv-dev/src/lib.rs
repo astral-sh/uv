@@ -11,6 +11,7 @@ use crate::generate_cli_reference::Args as GenerateCliReferenceArgs;
 use crate::generate_env_vars_reference::Args as GenerateEnvVarsReferenceArgs;
 use crate::generate_json_schema::Args as GenerateJsonSchemaArgs;
 use crate::generate_options_reference::Args as GenerateOptionsReferenceArgs;
+use crate::generate_sysconfig_mappings::Args as GenerateSysconfigMetadataArgs;
 #[cfg(feature = "render")]
 use crate::render_benchmarks::RenderBenchmarksArgs;
 use crate::wheel_metadata::WheelMetadataArgs;
@@ -22,6 +23,7 @@ mod generate_cli_reference;
 mod generate_env_vars_reference;
 mod generate_json_schema;
 mod generate_options_reference;
+mod generate_sysconfig_mappings;
 mod render_benchmarks;
 mod wheel_metadata;
 
@@ -45,6 +47,8 @@ enum Cli {
     GenerateCliReference(GenerateCliReferenceArgs),
     /// Generate the environment variables reference for the documentation.
     GenerateEnvVarsReference(GenerateEnvVarsReferenceArgs),
+    /// Generate the sysconfig metadata from derived targets.
+    GenerateSysconfigMetadata(GenerateSysconfigMetadataArgs),
     #[cfg(feature = "render")]
     /// Render the benchmarks.
     RenderBenchmarks(RenderBenchmarksArgs),
@@ -57,11 +61,12 @@ pub async fn run() -> Result<()> {
         Cli::WheelMetadata(args) => wheel_metadata::wheel_metadata(args).await?,
         Cli::Compile(args) => compile::compile(args).await?,
         Cli::ClearCompile(args) => clear_compile::clear_compile(&args)?,
-        Cli::GenerateAll(args) => generate_all::main(&args)?,
+        Cli::GenerateAll(args) => generate_all::main(&args).await?,
         Cli::GenerateJSONSchema(args) => generate_json_schema::main(&args)?,
         Cli::GenerateOptionsReference(args) => generate_options_reference::main(&args)?,
         Cli::GenerateCliReference(args) => generate_cli_reference::main(&args)?,
         Cli::GenerateEnvVarsReference(args) => generate_env_vars_reference::main(&args)?,
+        Cli::GenerateSysconfigMetadata(args) => generate_sysconfig_mappings::main(&args).await?,
         #[cfg(feature = "render")]
         Cli::RenderBenchmarks(args) => render_benchmarks::render_benchmarks(&args)?,
     }
