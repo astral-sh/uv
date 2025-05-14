@@ -43,6 +43,7 @@ if ('{{ VIRTUAL_PROMPT }}' != "") then
 else
     setenv VIRTUAL_ENV_PROMPT "$VIRTUAL_ENV:t:q"
 endif
+setenv VIRTUAL_ENV_PROMPT "($VIRTUAL_ENV_PROMPT) "
 
 if ( $?VIRTUAL_ENV_DISABLE_PROMPT ) then
     if ( $VIRTUAL_ENV_DISABLE_PROMPT == "" ) then

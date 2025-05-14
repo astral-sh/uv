@@ -92,10 +92,11 @@ set -gx PATH "$VIRTUAL_ENV"'/{{ BIN_NAME }}' $PATH
 # Prompt override provided?
 # If not, just use the environment name.
 if test -n '{{ VIRTUAL_PROMPT }}'
-    set -gx VIRTUAL_ENV_PROMPT '{{ VIRTUAL_PROMPT }}'
+    set -gx VIRTUAL_ENV_PROMPT "{{ VIRTUAL_PROMPT }}"
 else
     set -gx VIRTUAL_ENV_PROMPT (basename "$VIRTUAL_ENV")
 end
+set -gx VIRTUAL_ENV_PROMPT "($VIRTUAL_ENV_PROMPT) "
 
 # Unset `$PYTHONHOME` if set.
 if set -q PYTHONHOME

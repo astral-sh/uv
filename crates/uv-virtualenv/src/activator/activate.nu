@@ -74,6 +74,8 @@ export-env {
         '{{ VIRTUAL_PROMPT }}'
     })
 
+    let virtual_env_prompt = $"(ansi lparen)($virtual_env_prompt)(ansi rparen) "
+
     let new_env = {
         $path_name         : $new_path
         VIRTUAL_ENV        : $virtual_env
@@ -95,12 +97,12 @@ export-env {
 
       let new_prompt = (if (has-env 'PROMPT_COMMAND') {
           if 'closure' in ($old_prompt_command | describe) {
-              {|| $'($virtual_prefix)(do $old_prompt_command)' }
+              {|| $'(($virtual_prefix)) (do $old_prompt_command)' }
           } else {
-              {|| $'($virtual_prefix)($old_prompt_command)' }
+              {|| $'(($virtual_prefix)) ($old_prompt_command)' }
           }
       } else {
-          {|| $'($virtual_prefix)' }
+          {|| $'(($virtual_prefix)) ' }
       })
 
       $new_env | merge {
