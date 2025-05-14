@@ -110,7 +110,7 @@ jobs:
     environment:
       name: release
     needs:
-      - docker-publish
+      - docker-build
     if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
     permissions:
       packages: write
@@ -153,13 +153,13 @@ jobs:
           username: astralshbot
           password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
-
       - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: depot/setup-action@v1
 
       - name: Generate Dynamic Dockerfile Tags
         shell: bash
@@ -191,9 +191,6 @@ jobs:
           # Remove the trailing newline from the pattern list
           TAG_PATTERNS="${TAG_PATTERNS%\\n}"
 
-          # Export image cache name
-          echo "IMAGE_REF=${BASE_IMAGE//:/-}" >> $GITHUB_ENV
-
           # Export tag patterns using the multiline env var syntax
           {
             echo "TAG_PATTERNS<<EOF"
@@ -216,13 +213,10 @@ jobs:
 
       - name: Build and push
         id: build-and-push
-        uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1 # v6.16.0
+        uses: depot/build-push-action@v1
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          # We do not really need to cache here as the Dockerfile is tiny
-          #cache-from: type=gha,scope=uv-${{ env.IMAGE_REF }}
-          #cache-to: type=gha,mode=min,scope=uv-${{ env.IMAGE_REF }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -233,93 +227,3 @@ jobs:
         with:
           subject-name: ${{ env.UV_BASE_IMG }}
           subject-digest: ${{ steps.build-and-push.outputs.digest }}
-          # push-to-registry is explicitly not enabled to maintain full control over the top image
-
-  # This is effectively a duplicate of `docker-publish` to make https://github.com/astral-sh/uv/pkgs/container/uv
-  # show the uv base image first since GitHub always shows the last updated image digests
-  # This works by annotating the original digests (previously non-annotated) which triggers an update to ghcr.io
-  docker-republish:
-    name: Annotate Docker image (ghcr.io/astral-sh/uv)
-    runs-on: ubuntu-latest
-    environment:
-      name: release
-    needs:
-      - docker-publish-extra
-    if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
-    permissions:
-      packages: write
-      attestations: write # needed to push image attestations to the Github attestation store
-      id-token: write # needed for signing the images with GitHub OIDC Token
-    steps:
-      # Login to DockerHub first, to avoid rate-limiting
-      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        with:
-          username: astralshbot
-          password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
-
-      - name: Download digests
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          path: /tmp/digests
-          pattern: digests-*
-          merge-multiple: true
-
-      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
-        env:
-          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
-        with:
-          images: ${{ env.UV_BASE_IMG }}
-          # Order is on purpose such that the label org.opencontainers.image.version has the first pattern with the full version
-          tags: |
-            type=pep440,pattern={{ version }},value=${{ fromJson(inputs.plan).announcement_tag }}
-            type=pep440,pattern={{ major }}.{{ minor }},value=${{ fromJson(inputs.plan).announcement_tag }}
-
-      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
-      - name: Create manifest list and push
-        working-directory: /tmp/digests
-        # The readarray part is used to make sure the quoting and special characters are preserved on expansion (e.g. spaces)
-        # The jq command expands the docker/metadata json "tags" array entry to `-t tag1 -t tag2 ...` for each tag in the array
-        # The printf will expand the base image with the `<UV_BASE_IMG>@sha256:<sha256> ...` for each sha256 in the directory
-        # The final command becomes `docker buildx imagetools create -t tag1 -t tag2 ... <UV_BASE_IMG>@sha256:<sha256_1> <UV_BASE_IMG>@sha256:<sha256_2> ...`
-        run: |
-          readarray -t lines <<< "$DOCKER_METADATA_OUTPUT_ANNOTATIONS"; annotations=(); for line in "${lines[@]}"; do annotations+=(--annotation "$line"); done
-          docker buildx imagetools create \
-            "${annotations[@]}" \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.UV_BASE_IMG }}@sha256:%s ' *)
-
-      - name: Share manifest digest
-        id: manifest-digest
-        # To sign the manifest, we need it's digest. Unfortunately "docker
-        # buildx imagetools create" does not (yet) have a clean way of sharing
-        # the digest of the manifest it creates (see docker/buildx#2407), so
-        # we use a separate command to retrieve it.
-        # imagetools inspect [TAG] --format '{{json .Manifest}}' gives us
-        # the machine readable JSON description of the manifest, and the
-        # jq command extracts the digest from this. The digest is then
-        # sent to the Github step output file for sharing with other steps.
-        run: |
-          digest="$(
-            docker buildx imagetools inspect \
-              "${UV_BASE_IMG}:${DOCKER_METADATA_OUTPUT_VERSION}" \
-              --format '{{json .Manifest}}' \
-            | jq -r '.digest'
-          )"
-          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
-
-      - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2.2.3
-        with:
-          subject-name: ${{ env.UV_BASE_IMG }}
-          subject-digest: ${{ steps.manifest-digest.outputs.digest }}
-          # push-to-registry is explicitly not enabled to maintain full control over the top image
