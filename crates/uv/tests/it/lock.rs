@@ -3688,6 +3688,8 @@ fn lock_requires_python() -> Result<()> {
           hint: Pre-releases are available for `pygls` in the requested range (e.g., 2.0.0a4), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
           hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
+
+          hint: The resolution failed for a Python version range different than the current Python version, consider limiting the Python version range using `requires-python`.
     ");
 
     // Require >=3.7, and allow locking to a version of `pygls` that is compatible (==1.0.1).
@@ -27383,6 +27385,139 @@ fn lock_omit_wheels_exclude_newer() -> Result<()> {
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Check that we hint if the resolution failed in a different Python version.
+#[test]
+fn lock_conflict_for_disjoint_python_version() -> Result<()> {
+    let context = TestContext::new("3.9");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "numpy==1.20.3",
+            "pandas==1.5.3",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (python_full_version >= '3.11'):
+      ╰─▶ Because only numpy{python_full_version >= '3.10'}<=1.26.4 is available and pandas==1.5.3 depends on numpy{python_full_version >= '3.10'}>=1.21.0, we can conclude that pandas==1.5.3 depends on numpy>=1.21.0,<=1.26.4.
+          And because your project depends on numpy==1.20.3 and pandas==1.5.3, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: Pre-releases are available for `numpy` in the requested range (e.g., 2.2.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+
+          hint: The resolution failed for a Python version range different than the current Python version, consider limiting the Python version range using `requires-python`.
+    ");
+
+    // Check that the resolution passes on the restricted Python environment.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = "==3.9.*"
+        dependencies = [
+            "numpy==1.20.3",
+            "pandas==1.5.3",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Check that we hint if the resolution failed for a different platform.
+#[test]
+fn lock_conflict_for_disjoint_platform() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "numpy>=1.24,<1.26; sys_platform == 'exotic'",
+            "numpy>=1.26",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (sys_platform == 'exotic'):
+      ╰─▶ Because only the following versions of numpy{sys_platform == 'exotic'} are available:
+              numpy{sys_platform == 'exotic'}<=1.24.0
+              numpy{sys_platform == 'exotic'}==1.24.1
+              numpy{sys_platform == 'exotic'}==1.24.2
+              numpy{sys_platform == 'exotic'}==1.24.3
+              numpy{sys_platform == 'exotic'}==1.24.4
+              numpy{sys_platform == 'exotic'}==1.25.0
+              numpy{sys_platform == 'exotic'}==1.25.1
+              numpy{sys_platform == 'exotic'}==1.25.2
+              numpy{sys_platform == 'exotic'}>1.26
+          and your project depends on numpy{sys_platform == 'exotic'}>=1.24,<1.26, we can conclude that your project depends on numpy>=1.24.0,<=1.25.2.
+          And because your project depends on numpy>=1.26, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    ");
+
+    // Check that the resolution passes on the restricted environment.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "numpy>=1.24,<1.26; sys_platform == 'exotic'",
+            "numpy>=1.26",
+        ]
+
+        [tool.uv]
+        environments = [
+            "sys_platform == 'linux' or sys_platform == 'win32' or sys_platform == 'darwin'"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----

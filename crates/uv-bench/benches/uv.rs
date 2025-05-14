@@ -206,6 +206,7 @@ mod resolver {
             options,
             &python_requirement,
             markers,
+            interpreter.markers(),
             conflicts,
             Some(&TAGS),
             &flat_index,
