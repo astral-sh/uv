@@ -91,6 +91,7 @@ jobs:
         id: build
         uses: depot/build-push-action@636daae76684e38c301daa0c5eca1c095b24e780
         with:
+          project: 7hd4vdzmw5 # astral-sh/uv
           context: .
           platforms: linux/amd64,linux/arm64
           push: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
