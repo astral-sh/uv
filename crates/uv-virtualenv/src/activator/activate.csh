@@ -63,7 +63,7 @@ if ( $do_prompt == "1" ) then
         if ( "$prompt:q" =~ *"$newline:q"* ) then
             :
         else
-            set prompt = '('"$VIRTUAL_ENV_PROMPT:q"') '"$prompt:q"
+            set prompt = "$VIRTUAL_ENV_PROMPT:q$prompt:q"
         endif
     endif
 endif

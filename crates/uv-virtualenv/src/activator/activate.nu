@@ -84,7 +84,7 @@ export-env {
       $new_env
     } else {
       # Creating the new prompt for the session
-      let virtual_prefix = $'(char lparen)($virtual_env_prompt)(char rparen) '
+      let virtual_prefix = $virtual_env_prompt
 
       # Back up the old prompt builder
       let old_prompt_command = (if (has-env 'PROMPT_COMMAND') {

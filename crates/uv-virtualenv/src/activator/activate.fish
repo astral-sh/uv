@@ -115,8 +115,7 @@ if test -z "$VIRTUAL_ENV_DISABLE_PROMPT"
         # Run the user's prompt first; it might depend on (pipe)status.
         set -l prompt (_old_fish_prompt)
 
-        printf '(%s) ' $VIRTUAL_ENV_PROMPT
-
+        printf '%s' $VIRTUAL_ENV_PROMPT
         string join -- \n $prompt # handle multi-line prompts
     end
 
