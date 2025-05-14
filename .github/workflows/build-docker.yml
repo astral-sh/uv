@@ -1,4 +1,4 @@
-# Build and publish a Docker image.
+# Build and publish a Docker image using Depot.
 #
 # Assumed to run as a subworkflow of .github/workflows/release.yml; specifically, as a local
 # artifacts job within `cargo-dist`.
