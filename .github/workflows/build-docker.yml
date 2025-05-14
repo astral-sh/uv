@@ -61,7 +61,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: depot/setup-action@v1
+      - uses: depot/setup-action@b0b1ea4f69e92ebf5dea3f8713a1b0c37b2126a5
 
       - name: Check tag consistency
         if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
@@ -89,7 +89,7 @@ jobs:
 
       - name: Build and push by digest
         id: build
-        uses: depot/build-push-action@v1
+        uses: depot/build-push-action@636daae76684e38c301daa0c5eca1c095b24e780
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -159,7 +159,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: depot/setup-action@v1
+      - uses: depot/setup-action@b0b1ea4f69e92ebf5dea3f8713a1b0c37b2126a5
 
       - name: Generate Dynamic Dockerfile Tags
         shell: bash
@@ -213,7 +213,7 @@ jobs:
 
       - name: Build and push
         id: build-and-push
-        uses: depot/build-push-action@v1
+        uses: depot/build-push-action@636daae76684e38c301daa0c5eca1c095b24e780
         with:
           context: .
           platforms: linux/amd64,linux/arm64
