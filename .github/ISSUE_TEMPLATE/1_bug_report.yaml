@@ -13,6 +13,8 @@ body:
       description: |
         A clear and concise description of the bug, including [a minimal reproducible example](https://docs.astral.sh/uv/reference/troubleshooting/reproducible-examples/).
         If we cannot reproduce the bug, it is unlikely that we will be able to help you.
+
+        Please include the full output of uv with the complete error message.
     validations:
       required: true
 
