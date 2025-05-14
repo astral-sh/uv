@@ -92,6 +92,7 @@ impl CachedEnvironment {
             uv_virtualenv::Prompt::None,
             false,
             false,
+            uv_virtualenv::VenvForceMode::ReplaceAny,
             true,
             false,
         )?;
