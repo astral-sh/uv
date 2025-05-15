@@ -1161,18 +1161,20 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
             );
 
-            let is_py_file = |file: &PathBuf| {
+            // Check if the file is a valid PEP 723 target: a .py file (excluding setup.py) or a file with no extension.
+            let is_pep723_candidate = |file: &PathBuf| {
                 file.extension().map(|ext| ext == "py").unwrap_or(false)
                     && file
                         .file_name()
                         .map(|name| name != "setup.py")
                         .unwrap_or(true)
+                    || file.extension().is_none()
             };
 
             let pep723_results = join_all(
                 args.with_requirements
                     .iter()
-                    .filter(|file| is_py_file(file))
+                    .filter(|file| is_pep723_candidate(file))
                     .map(|file| async move {
                         let result = Pep723Script::read(&file).await;
                         (file, result)
@@ -1211,7 +1213,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 requirements.extend(
                     args.with_requirements
                         .into_iter()
-                        .filter(|file| !is_py_file(file))
+                        .filter(|file| !is_pep723_candidate(file))
                         .map(RequirementsSource::from_requirements_file)
                         .collect::<Result<Vec<_>, _>>()?,
                 );
