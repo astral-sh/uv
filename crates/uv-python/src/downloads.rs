@@ -342,30 +342,51 @@ impl PythonDownloadRequest {
     }
 
     pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
+        let executable = interpreter.sys_executable().display();
         if let Some(version) = self.version() {
             if !version.matches_interpreter(interpreter) {
+                let interpreter_version = interpreter.python_version();
+                debug!(
+                    "Skipping interpreter at `{executable}`: version `{interpreter_version}` does not match request `{version}`"
+                );
                 return false;
             }
         }
         if let Some(os) = self.os() {
-            if &Os::from(interpreter.platform().os()) != os {
+            let interpreter_os = Os::from(interpreter.platform().os());
+            if &interpreter_os != os {
+                debug!(
+                    "Skipping interpreter at `{executable}`: operating system `{interpreter_os}` does not match request `{os}`"
+                );
                 return false;
             }
         }
         if let Some(arch) = self.arch() {
-            if &Arch::from(&interpreter.platform().arch()) != arch {
+            let interpreter_arch = Arch::from(&interpreter.platform().arch());
+            if &interpreter_arch != arch {
+                debug!(
+                    "Skipping interpreter at `{executable}`: architecture `{interpreter_arch}` does not match request `{arch}`"
+                );
                 return false;
             }
         }
         if let Some(implementation) = self.implementation() {
-            if LenientImplementationName::from(interpreter.implementation_name())
+            let interpreter_implementation = interpreter.implementation_name();
+            if LenientImplementationName::from(interpreter_implementation)
                 != LenientImplementationName::from(*implementation)
             {
+                debug!(
+                    "Skipping interpreter at `{executable}`: implementation `{interpreter_implementation}` does not match request `{implementation}`"
+                );
                 return false;
             }
         }
         if let Some(libc) = self.libc() {
-            if &Libc::from(interpreter.platform().os()) != libc {
+            let interpreter_libc = Libc::from(interpreter.platform().os());
+            if &interpreter_libc != libc {
+                debug!(
+                    "Skipping interpreter at `{executable}`: libc `{interpreter_libc}` does not match request `{libc}`"
+                );
                 return false;
             }
         }
