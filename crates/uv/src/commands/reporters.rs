@@ -91,7 +91,7 @@ impl Default for BarState {
             id: 0,
             // Avoid resizing the progress bar templates too often by starting with a padding
             // that's wider than most package names.
-            max_len: 5,
+            max_len: 20,
         }
     }
 }
