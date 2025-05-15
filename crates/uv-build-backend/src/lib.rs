@@ -275,7 +275,7 @@ mod tests {
     use flate2::bufread::GzDecoder;
     use fs_err::File;
     use indoc::indoc;
-    use insta::assert_snapshot;
+    use insta::{assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
     use sha2::Digest;
     use std::io::{BufReader, Read};
@@ -299,37 +299,36 @@ mod tests {
 
     /// Run both a direct wheel build and an indirect wheel build through a source distribution,
     /// while checking that directly built wheel and indirectly built wheel are the same.
-    fn build(source_root: &Path, dist: &Path) -> BuildResults {
+    fn build(source_root: &Path, dist: &Path) -> Result<BuildResults, Error> {
         // Build a direct wheel, capture all its properties to compare it with the indirect wheel
         // latest and remove it since it has the same filename as the indirect wheel.
-        let (_name, direct_wheel_list_files) = list_wheel(source_root, "1.0.0+test").unwrap();
-        let direct_wheel_filename = build_wheel(source_root, dist, None, "1.0.0+test").unwrap();
+        let (_name, direct_wheel_list_files) = list_wheel(source_root, "1.0.0+test")?;
+        let direct_wheel_filename = build_wheel(source_root, dist, None, "1.0.0+test")?;
         let direct_wheel_path = dist.join(direct_wheel_filename.to_string());
         let direct_wheel_contents = wheel_contents(&direct_wheel_path);
-        let direct_wheel_hash = sha2::Sha256::digest(fs_err::read(&direct_wheel_path).unwrap());
-        fs_err::remove_file(&direct_wheel_path).unwrap();
+        let direct_wheel_hash = sha2::Sha256::digest(fs_err::read(&direct_wheel_path)?);
+        fs_err::remove_file(&direct_wheel_path)?;
 
         // Build a source distribution.
-        let (_name, source_dist_list_files) = list_source_dist(source_root, "1.0.0+test").unwrap();
+        let (_name, source_dist_list_files) = list_source_dist(source_root, "1.0.0+test")?;
         // TODO(konsti): This should run in the unpacked source dist tempdir, but we need to
         // normalize the path.
-        let (_name, wheel_list_files) = list_wheel(source_root, "1.0.0+test").unwrap();
-        let source_dist_filename = build_source_dist(source_root, dist, "1.0.0+test").unwrap();
+        let (_name, wheel_list_files) = list_wheel(source_root, "1.0.0+test")?;
+        let source_dist_filename = build_source_dist(source_root, dist, "1.0.0+test")?;
         let source_dist_path = dist.join(source_dist_filename.to_string());
         let source_dist_contents = sdist_contents(&source_dist_path);
 
         // Unpack the source distribution and build a wheel from it.
-        let sdist_tree = TempDir::new().unwrap();
-        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
+        let sdist_tree = TempDir::new()?;
+        let sdist_reader = BufReader::new(File::open(&source_dist_path)?);
         let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
-        source_dist.unpack(sdist_tree.path()).unwrap();
+        source_dist.unpack(sdist_tree.path())?;
         let sdist_top_level_directory = sdist_tree.path().join(format!(
             "{}-{}",
             source_dist_filename.name.as_dist_info_name(),
             source_dist_filename.version
         ));
-        let wheel_filename =
-            build_wheel(&sdist_top_level_directory, dist, None, "1.0.0+test").unwrap();
+        let wheel_filename = build_wheel(&sdist_top_level_directory, dist, None, "1.0.0+test")?;
         let wheel_contents = wheel_contents(&dist.join(wheel_filename.to_string()));
 
         // Check that direct and indirect wheels are identical.
@@ -338,17 +337,17 @@ mod tests {
         assert_eq!(direct_wheel_list_files, wheel_list_files);
         assert_eq!(
             direct_wheel_hash,
-            sha2::Sha256::digest(fs_err::read(dist.join(wheel_filename.to_string())).unwrap())
+            sha2::Sha256::digest(fs_err::read(dist.join(wheel_filename.to_string()))?)
         );
 
-        BuildResults {
+        Ok(BuildResults {
             source_dist_list_files,
             source_dist_filename,
             source_dist_contents,
             wheel_list_files,
             wheel_filename,
             wheel_contents,
-        }
+        })
     }
 
     fn sdist_contents(source_dist_path: &Path) -> Vec<String> {
@@ -453,7 +452,7 @@ mod tests {
 
         // Perform both the direct and the indirect build.
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path());
+        let build = build(src.path(), dist.path()).unwrap();
 
         let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
         assert_eq!(
@@ -721,7 +720,7 @@ mod tests {
         File::create(src.path().join("two_step_build").join("__init__.py")).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build1 = build(src.path(), dist.path());
+        let build1 = build(src.path(), dist.path()).unwrap();
 
         assert_snapshot!(build1.source_dist_contents.join("\n"), @r"
         two_step_build-1.0.0/
@@ -760,7 +759,7 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build2 = build(src.path(), dist.path());
+        let build2 = build(src.path(), dist.path()).unwrap();
         assert_eq!(build1, build2);
     }
 }
