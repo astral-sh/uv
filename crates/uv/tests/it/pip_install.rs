@@ -288,6 +288,36 @@ fn invalid_uv_toml_option_disallowed() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn cache_uv_toml_credentials() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r#"
+    [pip]
+    extra-index-url = ["https://public:heron@pypi-proxy.fly.dev/basic-auth/simple/"]
+    "#})?;
+
+    // Provide an extra index with the same username and URL as in `uv.toml` but
+    // no password.
+    uv_snapshot!(context.pip_install()
+        .arg("iniconfig")
+        .arg("--extra-index-url")
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    Ok(())
+}
+
 /// For indirect, non-user controlled pyproject.toml, we don't enforce correctness.
 ///
 /// If we fail to extract the PEP 621 metadata, we fall back to treating it as a source
