@@ -134,3 +134,96 @@ pub(crate) fn cluster_globs(patterns: &[impl AsRef<str>]) -> Vec<(PathBuf, Vec<S
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::{cluster_globs, split_glob, GlobParts};
+
+    #[test]
+    fn test_split_glob() {
+        #[track_caller]
+        fn check(input: &str, base: &str, pattern: &str) {
+            let result = split_glob(input);
+            let expected = GlobParts {
+                base: base.into(),
+                pattern: pattern.into(),
+            };
+            assert_eq!(result, expected, "{input:?} != {base:?} + {pattern:?}");
+        }
+
+        check("", "", "");
+        check("a", "", "a");
+        check("a/b", "a", "b");
+        check("a/b/", "a", "b");
+        check("a/.//b/", "a", "b");
+        check("./a/b/c", "a/b", "c");
+        check("c/d/*", "c/d", "*");
+        check("c/d/*/../*", "c/d", "*/../*");
+        check("a/?b/c", "a", "?b/c");
+        check("/a/b/*", "/a/b", "*");
+        check("../x/*", "../x", "*");
+        check("a/{b,c}/d", "a", "{b,c}/d");
+        check("*", "", "*");
+        check("*/*", "", "*/*");
+        check("..", "..", "");
+        check("/", "/", "");
+    }
+
+    #[test]
+    fn test_cluster_globs() {
+        #[track_caller]
+        fn check(input: &[&str], expected: &[(&str, &[&str])]) {
+            let result = cluster_globs(input);
+            let expected_converted: Vec<(PathBuf, Vec<String>)> = expected
+                .iter()
+                .map(|&(base, patterns)| {
+                    (
+                        base.into(),
+                        patterns.iter().map(|&s| s.to_owned()).collect(),
+                    )
+                })
+                .collect();
+            assert_eq!(result, expected_converted, "{input:?} != {expected:?}");
+        }
+
+        check(&["a/b/*", "a/c/*"], &[("a/b", &["*"]), ("a/c", &["*"])]);
+        check(&["./a/b/*", "a/c/*"], &[("a/b", &["*"]), ("a/c", &["*"])]);
+        check(&["/a/b/*", "/a/c/*"], &[("/a/b", &["*"]), ("/a/c", &["*"])]);
+        check(
+            &["../a/b/*", "../a/c/*"],
+            &[("../a/b", &["*"]), ("../a/c", &["*"])],
+        );
+        check(&["x/*", "y/*"], &[("x", &["*"]), ("y", &["*"])]);
+        check(&[], &[]);
+        check(&["/abs/path/*"], &[("/abs/path", &["*"])]);
+        check(&["/abs/*", "rel/*"], &[("/abs", &["*"]), ("rel", &["*"])]);
+        check(&["a/{b,c}/*", "a/d?/*"], &[("a", &["{b,c}/*", "d?/*"])]);
+        check(
+            &[
+                "../shared/a/*.png",
+                "../shared/a/b/*",
+                "../shared/b/c/?x/d",
+                "docs/important/*.{doc,xls}",
+                "docs/important/very/*",
+            ],
+            &[
+                ("../shared/a", &["*.png", "b/*"]),
+                ("../shared/b/c", &["?x/d"]),
+                ("docs/important", &["*.{doc,xls}", "very/*"]),
+            ],
+        );
+        check(&["file.txt"], &[("", &["file.txt"])]);
+        check(&["/"], &[("/", &[""])]);
+        check(&[".."], &[("..", &[""])]);
+        check(
+            &["file1.txt", "file2.txt"],
+            &[("", &["file1.txt", "file2.txt"])],
+        );
+        check(
+            &["a/file1.txt", "a/file2.txt"],
+            &[("a", &["file1.txt", "file2.txt"])],
+        );
+    }
+}
