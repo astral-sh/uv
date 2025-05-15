@@ -152,6 +152,14 @@ mod tests {
 
     use super::{cluster_globs, split_glob, GlobParts};
 
+    fn dewindows(path: &str) -> String {
+        if cfg!(windows) {
+            path.replace('\\', "/")
+        } else {
+            path.to_owned()
+        }
+    }
+
     #[test]
     fn test_split_glob() {
         #[track_caller]
@@ -191,8 +199,8 @@ mod tests {
                 .iter()
                 .map(|&(base, patterns)| {
                     (
-                        base.into(),
-                        patterns.iter().map(|&s| s.to_owned()).collect(),
+                        dewindows(base).into(),
+                        patterns.iter().map(|&s| dewindows(s)).collect(),
                     )
                 })
                 .collect();
