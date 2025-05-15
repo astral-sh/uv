@@ -22,14 +22,12 @@ fn split_glob(pattern: impl AsRef<str>) -> GlobParts {
     let pattern: &Path = pattern.as_ref().as_ref();
 
     let mut glob = GlobParts::default();
-    let mut current = PathBuf::new();
     let mut globbing = false;
     let mut last = None;
 
     for part in pattern.components() {
         if let Some(last) = last {
             if last != Component::CurDir {
-                current.push(last);
                 if globbing {
                     glob.pattern.push(last);
                 } else {
