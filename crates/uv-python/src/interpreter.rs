@@ -716,7 +716,7 @@ impl Display for BrokenSymlink {
             self.path.user_display()
         )?;
         if self.venv {
-            writeln!(
+            write!(
                 f,
                 "\n\n{}{} Consider recreating the environment (e.g., with `{}`)",
                 "hint".bold().cyan(),
