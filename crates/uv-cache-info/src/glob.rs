@@ -81,7 +81,10 @@ impl<'a> Trie<'a> {
             patterns.push(prefix.join(pattern));
         }
         for (part, child) in &self.children {
-            child.collect_patterns(prefix.join(part), patterns);
+            if let Component::Normal(_) = part {
+                // important: we only include normal components here
+                child.collect_patterns(prefix.join(part), patterns);
+            }
         }
     }
 
@@ -95,8 +98,15 @@ impl<'a> Trie<'a> {
         } else {
             // pivot point, we've hit a pattern node; we have to stop here and form a group
             let mut group = Vec::new();
+            // note: only normal components are included here
             self.collect_patterns(PathBuf::new(), &mut group);
-            groups.push((prefix, group));
+            groups.push((prefix.clone(), group));
+            // for non-normal components, we may have to descend separately
+            for (part, child) in &self.children {
+                if !matches!(part, Component::Normal(_)) {
+                    child.collect_groups(prefix.join(part), groups);
+                }
+            }
         }
     }
 }
@@ -197,6 +207,25 @@ mod tests {
         );
         check(&["x/*", "y/*"], &[("x", &["*"]), ("y", &["*"])]);
         check(&[], &[]);
+        check(
+            &["./*", "a/*", "../foo/*.png"],
+            &[("", &["*", "a/*"]), ("../foo", &["*.png"])],
+        );
+        check(
+            &[
+                "?",
+                "/foo/?",
+                "/foo/bar/*",
+                "../bar/*.png",
+                "../bar/../baz/*.jpg",
+            ],
+            &[
+                ("", &["?"]),
+                ("/foo", &["?", "bar/*"]),
+                ("../bar", &["*.png"]),
+                ("../bar/../baz", &["*.jpg"]),
+            ],
+        );
         check(&["/abs/path/*"], &[("/abs/path", &["*"])]);
         check(&["/abs/*", "rel/*"], &[("/abs", &["*"]), ("rel", &["*"])]);
         check(&["a/{b,c}/*", "a/d?/*"], &[("a", &["{b,c}/*", "d?/*"])]);
