@@ -188,6 +188,7 @@ mod tests {
         check("/a/b/*", "/a/b", "*");
         check("../x/*", "../x", "*");
         check("a/{b,c}/d", "a", "{b,c}/d");
+        check("a/[bc]/d", "a", "[bc]/d");
         check("*", "", "*");
         check("*/*", "", "*/*");
         check("..", "..", "");
@@ -256,14 +257,14 @@ mod tests {
         check(&["a/{b,c}/*", "a/d?/*"], &[("a", &["{b,c}/*", "d?/*"])]);
         check(
             &[
-                "../shared/a/*.png",
+                "../shared/a/[abc].png",
                 "../shared/a/b/*",
                 "../shared/b/c/?x/d",
                 "docs/important/*.{doc,xls}",
                 "docs/important/very/*",
             ],
             &[
-                ("../shared/a", &["*.png", "b/*"]),
+                ("../shared/a", &["[abc].png", "b/*"]),
                 ("../shared/b/c", &["?x/d"]),
                 ("docs/important", &["*.{doc,xls}", "very/*"]),
             ],
