@@ -53,6 +53,8 @@ struct BarState {
     /// A map of progress bars, by ID.
     bars: FxHashMap<usize, ProgressBar>,
     /// The download size, if known, by ID.
+    ///
+    /// There are only entries for numerical progress, none for spinners.
     size: FxHashMap<usize, Option<u64>>,
     /// A monotonic counter for bar IDs.
     id: usize,
@@ -205,6 +207,11 @@ impl ProgressReporter {
 
         let max_len = state.max_len;
         for id in 0..state.id {
+            // Ignore spinners, such as for builds.
+            if !state.size.contains_key(&id) {
+                continue;
+            }
+
             if let Some(progress) = state.bars.get_mut(&id) {
                 let template = format!(
                     "{{msg:{max_len}.dim}} {{bar:30.green/dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}"
