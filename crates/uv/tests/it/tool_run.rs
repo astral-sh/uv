@@ -2436,12 +2436,26 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
         import anyio
     "#})?;
 
-    // script dependencies (anyio and idna) are now installed.
+    let script_without_extension = context.temp_dir.child("script_without_extension");
+    script_without_extension.write_str(indoc! {r#"
+        #!/usr/bin/env -S uv run --script
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "pytest",
+        # ]
+        # ///
+
+        import pytest
+    "#})?;
+
+    // script dependencies (anyio) are now installed.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--with-requirements")
         .arg("script.py")
         .arg("black")
-        .arg("script.py"), @r###"
+        .arg("script.py")
+        .arg("-q"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2459,9 +2473,33 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
      + pathspec==0.12.1
      + platformdirs==4.2.0
      + sniffio==1.3.1
-    All done! ✨ 🍰 ✨
-    1 file left unchanged.
-    "###);
+    ");
+
+    // script_without_extension dependencies (pytest) are now installed.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--with-requirements")
+        .arg("script_without_extension")
+        .arg("black")
+        .arg("script.py")
+        .arg("-q"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 9 packages in [TIME]
+     + black==24.3.0
+     + click==8.1.7
+     + iniconfig==2.0.0
+     + mypy-extensions==1.0.0
+     + packaging==24.0
+     + pathspec==0.12.1
+     + platformdirs==4.2.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    ");
 
     // Error when the script is not a valid PEP723 script.
     let script = context.temp_dir.child("not_pep723_script.py");
