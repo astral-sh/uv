@@ -816,6 +816,59 @@ fn add_raw_error() -> Result<()> {
 }
 
 #[test]
+fn reinstall_local_source_trees() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project_1 = context.temp_dir.child("project1");
+    project_1.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let project_2 = context.temp_dir.child("project2");
+    project_2.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project2"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().current_dir(&project_1).arg("../project2").arg("--editable"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project2==0.1.0 (from file://[TEMP_DIR]/project2)
+    ");
+
+    // Running `uv add` should reinstall the project.
+    uv_snapshot!(context.filters(), context.add().current_dir(&project_1).arg("../project2").arg("--editable"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project2==0.1.0 (from file://[TEMP_DIR]/project2)
+    ");
+
+    Ok(())
+}
+
+#[test]
 #[cfg(feature = "git")]
 fn add_editable_error() -> Result<()> {
     let context = TestContext::new("3.12");

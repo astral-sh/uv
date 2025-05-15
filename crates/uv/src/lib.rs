@@ -1818,15 +1818,8 @@ async fn run_project(
         }
         ProjectCommand::Add(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AddSettings::resolve(args, filesystem);
+            let mut args = settings::AddSettings::resolve(args, filesystem);
             show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
-                args.refresh
-                    .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
-            );
 
             // If the script already exists, use it; otherwise, propagate the file path and we'll
             // initialize it later on.
@@ -1852,6 +1845,55 @@ async fn run_project(
                         .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Result<Vec<_>>>()?;
+
+            // Special-case: any local source trees specified on the command-line are automatically
+            // reinstalled.
+            for requirement in &requirements {
+                let requirement = match requirement {
+                    RequirementsSource::Package(requirement) => requirement,
+                    RequirementsSource::Editable(requirement) => requirement,
+                    _ => continue,
+                };
+                match requirement {
+                    RequirementsTxtRequirement::Named(requirement) => {
+                        if let Some(VersionOrUrl::Url(url)) = requirement.version_or_url.as_ref() {
+                            if let ParsedUrl::Directory(ParsedDirectoryUrl {
+                                install_path, ..
+                            }) = &url.parsed_url
+                            {
+                                debug!(
+                                    "Marking explicit source tree for reinstall: `{}`",
+                                    install_path.display()
+                                );
+                                args.settings.reinstall = args
+                                    .settings
+                                    .reinstall
+                                    .with_package(requirement.name.clone());
+                            }
+                        }
+                    }
+                    RequirementsTxtRequirement::Unnamed(requirement) => {
+                        if let ParsedUrl::Directory(ParsedDirectoryUrl { install_path, .. }) =
+                            &requirement.url.parsed_url
+                        {
+                            debug!(
+                                "Marking explicit source tree for reinstall: `{}`",
+                                install_path.display()
+                            );
+                            args.settings.reinstall =
+                                args.settings.reinstall.with_path(install_path.clone());
+                        }
+                    }
+                }
+            }
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
+            );
+
             let constraints = args
                 .constraints
                 .into_iter()
