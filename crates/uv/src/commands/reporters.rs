@@ -1,5 +1,6 @@
 use std::env;
 use std::fmt::Write;
+use std::ops::Deref;
 use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -44,18 +45,55 @@ enum ProgressMode {
     },
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
+enum ProgressBarKind {
+    /// A progress bar with an increasing value, such as a download.
+    Numeric {
+        progress: ProgressBar,
+        /// The download size in bytes, if known.
+        size: Option<u64>,
+    },
+    /// A progress spinner for a task, such as a build.
+    Spinner { progress: ProgressBar },
+}
+
+impl Deref for ProgressBarKind {
+    type Target = ProgressBar;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Numeric { progress, .. } => progress,
+            Self::Spinner { progress } => progress,
+        }
+    }
+}
+
+#[derive(Debug)]
 struct BarState {
-    /// The number of bars that precede any download bars (i.e. build/checkout status).
+    /// The number of bars that precede any download bars (i.e., build/checkout status).
     headers: usize,
     /// A list of download bar sizes, in descending order.
     sizes: Vec<u64>,
     /// A map of progress bars, by ID.
-    bars: FxHashMap<usize, ProgressBar>,
-    /// The download size, if known, by ID.
-    size: FxHashMap<usize, Option<u64>>,
+    bars: FxHashMap<usize, ProgressBarKind>,
     /// A monotonic counter for bar IDs.
     id: usize,
+    /// The maximum length of all bar names encountered.
+    max_len: usize,
+}
+
+impl Default for BarState {
+    fn default() -> Self {
+        Self {
+            headers: 0,
+            sizes: Vec::default(),
+            bars: FxHashMap::default(),
+            id: 0,
+            // Avoid resizing the progress bar templates too often by starting with a padding
+            // that's wider than most package names.
+            max_len: 20,
+        }
+    }
 }
 
 impl BarState {
@@ -142,7 +180,7 @@ impl ProgressReporter {
         progress.set_message(message);
 
         state.headers += 1;
-        state.bars.insert(id, progress);
+        state.bars.insert(id, ProgressBarKind::Spinner { progress });
         id
     }
 
@@ -186,6 +224,23 @@ impl ProgressReporter {
         // Preserve ascending order.
         let position = size.map_or(0, |size| state.sizes.partition_point(|&len| len < size));
         state.sizes.insert(position, size.unwrap_or(0));
+        state.max_len = std::cmp::max(state.max_len, name.len());
+
+        let max_len = state.max_len;
+        for progress in state.bars.values_mut() {
+            // Ignore spinners, such as for builds.
+            if let ProgressBarKind::Numeric { progress, .. } = progress {
+                let template = format!(
+                    "{{msg:{max_len}.dim}} {{bar:30.green/dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}"
+                );
+                progress.set_style(
+                    ProgressStyle::with_template(&template)
+                        .unwrap()
+                        .progress_chars("--"),
+                );
+                progress.tick();
+            }
+        }
 
         let progress = multi_progress.insert(
             // Make sure not to reorder the initial "Preparing..." bar, or any previous bars.
@@ -197,10 +252,12 @@ impl ProgressReporter {
             // We're using binary bytes to match `human_readable_bytes`.
             progress.set_style(
                 ProgressStyle::with_template(
-                    "{msg:10.dim} {bar:30.green/dim} {binary_bytes:>7}/{binary_total_bytes:7}",
+                    &format!(
+                        "{{msg:{}.dim}} {{bar:30.green/dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}", state.max_len
+                    ),
                 )
-                .unwrap()
-                .progress_chars("--"),
+                    .unwrap()
+                    .progress_chars("--"),
             );
             // If the file is larger than 1MB, show a message to indicate that this may take
             // a while keeping the log concise.
@@ -236,8 +293,9 @@ impl ProgressReporter {
         }
 
         let id = state.id();
-        state.bars.insert(id, progress);
-        state.size.insert(id, size);
+        state
+            .bars
+            .insert(id, ProgressBarKind::Numeric { progress, size });
         id
     }
 
@@ -259,21 +317,22 @@ impl ProgressReporter {
         };
 
         let mut state = state.lock().unwrap();
-        let progress = state.bars.remove(&id).unwrap();
-        let size = state.size[&id];
-        if multi_progress.is_hidden()
-            && !*HAS_UV_TEST_NO_CLI_PROGRESS
-            && size.is_none_or(|size| size > 1024 * 1024)
-        {
-            let _ = writeln!(
-                self.printer.stderr(),
-                " {} {}",
-                direction.as_str().bold().green(),
-                progress.message()
-            );
+        if let ProgressBarKind::Numeric { progress, size } = state.bars.remove(&id).unwrap() {
+            if multi_progress.is_hidden()
+                && !*HAS_UV_TEST_NO_CLI_PROGRESS
+                && size.is_none_or(|size| size > 1024 * 1024)
+            {
+                let _ = writeln!(
+                    self.printer.stderr(),
+                    " {} {}",
+                    direction.as_str().bold().green(),
+                    progress.message()
+                );
+            }
+            progress.finish_and_clear();
+        } else {
+            debug_assert!(false, "Request progress bars are numeric");
         }
-
-        progress.finish_and_clear();
     }
 
     fn on_download_progress(&self, id: usize, bytes: u64) {
@@ -327,7 +386,7 @@ impl ProgressReporter {
         progress.finish();
 
         state.headers += 1;
-        state.bars.insert(id, progress);
+        state.bars.insert(id, ProgressBarKind::Spinner { progress });
         id
     }
 
