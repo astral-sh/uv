@@ -138,6 +138,7 @@ impl DirectoryWriter for ListWriter<'_> {
         self.files.push((path.to_string(), None));
         Ok(())
     }
+
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         self.files
             .push((path.to_string(), Some(file.to_path_buf())));
@@ -204,11 +205,12 @@ fn find_roots(
     relative_module_root: &Path,
     module_name: Option<&Identifier>,
 ) -> Result<(PathBuf, PathBuf), Error> {
-    let src_root = source_tree.join(uv_fs::normalize_path(relative_module_root));
+    let relative_module_root = uv_fs::normalize_path(relative_module_root);
+    let src_root = source_tree.join(&relative_module_root);
     if !src_root.starts_with(source_tree) {
         return Err(Error::InvalidModuleRoot(relative_module_root.to_path_buf()));
     }
-    let src_root = source_tree.join(relative_module_root);
+    let src_root = source_tree.join(&relative_module_root);
     let module_root = find_module_root(&src_root, module_name, pyproject_toml.name())?;
     Ok((src_root, module_root))
 }
