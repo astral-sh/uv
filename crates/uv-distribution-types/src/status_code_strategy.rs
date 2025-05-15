@@ -140,8 +140,8 @@ impl schemars::JsonSchema for SerializableStatusCode {
         "StatusCode".to_string()
     }
 
-    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        let mut schema = gen.subschema_for::<u16>().into_object();
+    fn json_schema(r#gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
+        let mut schema = r#gen.subschema_for::<u16>().into_object();
         schema.metadata().description = Some("HTTP status code (100-599)".to_string());
         schema.number().minimum = Some(100.0);
         schema.number().maximum = Some(599.0);
