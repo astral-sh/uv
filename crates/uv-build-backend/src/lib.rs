@@ -20,6 +20,7 @@ use tracing::debug;
 
 use uv_fs::Simplified;
 use uv_globfilter::PortableGlobError;
+use uv_normalize::PackageName;
 use uv_pypi_types::{Identifier, IdentifierParseError};
 
 use crate::metadata::ValidationError;
@@ -82,7 +83,7 @@ pub enum Error {
         paths.iter().map(Simplified::user_display).join("`\n* `")
     )]
     MultipleModules {
-        module_name: Identifier,
+        module_name: String,
         paths: Vec<PathBuf>,
     },
     /// Either an absolute path or a parent path through `..`.
@@ -137,7 +138,6 @@ impl DirectoryWriter for ListWriter<'_> {
         self.files.push((path.to_string(), None));
         Ok(())
     }
-
     fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
         self.files
             .push((path.to_string(), Some(file.to_path_buf())));
@@ -197,7 +197,7 @@ fn check_metadata_directory(
     Ok(())
 }
 
-/// Resolve the source root and module root paths.
+/// Resolve the source root, module root and the module name.
 fn find_roots(
     source_tree: &Path,
     pyproject_toml: &PyProjectToml,
@@ -208,17 +208,8 @@ fn find_roots(
     if !src_root.starts_with(source_tree) {
         return Err(Error::InvalidModuleRoot(relative_module_root.to_path_buf()));
     }
-
-    let module_name = if let Some(module_name) = module_name {
-        module_name.clone()
-    } else {
-        // Should never error, the rules for package names (in dist-info formatting) are stricter
-        // than those for identifiers
-        Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
-    };
-    debug!("Module name: `{:?}`", module_name);
-
-    let module_root = find_module_root(&src_root, module_name)?;
+    let src_root = source_tree.join(relative_module_root);
+    let module_root = find_module_root(&src_root, module_name, pyproject_toml.name())?;
     Ok((src_root, module_root))
 }
 
@@ -231,8 +222,24 @@ fn find_roots(
 /// For dist-info-normalizing a package name, the rules are lowercasing, replacing `.` with `_` and
 /// replace `-` with `_`. Since `.` and `-` are not allowed in module names, we can check whether a
 /// directory name matches our expected module name by lowercasing it.
-fn find_module_root(src_root: &Path, module_name: Identifier) -> Result<PathBuf, Error> {
-    let normalized = module_name.to_string();
+///
+/// Given that there are case-insensitive file systems, we always search case-insensitive.
+///
+/// Returns the module root and the module name.
+fn find_module_root(
+    src_root: &Path,
+    module_name: Option<&Identifier>,
+    package_name: &PackageName,
+) -> Result<PathBuf, Error> {
+    let module_name = if let Some(module_name) = module_name {
+        module_name.to_string().to_lowercase()
+    } else {
+        // Should never error, the rules for package names (in dist-info formatting) are stricter
+        // than those for identifiers
+        let module_name = Identifier::from_str(package_name.as_dist_info_name().as_ref())?;
+        module_name.to_string().to_lowercase()
+    };
+
     let dir_iterator = match fs_err::read_dir(src_root) {
         Ok(dir_iterator) => dir_iterator,
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
@@ -245,28 +252,31 @@ fn find_module_root(src_root: &Path, module_name: Identifier) -> Result<PathBuf,
             entry
                 .file_name()
                 .to_str()
-                .is_some_and(|file_name| file_name.to_lowercase() == normalized)
+                .is_some_and(|file_name| file_name.to_lowercase() == module_name)
         })
         .map_ok(|entry| entry.path())
         .collect::<Result<Vec<_>, _>>()?;
-    match modules.as_slice() {
+    let module_root = match modules.as_slice() {
         [] => {
             // Show the normalized path in the error message, as representative example.
-            Err(Error::MissingModule(src_root.join(module_name.as_ref())))
+            return Err(Error::MissingModule(src_root.join(module_name)));
         }
         [module_root] => {
             if module_root.join("__init__.py").is_file() {
-                Ok(module_root.clone())
+                module_root.clone()
             } else {
-                Err(Error::MissingInitPy(module_root.join("__init__.py")))
+                return Err(Error::MissingInitPy(module_root.join("__init__.py")));
             }
         }
         multiple => {
             let mut paths = multiple.to_vec();
             paths.sort();
-            Err(Error::MultipleModules { module_name, paths })
+            return Err(Error::MultipleModules { module_name, paths });
         }
-    }
+    };
+
+    debug!("Module name (case-insensitive): `{}`", module_name);
+    Ok(module_root)
 }
 
 #[cfg(test)]
@@ -275,7 +285,7 @@ mod tests {
     use flate2::bufread::GzDecoder;
     use fs_err::File;
     use indoc::indoc;
-    use insta::{assert_debug_snapshot, assert_snapshot};
+    use insta::assert_snapshot;
     use itertools::Itertools;
     use sha2::Digest;
     use std::io::{BufReader, Read};
@@ -761,5 +771,74 @@ mod tests {
         let dist = TempDir::new().unwrap();
         let build2 = build(src.path(), dist.path()).unwrap();
         assert_eq!(build1, build2);
+    }
+
+    /// Check that upper case letters in module names work.
+    #[test]
+    fn test_camel_case() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "camelcase"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+
+        fs_err::create_dir_all(src.path().join("src").join("camelCase")).unwrap();
+        File::create(src.path().join("src").join("camelCase").join("__init__.py")).unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build1 = build(src.path(), dist.path()).unwrap();
+
+        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        camelCase/
+        camelCase/__init__.py
+        camelcase-1.0.0.dist-info/
+        camelcase-1.0.0.dist-info/METADATA
+        camelcase-1.0.0.dist-info/RECORD
+        camelcase-1.0.0.dist-info/WHEEL
+        ");
+
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "cased-rename"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            module-name = "camelCase"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+
+        let build2 = build(src.path(), dist.path()).unwrap();
+        assert_snapshot!(build2.wheel_contents.join("\n"), @r"
+        camelCase/
+        camelCase/__init__.py
+        cased_rename-1.0.0.dist-info/
+        cased_rename-1.0.0.dist-info/METADATA
+        cased_rename-1.0.0.dist-info/RECORD
+        cased_rename-1.0.0.dist-info/WHEEL
+        ");
+
+        // Check that an explicit wrong casing fails to build.
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            pyproject_toml.replace("camelCase", "camel_case"),
+        )
+        .unwrap();
+        let build_err = build(src.path(), dist.path()).unwrap_err();
+        assert_snapshot!(
+            build_err.to_string().replace(&src.path().user_display().to_string(), "[TEMP_PATH]"),
+            @"Expected a Python module directory at: `[TEMP_PATH]/src/camel_case`"
+        );
     }
 }
