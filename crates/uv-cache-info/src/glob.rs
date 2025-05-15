@@ -3,6 +3,14 @@ use std::{
     path::{Component, Components, Path, PathBuf},
 };
 
+/// Check if a component of the path looks like it may be a glob pattern.
+///
+/// Note: this function is being used when splitting a glob pattern into a long possible
+/// base and the glob remainder (scanning through components until we hit the first component
+/// for which this function returns true). It is acceptable for this function to return
+/// false positives (e.g. patterns like 'foo[bar' or 'foo{bar') in which case correctness
+/// will not be affected but efficiency might be (because we'll traverse more than we should),
+/// however it should not return false negatives.
 fn is_glob_like(part: Component) -> bool {
     matches!(part, Component::Normal(_))
         && part.as_os_str().to_str().is_some_and(|part| {
