@@ -79,12 +79,10 @@ fn source_dist_matcher(
 
     // The wheel must not include any files included by the source distribution (at least until we
     // have files generated in the source dist -> wheel build step).
-    let import_path = &settings
-        .module_root
-        .join(module_name.as_ref())
+    let import_path = uv_fs::normalize_path(&settings.module_root.join(module_name.as_ref()))
         .portable_display()
         .to_string();
-    includes.push(format!("{}/**", globset::escape(import_path)));
+    includes.push(format!("{}/**", globset::escape(&import_path)));
     for include in includes {
         let glob = PortableGlobParser::Uv
             .parse(&include)
@@ -92,7 +90,7 @@ fn source_dist_matcher(
                 field: "tool.uv.build-backend.source-include".to_string(),
                 source: err,
             })?;
-        include_globs.push(glob.clone());
+        include_globs.push(glob);
     }
 
     // Include the Readme
@@ -101,11 +99,11 @@ fn source_dist_matcher(
         .as_ref()
         .and_then(|readme| readme.path())
     {
+        let readme = uv_fs::normalize_path(readme);
         trace!("Including readme at: `{}`", readme.user_display());
-        include_globs.push(
-            Glob::new(&globset::escape(&readme.portable_display().to_string()))
-                .expect("escaped globset is parseable"),
-        );
+        let readme = readme.portable_display().to_string();
+        let glob = Glob::new(&globset::escape(&readme)).expect("escaped globset is parseable");
+        include_globs.push(glob);
     }
 
     // Include the license files
@@ -122,13 +120,19 @@ fn source_dist_matcher(
 
     // Include the data files
     for (name, directory) in settings.data.iter() {
+        let directory = uv_fs::normalize_path(Path::new(directory));
+        trace!(
+            "Including data ({}) at: `{}`",
+            name,
+            directory.user_display()
+        );
+        let directory = directory.portable_display().to_string();
         let glob = PortableGlobParser::Uv
-            .parse(&format!("{}/**", globset::escape(directory)))
+            .parse(&format!("{}/**", globset::escape(&directory)))
             .map_err(|err| Error::PortableGlob {
                 field: format!("tool.uv.build-backend.data.{name}"),
                 source: err,
             })?;
-        trace!("Including data ({name}) at: `{directory}`");
         include_globs.push(glob);
     }
 

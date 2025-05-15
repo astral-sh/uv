@@ -268,10 +268,10 @@ pub fn build_editable(
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
     debug!("Adding pth file to {}", wheel_path.user_display());
-    if settings.module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
+    let src_root = source_tree.join(&settings.module_root);
+    if !src_root.starts_with(source_tree) {
+        return Err(Error::InvalidModuleRoot(settings.module_root.clone()));
     }
-    let src_root = source_tree.join(settings.module_root);
 
     let module_name = if let Some(module_name) = settings.module_name {
         module_name

@@ -85,8 +85,9 @@ pub enum Error {
         module_name: Identifier,
         paths: Vec<PathBuf>,
     },
-    #[error("Absolute module root is not allowed: `{}`", _0.display())]
-    AbsoluteModuleRoot(PathBuf),
+    /// Either an absolute path or a parent path through `..`.
+    #[error("Module root must be inside the project: `{}`", _0.user_display())]
+    InvalidModuleRoot(PathBuf),
     #[error("Inconsistent metadata between prepare and build step: `{0}`")]
     InconsistentSteps(&'static str),
     #[error("Failed to write to {}", _0.user_display())]
@@ -203,12 +204,10 @@ fn find_roots(
     relative_module_root: &Path,
     module_name: Option<&Identifier>,
 ) -> Result<(PathBuf, PathBuf), Error> {
-    if relative_module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(
-            relative_module_root.to_path_buf(),
-        ));
+    let src_root = source_tree.join(uv_fs::normalize_path(relative_module_root));
+    if !src_root.starts_with(source_tree) {
+        return Err(Error::InvalidModuleRoot(relative_module_root.to_path_buf()));
     }
-    let src_root = source_tree.join(relative_module_root);
 
     let module_name = if let Some(module_name) = module_name {
         module_name.clone()
@@ -288,6 +287,7 @@ mod tests {
     /// source tree -> wheel
     /// and a build with
     /// source tree -> source dist -> wheel.
+    #[derive(Debug, PartialEq, Eq)]
     struct BuildResults {
         source_dist_list_files: FileList,
         source_dist_filename: SourceDistFilename,
@@ -693,5 +693,74 @@ mod tests {
         Name: two-step-build
         Version: 1.0.0
         "###);
+    }
+
+    /// Check that non-normalized paths for `module-root` work with the glob inclusions.
+    #[test]
+    fn test_glob_path_normalization() {
+        let src = TempDir::new().unwrap();
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "two-step-build"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            module-root = "./"
+            "#
+            },
+        )
+        .unwrap();
+
+        fs_err::create_dir_all(src.path().join("two_step_build")).unwrap();
+        File::create(src.path().join("two_step_build").join("__init__.py")).unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build1 = build(src.path(), dist.path());
+
+        assert_snapshot!(build1.source_dist_contents.join("\n"), @r"
+        two_step_build-1.0.0/
+        two_step_build-1.0.0/PKG-INFO
+        two_step_build-1.0.0/pyproject.toml
+        two_step_build-1.0.0/two_step_build
+        two_step_build-1.0.0/two_step_build/__init__.py
+        ");
+
+        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        two_step_build-1.0.0.dist-info/
+        two_step_build-1.0.0.dist-info/METADATA
+        two_step_build-1.0.0.dist-info/RECORD
+        two_step_build-1.0.0.dist-info/WHEEL
+        two_step_build/
+        two_step_build/__init__.py
+        ");
+
+        // A path with a parent reference.
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            indoc! {r#"
+            [project]
+            name = "two-step-build"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            module-root = "two_step_build/.././"
+            "#
+            },
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build2 = build(src.path(), dist.path());
+        assert_eq!(build1, build2);
     }
 }
