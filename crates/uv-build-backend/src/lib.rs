@@ -281,7 +281,123 @@ mod tests {
     use sha2::Digest;
     use std::io::{BufReader, Read};
     use tempfile::TempDir;
+    use uv_distribution_filename::{SourceDistFilename, WheelFilename};
     use uv_fs::{copy_dir_all, relative_to};
+
+    /// File listings, generated archives and archive contents for both a build with
+    /// source tree -> wheel
+    /// and a build with
+    /// source tree -> source dist -> wheel.
+    struct BuildResults {
+        source_dist_list_files: FileList,
+        source_dist_filename: SourceDistFilename,
+        source_dist_contents: Vec<String>,
+        wheel_list_files: FileList,
+        wheel_filename: WheelFilename,
+        wheel_contents: Vec<String>,
+    }
+
+    /// Run both a direct wheel build and an indirect wheel build through a source distribution,
+    /// while checking that directly built wheel and indirectly built wheel are the same.
+    fn build(source_root: &Path, dist: &Path) -> BuildResults {
+        // Build a direct wheel, capture all its properties to compare it with the indirect wheel
+        // latest and remove it since it has the same filename as the indirect wheel.
+        let (_name, direct_wheel_list_files) = list_wheel(source_root, "1.0.0+test").unwrap();
+        let direct_wheel_filename = build_wheel(source_root, dist, None, "1.0.0+test").unwrap();
+        let direct_wheel_path = dist.join(direct_wheel_filename.to_string());
+        let direct_wheel_contents = wheel_contents(&direct_wheel_path);
+        let direct_wheel_hash = sha2::Sha256::digest(fs_err::read(&direct_wheel_path).unwrap());
+        fs_err::remove_file(&direct_wheel_path).unwrap();
+
+        // Build a source distribution.
+        let (_name, source_dist_list_files) = list_source_dist(source_root, "1.0.0+test").unwrap();
+        // TODO(konsti): This should run in the unpacked source dist tempdir, but we need to
+        // normalize the path.
+        let (_name, wheel_list_files) = list_wheel(source_root, "1.0.0+test").unwrap();
+        let source_dist_filename = build_source_dist(source_root, dist, "1.0.0+test").unwrap();
+        let source_dist_path = dist.join(source_dist_filename.to_string());
+        let source_dist_contents = sdist_contents(&source_dist_path);
+
+        // Unpack the source distribution and build a wheel from it.
+        let sdist_tree = TempDir::new().unwrap();
+        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
+        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
+        source_dist.unpack(sdist_tree.path()).unwrap();
+        let sdist_top_level_directory = sdist_tree.path().join(format!(
+            "{}-{}",
+            source_dist_filename.name.as_dist_info_name(),
+            source_dist_filename.version
+        ));
+        let wheel_filename =
+            build_wheel(&sdist_top_level_directory, dist, None, "1.0.0+test").unwrap();
+        let wheel_contents = wheel_contents(&dist.join(wheel_filename.to_string()));
+
+        // Check that direct and indirect wheels are identical.
+        assert_eq!(direct_wheel_filename, wheel_filename);
+        assert_eq!(direct_wheel_contents, wheel_contents);
+        assert_eq!(direct_wheel_list_files, wheel_list_files);
+        assert_eq!(
+            direct_wheel_hash,
+            sha2::Sha256::digest(fs_err::read(dist.join(wheel_filename.to_string())).unwrap())
+        );
+
+        BuildResults {
+            source_dist_list_files,
+            source_dist_filename,
+            source_dist_contents,
+            wheel_list_files,
+            wheel_filename,
+            wheel_contents,
+        }
+    }
+
+    fn sdist_contents(source_dist_path: &Path) -> Vec<String> {
+        let sdist_reader = BufReader::new(File::open(source_dist_path).unwrap());
+        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
+        let mut source_dist_contents: Vec<_> = source_dist
+            .entries()
+            .unwrap()
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .replace('\\', "/")
+            })
+            .collect();
+        source_dist_contents.sort();
+        source_dist_contents
+    }
+
+    fn wheel_contents(direct_output_dir: &Path) -> Vec<String> {
+        let wheel = zip::ZipArchive::new(File::open(direct_output_dir).unwrap()).unwrap();
+        let mut wheel_contents: Vec<_> = wheel
+            .file_names()
+            .map(|path| path.replace('\\', "/"))
+            .collect();
+        wheel_contents.sort_unstable();
+        wheel_contents
+    }
+
+    fn format_file_list(file_list: FileList, src: &Path) -> String {
+        file_list
+            .into_iter()
+            .map(|(path, source)| {
+                let path = path.replace('\\', "/");
+                if let Some(source) = source {
+                    let source = relative_to(source, src)
+                        .unwrap()
+                        .portable_display()
+                        .to_string();
+                    format!("{path} ({source})")
+                } else {
+                    format!("{path} (generated)")
+                }
+            })
+            .join("\n")
+    }
 
     /// Tests that builds are stable and include the right files and.
     ///
@@ -335,91 +451,39 @@ mod tests {
         File::create(module_root.join("__pycache__").join("compiled.pyc")).unwrap();
         File::create(module_root.join("arithmetic").join("circle.pyc")).unwrap();
 
-        // Build a wheel from the source tree
-        let direct_output_dir = TempDir::new().unwrap();
-        let (_name, wheel_list_files) = list_wheel(src.path(), "1.0.0+test").unwrap();
-        build_wheel(src.path(), direct_output_dir.path(), None, "1.0.0+test").unwrap();
+        // Perform both the direct and the indirect build.
+        let dist = TempDir::new().unwrap();
+        let build = build(src.path(), dist.path());
 
-        let wheel = zip::ZipArchive::new(
-            File::open(
-                direct_output_dir
-                    .path()
-                    .join("built_by_uv-0.1.0-py3-none-any.whl"),
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let mut direct_wheel_contents: Vec<_> = wheel.file_names().collect();
-        direct_wheel_contents.sort_unstable();
-
-        // List file and build a source dist from the source tree
-        let source_dist_dir = TempDir::new().unwrap();
-        let (_name, source_dist_list_files) = list_source_dist(src.path(), "1.0.0+test").unwrap();
-        build_source_dist(src.path(), source_dist_dir.path(), "1.0.0+test").unwrap();
-        let source_dist_path = source_dist_dir.path().join("built_by_uv-0.1.0.tar.gz");
+        let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
+        assert_eq!(
+            build.source_dist_filename.to_string(),
+            "built_by_uv-0.1.0.tar.gz"
+        );
         // Check that the source dist is reproducible across platforms.
         assert_snapshot!(
             format!("{:x}", sha2::Sha256::digest(fs_err::read(&source_dist_path).unwrap())),
             @"dab46bcc4d66960a11cfdc19604512a8e1a3241a67536f7e962166760e9c575c"
         );
-
-        // Build a wheel from the source dist
-        let sdist_tree = TempDir::new().unwrap();
-        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
-        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
-        let mut source_dist_contents: Vec<_> = source_dist
-            .entries()
-            .unwrap()
-            .map(|entry| entry.unwrap().path().unwrap().to_str().unwrap().to_string())
-            .collect();
-        source_dist_contents.sort();
-        // Reset the reader and unpack
-        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
-        let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
-        source_dist.unpack(sdist_tree.path()).unwrap();
-        drop(source_dist_dir);
-
-        let indirect_output_dir = TempDir::new().unwrap();
-        build_wheel(
-            &sdist_tree.path().join("built_by_uv-0.1.0"),
-            indirect_output_dir.path(),
-            None,
-            "1.0.0+test",
-        )
-        .unwrap();
-        let wheel = zip::ZipArchive::new(
-            File::open(
-                indirect_output_dir
-                    .path()
-                    .join("built_by_uv-0.1.0-py3-none-any.whl"),
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        let mut indirect_wheel_contents: Vec<_> = wheel.file_names().collect();
-        indirect_wheel_contents.sort_unstable();
-        assert_eq!(indirect_wheel_contents, direct_wheel_contents);
-
-        let format_file_list = |file_list: FileList| {
-            file_list
-                .into_iter()
-                .map(|(path, source)| {
-                    let path = path.replace('\\', "/");
-                    if let Some(source) = source {
-                        let source = relative_to(source, src.path())
-                            .unwrap()
-                            .portable_display()
-                            .to_string();
-                        format!("{path} ({source})")
-                    } else {
-                        format!("{path} (generated)")
-                    }
-                })
-                .join("\n")
-        };
-
-        // Check the contained files and directories
-        assert_snapshot!(source_dist_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r###"
+        // Check both the files we report and the actual files
+        assert_snapshot!(format_file_list(build.source_dist_list_files, src.path()), @r"
+        built_by_uv-0.1.0/PKG-INFO (generated)
+        built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
+        built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
+        built_by_uv-0.1.0/README.md (README.md)
+        built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
+        built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
+        built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
+        built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
+        built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
+        built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
+        built_by_uv-0.1.0/src/built_by_uv/build-only.h (src/built_by_uv/build-only.h)
+        built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
+        built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+        ");
+        assert_snapshot!(build.source_dist_contents.iter().join("\n"), @r"
         built_by_uv-0.1.0/
         built_by_uv-0.1.0/LICENSE-APACHE
         built_by_uv-0.1.0/LICENSE-MIT
@@ -443,26 +507,19 @@ mod tests {
         built_by_uv-0.1.0/src/built_by_uv/cli.py
         built_by_uv-0.1.0/third-party-licenses
         built_by_uv-0.1.0/third-party-licenses/PEP-401.txt
-        "###);
-        assert_snapshot!(format_file_list(source_dist_list_files), @r"
-        built_by_uv-0.1.0/PKG-INFO (generated)
-        built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
-        built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
-        built_by_uv-0.1.0/README.md (README.md)
-        built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
-        built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
-        built_by_uv-0.1.0/pyproject.toml (pyproject.toml)
-        built_by_uv-0.1.0/scripts/whoami.sh (scripts/whoami.sh)
-        built_by_uv-0.1.0/src/built_by_uv/__init__.py (src/built_by_uv/__init__.py)
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
-        built_by_uv-0.1.0/src/built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
-        built_by_uv-0.1.0/src/built_by_uv/build-only.h (src/built_by_uv/build-only.h)
-        built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
-        built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
         ");
 
-        assert_snapshot!(indirect_wheel_contents.iter().map(|path| path.replace('\\', "/")).join("\n"), @r###"
+        let wheel_path = dist.path().join(build.wheel_filename.to_string());
+        assert_eq!(
+            build.wheel_filename.to_string(),
+            "built_by_uv-0.1.0-py3-none-any.whl"
+        );
+        // Check that the wheel is reproducible across platforms.
+        assert_snapshot!(
+            format!("{:x}", sha2::Sha256::digest(fs_err::read(&wheel_path).unwrap())),
+            @"ac3f68ac448023bca26de689d80401bff57f764396ae802bf4666234740ffbe3"
+        );
+        assert_snapshot!(build.wheel_contents.join("\n"), @r"
         built_by_uv-0.1.0.data/data/
         built_by_uv-0.1.0.data/data/data.csv
         built_by_uv-0.1.0.data/headers/
@@ -486,9 +543,8 @@ mod tests {
         built_by_uv/arithmetic/circle.py
         built_by_uv/arithmetic/pi.txt
         built_by_uv/cli.py
-        "###);
-
-        assert_snapshot!(format_file_list(wheel_list_files), @r"
+        ");
+        assert_snapshot!(format_file_list(build.wheel_list_files, src.path()), @r"
         built_by_uv/__init__.py (src/built_by_uv/__init__.py)
         built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
         built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
@@ -504,19 +560,6 @@ mod tests {
         built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
         built_by_uv-0.1.0.dist-info/METADATA (generated)
         ");
-
-        // Check that the wheel is the same for both build paths and reproducible across platforms.
-        let wheel_filename = "built_by_uv-0.1.0-py3-none-any.whl";
-        let index_wheel_contents =
-            fs_err::read(indirect_output_dir.path().join(wheel_filename)).unwrap();
-        assert_eq!(
-            fs_err::read(direct_output_dir.path().join(wheel_filename)).unwrap(),
-            index_wheel_contents
-        );
-        assert_snapshot!(
-            format!("{:x}", sha2::Sha256::digest(&index_wheel_contents)),
-            @"ac3f68ac448023bca26de689d80401bff57f764396ae802bf4666234740ffbe3"
-        );
     }
 
     /// Test that `license = { file = "LICENSE" }` is supported.
