@@ -948,7 +948,7 @@ async fn create_pep517_build_environment(
                 package_name,
                 package_version,
                 version_id,
-            ))
+            ));
         }
     };
 
@@ -1098,7 +1098,7 @@ impl PythonRunner {
                 return Err(Error::CommandFailed(
                     venv.python_executable().to_path_buf(),
                     err,
-                ))
+                ));
             }
         }
 

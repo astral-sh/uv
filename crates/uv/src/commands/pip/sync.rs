@@ -124,7 +124,9 @@ pub(crate) async fn pip_sync(
 
     if pylock.is_some() {
         if preview.is_disabled() {
-            warn_user!("The `--pylock` setting is experimental and may change without warning. Pass `--preview` to disable this warning.");
+            warn_user!(
+                "The `--pylock` setting is experimental and may change without warning. Pass `--preview` to disable this warning."
+            );
         }
     }
 
@@ -137,7 +139,10 @@ pub(crate) async fn pip_sync(
         let num_requirements =
             requirements.len() + source_trees.len() + usize::from(pylock.is_some());
         if num_requirements == 0 {
-            writeln!(printer.stderr(), "No requirements found (hint: use `--allow-empty-requirements` to clear the environment)")?;
+            writeln!(
+                printer.stderr(),
+                "No requirements found (hint: use `--allow-empty-requirements` to clear the environment)"
+            )?;
             return Ok(ExitStatus::Success);
         }
     }
@@ -427,7 +432,7 @@ pub(crate) async fn pip_sync(
             Err(err) => {
                 return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
         };
 
@@ -464,7 +469,7 @@ pub(crate) async fn pip_sync(
         Err(err) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     }
 

@@ -1620,7 +1620,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             // Nothing to do.
                         }
                         Err(err) => {
-                            debug!("Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})");
+                            debug!(
+                                "Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})"
+                            );
                         }
                     }
                 }
@@ -2138,7 +2140,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 return Err(Error::Extract(
                     temp_dir.path().to_string_lossy().into_owned(),
                     err,
-                ))
+                ));
             }
         };
 
@@ -2206,7 +2208,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 return Err(Error::Extract(
                     temp_dir.path().to_string_lossy().into_owned(),
                     err,
-                ))
+                ));
             }
         };
 

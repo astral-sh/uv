@@ -28,7 +28,9 @@ pub enum ParsedUrlError {
     UrlParse(String, #[source] ParseError),
     #[error(transparent)]
     VerbatimUrl(#[from] VerbatimUrlError),
-    #[error("Direct URL (`{0}`) references a Git repository, but is missing the `git+` prefix (e.g., `git+{0}`)")]
+    #[error(
+        "Direct URL (`{0}`) references a Git repository, but is missing the `git+` prefix (e.g., `git+{0}`)"
+    )]
     MissingGitPrefix(String),
     #[error("Expected direct URL (`{0}`) to end in a supported file extension: {1}")]
     MissingExtensionUrl(String, ExtensionError),
@@ -309,7 +311,7 @@ impl TryFrom<Url> for ParsedArchiveUrl {
         let ext = match DistExtension::from_path(url.path()) {
             Ok(ext) => ext,
             Err(..) if looks_like_git_repository(&url) => {
-                return Err(ParsedUrlError::MissingGitPrefix(url.to_string()))
+                return Err(ParsedUrlError::MissingGitPrefix(url.to_string()));
             }
             Err(err) => return Err(ParsedUrlError::MissingExtensionUrl(url.to_string(), err)),
         };

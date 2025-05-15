@@ -205,7 +205,7 @@ impl RequirementsSpecification {
                 return Err(anyhow::anyhow!(
                     "Conda environment files (i.e., `{}`) are not supported",
                     path.user_display()
-                ))
+                ));
             }
         })
     }

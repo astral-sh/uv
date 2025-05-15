@@ -4111,7 +4111,7 @@ impl Wheel {
                             name: filename.name,
                             version: filename.version,
                         }
-                        .into())
+                        .into());
                     }
                 };
                 let file = Box::new(uv_distribution_types::File {
@@ -4141,7 +4141,7 @@ impl Wheel {
                             name: filename.name,
                             version: filename.version,
                         }
-                        .into())
+                        .into());
                     }
                 };
                 let file_url = Url::from_file_path(root.join(index_path).join(file_path))

@@ -2238,7 +2238,9 @@ fn install_git_private_https_pat_at_ref() {
         ""
     };
 
-    let package = format!("uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac");
+    let package = format!(
+        "uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac"
+    );
     uv_snapshot!(filters, context.pip_install()
         .arg(package), @r###"
     success: true

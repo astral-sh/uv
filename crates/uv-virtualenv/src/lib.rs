@@ -11,7 +11,9 @@ mod virtualenv;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Could not find a suitable Python executable for the virtual environment based on the interpreter: {0}")]
+    #[error(
+        "Could not find a suitable Python executable for the virtual environment based on the interpreter: {0}"
+    )]
     NotFound(String),
 }
 

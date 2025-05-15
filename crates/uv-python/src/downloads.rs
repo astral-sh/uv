@@ -94,7 +94,9 @@ pub enum Error {
     Mirror(&'static str, &'static str),
     #[error(transparent)]
     LibcDetection(#[from] LibcDetectionError),
-    #[error("Remote python downloads JSON is not yet supported, please use a local path (without `file://` prefix)")]
+    #[error(
+        "Remote python downloads JSON is not yet supported, please use a local path (without `file://` prefix)"
+    )]
     RemoteJSONNotSupported(),
     #[error("The json of the python downloads is invalid: {0}")]
     InvalidPythonDownloadsJSON(String, #[source] serde_json::Error),
@@ -401,7 +403,9 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
             Some(VersionRequest::from(&key.version())),
             match &key.implementation {
                 LenientImplementationName::Known(implementation) => Some(*implementation),
-                LenientImplementationName::Unknown(name) => unreachable!("Managed Python installations are expected to always have known implementation names, found {name}"),
+                LenientImplementationName::Unknown(name) => unreachable!(
+                    "Managed Python installations are expected to always have known implementation names, found {name}"
+                ),
             },
             Some(key.arch),
             Some(key.os),
