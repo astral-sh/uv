@@ -5,10 +5,11 @@ use std::{
 
 fn is_glob_like(part: Component) -> bool {
     matches!(part, Component::Normal(_))
-        && part
-            .as_os_str()
-            .to_str()
-            .is_some_and(|part| ["*", "{", "}", "?"].into_iter().any(|c| part.contains(c)))
+        && part.as_os_str().to_str().is_some_and(|part| {
+            ["*", "{", "}", "?", "[", "]"]
+                .into_iter()
+                .any(|c| part.contains(c))
+        })
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
