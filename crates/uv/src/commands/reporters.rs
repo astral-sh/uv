@@ -206,15 +206,15 @@ impl ProgressReporter {
         let max_len = state.max_len;
         for id in 0..state.id {
             if let Some(progress) = state.bars.get_mut(&id) {
+                let template = format!(
+                    "{{msg:{max_len}.dim}} {{bar:30.green/dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}"
+                );
                 progress.set_style(
-                ProgressStyle::with_template(
-                    &format!(
-                        "{{msg:{max_len}.dim}} {{bar:30.green/dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}"
-                    ),
-                )
-                .unwrap()
-                .progress_chars("--"),
-            );
+                    ProgressStyle::with_template(&template)
+                        .unwrap()
+                        .progress_chars("--"),
+                );
+                progress.tick();
             }
         }
 
