@@ -1846,7 +1846,7 @@ async fn run_project(
                 )
                 .collect::<Result<Vec<_>>>()?;
 
-            // Special-case: any source trees specified on the command-line are automatically
+            // Special-case: any local source trees specified on the command-line are automatically
             // reinstalled.
             for requirement in &requirements {
                 let requirement = match requirement {
