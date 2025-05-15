@@ -75,15 +75,29 @@ impl<'a> Trie<'a> {
     }
 
     #[allow(clippy::needless_pass_by_value)]
-    fn collect_patterns(&self, prefix: PathBuf, patterns: &mut Vec<PathBuf>) {
+    fn collect_patterns(
+        &self,
+        pattern_prefix: PathBuf,
+        group_prefix: PathBuf,
+        patterns: &mut Vec<PathBuf>,
+        groups: &mut Vec<(PathBuf, Vec<PathBuf>)>,
+    ) {
         // collect all patterns beneath and including this node
         for pattern in &self.patterns {
-            patterns.push(prefix.join(pattern));
+            patterns.push(pattern_prefix.join(pattern));
         }
         for (part, child) in &self.children {
             if let Component::Normal(_) = part {
-                // important: we only include normal components here
-                child.collect_patterns(prefix.join(part), patterns);
+                // for normal components, collect all descendant patterns ('normal' edges only)
+                child.collect_patterns(
+                    pattern_prefix.join(part),
+                    group_prefix.join(part),
+                    patterns,
+                    groups,
+                );
+            } else {
+                // for non-normal component edges, kick off separate group collection at this node
+                child.collect_groups(group_prefix.join(part), groups);
             }
         }
     }
@@ -99,15 +113,8 @@ impl<'a> Trie<'a> {
         } else {
             // pivot point, we've hit a pattern node; we have to stop here and form a group
             let mut group = Vec::new();
-            // note: only normal components are included here
-            self.collect_patterns(PathBuf::new(), &mut group);
-            groups.push((prefix.clone(), group));
-            // for non-normal components, we may have to descend separately
-            for (part, child) in &self.children {
-                if !matches!(part, Component::Normal(_)) {
-                    child.collect_groups(prefix.join(part), groups);
-                }
-            }
+            self.collect_patterns(PathBuf::new(), prefix.clone(), &mut group, groups);
+            groups.push((prefix, group));
         }
     }
 }
@@ -148,8 +155,6 @@ pub(crate) fn cluster_globs(patterns: &[impl AsRef<str>]) -> Vec<(PathBuf, Vec<S
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
     use super::{cluster_globs, split_glob, GlobParts};
 
     fn dewindows(path: &str) -> String {
@@ -194,17 +199,25 @@ mod tests {
     fn test_cluster_globs() {
         #[track_caller]
         fn check(input: &[&str], expected: &[(&str, &[&str])]) {
-            let result = cluster_globs(input);
-            let expected_converted: Vec<(PathBuf, Vec<String>)> = expected
-                .iter()
-                .map(|&(base, patterns)| {
-                    (
-                        dewindows(base).into(),
-                        patterns.iter().map(|&s| dewindows(s)).collect(),
-                    )
-                })
-                .collect();
-            assert_eq!(result, expected_converted, "{input:?} != {expected:?}");
+            let mut result_sorted = cluster_globs(input);
+            for (_, patterns) in &mut result_sorted {
+                patterns.sort_unstable();
+            }
+            result_sorted.sort_unstable();
+            let mut expected_sorted = Vec::new();
+            for (base, patterns) in expected {
+                let mut patterns_sorted = Vec::new();
+                for pattern in *patterns {
+                    patterns_sorted.push(dewindows(pattern));
+                }
+                patterns_sorted.sort_unstable();
+                expected_sorted.push((dewindows(base).into(), patterns_sorted));
+            }
+            expected_sorted.sort_unstable();
+            assert_eq!(
+                result_sorted, expected_sorted,
+                "{input:?} != {expected_sorted:?} (got: {result_sorted:?})"
+            );
         }
 
         check(&["a/b/*", "a/c/*"], &[("a/b", &["*"]), ("a/c", &["*"])]);
@@ -262,6 +275,15 @@ mod tests {
         check(
             &["a/file1.txt", "a/file2.txt"],
             &[("a", &["file1.txt", "file2.txt"])],
+        );
+        check(
+            &["*", "a/b/*", "a/../c/*.jpg", "a/../c/*.png", "/a/*", "/b/*"],
+            &[
+                ("", &["*", "a/b/*"]),
+                ("a/../c", &["*.jpg", "*.png"]),
+                ("/a", &["*"]),
+                ("/b", &["*"]),
+            ],
         );
     }
 }
