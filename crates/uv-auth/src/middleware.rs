@@ -280,7 +280,10 @@ impl Middleware for AuthMiddleware {
             .map(|credentials| credentials.to_username())
             .unwrap_or(Username::none());
         let credentials = if let Some(index_url) = maybe_index_url {
-            self.cache().get_url(index_url, &username)
+            self.cache().get_url(index_url, &username).or_else(|| {
+                self.cache()
+                    .get_realm(Realm::from(retry_request.url()), username)
+            })
         } else {
             // Since there is no known index for this URL, check if there are credentials in
             // the realm-level cache.
@@ -434,9 +437,15 @@ impl AuthMiddleware {
             Some(credentials)
         } else if index_url.is_some() {
             // If this is a known index, we fall back to checking for the realm.
-            self.cache()
+            if let Some(credentials) = self
+                .cache()
                 .get_realm(Realm::from(request.url()), credentials.to_username())
-                .or(Some(credentials))
+            {
+                request = credentials.authenticate(request);
+                Some(credentials)
+            } else {
+                Some(credentials)
+            }
         } else {
             // If we don't find a password, we'll still attempt the request with the existing credentials
             Some(credentials)
