@@ -834,17 +834,17 @@ fn simplify_derivation_tree_markers(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
 ) {
     match tree {
-        DerivationTree::External(External::NotRoot(ref mut pkg, _)) => {
+        DerivationTree::External(External::NotRoot(pkg, _)) => {
             pkg.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::NoVersions(ref mut pkg, _)) => {
+        DerivationTree::External(External::NoVersions(pkg, _)) => {
             pkg.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::FromDependencyOf(ref mut pkg1, _, ref mut pkg2, _)) => {
+        DerivationTree::External(External::FromDependencyOf(pkg1, _, pkg2, _)) => {
             pkg1.simplify_markers(python_requirement);
             pkg2.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::Custom(ref mut pkg, _, _)) => {
+        DerivationTree::External(External::Custom(pkg, _, _)) => {
             pkg.simplify_markers(python_requirement);
         }
         DerivationTree::Derived(derived) => {

@@ -271,8 +271,8 @@ impl std::fmt::Display for ConflictError {
             .set
             .iter()
             .map(|item| match item.conflict() {
-                ConflictPackage::Extra(ref extra) => format!("`{}[{}]`", item.package(), extra),
-                ConflictPackage::Group(ref group) => format!("`{}:{}`", item.package(), group),
+                ConflictPackage::Extra(extra) => format!("`{}[{}]`", item.package(), extra),
+                ConflictPackage::Group(group) => format!("`{}:{}`", item.package(), group),
             })
             .join(", ");
 
@@ -289,7 +289,7 @@ impl std::fmt::Display for ConflictError {
                     self.conflicts
                         .iter()
                         .map(|conflict| match conflict {
-                            ConflictPackage::Extra(ref extra) => format!("`{extra}`"),
+                            ConflictPackage::Extra(extra) => format!("`{extra}`"),
                             ConflictPackage::Group(..) => unreachable!(),
                         })
                         .collect()
@@ -312,10 +312,10 @@ impl std::fmt::Display for ConflictError {
                     self.conflicts
                         .iter()
                         .map(|conflict| match conflict {
-                            ConflictPackage::Group(ref group)
+                            ConflictPackage::Group(group)
                                 if self.dev.contains_because_default(group) =>
                                 format!("`{group}` (enabled by default)"),
-                            ConflictPackage::Group(ref group) => format!("`{group}`"),
+                            ConflictPackage::Group(group) => format!("`{group}`"),
                             ConflictPackage::Extra(..) => unreachable!(),
                         })
                         .collect()
@@ -331,13 +331,13 @@ impl std::fmt::Display for ConflictError {
                         .enumerate()
                         .map(|(i, conflict)| {
                             let conflict = match conflict {
-                                ConflictPackage::Extra(ref extra) => format!("extra `{extra}`"),
-                                ConflictPackage::Group(ref group)
+                                ConflictPackage::Extra(extra) => format!("extra `{extra}`"),
+                                ConflictPackage::Group(group)
                                     if self.dev.contains_because_default(group) =>
                                 {
                                     format!("group `{group}` (enabled by default)")
                                 }
-                                ConflictPackage::Group(ref group) => format!("group `{group}`"),
+                                ConflictPackage::Group(group) => format!("group `{group}`"),
                             };
                             if i == 0 {
                                 capitalize(&conflict)

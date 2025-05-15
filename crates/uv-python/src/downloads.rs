@@ -268,10 +268,10 @@ impl PythonDownloadRequest {
     }
 
     /// Iterate over all [`PythonDownload`]'s that match this request.
-    pub fn iter_downloads(
-        &self,
-        python_downloads_json_url: Option<&str>,
-    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload> + use<'_>, Error> {
+    pub fn iter_downloads<'a>(
+        &'a self,
+        python_downloads_json_url: Option<&'a str>,
+    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload> + use<'a>, Error> {
         Ok(ManagedPythonDownload::iter_all(python_downloads_json_url)?
             .filter(move |download| self.satisfied_by_download(download)))
     }

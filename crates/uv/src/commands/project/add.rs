@@ -578,7 +578,7 @@ fn edits(
             AddTarget::Script(_, _) | AddTarget::Project(_, _) if raw => {
                 (uv_pep508::Requirement::from(requirement), None)
             }
-            AddTarget::Script(ref script, _) => {
+            AddTarget::Script(script, _) => {
                 let script_path = std::path::absolute(&script.path)?;
                 let script_dir = script_path.parent().expect("script path has no parent");
 
@@ -595,7 +595,7 @@ fn edits(
                     existing_sources,
                 )?
             }
-            AddTarget::Project(ref project, _) => {
+            AddTarget::Project(project, _) => {
                 let existing_sources = project
                     .pyproject_toml()
                     .tool
@@ -701,10 +701,10 @@ fn edits(
         let edit = match &dependency_type {
             DependencyType::Production => toml.add_dependency(&requirement, source.as_ref())?,
             DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref())?,
-            DependencyType::Optional(ref extra) => {
+            DependencyType::Optional(extra) => {
                 toml.add_optional_dependency(extra, &requirement, source.as_ref())?
             }
-            DependencyType::Group(ref group) => {
+            DependencyType::Group(group) => {
                 toml.add_dependency_group_requirement(group, &requirement, source.as_ref())?
             }
         };
@@ -908,12 +908,12 @@ async fn lock_and_sync(
             let dev = DependencyGroups::from_dev_mode(DevMode::Include);
             (extras, dev)
         }
-        DependencyType::Optional(ref extra_name) => {
+        DependencyType::Optional(extra_name) => {
             let extras = ExtrasSpecification::from_extra(vec![extra_name.clone()]);
             let dev = DependencyGroups::from_dev_mode(DevMode::Exclude);
             (extras, dev)
         }
-        DependencyType::Group(ref group_name) => {
+        DependencyType::Group(group_name) => {
             let extras = ExtrasSpecification::from_extra(vec![]);
             let dev = DependencyGroups::from_group(group_name.clone());
             (extras, dev)

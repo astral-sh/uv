@@ -529,10 +529,10 @@ impl PyProjectTomlMut {
         let group = match dependency_type {
             DependencyType::Production => self.set_project_dependency_minimum_version()?,
             DependencyType::Dev => self.set_dev_dependency_minimum_version()?,
-            DependencyType::Optional(ref extra) => {
+            DependencyType::Optional(extra) => {
                 self.set_optional_dependency_minimum_version(extra)?
             }
-            DependencyType::Group(ref group) => {
+            DependencyType::Group(group) => {
                 self.set_dependency_group_requirement_minimum_version(group)?
             }
         };
