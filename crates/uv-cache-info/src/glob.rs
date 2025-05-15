@@ -157,9 +157,9 @@ pub(crate) fn cluster_globs(patterns: &[impl AsRef<str>]) -> Vec<(PathBuf, Vec<S
 mod tests {
     use super::{cluster_globs, split_glob, GlobParts};
 
-    fn dewindows(path: &str) -> String {
+    fn windowsify(path: &str) -> String {
         if cfg!(windows) {
-            path.replace('\\', "/")
+            path.replace('/', "\\")
         } else {
             path.to_owned()
         }
@@ -199,21 +199,25 @@ mod tests {
     fn test_cluster_globs() {
         #[track_caller]
         fn check(input: &[&str], expected: &[(&str, &[&str])]) {
-            let mut result_sorted = cluster_globs(input);
+            let input = input.iter().map(|s| windowsify(s)).collect::<Vec<_>>();
+
+            let mut result_sorted = cluster_globs(&input);
             for (_, patterns) in &mut result_sorted {
                 patterns.sort_unstable();
             }
             result_sorted.sort_unstable();
+
             let mut expected_sorted = Vec::new();
             for (base, patterns) in expected {
                 let mut patterns_sorted = Vec::new();
                 for pattern in *patterns {
-                    patterns_sorted.push(dewindows(pattern));
+                    patterns_sorted.push(windowsify(pattern));
                 }
                 patterns_sorted.sort_unstable();
-                expected_sorted.push((dewindows(base).into(), patterns_sorted));
+                expected_sorted.push((windowsify(base).into(), patterns_sorted));
             }
             expected_sorted.sort_unstable();
+
             assert_eq!(
                 result_sorted, expected_sorted,
                 "{input:?} != {expected_sorted:?} (got: {result_sorted:?})"
