@@ -4,7 +4,6 @@ use itertools::Itertools;
 use sha2::{Digest, Sha256};
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::{io, mem};
 use tracing::{debug, trace};
 use walkdir::WalkDir;
@@ -14,12 +13,12 @@ use uv_distribution_filename::WheelFilename;
 use uv_fs::Simplified;
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
-use uv_pypi_types::Identifier;
 use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::{
-    find_roots, BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+    find_module_root, find_roots, BuildBackendSettings, DirectoryWriter, Error, FileList,
+    ListWriter, PyProjectToml,
 };
 
 /// Build a wheel from the source tree and place it in the output directory.
@@ -273,17 +272,12 @@ pub fn build_editable(
         return Err(Error::InvalidModuleRoot(settings.module_root.clone()));
     }
 
-    let module_name = if let Some(module_name) = settings.module_name {
-        module_name
-    } else {
-        // Should never error, the rules for package names (in dist-info formatting) are stricter
-        // than those for identifiers
-        Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
-    };
-    debug!("Module name: `{:?}`", module_name);
-
     // Check that a module root exists in the directory we're linking from the `.pth` file
-    crate::find_module_root(&src_root, module_name)?;
+    find_module_root(
+        &src_root,
+        settings.module_name.as_ref(),
+        pyproject_toml.name(),
+    )?;
 
     wheel_writer.write_bytes(
         &format!("{}.pth", pyproject_toml.name().as_dist_info_name()),

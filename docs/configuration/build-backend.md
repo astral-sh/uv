@@ -40,6 +40,20 @@ command includes a copy of the build backend, so when running `uv build`, the sa
 used for the build backend as for the uv process. Other build frontends, such as `python -m build`,
 will choose the latest compatible `uv_build` version.
 
+## Modules
+
+The default module name is the package name in lower case with dots and dashes replaced by
+underscores, and the default module location is under the `src` directory, i.e., the build backend
+expects to find `src/<package_name>/__init__.py`. These defaults can be changed with the
+`module-name` and `module-root` setting. The example below expects a module in the project root with
+`PIL/__init__.py` instead:
+
+```toml
+[tool.uv.build-backend]
+module-name = "PIL"
+module-root = ""
+```
+
 ## Include and exclude configuration
 
 To select which files to include in the source distribution, uv first adds the included files and

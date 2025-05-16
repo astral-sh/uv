@@ -14,12 +14,12 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use itertools::Itertools;
 use thiserror::Error;
 use tracing::debug;
 
 use uv_fs::Simplified;
 use uv_globfilter::PortableGlobError;
+use uv_normalize::PackageName;
 use uv_pypi_types::{Identifier, IdentifierParseError};
 
 use crate::metadata::ValidationError;
@@ -70,20 +70,17 @@ pub enum Error {
         "Expected a Python module directory at: `{}`",
         _0.user_display()
     )]
-    MissingModule(PathBuf),
-    #[error(
-        "Expected an `__init__.py` at: `{}`",
-        _0.user_display()
-    )]
     MissingInitPy(PathBuf),
     #[error(
-        "Expected an `__init__.py` at `{}`, found multiple:\n* `{}`",
+        "Missing module directory for `{}` in `{}`. Found: `{}`",
         module_name,
-        paths.iter().map(Simplified::user_display).join("`\n* `")
+        src_root.user_display(),
+        dir_listing.join("`, `")
     )]
-    MultipleModules {
-        module_name: Identifier,
-        paths: Vec<PathBuf>,
+    MissingModuleDir {
+        module_name: String,
+        src_root: PathBuf,
+        dir_listing: Vec<String>,
     },
     /// Either an absolute path or a parent path through `..`.
     #[error("Module root must be inside the project: `{}`", _0.user_display())]
@@ -197,76 +194,93 @@ fn check_metadata_directory(
     Ok(())
 }
 
-/// Resolve the source root and module root paths.
+/// Resolve the source root, module root and the module name.
 fn find_roots(
     source_tree: &Path,
     pyproject_toml: &PyProjectToml,
     relative_module_root: &Path,
     module_name: Option<&Identifier>,
 ) -> Result<(PathBuf, PathBuf), Error> {
-    let src_root = source_tree.join(uv_fs::normalize_path(relative_module_root));
+    let relative_module_root = uv_fs::normalize_path(relative_module_root);
+    let src_root = source_tree.join(&relative_module_root);
     if !src_root.starts_with(source_tree) {
         return Err(Error::InvalidModuleRoot(relative_module_root.to_path_buf()));
     }
-
-    let module_name = if let Some(module_name) = module_name {
-        module_name.clone()
-    } else {
-        // Should never error, the rules for package names (in dist-info formatting) are stricter
-        // than those for identifiers
-        Identifier::from_str(pyproject_toml.name().as_dist_info_name().as_ref())?
-    };
-    debug!("Module name: `{:?}`", module_name);
-
-    let module_root = find_module_root(&src_root, module_name)?;
+    let src_root = source_tree.join(&relative_module_root);
+    let module_root = find_module_root(&src_root, module_name, pyproject_toml.name())?;
     Ok((src_root, module_root))
 }
 
 /// Match the module name to its module directory with potentially different casing.
 ///
-/// For example, a package may have the dist-info-normalized package name `pil_util`, but the
-/// importable module is named `PIL_util`.
+/// Some target platforms have case-sensitive filesystems, while others have case-insensitive
+/// filesystems and we always lower case the package name, our default for the module, while some
+/// users want uppercase letters in their module names. For example, the package name is `pil_util`,
+/// but the module `PIL_util`.
 ///
-/// We get the module either as dist-info-normalized package name, or explicitly from the user.
-/// For dist-info-normalizing a package name, the rules are lowercasing, replacing `.` with `_` and
-/// replace `-` with `_`. Since `.` and `-` are not allowed in module names, we can check whether a
-/// directory name matches our expected module name by lowercasing it.
-fn find_module_root(src_root: &Path, module_name: Identifier) -> Result<PathBuf, Error> {
-    let normalized = module_name.to_string();
-    let dir_iterator = match fs_err::read_dir(src_root) {
-        Ok(dir_iterator) => dir_iterator,
+/// By default, the dist-info-normalized package name is the module name. For
+/// dist-info-normalization, the rules are lowercasing, replacing `.` with `_` and
+/// replace `-` with `_`. Since `.` and `-` are not allowed in identifiers, we can use a string
+/// comparison with the module name.
+///
+/// To make the behavior as consistent as possible across platforms as possible, we require that an
+/// upper case name is given explicitly through `tool.uv.module-name`.
+///
+/// Returns the module root path, the directory below which the `__init__.py` lives.
+fn find_module_root(
+    src_root: &Path,
+    module_name: Option<&Identifier>,
+    package_name: &PackageName,
+) -> Result<PathBuf, Error> {
+    let module_name = if let Some(module_name) = module_name {
+        // This name can be uppercase.
+        module_name.to_string()
+    } else {
+        // Should never error, the rules for package names (in dist-info formatting) are stricter
+        // than those for identifiers.
+        // This name is always lowercase.
+        Identifier::from_str(package_name.as_dist_info_name().as_ref())?.to_string()
+    };
+
+    let dir = match fs_err::read_dir(src_root) {
+        Ok(dir_iterator) => dir_iterator.collect::<Result<Vec<_>, _>>()?,
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
             return Err(Error::MissingSrc(src_root.to_path_buf()))
         }
         Err(err) => return Err(Error::Io(err)),
     };
-    let modules = dir_iterator
-        .filter_ok(|entry| {
-            entry
-                .file_name()
-                .to_str()
-                .is_some_and(|file_name| file_name.to_lowercase() == normalized)
-        })
-        .map_ok(|entry| entry.path())
-        .collect::<Result<Vec<_>, _>>()?;
-    match modules.as_slice() {
-        [] => {
-            // Show the normalized path in the error message, as representative example.
-            Err(Error::MissingModule(src_root.join(module_name.as_ref())))
+    let module_root = dir.iter().find_map(|entry| {
+        // TODO(konsti): Do we ever need to check if `dir/{module_name}/__init__.py` exists because
+        // the wrong casing may be recorded on disk?
+        if entry
+            .file_name()
+            .to_str()
+            .is_some_and(|file_name| file_name == module_name)
+        {
+            Some(entry.path())
+        } else {
+            None
         }
-        [module_root] => {
-            if module_root.join("__init__.py").is_file() {
-                Ok(module_root.clone())
-            } else {
-                Err(Error::MissingInitPy(module_root.join("__init__.py")))
-            }
+    });
+    let module_root = if let Some(module_root) = module_root {
+        if module_root.join("__init__.py").is_file() {
+            module_root.clone()
+        } else {
+            return Err(Error::MissingInitPy(module_root.join("__init__.py")));
         }
-        multiple => {
-            let mut paths = multiple.to_vec();
-            paths.sort();
-            Err(Error::MultipleModules { module_name, paths })
-        }
-    }
+    } else {
+        return Err(Error::MissingModuleDir {
+            module_name,
+            src_root: src_root.to_path_buf(),
+            dir_listing: dir
+                .into_iter()
+                .filter_map(|entry| Some(entry.file_name().to_str()?.to_string()))
+                .collect(),
+        });
+    };
+
+    debug!("Module name: `{}`", module_name);
+    Ok(module_root)
 }
 
 #[cfg(test)]
@@ -299,37 +313,36 @@ mod tests {
 
     /// Run both a direct wheel build and an indirect wheel build through a source distribution,
     /// while checking that directly built wheel and indirectly built wheel are the same.
-    fn build(source_root: &Path, dist: &Path) -> BuildResults {
+    fn build(source_root: &Path, dist: &Path) -> Result<BuildResults, Error> {
         // Build a direct wheel, capture all its properties to compare it with the indirect wheel
         // latest and remove it since it has the same filename as the indirect wheel.
-        let (_name, direct_wheel_list_files) = list_wheel(source_root, "1.0.0+test").unwrap();
-        let direct_wheel_filename = build_wheel(source_root, dist, None, "1.0.0+test").unwrap();
+        let (_name, direct_wheel_list_files) = list_wheel(source_root, "1.0.0+test")?;
+        let direct_wheel_filename = build_wheel(source_root, dist, None, "1.0.0+test")?;
         let direct_wheel_path = dist.join(direct_wheel_filename.to_string());
         let direct_wheel_contents = wheel_contents(&direct_wheel_path);
-        let direct_wheel_hash = sha2::Sha256::digest(fs_err::read(&direct_wheel_path).unwrap());
-        fs_err::remove_file(&direct_wheel_path).unwrap();
+        let direct_wheel_hash = sha2::Sha256::digest(fs_err::read(&direct_wheel_path)?);
+        fs_err::remove_file(&direct_wheel_path)?;
 
         // Build a source distribution.
-        let (_name, source_dist_list_files) = list_source_dist(source_root, "1.0.0+test").unwrap();
+        let (_name, source_dist_list_files) = list_source_dist(source_root, "1.0.0+test")?;
         // TODO(konsti): This should run in the unpacked source dist tempdir, but we need to
         // normalize the path.
-        let (_name, wheel_list_files) = list_wheel(source_root, "1.0.0+test").unwrap();
-        let source_dist_filename = build_source_dist(source_root, dist, "1.0.0+test").unwrap();
+        let (_name, wheel_list_files) = list_wheel(source_root, "1.0.0+test")?;
+        let source_dist_filename = build_source_dist(source_root, dist, "1.0.0+test")?;
         let source_dist_path = dist.join(source_dist_filename.to_string());
         let source_dist_contents = sdist_contents(&source_dist_path);
 
         // Unpack the source distribution and build a wheel from it.
-        let sdist_tree = TempDir::new().unwrap();
-        let sdist_reader = BufReader::new(File::open(&source_dist_path).unwrap());
+        let sdist_tree = TempDir::new()?;
+        let sdist_reader = BufReader::new(File::open(&source_dist_path)?);
         let mut source_dist = tar::Archive::new(GzDecoder::new(sdist_reader));
-        source_dist.unpack(sdist_tree.path()).unwrap();
+        source_dist.unpack(sdist_tree.path())?;
         let sdist_top_level_directory = sdist_tree.path().join(format!(
             "{}-{}",
             source_dist_filename.name.as_dist_info_name(),
             source_dist_filename.version
         ));
-        let wheel_filename =
-            build_wheel(&sdist_top_level_directory, dist, None, "1.0.0+test").unwrap();
+        let wheel_filename = build_wheel(&sdist_top_level_directory, dist, None, "1.0.0+test")?;
         let wheel_contents = wheel_contents(&dist.join(wheel_filename.to_string()));
 
         // Check that direct and indirect wheels are identical.
@@ -338,17 +351,17 @@ mod tests {
         assert_eq!(direct_wheel_list_files, wheel_list_files);
         assert_eq!(
             direct_wheel_hash,
-            sha2::Sha256::digest(fs_err::read(dist.join(wheel_filename.to_string())).unwrap())
+            sha2::Sha256::digest(fs_err::read(dist.join(wheel_filename.to_string()))?)
         );
 
-        BuildResults {
+        Ok(BuildResults {
             source_dist_list_files,
             source_dist_filename,
             source_dist_contents,
             wheel_list_files,
             wheel_filename,
             wheel_contents,
-        }
+        })
     }
 
     fn sdist_contents(source_dist_path: &Path) -> Vec<String> {
@@ -453,7 +466,7 @@ mod tests {
 
         // Perform both the direct and the indirect build.
         let dist = TempDir::new().unwrap();
-        let build = build(src.path(), dist.path());
+        let build = build(src.path(), dist.path()).unwrap();
 
         let source_dist_path = dist.path().join(build.source_dist_filename.to_string());
         assert_eq!(
@@ -721,7 +734,7 @@ mod tests {
         File::create(src.path().join("two_step_build").join("__init__.py")).unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build1 = build(src.path(), dist.path());
+        let build1 = build(src.path(), dist.path()).unwrap();
 
         assert_snapshot!(build1.source_dist_contents.join("\n"), @r"
         two_step_build-1.0.0/
@@ -760,7 +773,58 @@ mod tests {
         .unwrap();
 
         let dist = TempDir::new().unwrap();
-        let build2 = build(src.path(), dist.path());
+        let build2 = build(src.path(), dist.path()).unwrap();
         assert_eq!(build1, build2);
+    }
+
+    /// Check that upper case letters in module names work.
+    #[test]
+    fn test_camel_case() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "camelcase"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            module-name = "camelCase"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+
+        fs_err::create_dir_all(src.path().join("src").join("camelCase")).unwrap();
+        File::create(src.path().join("src").join("camelCase").join("__init__.py")).unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build1 = build(src.path(), dist.path()).unwrap();
+
+        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        camelCase/
+        camelCase/__init__.py
+        camelcase-1.0.0.dist-info/
+        camelcase-1.0.0.dist-info/METADATA
+        camelcase-1.0.0.dist-info/RECORD
+        camelcase-1.0.0.dist-info/WHEEL
+        ");
+
+        // Check that an explicit wrong casing fails to build.
+        fs_err::write(
+            src.path().join("pyproject.toml"),
+            pyproject_toml.replace("camelCase", "camel_case"),
+        )
+        .unwrap();
+        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let err_message = build_err
+            .to_string()
+            .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
+            .replace('\\', "/");
+        assert_snapshot!(
+            err_message,
+            @"Missing module directory for `camel_case` in `[TEMP_PATH]/src`. Found: `camelCase`"
+        );
     }
 }
