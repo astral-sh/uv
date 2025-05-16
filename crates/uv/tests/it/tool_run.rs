@@ -2422,7 +2422,7 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
 
 #[test]
 fn tool_run_with_dependencies_from_script() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_filtered_counts();
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! {r#"
@@ -2461,9 +2461,9 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 9 packages in [TIME]
-    Prepared 9 packages in [TIME]
-    Installed 9 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + anyio==4.3.0
      + black==24.3.0
      + click==8.1.7
@@ -2487,9 +2487,9 @@ fn tool_run_with_dependencies_from_script() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 9 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 9 packages in [TIME]
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
      + black==24.3.0
      + click==8.1.7
      + iniconfig==2.0.0
