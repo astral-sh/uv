@@ -191,7 +191,7 @@ impl ManagedPythonInstallations {
     /// This ensures a consistent ordering across all platforms.
     pub fn find_all(
         &self,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
         let dirs = match fs_err::read_dir(&self.root) {
             Ok(installation_dirs) => {
                 // Collect sorted directory paths; `read_dir` is not stable across platforms
@@ -243,7 +243,7 @@ impl ManagedPythonInstallations {
     /// Iterate over Python installations that support the current platform.
     pub fn find_matching_current_platform(
         &self,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
         let os = Os::from_env();
         let arch = Arch::from_env();
         let libc = Libc::from_env()?;
@@ -269,7 +269,7 @@ impl ManagedPythonInstallations {
     /// - The platform metadata cannot be read
     /// - A directory for the installation cannot be read
     pub fn find_version<'a>(
-        &self,
+        &'a self,
         version: &'a PythonVersion,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
         Ok(self

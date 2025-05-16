@@ -186,8 +186,9 @@ pub(crate) async fn pin(
 
 fn pep440_version_from_request(request: &PythonRequest) -> Option<uv_pep440::Version> {
     let version_request = match request {
-        PythonRequest::Version(ref version)
-        | PythonRequest::ImplementationVersion(_, ref version) => version,
+        PythonRequest::Version(version) | PythonRequest::ImplementationVersion(_, version) => {
+            version
+        }
         PythonRequest::Key(download_request) => download_request.version()?,
         _ => {
             return None;

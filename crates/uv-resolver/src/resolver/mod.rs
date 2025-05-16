@@ -519,7 +519,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .term_intersection_for_package(next_id)
                                 .expect("a package was chosen but we don't have a term");
 
-                            if let PubGrubPackageInner::Package { ref name, .. } = &**next_package {
+                            if let PubGrubPackageInner::Package { name, .. } = &**next_package {
                                 // Check if the decision was due to the package being unavailable
                                 if let Some(entry) = self.unavailable_packages.get(name) {
                                     state.pubgrub.add_incompatibility(

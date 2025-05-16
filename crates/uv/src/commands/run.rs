@@ -57,7 +57,7 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
         impl PlatformSpecificSignal {
             async fn recv(&mut self) -> Option<()> {
                 match self {
-                    PlatformSpecificSignal::Signal(ref mut signal) => signal.recv().await,
+                    PlatformSpecificSignal::Signal(signal) => signal.recv().await,
                     PlatformSpecificSignal::Dummy => std::future::pending().await,
                 }
             }

@@ -161,7 +161,7 @@ pub(crate) async fn install(
             requirement
         }
         // Ex) `ruff@0.6.0`
-        Target::Version(.., name, ref extras, ref version) => {
+        Target::Version(.., name, extras, version) => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
@@ -182,7 +182,7 @@ pub(crate) async fn install(
             }
         }
         // Ex) `ruff@latest`
-        Target::Latest(.., name, ref extras) => {
+        Target::Latest(.., name, extras) => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }

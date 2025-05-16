@@ -563,7 +563,7 @@ fn find_all_minor(
     implementation: Option<&ImplementationName>,
     version_request: &VersionRequest,
     dir: &Path,
-) -> impl Iterator<Item = PathBuf> {
+) -> impl Iterator<Item = PathBuf> + use<> {
     match version_request {
         &VersionRequest::Any
         | VersionRequest::Default
