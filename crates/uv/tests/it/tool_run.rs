@@ -2243,7 +2243,7 @@ fn tool_run_with_existing_py_script() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks you tried to run a Python script at `script.py`, which is not supported by `uv tool run`
+    error: It looks like you tried to run a Python script at `script.py`, which is not supported by `uv tool run`
 
     hint: Use `uv run script.py` instead
     ");
@@ -2263,7 +2263,7 @@ fn tool_run_with_existing_pyw_script() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks you tried to run a Python script at `script.pyw`, which is not supported by `uv tool run`
+    error: It looks like you tried to run a Python script at `script.pyw`, which is not supported by `uv tool run`
 
     hint: Use `uv run script.pyw` instead
     ");
@@ -2282,7 +2282,7 @@ fn tool_run_with_nonexistent_py_script() {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks you provided a Python script to run, which is not supported supported by `uv tool run`
+    error: It looks like you provided a Python script to run, which is not supported supported by `uv tool run`
 
     hint: We did not find a script at the requested path. If you meant to run a command from the `script-py` package, pass the normalized package name to `--from` to disambiguate, e.g., `uv tool run --from script-py script.py`
     ");
@@ -2300,7 +2300,7 @@ fn tool_run_with_nonexistent_pyw_script() {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks you provided a Python script to run, which is not supported supported by `uv tool run`
+    error: It looks like you provided a Python script to run, which is not supported supported by `uv tool run`
 
     hint: We did not find a script at the requested path. If you meant to run a command from the `script-pyw` package, pass the normalized package name to `--from` to disambiguate, e.g., `uv tool run --from script-pyw script.pyw`
     ");
@@ -2320,7 +2320,7 @@ fn tool_run_with_from_script() {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks you provided a Python script to `--from`, which is not supported
+    error: It looks like you provided a Python script to `--from`, which is not supported
 
     hint: If you meant to run a command from the `script-py` package, use the normalized package name instead to disambiguate, e.g., `uv tool run --from script-py ruff`
     ");
@@ -2340,7 +2340,7 @@ fn tool_run_with_script_and_from_script() {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks you provided a Python script to `--from`, which is not supported
+    error: It looks like you provided a Python script to `--from`, which is not supported
 
     hint: If you meant to run a command from the `script-py` package, use the normalized package name instead to disambiguate, e.g., `uv tool run --from script-py other-script.py`
     ");

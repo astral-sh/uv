@@ -169,7 +169,7 @@ pub(crate) async fn run(
         if has_python_script_ext(Path::new(from)) {
             let package_name = PackageName::from_str(from)?;
             return Err(anyhow::anyhow!(
-                "It looks you provided a Python script to `--from`, which is not supported\n\n{}{} If you meant to run a command from the `{}` package, use the normalized package name instead to disambiguate, e.g., `{}`",
+                "It looks like you provided a Python script to `--from`, which is not supported\n\n{}{} If you meant to run a command from the `{}` package, use the normalized package name instead to disambiguate, e.g., `{}`",
                 "hint".bold().cyan(),
                 ":".bold(),
                 package_name.cyan(),
@@ -183,7 +183,7 @@ pub(crate) async fn run(
         if has_python_script_ext(target_path) {
             return if target_path.try_exists()? {
                 Err(anyhow::anyhow!(
-                    "It looks you tried to run a Python script at `{}`, which is not supported by `{}`\n\n{}{} Use `{}` instead",
+                    "It looks like you tried to run a Python script at `{}`, which is not supported by `{}`\n\n{}{} Use `{}` instead",
                     target_path.user_display(),
                     invocation_source,
                     "hint".bold().cyan(),
@@ -193,7 +193,7 @@ pub(crate) async fn run(
             } else {
                 let package_name = PackageName::from_str(target)?;
                 Err(anyhow::anyhow!(
-                    "It looks you provided a Python script to run, which is not supported supported by `{}`\n\n{}{} We did not find a script at the requested path. If you meant to run a command from the `{}` package, pass the normalized package name to `--from` to disambiguate, e.g., `{}`",
+                    "It looks like you provided a Python script to run, which is not supported supported by `{}`\n\n{}{} We did not find a script at the requested path. If you meant to run a command from the `{}` package, pass the normalized package name to `--from` to disambiguate, e.g., `{}`",
                     invocation_source,
                     "hint".bold().cyan(),
                     ":".bold(),
