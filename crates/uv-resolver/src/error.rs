@@ -360,7 +360,7 @@ impl NoSolutionError {
     }
 
     /// Hint at limiting the resolver environment if universal resolution failed for a target
-    /// that is not the current platform or Python environment.
+    /// that is not the current platform or not the current Python version.
     fn hint_disjoint_targets(&self, f: &mut Formatter) -> std::fmt::Result {
         // Only applicable to universal resolution.
         let Some(markers) = self.env.fork_markers() else {
@@ -377,17 +377,17 @@ impl NoSolutionError {
         });
         if markers.is_disjoint(current_python_version) {
             write!(
-                    f,
-                    "\n\n{}{} The resolution failed for a Python version range different than the current Python version, \
-                    consider limiting the Python version range using `requires-python`.",
-                    "hint".bold().cyan(),
-                    ":".bold(),
-                )?;
+                f,
+                "\n\n{}{} The resolution failed for a Python version range outside the current Python version, \
+                consider limiting the Python version range using `requires-python`.",
+                "hint".bold().cyan(),
+                ":".bold(),
+            )?;
         } else if !markers.evaluate(&self.current_environment, &[]) {
             write!(
                 f,
                 "\n\n{}{} The resolution failed for an environment that is not the current one, \
-                    consider limiting the environments with `tool.uv.environments`.",
+                consider limiting the environments with `tool.uv.environments`.",
                 "hint".bold().cyan(),
                 ":".bold(),
             )?;
@@ -495,7 +495,6 @@ impl std::fmt::Display for NoSolutionError {
 
         // Include any additional hints.
         let mut additional_hints = IndexSet::default();
-
         formatter.generate_hints(
             &tree,
             &self.index,
