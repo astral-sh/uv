@@ -94,8 +94,6 @@ impl PortableGlobParser {
         self.check(glob)?;
         Ok(GlobBuilder::new(glob)
             .literal_separator(true)
-            // We support case-insensitive file systems.
-            .case_insensitive(true)
             // No need to support Windows-style paths, so the backslash can be used a escape.
             .backslash_escape(self.backslash_escape())
             .build()?)

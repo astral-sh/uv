@@ -14,7 +14,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use itertools::Itertools;
 use thiserror::Error;
 use tracing::debug;
 
@@ -71,20 +70,17 @@ pub enum Error {
         "Expected a Python module directory at: `{}`",
         _0.user_display()
     )]
-    MissingModule(PathBuf),
-    #[error(
-        "Expected an `__init__.py` at: `{}`",
-        _0.user_display()
-    )]
     MissingInitPy(PathBuf),
     #[error(
-        "Expected an `__init__.py` at `{}`, found multiple:\n* `{}`",
+        "Missing module directory for `{}` in `{}`. Found: `{}`",
         module_name,
-        paths.iter().map(Simplified::user_display).join("`\n* `")
+        src_root.user_display(),
+        dir_listing.join("`, `")
     )]
-    MultipleModules {
+    MissingModuleDir {
         module_name: String,
-        paths: Vec<PathBuf>,
+        src_root: PathBuf,
+        dir_listing: Vec<String>,
     },
     /// Either an absolute path or a parent path through `..`.
     #[error("Module root must be inside the project: `{}`", _0.user_display())]
@@ -217,67 +213,73 @@ fn find_roots(
 
 /// Match the module name to its module directory with potentially different casing.
 ///
-/// For example, a package may have the dist-info-normalized package name `pil_util`, but the
-/// importable module is named `PIL_util`.
+/// Some target platforms have case-sensitive filesystems, while others have case-insensitive
+/// filesystems and we always lower case the package name, our default for the module, while some
+/// users want uppercase letters in their module names. For example, the package name is `pil_util`,
+/// but the module `PIL_util`.
 ///
-/// We get the module either as dist-info-normalized package name, or explicitly from the user.
-/// For dist-info-normalizing a package name, the rules are lowercasing, replacing `.` with `_` and
-/// replace `-` with `_`. Since `.` and `-` are not allowed in module names, we can check whether a
-/// directory name matches our expected module name by lowercasing it.
+/// By default, the dist-info-normalized package name is the module name. For
+/// dist-info-normalization, the rules are lowercasing, replacing `.` with `_` and
+/// replace `-` with `_`. Since `.` and `-` are not allowed in identifiers, we can use a string
+/// comparison with the module name.
 ///
-/// Given that there are case-insensitive file systems, we always search case-insensitive.
+/// To make the behavior as consistent as possible across platforms as possible, we require that an
+/// upper case name is given explicitly through `tool.uv.module-name`.
 ///
-/// Returns the module root and the module name.
+/// Returns the module root path, the directory below which the `__init__.py` lives.
 fn find_module_root(
     src_root: &Path,
     module_name: Option<&Identifier>,
     package_name: &PackageName,
 ) -> Result<PathBuf, Error> {
     let module_name = if let Some(module_name) = module_name {
-        module_name.to_string().to_lowercase()
+        // This name can be uppercase.
+        module_name.to_string()
     } else {
         // Should never error, the rules for package names (in dist-info formatting) are stricter
-        // than those for identifiers
-        let module_name = Identifier::from_str(package_name.as_dist_info_name().as_ref())?;
-        module_name.to_string().to_lowercase()
+        // than those for identifiers.
+        // This name is always lowercase.
+        Identifier::from_str(package_name.as_dist_info_name().as_ref())?.to_string()
     };
 
-    let dir_iterator = match fs_err::read_dir(src_root) {
-        Ok(dir_iterator) => dir_iterator,
+    let dir = match fs_err::read_dir(src_root) {
+        Ok(dir_iterator) => dir_iterator.collect::<Result<Vec<_>, _>>()?,
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
             return Err(Error::MissingSrc(src_root.to_path_buf()))
         }
         Err(err) => return Err(Error::Io(err)),
     };
-    let modules = dir_iterator
-        .filter_ok(|entry| {
-            entry
-                .file_name()
-                .to_str()
-                .is_some_and(|file_name| file_name.to_lowercase() == module_name)
-        })
-        .map_ok(|entry| entry.path())
-        .collect::<Result<Vec<_>, _>>()?;
-    let module_root = match modules.as_slice() {
-        [] => {
-            // Show the normalized path in the error message, as representative example.
-            return Err(Error::MissingModule(src_root.join(module_name)));
+    let module_root = dir.iter().find_map(|entry| {
+        // TODO(konsti): Do we ever need to check if `dir/{module_name}/__init__.py` exists because
+        // the wrong casing may be recorded on disk?
+        if entry
+            .file_name()
+            .to_str()
+            .is_some_and(|file_name| file_name == module_name)
+        {
+            Some(entry.path())
+        } else {
+            None
         }
-        [module_root] => {
-            if module_root.join("__init__.py").is_file() {
-                module_root.clone()
-            } else {
-                return Err(Error::MissingInitPy(module_root.join("__init__.py")));
-            }
+    });
+    let module_root = if let Some(module_root) = module_root {
+        if module_root.join("__init__.py").is_file() {
+            module_root.clone()
+        } else {
+            return Err(Error::MissingInitPy(module_root.join("__init__.py")));
         }
-        multiple => {
-            let mut paths = multiple.to_vec();
-            paths.sort();
-            return Err(Error::MultipleModules { module_name, paths });
-        }
+    } else {
+        return Err(Error::MissingModuleDir {
+            module_name,
+            src_root: src_root.to_path_buf(),
+            dir_listing: dir
+                .into_iter()
+                .filter_map(|entry| Some(entry.file_name().to_str()?.to_string()))
+                .collect(),
+        });
     };
 
-    debug!("Module name (case-insensitive): `{}`", module_name);
+    debug!("Module name: `{}`", module_name);
     Ok(module_root)
 }
 
@@ -787,6 +789,9 @@ mod tests {
             [build-system]
             requires = ["uv_build>=0.5.15,<0.6"]
             build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            module-name = "camelCase"
             "#
         };
         fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
@@ -806,31 +811,6 @@ mod tests {
         camelcase-1.0.0.dist-info/WHEEL
         ");
 
-        let pyproject_toml = indoc! {r#"
-            [project]
-            name = "cased-rename"
-            version = "1.0.0"
-
-            [build-system]
-            requires = ["uv_build>=0.5.15,<0.6"]
-            build-backend = "uv_build"
-
-            [tool.uv.build-backend]
-            module-name = "camelCase"
-            "#
-        };
-        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
-
-        let build2 = build(src.path(), dist.path()).unwrap();
-        assert_snapshot!(build2.wheel_contents.join("\n"), @r"
-        camelCase/
-        camelCase/__init__.py
-        cased_rename-1.0.0.dist-info/
-        cased_rename-1.0.0.dist-info/METADATA
-        cased_rename-1.0.0.dist-info/RECORD
-        cased_rename-1.0.0.dist-info/WHEEL
-        ");
-
         // Check that an explicit wrong casing fails to build.
         fs_err::write(
             src.path().join("pyproject.toml"),
@@ -838,9 +818,13 @@ mod tests {
         )
         .unwrap();
         let build_err = build(src.path(), dist.path()).unwrap_err();
+        let err_message = build_err
+            .to_string()
+            .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
+            .replace('\\', "/");
         assert_snapshot!(
-            build_err.to_string().replace(&src.path().user_display().to_string(), "[TEMP_PATH]"),
-            @"Expected a Python module directory at: `[TEMP_PATH]/src/camel_case`"
+            err_message,
+            @"Missing module directory for `camel_case` in `[TEMP_PATH]/src`. Found: `camelCase`"
         );
     }
 }
