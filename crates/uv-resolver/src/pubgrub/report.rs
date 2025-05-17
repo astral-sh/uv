@@ -894,7 +894,10 @@ impl PubGrubReportFormatter<'_> {
 
         // Add hints due to the package being available on an index, but not at the correct version,
         // with subsequent indexes that were _not_ queried.
-        if matches!(selector.index_strategy(), IndexStrategy::FirstIndex) {
+        if matches!(
+            selector.index_strategy(),
+            IndexStrategy::FirstIndex | IndexStrategy::UnsafeFirstIndex
+        ) {
             // Do not include the hint if the set is "all versions". This is an unusual but valid
             // case in which a package returns a 200 response, but without any versions or
             // distributions for the package.
