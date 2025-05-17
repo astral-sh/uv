@@ -203,11 +203,11 @@ executing a command:
 
 === "Windows"
 
-    ```powershell
-    uv sync
-    source .venv\Scripts\activate
-    flask run -p 3000
-    python example.py
+    ```pwsh-session
+    PS> uv sync
+    PS> .venv\Scripts\activate
+    PS> flask run -p 3000
+    PS> python example.py
     ```
 
 !!! note
