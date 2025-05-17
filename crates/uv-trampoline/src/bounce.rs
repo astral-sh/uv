@@ -150,7 +150,7 @@ fn check_pyvenvcfg_home(exec_dir: &Path) -> bool {
         if pyvenv_path.exists() {
             if let Ok(file) = File::open(&pyvenv_path) {
                 let reader = BufReader::new(file);
-                for line in reader.lines().flatten() {
+                for line in reader.lines().map_while(Result::ok) {
                     if line.trim().starts_with("home") {
                         return true;
                     }
