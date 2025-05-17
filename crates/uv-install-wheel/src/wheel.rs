@@ -430,7 +430,12 @@ fn install_script(
     let placeholder_python = b"#!python";
     // scripts might be binaries, so we read an exact number of bytes instead of the first line as string
     let mut start = vec![0; placeholder_python.len()];
-    script.read_exact(&mut start)?;
+    match script.read_exact(&mut start) {
+        Ok(()) => {}
+        // Ignore scripts shorter than the buffer.
+        Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {}
+        Err(err) => return Err(Error::Io(err)),
+    }
     let size_and_encoded_hash = if start == placeholder_python {
         let is_gui = {
             let mut buf = vec![0; 1];
