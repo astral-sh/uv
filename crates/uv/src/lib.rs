@@ -1521,6 +1521,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 check_url,
                 index,
                 index_locations,
+                force,
             } = PublishSettings::resolve(args, filesystem);
 
             let (publish_url, check_url) = if let Some(index_name) = index {
@@ -1570,6 +1571,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 check_url,
                 &cache,
                 printer,
+                force,
             )
             .await
         }

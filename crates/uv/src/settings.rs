@@ -3090,6 +3090,7 @@ pub(crate) struct PublishSettings {
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
     pub(crate) index: Option<String>,
+    pub(crate) force: bool,
 
     // Both CLI and configuration.
     pub(crate) publish_url: Url,
@@ -3157,6 +3158,7 @@ impl PublishSettings {
                 Vec::new(),
                 false,
             ),
+            force: args.force,
         }
     }
 }
