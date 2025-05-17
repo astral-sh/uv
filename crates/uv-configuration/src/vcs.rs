@@ -93,4 +93,7 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Environment variables
+.env
 ";
