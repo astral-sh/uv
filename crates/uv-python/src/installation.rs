@@ -180,6 +180,21 @@ impl PythonInstallation {
         installed.ensure_externally_managed()?;
         installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;
+
+        let minor_version = installed.version().python_version();
+        let highest_patch = installations
+            .find_all()?
+            .filter(|installation| installation.version().python_version() == minor_version)
+            .filter_map(|installation| installation.version().patch())
+            .fold(0, std::cmp::max);
+        if installed
+            .version()
+            .patch()
+            .is_some_and(|p| p >= highest_patch)
+        {
+            installed.ensure_minor_version_link()?;
+        }
+
         if let Err(e) = installed.ensure_dylib_patched() {
             e.warn_user(&installed);
         }

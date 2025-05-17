@@ -153,7 +153,7 @@ pub enum PythonVariant {
 }
 
 /// A Python discovery version request.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum VersionRequest {
     /// Allow an appropriate default Python version.
     #[default]
@@ -1488,6 +1488,24 @@ impl PythonRequest {
         // Finally, we'll treat it as the name of an executable (i.e. in the search PATH)
         // e.g. foo.exe
         Self::ExecutableName(value.to_string())
+    }
+
+    /// Check if this request includes a specific patch version.
+    pub fn includes_patch(&self) -> bool {
+        match self {
+            PythonRequest::Default => false,
+            PythonRequest::Any => false,
+            PythonRequest::Version(version_request) => version_request.patch().is_some(),
+            PythonRequest::Directory(..) => false,
+            PythonRequest::File(..) => false,
+            PythonRequest::ExecutableName(..) => false,
+            PythonRequest::Implementation(..) => false,
+            PythonRequest::ImplementationVersion(_, version) => version.patch().is_some(),
+            PythonRequest::Key(request) => request
+                .version
+                .as_ref()
+                .is_some_and(|request| request.patch().is_some()),
+        }
     }
 
     /// Check if a given interpreter satisfies the interpreter request.
