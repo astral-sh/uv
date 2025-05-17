@@ -312,11 +312,6 @@ pub(crate) async fn remove(
         return Ok(ExitStatus::Success);
     };
 
-    // Perform a full sync, because we don't know what exactly is affected by the removal.
-    // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
-    let extras = ExtrasSpecification::from_all_extras();
-    let install_options = InstallOptions::default();
-
     // Determine the default groups to include.
     let default_groups = default_dependency_groups(project.pyproject_toml())?;
 
@@ -341,10 +336,10 @@ pub(crate) async fn remove(
     match project::sync::do_sync(
         target,
         venv,
-        &extras.with_defaults(default_extras),
+        &ExtrasSpecification::default().with_defaults(default_extras),
         &DependencyGroups::default().with_defaults(default_groups),
         EditableMode::Editable,
-        install_options,
+        InstallOptions::default(),
         Modifications::Exact,
         (&settings).into(),
         &network_settings,
