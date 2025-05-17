@@ -1089,9 +1089,14 @@ mod test {
         );
 
         // If the path is too long, we should not use the `exec` trick.
-        let executable = Path::new("/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3");
+        let executable = Path::new(
+            "/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3",
+        );
         let os_name = "posix";
-        assert_eq!(format_shebang(executable, os_name, false), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''"
+        );
     }
 
     #[test]

@@ -50,7 +50,7 @@ impl LatestClient<'_> {
                     uv_client::ErrorKind::NoIndex(_) => Ok(None),
                     uv_client::ErrorKind::Offline(_) => Ok(None),
                     kind => Err(kind.into()),
-                }
+                };
             }
         };
 

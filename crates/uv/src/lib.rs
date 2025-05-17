@@ -93,19 +93,25 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             // `--isolated` moved to `--no-workspace`.
             Commands::Project(command) if matches!(**command, ProjectCommand::Init(_)) => {
-                warn_user!("The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace."
+                );
                 false
             }
 
             // Preview APIs. Ignore `--isolated` and warn.
             Commands::Project(_) | Commands::Tool(_) | Commands::Python(_) => {
-                warn_user!("The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files."
+                );
                 false
             }
 
             // Non-preview APIs. Continue to support `--isolated`, but warn.
             _ => {
-                warn_user!("The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files."
+                );
                 true
             }
         }
@@ -125,7 +131,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             .file_name()
             .is_some_and(|file_name| file_name == "pyproject.toml")
         {
-            warn_user!("The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead.");
+            warn_user!(
+                "The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead."
+            );
         }
         Some(FilesystemOptions::from_file(config_file)?)
     } else if deprecated_isolated || cli.top_level.no_config {
@@ -977,11 +985,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             if args.no_system {
-                warn_user_once!("The `--no-system` flag has no effect, a system Python interpreter is always used in `uv venv`");
+                warn_user_once!(
+                    "The `--no-system` flag has no effect, a system Python interpreter is always used in `uv venv`"
+                );
             }
 
             if args.system {
-                warn_user_once!("The `--system` flag has no effect, a system Python interpreter is always used in `uv venv`");
+                warn_user_once!(
+                    "The `--system` flag has no effect, a system Python interpreter is always used in `uv venv`"
+                );
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.

@@ -49,11 +49,13 @@ impl Accelerator {
             Ok(content) => {
                 return match parse_sys_module_nvidia_version(&content) {
                     Ok(driver_version) => {
-                        debug!("Detected CUDA driver version from `/sys/module/nvidia/version`: {driver_version}");
+                        debug!(
+                            "Detected CUDA driver version from `/sys/module/nvidia/version`: {driver_version}"
+                        );
                         Ok(Some(Self::Cuda { driver_version }))
                     }
                     Err(e) => Err(e),
-                }
+                };
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(e.into()),
@@ -61,18 +63,20 @@ impl Accelerator {
 
         // Read from `/proc/driver/nvidia/version`
         match fs_err::read_to_string("/proc/driver/nvidia/version") {
-            Ok(content) => {
-                match parse_proc_driver_nvidia_version(&content) {
-                    Ok(Some(driver_version)) => {
-                        debug!("Detected CUDA driver version from `/proc/driver/nvidia/version`: {driver_version}");
-                        return Ok(Some(Self::Cuda { driver_version }));
-                    }
-                    Ok(None) => {
-                        debug!("Failed to parse CUDA driver version from `/proc/driver/nvidia/version`");
-                    }
-                    Err(e) => return Err(e),
+            Ok(content) => match parse_proc_driver_nvidia_version(&content) {
+                Ok(Some(driver_version)) => {
+                    debug!(
+                        "Detected CUDA driver version from `/proc/driver/nvidia/version`: {driver_version}"
+                    );
+                    return Ok(Some(Self::Cuda { driver_version }));
                 }
-            }
+                Ok(None) => {
+                    debug!(
+                        "Failed to parse CUDA driver version from `/proc/driver/nvidia/version`"
+                    );
+                }
+                Err(e) => return Err(e),
+            },
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(e.into()),
         }

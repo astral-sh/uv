@@ -569,9 +569,9 @@ fn parse_extras_cursor<T: Pep508Url>(
             }
             (Some((pos, other)), false) => {
                 return Err(Pep508Error {
-                    message: Pep508ErrorSource::String(
-                        format!("Expected either `,` (separating extras) or `]` (ending the extras section), found `{other}`")
-                    ),
+                    message: Pep508ErrorSource::String(format!(
+                        "Expected either `,` (separating extras) or `]` (ending the extras section), found `{other}`"
+                    )),
                     start: pos,
                     len: 1,
                     input: cursor.to_string(),
@@ -1120,7 +1120,10 @@ mod tests {
     #[cfg(feature = "non-pep508-extensions")]
     fn direct_url_no_extras() {
         let numpy = crate::UnnamedRequirement::<VerbatimUrl>::from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl").unwrap();
-        assert_eq!(numpy.url.to_string(), "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl");
+        assert_eq!(
+            numpy.url.to_string(),
+            "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl"
+        );
         assert_eq!(*numpy.extras, []);
     }
 

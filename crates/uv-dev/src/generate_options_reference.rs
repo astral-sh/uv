@@ -56,7 +56,9 @@ pub(crate) fn main(args: &Args) -> Result<()> {
                     println!("Up-to-date: {filename}");
                 } else {
                     let comparison = StrComparison::new(&current, &reference_string);
-                    bail!("{filename} changed, please run `cargo dev generate-options-reference`:\n{comparison}");
+                    bail!(
+                        "{filename} changed, please run `cargo dev generate-options-reference`:\n{comparison}"
+                    );
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -68,25 +70,25 @@ pub(crate) fn main(args: &Args) -> Result<()> {
                 );
             }
         },
-        Mode::Write => {
-            match fs_err::read_to_string(&reference_path) {
-                Ok(current) => {
-                    if current == reference_string {
-                        println!("Up-to-date: {filename}");
-                    } else {
-                        println!("Updating: {filename}");
-                        fs_err::write(reference_path, reference_string.as_bytes())?;
-                    }
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+        Mode::Write => match fs_err::read_to_string(&reference_path) {
+            Ok(current) => {
+                if current == reference_string {
+                    println!("Up-to-date: {filename}");
+                } else {
                     println!("Updating: {filename}");
                     fs_err::write(reference_path, reference_string.as_bytes())?;
                 }
-                Err(err) => {
-                    bail!("{filename} changed, please run `cargo dev generate-options-reference`:\n{err}");
-                }
             }
-        }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                println!("Updating: {filename}");
+                fs_err::write(reference_path, reference_string.as_bytes())?;
+            }
+            Err(err) => {
+                bail!(
+                    "{filename} changed, please run `cargo dev generate-options-reference`:\n{err}"
+                );
+            }
+        },
     }
 
     Ok(())

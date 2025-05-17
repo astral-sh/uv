@@ -309,7 +309,7 @@ impl SitePackages {
                             [] => {
                                 return Ok(SatisfiesResult::Unsatisfied(
                                     requirement.url.verbatim.raw().to_string(),
-                                ))
+                                ));
                             }
                             [distribution] => {
                                 let requirement = uv_pep508::Requirement {
@@ -326,7 +326,7 @@ impl SitePackages {
                             _ => {
                                 return Ok(SatisfiesResult::Unsatisfied(
                                     requirement.url.verbatim.raw().to_string(),
-                                ))
+                                ));
                             }
                         }
                     }
@@ -349,7 +349,7 @@ impl SitePackages {
                             [] => {
                                 return Ok(SatisfiesResult::Unsatisfied(
                                     requirement.url.verbatim.raw().to_string(),
-                                ))
+                                ));
                             }
                             [distribution] => {
                                 let requirement = uv_pep508::Requirement {
@@ -366,7 +366,7 @@ impl SitePackages {
                             _ => {
                                 return Ok(SatisfiesResult::Unsatisfied(
                                     requirement.url.verbatim.raw().to_string(),
-                                ))
+                                ));
                             }
                         }
                     }
@@ -447,7 +447,7 @@ impl SitePackages {
                             RequirementSatisfaction::Mismatch
                             | RequirementSatisfaction::OutOfDate
                             | RequirementSatisfaction::CacheInvalid => {
-                                return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()))
+                                return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
                             }
                             RequirementSatisfaction::Satisfied => {}
                         }
@@ -462,7 +462,7 @@ impl SitePackages {
                                 | RequirementSatisfaction::CacheInvalid => {
                                     return Ok(SatisfiesResult::Unsatisfied(
                                         requirement.to_string(),
-                                    ))
+                                    ));
                                 }
                                 RequirementSatisfaction::Satisfied => {}
                             }
@@ -572,7 +572,8 @@ impl Diagnostic for SitePackagesDiagnostic {
     fn message(&self) -> String {
         match self {
             Self::MetadataUnavailable { package, path } => format!(
-                "The package `{package}` is broken or incomplete (unable to read `METADATA`). Consider recreating the virtualenv, or removing the package directory at: {}.", path.display(),
+                "The package `{package}` is broken or incomplete (unable to read `METADATA`). Consider recreating the virtualenv, or removing the package directory at: {}.",
+                path.display(),
             ),
             Self::IncompatiblePythonVersion {
                 package,
@@ -599,7 +600,8 @@ impl Diagnostic for SitePackagesDiagnostic {
                 paths.sort();
                 format!(
                     "The package `{package}` has multiple installed distributions: {}",
-                    paths.iter().fold(String::new(), |acc, path| acc + &format!("\n  - {}", path.display()))
+                    paths.iter().fold(String::new(), |acc, path| acc
+                        + &format!("\n  - {}", path.display()))
                 )
             }
         }

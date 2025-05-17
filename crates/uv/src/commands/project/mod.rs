@@ -70,7 +70,9 @@ pub(crate) mod tree;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ProjectError {
-    #[error("The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.")]
+    #[error(
+        "The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`."
+    )]
     LockMismatch(Box<Lock>),
 
     #[error(
@@ -78,40 +80,60 @@ pub(crate) enum ProjectError {
     )]
     MissingLockfile,
 
-    #[error("The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.")]
+    #[error(
+        "The lockfile at `uv.lock` uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
+    )]
     UnsupportedLockVersion(u32, u32),
 
-    #[error("Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.")]
+    #[error(
+        "Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
+    )]
     UnparsableLockVersion(u32, u32, #[source] toml::de::Error),
 
     #[error("Failed to serialize `uv.lock`")]
     LockSerialization(#[from] toml_edit::ser::Error),
 
-    #[error("The current Python version ({0}) is not compatible with the locked Python requirement: `{1}`")]
+    #[error(
+        "The current Python version ({0}) is not compatible with the locked Python requirement: `{1}`"
+    )]
     LockedPythonIncompatibility(Version, RequiresPython),
 
-    #[error("The current Python platform is not compatible with the lockfile's supported environments: {0}")]
+    #[error(
+        "The current Python platform is not compatible with the lockfile's supported environments: {0}"
+    )]
     LockedPlatformIncompatibility(String),
 
     #[error(transparent)]
     Conflict(#[from] ConflictError),
 
-    #[error("The requested interpreter resolved to Python {0}, which is incompatible with the project's Python requirement: `{1}`")]
+    #[error(
+        "The requested interpreter resolved to Python {0}, which is incompatible with the project's Python requirement: `{1}`"
+    )]
     RequestedPythonProjectIncompatibility(Version, RequiresPython),
 
-    #[error("The Python request from `{0}` resolved to Python {1}, which is incompatible with the project's Python requirement: `{2}`. Use `uv python pin` to update the `.python-version` file to a compatible version.")]
+    #[error(
+        "The Python request from `{0}` resolved to Python {1}, which is incompatible with the project's Python requirement: `{2}`. Use `uv python pin` to update the `.python-version` file to a compatible version."
+    )]
     DotPythonVersionProjectIncompatibility(String, Version, RequiresPython),
 
-    #[error("The resolved Python interpreter (Python {0}) is incompatible with the project's Python requirement: `{1}`")]
+    #[error(
+        "The resolved Python interpreter (Python {0}) is incompatible with the project's Python requirement: `{1}`"
+    )]
     RequiresPythonProjectIncompatibility(Version, RequiresPython),
 
-    #[error("The requested interpreter resolved to Python {0}, which is incompatible with the script's Python requirement: `{1}`")]
+    #[error(
+        "The requested interpreter resolved to Python {0}, which is incompatible with the script's Python requirement: `{1}`"
+    )]
     RequestedPythonScriptIncompatibility(Version, RequiresPython),
 
-    #[error("The Python request from `{0}` resolved to Python {1}, which is incompatible with the script's Python requirement: `{2}`")]
+    #[error(
+        "The Python request from `{0}` resolved to Python {1}, which is incompatible with the script's Python requirement: `{2}`"
+    )]
     DotPythonVersionScriptIncompatibility(String, Version, RequiresPython),
 
-    #[error("The resolved Python interpreter (Python {0}) is incompatible with the script's Python requirement: `{1}`")]
+    #[error(
+        "The resolved Python interpreter (Python {0}) is incompatible with the script's Python requirement: `{1}`"
+    )]
     RequiresPythonScriptIncompatibility(Version, RequiresPython),
 
     #[error("The requested interpreter resolved to Python {0}, which is incompatible with the project's Python requirement: `{1}`. However, a workspace member (`{member}`) supports Python {3}. To install the workspace member on its own, navigate to `{path}`, then run `{venv}` followed by `{install}`.", member = _2.cyan(), venv = format!("uv venv --python {_0}").green(), install = "uv pip install -e .".green(), path = _4.user_display().cyan() )]
@@ -151,7 +173,9 @@ pub(crate) enum ProjectError {
     #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
     MissingGroupScript(GroupName),
 
-    #[error("Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table")]
+    #[error(
+        "Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table"
+    )]
     MissingDefaultGroup(GroupName),
 
     #[error("Extra `{0}` is not defined in the project's `optional-dependencies` table")]
@@ -785,7 +809,9 @@ pub(crate) enum EnvironmentIncompatibilityError {
     #[error("The {0} environment's Python version does not meet the Python requirement: `{1}`")]
     RequiresPython(EnvironmentKind, RequiresPython),
 
-    #[error("The interpreter in the {0} environment has different version ({1}) than it was created with ({2})")]
+    #[error(
+        "The interpreter in the {0} environment has different version ({1}) than it was created with ({2})"
+    )]
     PyenvVersionConflict(EnvironmentKind, Version, Version),
 }
 
@@ -899,7 +925,7 @@ impl ProjectInterpreter {
                         return Err(ProjectError::InvalidProjectEnvironmentDir(
                             root,
                             inner.kind.to_string(),
-                        ))
+                        ));
                     }
                     InvalidEnvironmentKind::MissingExecutable(_) => {
                         if fs_err::read_dir(&root).is_ok_and(|mut dir| dir.next().is_some()) {
@@ -1264,7 +1290,9 @@ impl ProjectEnvironment {
                     (_, Err(err)) | (Err(err), _) => {
                         return Err(ProjectError::InvalidProjectEnvironmentDir(
                             root,
-                            format!("it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"),
+                            format!(
+                                "it is not a compatible environment but cannot be recreated because uv cannot determine if it is a virtual environment: {err}"
+                            ),
                         ));
                     }
                 };
@@ -2561,7 +2589,9 @@ fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: 
     if settings.index_locations.no_index() {
         // Nothing to do, we're ignoring the URLs anyway.
     } else if *no_index {
-        warn_user_once!("Ignoring `--no-index` from requirements file. Instead, use the `--no-index` command-line argument, or set `no-index` in a `uv.toml` or `pyproject.toml` file.");
+        warn_user_once!(
+            "Ignoring `--no-index` from requirements file. Instead, use the `--no-index` command-line argument, or set `no-index` in a `uv.toml` or `pyproject.toml` file."
+        );
     } else {
         if let Some(index_url) = index_url {
             if settings.index_locations.default_index().map(Index::url) != Some(index_url) {
@@ -2578,7 +2608,6 @@ fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: 
             {
                 warn_user_once!(
                     "Ignoring `--extra-index-url` from requirements file: `{extra_index_url}`. Instead, use the `--extra-index-url` command-line argument, or set `extra-index-url` in a `uv.toml` or `pyproject.toml` file.`"
-
                 );
             }
         }
@@ -2596,11 +2625,15 @@ fn warn_on_requirements_txt_setting(spec: &RequirementsSpecification, settings: 
     }
 
     if !no_binary.is_none() && settings.build_options.no_binary() != no_binary {
-        warn_user_once!("Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-binary` command-line argument, or set `no-binary` in a `uv.toml` or `pyproject.toml` file.");
+        warn_user_once!(
+            "Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-binary` command-line argument, or set `no-binary` in a `uv.toml` or `pyproject.toml` file."
+        );
     }
 
     if !no_build.is_none() && settings.build_options.no_build() != no_build {
-        warn_user_once!("Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-build` command-line argument, or set `no-build` in a `uv.toml` or `pyproject.toml` file.");
+        warn_user_once!(
+            "Ignoring `--no-binary` setting from requirements file. Instead, use the `--no-build` command-line argument, or set `no-build` in a `uv.toml` or `pyproject.toml` file."
+        );
     }
 }
 

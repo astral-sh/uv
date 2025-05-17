@@ -106,8 +106,15 @@ impl fmt::Display for EnvironmentNotFound {
         match search_type {
             // This error message assumes that the relevant API accepts the `--system` flag. This
             // is true of the callsites today, since the project APIs never surface this error.
-            SearchType::Virtual => write!(f, "; run `{}` to create an environment, or pass `{}` to install into a non-virtual environment", "uv venv".green(), "--system".green())?,
-            SearchType::VirtualOrSystem => write!(f, "; run `{}` to create an environment", "uv venv".green())?,
+            SearchType::Virtual => write!(
+                f,
+                "; run `{}` to create an environment, or pass `{}` to install into a non-virtual environment",
+                "uv venv".green(),
+                "--system".green()
+            )?,
+            SearchType::VirtualOrSystem => {
+                write!(f, "; run `{}` to create an environment", "uv venv".green())?;
+            }
             SearchType::System => {}
         }
 

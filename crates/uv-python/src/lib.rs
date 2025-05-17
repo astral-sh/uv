@@ -636,12 +636,12 @@ mod tests {
         })??;
         assert!(
             matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPath,
-                interpreter: _
-            }
-        ),
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPath,
+                    interpreter: _
+                }
+            ),
             "We should skip the Python 2 installation and find the Python 3 interpreter; got {python:?}"
         );
         assert_eq!(python.interpreter().sys_executable(), python3.path());
@@ -937,12 +937,12 @@ mod tests {
             })??;
         assert!(
             matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPathFirst,
-                interpreter: _
-            }
-        ),
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPathFirst,
+                    interpreter: _
+                }
+            ),
             "We should skip the active environment in favor of the requested version; got {python:?}"
         );
 

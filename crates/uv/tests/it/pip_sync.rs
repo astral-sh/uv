@@ -1087,7 +1087,10 @@ fn install_local_wheel() -> Result<()> {
 
     // Download a wheel.
     let archive = context.temp_dir.child("tomli-2.0.1-py3-none-any.whl");
-    download_to_disk("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl", &archive);
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1224,7 +1227,10 @@ fn mismatched_version() -> Result<()> {
 
     // Download a wheel.
     let archive = context.temp_dir.child("tomli-3.7.2-py3-none-any.whl");
-    download_to_disk("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl", &archive);
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(

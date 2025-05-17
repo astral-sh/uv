@@ -506,18 +506,26 @@ impl ToolRunSettings {
         // If `--upgrade` was passed explicitly, warn.
         if installer.upgrade || !installer.upgrade_package.is_empty() {
             if with.is_empty() && with_requirements.is_empty() {
-                warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool.");
+                warn_user_once!(
+                    "Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool."
+                );
             } else {
-                warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to upgrade any `--with` dependencies.");
+                warn_user_once!(
+                    "Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to upgrade any `--with` dependencies."
+                );
             }
         }
 
         // If `--reinstall` was passed explicitly, warn.
         if installer.reinstall || !installer.reinstall_package.is_empty() {
             if with.is_empty() && with_requirements.is_empty() {
-                warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --all --reinstall` to reinstall all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool.");
+                warn_user_once!(
+                    "Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --all --reinstall` to reinstall all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool."
+                );
             } else {
-                warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --all --reinstall` to reinstall all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to reinstall any `--with` dependencies.");
+                warn_user_once!(
+                    "Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --all --reinstall` to reinstall all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to reinstall any `--with` dependencies."
+                );
             }
         }
 
@@ -1334,9 +1342,13 @@ impl AddSettings {
             .is_some_and(Maybe::is_some)
         {
             if script.is_some() {
-                warn_user_once!("Indexes specified via `--index-url` will not be persisted to the script; use `--default-index` instead.");
+                warn_user_once!(
+                    "Indexes specified via `--index-url` will not be persisted to the script; use `--default-index` instead."
+                );
             } else {
-                warn_user_once!("Indexes specified via `--index-url` will not be persisted to the `pyproject.toml` file; use `--default-index` instead.");
+                warn_user_once!(
+                    "Indexes specified via `--index-url` will not be persisted to the `pyproject.toml` file; use `--default-index` instead."
+                );
             }
         }
 
@@ -1347,9 +1359,13 @@ impl AddSettings {
             .is_some_and(|extra_index_url| extra_index_url.iter().any(Maybe::is_some))
         {
             if script.is_some() {
-                warn_user_once!("Indexes specified via `--extra-index-url` will not be persisted to the script; use `--index` instead.");
+                warn_user_once!(
+                    "Indexes specified via `--extra-index-url` will not be persisted to the script; use `--index` instead."
+                );
             } else {
-                warn_user_once!("Indexes specified via `--extra-index-url` will not be persisted to the `pyproject.toml` file; use `--index` instead.");
+                warn_user_once!(
+                    "Indexes specified via `--extra-index-url` will not be persisted to the `pyproject.toml` file; use `--index` instead."
+                );
             }
         }
 

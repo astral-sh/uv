@@ -273,7 +273,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     )
                     .with_context("script")
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -318,7 +318,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     )
                     .with_context("script")
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -414,7 +414,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         )
                         .with_context("script")
                         .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -717,7 +717,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                             network_settings.native_tls,
                         )
                         .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -806,7 +806,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                             network_settings.native_tls,
                         )
                         .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -968,7 +968,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     )
                     .with_context("`--with`")
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -1562,7 +1562,7 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
         Err(VarError::NotPresent) => return Ok(0),
         Err(e) => {
             return Err(e)
-                .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
+                .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH));
         }
     };
 

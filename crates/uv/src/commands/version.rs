@@ -57,7 +57,10 @@ pub(crate) async fn project_version(
                 return Err(err)?;
             }
             // Otherwise, warn and provide fallback
-            warn_user!("Failed to read project metadata ({err}). Running `{}` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.", "uv self version".green());
+            warn_user!(
+                "Failed to read project metadata ({err}). Running `{}` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.",
+                "uv self version".green()
+            );
             return self_version(short, output_format, printer);
         }
     };

@@ -215,7 +215,7 @@ impl ManagedPythonInstallations {
                 return Err(Error::ReadError {
                     dir: self.root.clone(),
                     err,
-                })
+                });
             }
         };
         let scratch = self.scratch();
@@ -487,7 +487,7 @@ impl ManagedPythonInstallation {
                     );
                 }
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    return Err(Error::MissingExecutable(python.clone()))
+                    return Err(Error::MissingExecutable(python.clone()));
                 }
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(err) => {
@@ -495,7 +495,7 @@ impl ManagedPythonInstallation {
                         from: executable,
                         to: python,
                         err,
-                    })
+                    });
                 }
             }
         }

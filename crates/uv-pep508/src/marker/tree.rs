@@ -2000,7 +2000,7 @@ mod test {
         let string_string = MarkerTree::from_str("'b' >= 'a'").unwrap();
         string_string.evaluate(&env37, &[]);
         logs_contain(
-            "Comparing two quoted strings with each other doesn't make sense: 'b' >= 'a', will evaluate to false"
+            "Comparing two quoted strings with each other doesn't make sense: 'b' >= 'a', will evaluate to false",
         );
     }
 
@@ -2016,13 +2016,13 @@ mod test {
                 .iter()
                 .map(|s| s.split_once("  ").unwrap().1)
                 .collect();
-            let expected =  [
+            let expected = [
                 "WARN warnings4: uv_pep508: os.name is deprecated in favor of os_name",
                 "WARN warnings4: uv_pep508: platform.machine is deprecated in favor of platform_machine",
                 "WARN warnings4: uv_pep508: platform.python_implementation is deprecated in favor of platform_python_implementation",
                 "WARN warnings4: uv_pep508: platform.version is deprecated in favor of platform_version",
                 "WARN warnings4: uv_pep508: sys.platform is deprecated in favor of sys_platform",
-                "WARN warnings4: uv_pep508: Comparing linux and posix lexicographically"
+                "WARN warnings4: uv_pep508: Comparing linux and posix lexicographically",
             ];
             if lines == expected {
                 Ok(())

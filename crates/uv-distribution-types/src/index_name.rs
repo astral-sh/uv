@@ -91,7 +91,9 @@ impl Deref for IndexName {
 pub enum IndexNameError {
     #[error("Index included a name, but the name was empty")]
     EmptyName,
-    #[error("Index names may only contain letters, digits, hyphens, underscores, and periods, but found unsupported character (`{0}`) in: `{1}`")]
+    #[error(
+        "Index names may only contain letters, digits, hyphens, underscores, and periods, but found unsupported character (`{0}`) in: `{1}`"
+    )]
     UnsupportedCharacter(char, String),
     #[error("Index names must be ASCII, but found non-ASCII character (`{0}`) in: `{1}`")]
     NonAsciiName(char, String),

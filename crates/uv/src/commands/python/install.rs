@@ -144,7 +144,10 @@ pub(crate) async fn install(
     let start = std::time::Instant::now();
 
     if default && !preview.is_enabled() {
-        writeln!(printer.stderr(), "The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default`")?;
+        writeln!(
+            printer.stderr(),
+            "The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default`"
+        )?;
         return Ok(ExitStatus::Failure);
     }
 

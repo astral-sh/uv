@@ -245,7 +245,7 @@ fn find_module_root(
     let dir = match fs_err::read_dir(src_root) {
         Ok(dir_iterator) => dir_iterator.collect::<Result<Vec<_>, _>>()?,
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            return Err(Error::MissingSrc(src_root.to_path_buf()))
+            return Err(Error::MissingSrc(src_root.to_path_buf()));
         }
         Err(err) => return Err(Error::Io(err)),
     };

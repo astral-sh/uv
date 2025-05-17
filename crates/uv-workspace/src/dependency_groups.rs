@@ -151,7 +151,9 @@ pub enum DependencyGroupError {
     ),
     #[error("Failed to find group `{0}` included by `{1}`")]
     GroupNotFound(GroupName, GroupName),
-    #[error("Group `{0}` includes the `dev` group (`include = \"dev\"`), but only `tool.uv.dev-dependencies` was found. To reference the `dev` group via an `include`, remove the `tool.uv.dev-dependencies` section and add any development dependencies to the `dev` entry in the `[dependency-groups]` table instead.")]
+    #[error(
+        "Group `{0}` includes the `dev` group (`include = \"dev\"`), but only `tool.uv.dev-dependencies` was found. To reference the `dev` group via an `include`, remove the `tool.uv.dev-dependencies` section and add any development dependencies to the `dev` entry in the `[dependency-groups]` table instead."
+    )]
     DevGroupInclude(GroupName),
     #[error("Detected a cycle in `dependency-groups`: {0}")]
     DependencyGroupCycle(Cycle),

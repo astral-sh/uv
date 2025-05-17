@@ -533,7 +533,7 @@ pub(crate) async fn pip_compile(
         Err(err) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     };
 
@@ -655,7 +655,9 @@ pub(crate) async fn pip_compile(
         }
         ExportFormat::PylockToml => {
             if include_marker_expression {
-                warn_user!("The `--emit-marker-expression` option is not supported for `pylock.toml` output");
+                warn_user!(
+                    "The `--emit-marker-expression` option is not supported for `pylock.toml` output"
+                );
             }
             if include_index_url {
                 warn_user!(
@@ -673,7 +675,9 @@ pub(crate) async fn pip_compile(
                 );
             }
             if include_index_annotation {
-                warn_user!("The `--emit-index-annotation` option is not supported for `pylock.toml` output");
+                warn_user!(
+                    "The `--emit-index-annotation` option is not supported for `pylock.toml` output"
+                );
             }
 
             // Determine the directory relative to which the output file should be written.

@@ -1408,7 +1408,8 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     requires_python.cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
+                        .cyan(),
                     package_requires_python.cyan(),
                     package_requires_python.cyan(),
                 )
@@ -1426,7 +1427,8 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     requires_python.cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
+                        .cyan(),
                     package_requires_python.cyan(),
                 )
             }
@@ -1442,7 +1444,8 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} The Python interpreter uses a Python version that is not supported by your dependencies (e.g., {} only supports {}). Consider passing a `--python-version` value to raise the minimum supported version.",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
+                        .cyan(),
                     package_requires_python.cyan(),
                 )
             }
