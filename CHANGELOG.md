@@ -2,6 +2,14 @@
 
 <!-- prettier-ignore-start -->
 
+## 0.7.5
+
+### Bug fixes
+
+- Support case-sensitive module discovery in the build backend ([#13468](https://github.com/astral-sh/uv/pull/13468))
+- Bump Simple cache bucket to v16 ([#13498](https://github.com/astral-sh/uv/pull/13498))
+- Don't error when the script is too short for the buffer ([#13488](https://github.com/astral-sh/uv/pull/13488))
+- Add missing word in "script not supported" error ([#13483](https://github.com/astral-sh/uv/pull/13483))
 
 ## 0.7.4
 
