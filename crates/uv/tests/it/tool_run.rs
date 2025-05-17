@@ -9,46 +9,43 @@ use uv_static::EnvVars;
 #[test]
 fn tool_run_args() {
     let context = TestContext::new("3.12").with_filtered_counts();
+    let mut filters = context.filters();
+    filters.push((
+        r"Usage: uv tool run \[OPTIONS\] (?s).*",
+        "[UV TOOL RUN HELP]",
+    ));
+    filters.push((r"usage: pytest \[options\] (?s).*", "[PYTEST HELP]"));
     let tool_dir = context.temp_dir.child("tools");
     let bin_dir = context.temp_dir.child("bin");
 
-    // We treat arguments before the command as uv arguments
-    uv_snapshot!(context.filters(), context.tool_run()
-        .arg("--version")
+    // We treat arguments before the command as uv tool run arguments
+    uv_snapshot!(filters, context.tool_run()
+        .arg("--help")
         .arg("pytest")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    uv [VERSION] ([COMMIT] DATE)
+    Run a command provided by a Python package
 
-    ----- stderr -----
-    "###);
+    [UV TOOL RUN HELP]
+    ");
 
-    // We don't treat arguments after the command as uv arguments
-    uv_snapshot!(context.filters(), context.tool_run()
+    // We don't treat arguments after the command as uv tool run arguments
+    uv_snapshot!(filters, context.tool_run()
         .arg("pytest")
-        .arg("--version")
+        .arg("--help")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    pytest 8.1.1
-
-    ----- stderr -----
-    Resolved [N] packages in [TIME]
-    Prepared [N] packages in [TIME]
-    Installed [N] packages in [TIME]
-     + iniconfig==2.0.0
-     + packaging==24.0
-     + pluggy==1.4.0
-     + pytest==8.1.1
-    "###);
+    [PYTEST HELP]
+    ");
 
     // Can use `--` to separate uv arguments from the command arguments.
-    uv_snapshot!(context.filters(), context.tool_run()
+    uv_snapshot!(filters, context.tool_run()
         .arg("--")
         .arg("pytest")
         .arg("--version")
@@ -139,15 +136,10 @@ fn tool_run_at_version() {
         .arg("pytest@8.0.0")
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable `pytest@8.0.0` was not found.
-    The following executables are provided by `pytest`:
-    - py.test
-    - pytest
-    Consider using `uv tool run --from pytest <EXECUTABLE_NAME>` instead.
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -157,8 +149,11 @@ fn tool_run_at_version() {
      + packaging==24.0
      + pluggy==1.4.0
      + pytest==8.1.1
-    warning: An executable named `pytest@8.0.0` is not provided by package `pytest`.
-    "###);
+    An executable named `pytest@8.0.0` is not provided by package `pytest`.
+    The following executables are available:
+    - py.test
+    - pytest
+    ");
 }
 
 #[test]
@@ -265,15 +260,10 @@ fn tool_run_suggest_valid_commands() {
     .arg("black")
     .arg("orange")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable `orange` was not found.
-    The following executables are provided by `black`:
-    - black
-    - blackd
-    Consider using `uv tool run --from black <EXECUTABLE_NAME>` instead.
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -285,17 +275,19 @@ fn tool_run_suggest_valid_commands() {
      + packaging==24.0
      + pathspec==0.12.1
      + platformdirs==4.2.0
-    warning: An executable named `orange` is not provided by package `black`.
-    "###);
+    An executable named `orange` is not provided by package `black`.
+    The following executables are available:
+    - black
+    - blackd
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
     .arg("fastapi-cli")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable `fastapi-cli` was not found.
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
@@ -304,8 +296,8 @@ fn tool_run_suggest_valid_commands() {
      + fastapi-cli==0.0.1
      + importlib-metadata==1.7.0
      + zipp==3.18.1
-    warning: Package `fastapi-cli` does not provide any executables.
-    "###);
+    Package `fastapi-cli` does not provide any executables.
+    ");
 }
 
 #[test]
@@ -327,7 +319,7 @@ fn tool_run_warn_executable_not_in_from() {
         .arg("fastapi")
         .arg("fastapi")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -371,7 +363,7 @@ fn tool_run_warn_executable_not_in_from() {
      + watchfiles==0.21.0
      + websockets==12.0
     warning: An executable named `fastapi` is not provided by package `fastapi` but is available via the dependency `fastapi-cli`. Consider using `uv tool run --from fastapi-cli fastapi` instead.
-    "###);
+    ");
 }
 
 #[test]
@@ -1540,11 +1532,10 @@ fn warn_no_executables_found() {
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("requests")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable `requests` was not found.
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
@@ -1555,8 +1546,8 @@ fn warn_no_executables_found() {
      + idna==3.6
      + requests==2.31.0
      + urllib3==2.2.1
-    warning: Package `requests` does not provide any executables.
-    "###);
+    Package `requests` does not provide any executables.
+    ");
 }
 
 /// Warn when a user passes `--upgrade` to `uv tool run`.
@@ -2198,19 +2189,19 @@ fn tool_run_verbatim_name() {
         .arg("change-wheel-version")
         .arg("--help")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
-        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable `change-wheel-version` was not found.
-    The following executables are provided by `change-wheel-version`:
-    - change_wheel_version
-    Consider using `uv tool run --from change-wheel-version <EXECUTABLE_NAME>` instead.
 
     ----- stderr -----
     Resolved [N] packages in [TIME]
-    warning: An executable named `change-wheel-version` is not provided by package `change-wheel-version`.
-    "###);
+    An executable named `change-wheel-version` is not provided by package `change-wheel-version`.
+    The following executables are available:
+    - change_wheel_version
+
+    Use `uv tool run --from change-wheel-version change_wheel_version` instead.
+    ");
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
@@ -2252,7 +2243,7 @@ fn tool_run_with_existing_py_script() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks you tried to run a Python script at `script.py`, which is not supported by `uv tool run`
+    error: It looks like you tried to run a Python script at `script.py`, which is not supported by `uv tool run`
 
     hint: Use `uv run script.py` instead
     ");
@@ -2272,7 +2263,7 @@ fn tool_run_with_existing_pyw_script() -> anyhow::Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks you tried to run a Python script at `script.pyw`, which is not supported by `uv tool run`
+    error: It looks like you tried to run a Python script at `script.pyw`, which is not supported by `uv tool run`
 
     hint: Use `uv run script.pyw` instead
     ");
@@ -2291,7 +2282,7 @@ fn tool_run_with_nonexistent_py_script() {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks you provided a Python script to run, which is not supported supported by `uv tool run`
+    error: It looks like you provided a Python script to run, which is not supported supported by `uv tool run`
 
     hint: We did not find a script at the requested path. If you meant to run a command from the `script-py` package, pass the normalized package name to `--from` to disambiguate, e.g., `uv tool run --from script-py script.py`
     ");
@@ -2309,7 +2300,7 @@ fn tool_run_with_nonexistent_pyw_script() {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks you provided a Python script to run, which is not supported supported by `uv tool run`
+    error: It looks like you provided a Python script to run, which is not supported supported by `uv tool run`
 
     hint: We did not find a script at the requested path. If you meant to run a command from the `script-pyw` package, pass the normalized package name to `--from` to disambiguate, e.g., `uv tool run --from script-pyw script.pyw`
     ");
@@ -2329,7 +2320,7 @@ fn tool_run_with_from_script() {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks you provided a Python script to `--from`, which is not supported
+    error: It looks like you provided a Python script to `--from`, which is not supported
 
     hint: If you meant to run a command from the `script-py` package, use the normalized package name instead to disambiguate, e.g., `uv tool run --from script-py ruff`
     ");
@@ -2349,7 +2340,7 @@ fn tool_run_with_script_and_from_script() {
     ----- stdout -----
 
     ----- stderr -----
-    error: It looks you provided a Python script to `--from`, which is not supported
+    error: It looks like you provided a Python script to `--from`, which is not supported
 
     hint: If you meant to run a command from the `script-py` package, use the normalized package name instead to disambiguate, e.g., `uv tool run --from script-py other-script.py`
     ");
@@ -2512,16 +2503,14 @@ fn tool_run_windows_runnable_types() -> anyhow::Result<()> {
     success: false
     exit_code: 1
     ----- stdout -----
-    The executable `does_not_exist` was not found.
-    The following executables are provided by `foo`:
+
+    ----- stderr -----
+    An executable named `does_not_exist` is not provided by package `foo`.
+    The following executables are available:
     - custom_pydoc.exe
     - custom_pydoc.bat
     - custom_pydoc.cmd
     - custom_pydoc.ps1
-    Consider using `uv tool run --from foo <EXECUTABLE_NAME>` instead.
-
-    ----- stderr -----
-    warning: An executable named `does_not_exist` is not provided by package `foo`.
     "###);
 
     // Test with explicit .bat extension

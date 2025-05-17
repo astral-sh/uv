@@ -6,12 +6,11 @@ use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 
-use windows::core::{s, PSTR};
+use windows::core::{s, BOOL, PSTR};
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::{
     Foundation::{
-        CloseHandle, SetHandleInformation, BOOL, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE,
-        TRUE,
+        CloseHandle, SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, TRUE,
     },
     System::Console::{
         GetStdHandle, SetConsoleCtrlHandler, SetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
@@ -483,7 +482,7 @@ pub fn bounce(is_gui: bool) -> ! {
         TRUE
     }
     // See distlib/PC/launcher.c::control_key_handler
-    unsafe { SetConsoleCtrlHandler(Some(Some(control_key_handler)), true) }.unwrap_or_else(|_| {
+    unsafe { SetConsoleCtrlHandler(Some(control_key_handler), true) }.unwrap_or_else(|_| {
         print_last_error_and_exit("Control handler setting failed");
     });
 

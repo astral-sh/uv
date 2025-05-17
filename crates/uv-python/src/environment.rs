@@ -10,6 +10,7 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_cache_key::cache_digest;
 use uv_fs::{LockedFile, Simplified};
+use uv_pep440::Version;
 
 use crate::discovery::find_python_installation;
 use crate::installation::PythonInstallation;
@@ -105,8 +106,15 @@ impl fmt::Display for EnvironmentNotFound {
         match search_type {
             // This error message assumes that the relevant API accepts the `--system` flag. This
             // is true of the callsites today, since the project APIs never surface this error.
-            SearchType::Virtual => write!(f, "; run `{}` to create an environment, or pass `{}` to install into a non-virtual environment", "uv venv".green(), "--system".green())?,
-            SearchType::VirtualOrSystem => write!(f, "; run `{}` to create an environment", "uv venv".green())?,
+            SearchType::Virtual => write!(
+                f,
+                "; run `{}` to create an environment, or pass `{}` to install into a non-virtual environment",
+                "uv venv".green(),
+                "--system".green()
+            )?,
+            SearchType::VirtualOrSystem => {
+                write!(f, "; run `{}` to create an environment", "uv venv".green())?;
+            }
             SearchType::System => {}
         }
 
@@ -356,12 +364,24 @@ impl PythonEnvironment {
         }
     }
 
-    /// If this is a virtual environment (indicated by the presence of
-    /// a `pyvenv.cfg` file), this returns true if the `pyvenv.cfg` version
-    /// is the same as the interpreter Python version. Also returns true
-    /// if this is not a virtual environment.
-    pub fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
-        let Ok(cfg) = self.cfg() else { return true };
-        cfg.matches_interpreter(interpreter)
+    /// Check if the `pyvenv.cfg` version is the same as the interpreter's Python version.
+    ///
+    /// Returns [`None`] if the versions are the consistent or there is no `pyvenv.cfg`. If the
+    /// versions do not match, returns a tuple of the `pyvenv.cfg` and interpreter's Python versions
+    /// for display.
+    pub fn get_pyvenv_version_conflict(&self) -> Option<(Version, Version)> {
+        let cfg = self.cfg().ok()?;
+        let cfg_version = cfg.version?.into_version();
+
+        // Determine if we should be checking for patch or pre-release equality
+        let exe_version = if cfg_version.release().get(2).is_none() {
+            self.interpreter().python_minor_version()
+        } else if cfg_version.pre().is_none() {
+            self.interpreter().python_patch_version()
+        } else {
+            self.interpreter().python_version().clone()
+        };
+
+        (cfg_version != exe_version).then_some((cfg_version, exe_version))
     }
 }

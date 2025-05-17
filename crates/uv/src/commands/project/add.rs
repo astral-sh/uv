@@ -13,7 +13,6 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 use url::Url;
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_cache_key::RepositoryUrl;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -30,7 +29,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
-use uv_normalize::{DefaultGroups, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{DefaultExtras, PackageName, DEV_DEPENDENCIES};
 use uv_pep508::{ExtraName, MarkerTree, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -52,8 +51,8 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    init_script_python_requirement, PlatformState, ProjectEnvironment, ProjectError,
-    ProjectInterpreter, ScriptInterpreter, UniversalState,
+    default_dependency_groups, init_script_python_requirement, PlatformState, ProjectEnvironment,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
 use crate::commands::{diagnostics, project, ExitStatus, ScriptPath};
@@ -73,7 +72,7 @@ pub(crate) async fn add(
     marker: Option<MarkerTree>,
     editable: Option<bool>,
     dependency_type: DependencyType,
-    raw_sources: bool,
+    raw: bool,
     indexes: Vec<Index>,
     rev: Option<String>,
     tag: Option<String>,
@@ -105,7 +104,13 @@ pub(crate) async fn add(
             RequirementsSource::SetupCfg(_) => {
                 bail!("Adding requirements from a `setup.cfg` is not supported in `uv add`");
             }
-            _ => {}
+            RequirementsSource::PylockToml(_) => {
+                bail!("Adding requirements from a `pylock.toml` is not supported in `uv add`");
+            }
+            RequirementsSource::Package(_)
+            | RequirementsSource::Editable(_)
+            | RequirementsSource::RequirementsTxt(_)
+            | RequirementsSource::EnvironmentYml(_) => {}
         }
     }
 
@@ -169,6 +174,7 @@ pub(crate) async fn add(
             python_preference,
             python_downloads,
             &install_mirrors,
+            false,
             no_config,
             active,
             cache,
@@ -206,10 +212,16 @@ pub(crate) async fn add(
         if project.is_non_project() {
             match dependency_type {
                 DependencyType::Production => {
-                    bail!("Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `{}` instead", "uv add --dev".green())
+                    bail!(
+                        "Project is missing a `[project]` table; add a `[project]` table to use production dependencies, or run `{}` instead",
+                        "uv add --dev".green()
+                    )
                 }
                 DependencyType::Optional(_) => {
-                    bail!("Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead", "uv add --dev".green())
+                    bail!(
+                        "Project is missing a `[project]` table; add a `[project]` table to use optional dependencies, or run `{}` instead",
+                        "uv add --dev".green()
+                    )
                 }
                 DependencyType::Group(_) => {}
                 DependencyType::Dev => (),
@@ -226,6 +238,7 @@ pub(crate) async fn add(
                 python_preference,
                 python_downloads,
                 &install_mirrors,
+                false,
                 no_config,
                 active,
                 cache,
@@ -244,6 +257,7 @@ pub(crate) async fn add(
                 &network_settings,
                 python_preference,
                 python_downloads,
+                no_sync,
                 no_config,
                 active,
                 cache,
@@ -323,9 +337,8 @@ pub(crate) async fn add(
 
             // Initialize the registry client.
             let client = RegistryClientBuilder::try_from(client_builder)?
-                .index_urls(settings.resolver.index_locations.index_urls())
+                .index_locations(&settings.resolver.index_locations)
                 .index_strategy(settings.resolver.index_strategy)
-                .url_auth_policies(UrlAuthPolicies::from(&settings.resolver.index_locations))
                 .markers(target.interpreter().markers())
                 .platform(target.interpreter().platform())
                 .build();
@@ -443,7 +456,7 @@ pub(crate) async fn add(
         &target,
         editable,
         &dependency_type,
-        raw_sources,
+        raw,
         rev.as_deref(),
         tag.as_deref(),
         branch.as_deref(),
@@ -453,7 +466,7 @@ pub(crate) async fn add(
     )?;
 
     // Add any indexes that were provided on the command-line, in priority order.
-    if !raw_sources {
+    if !raw {
         let urls = IndexUrls::from_indexes(indexes);
         for index in urls.defined_indexes() {
             toml.add_index(index)?;
@@ -518,7 +531,7 @@ pub(crate) async fn add(
         sync_state,
         locked,
         &dependency_type,
-        raw_sources,
+        raw,
         constraints,
         &settings,
         &network_settings,
@@ -550,7 +563,7 @@ fn edits(
     target: &AddTarget,
     editable: Option<bool>,
     dependency_type: &DependencyType,
-    raw_sources: bool,
+    raw: bool,
     rev: Option<&str>,
     tag: Option<&str>,
     branch: Option<&str>,
@@ -568,10 +581,10 @@ fn edits(
         requirement.extras = ex.into_boxed_slice();
 
         let (requirement, source) = match target {
-            AddTarget::Script(_, _) | AddTarget::Project(_, _) if raw_sources => {
+            AddTarget::Script(_, _) | AddTarget::Project(_, _) if raw => {
                 (uv_pep508::Requirement::from(requirement), None)
             }
-            AddTarget::Script(ref script, _) => {
+            AddTarget::Script(script, _) => {
                 let script_path = std::path::absolute(&script.path)?;
                 let script_dir = script_path.parent().expect("script path has no parent");
 
@@ -588,7 +601,7 @@ fn edits(
                     existing_sources,
                 )?
             }
-            AddTarget::Project(ref project, _) => {
+            AddTarget::Project(project, _) => {
                 let existing_sources = project
                     .pyproject_toml()
                     .tool
@@ -694,10 +707,10 @@ fn edits(
         let edit = match &dependency_type {
             DependencyType::Production => toml.add_dependency(&requirement, source.as_ref())?,
             DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref())?,
-            DependencyType::Optional(ref extra) => {
+            DependencyType::Optional(extra) => {
                 toml.add_optional_dependency(extra, &requirement, source.as_ref())?
             }
-            DependencyType::Group(ref group) => {
+            DependencyType::Group(group) => {
                 toml.add_dependency_group_requirement(group, &requirement, source.as_ref())?
             }
         };
@@ -742,7 +755,7 @@ async fn lock_and_sync(
     sync_state: PlatformState,
     locked: bool,
     dependency_type: &DependencyType,
-    raw_sources: bool,
+    raw: bool,
     constraints: Vec<NameRequirementSpecification>,
     settings: &ResolverInstallerSettings,
     network_settings: &NetworkSettings,
@@ -773,7 +786,7 @@ async fn lock_and_sync(
     .into_lock();
 
     // Avoid modifying the user request further if `--raw-sources` is set.
-    if !raw_sources {
+    if !raw {
         // Extract the minimum-supported version for each dependency.
         let mut minimum_version =
             FxHashMap::with_capacity_and_hasher(lock.packages().len(), FxBuildHasher);
@@ -892,26 +905,32 @@ async fn lock_and_sync(
     // Sync the environment.
     let (extras, dev) = match dependency_type {
         DependencyType::Production => {
-            let extras = ExtrasSpecification::None;
+            let extras = ExtrasSpecification::from_extra(vec![]);
             let dev = DependencyGroups::from_dev_mode(DevMode::Exclude);
             (extras, dev)
         }
         DependencyType::Dev => {
-            let extras = ExtrasSpecification::None;
+            let extras = ExtrasSpecification::from_extra(vec![]);
             let dev = DependencyGroups::from_dev_mode(DevMode::Include);
             (extras, dev)
         }
-        DependencyType::Optional(ref extra_name) => {
-            let extras = ExtrasSpecification::Some(vec![extra_name.clone()]);
+        DependencyType::Optional(extra_name) => {
+            let extras = ExtrasSpecification::from_extra(vec![extra_name.clone()]);
             let dev = DependencyGroups::from_dev_mode(DevMode::Exclude);
             (extras, dev)
         }
-        DependencyType::Group(ref group_name) => {
-            let extras = ExtrasSpecification::None;
+        DependencyType::Group(group_name) => {
+            let extras = ExtrasSpecification::from_extra(vec![]);
             let dev = DependencyGroups::from_group(group_name.clone());
             (extras, dev)
         }
     };
+
+    // Determine the default groups to include.
+    let default_groups = default_dependency_groups(project.pyproject_toml())?;
+
+    // Determine the default extras to include.
+    let default_extras = DefaultExtras::default();
 
     // Identify the installation target.
     let target = match &project {
@@ -929,8 +948,8 @@ async fn lock_and_sync(
     project::sync::do_sync(
         target,
         venv,
-        &extras,
-        &dev.with_defaults(DefaultGroups::default()),
+        &extras.with_defaults(default_extras),
+        &dev.with_defaults(default_groups),
         EditableMode::Editable,
         InstallOptions::default(),
         Modifications::Sufficient,

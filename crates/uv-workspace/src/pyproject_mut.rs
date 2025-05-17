@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::path::Path;
 use std::str::FromStr;
 use std::{fmt, mem};
@@ -14,7 +13,7 @@ use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Index;
 use uv_fs::PortablePath;
 use uv_normalize::GroupName;
-use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 
 use crate::pyproject::{DependencyType, Source};
@@ -44,6 +43,8 @@ pub enum Error {
     MalformedWorkspace,
     #[error("Expected a dependency at index {0}")]
     MissingDependency(usize),
+    #[error("Failed to parse `version` field of `pyproject.toml`")]
+    VersionParse(#[from] VersionParseError),
     #[error("Cannot perform ambiguous update; found multiple entries for `{}`:\n{}", package_name, requirements.iter().map(|requirement| format!("- `{requirement}`")).join("\n"))]
     Ambiguous {
         package_name: PackageName,
@@ -528,10 +529,10 @@ impl PyProjectTomlMut {
         let group = match dependency_type {
             DependencyType::Production => self.set_project_dependency_minimum_version()?,
             DependencyType::Dev => self.set_dev_dependency_minimum_version()?,
-            DependencyType::Optional(ref extra) => {
+            DependencyType::Optional(extra) => {
                 self.set_optional_dependency_minimum_version(extra)?
             }
-            DependencyType::Group(ref group) => {
+            DependencyType::Group(group) => {
                 self.set_dependency_group_requirement_minimum_version(group)?
             }
         };
@@ -942,6 +943,46 @@ impl PyProjectTomlMut {
 
         types
     }
+
+    pub fn version(&mut self) -> Result<Version, Error> {
+        let version = self
+            .doc
+            .get("project")
+            .and_then(Item::as_table)
+            .and_then(|project| project.get("version"))
+            .and_then(Item::as_str)
+            .ok_or(Error::MalformedWorkspace)?;
+
+        Ok(Version::from_str(version)?)
+    }
+
+    pub fn has_dynamic_version(&mut self) -> bool {
+        let Some(dynamic) = self
+            .doc
+            .get("project")
+            .and_then(Item::as_table)
+            .and_then(|project| project.get("dynamic"))
+            .and_then(Item::as_array)
+        else {
+            return false;
+        };
+
+        dynamic.iter().any(|val| val.as_str() == Some("version"))
+    }
+
+    pub fn set_version(&mut self, version: &Version) -> Result<(), Error> {
+        let project = self
+            .doc
+            .get_mut("project")
+            .and_then(Item::as_table_mut)
+            .ok_or(Error::MalformedWorkspace)?;
+        project.insert(
+            "version",
+            Item::Value(Value::String(Formatted::new(version.to_string()))),
+        );
+
+        Ok(())
+    }
 }
 
 /// Returns an implicit table.
@@ -967,72 +1008,86 @@ pub fn add_dependency(
             enum Sort {
                 /// The list is sorted in a case-insensitive manner.
                 CaseInsensitive,
+                /// The list is sorted naively in a case-insensitive manner.
+                CaseInsensitiveNaive,
                 /// The list is sorted in a case-sensitive manner.
                 CaseSensitive,
+                /// The list is sorted naively in a case-sensitive manner.
+                CaseSensitiveNaive,
                 /// The list is unsorted.
                 Unsorted,
             }
 
-            /// Compare two [`Value`] requirements case-insensitively.
-            fn case_insensitive(a: &Value, b: &Value) -> Ordering {
-                a.as_str()
-                    .map(str::to_lowercase)
-                    .as_deref()
-                    .map(split_specifiers)
-                    .cmp(
-                        &b.as_str()
-                            .map(str::to_lowercase)
-                            .as_deref()
-                            .map(split_specifiers),
-                    )
+            fn is_sorted<T, I>(items: I) -> bool
+            where
+                I: IntoIterator<Item = T>,
+                T: PartialOrd + Copy,
+            {
+                items.into_iter().tuple_windows().all(|(a, b)| a <= b)
             }
 
-            /// Compare two [`Value`] requirements case-sensitively.
-            fn case_sensitive(a: &Value, b: &Value) -> Ordering {
-                a.as_str()
-                    .map(split_specifiers)
-                    .cmp(&b.as_str().map(split_specifiers))
-            }
+            // `deps` are either requirements (strings) or include groups (inline tables).
+            // Here we pull out just the requirements for determining the sort.
+            let reqs: Vec<_> = deps.iter().filter_map(Value::as_str).collect();
+            let reqs_lowercase: Vec<_> = reqs.iter().copied().map(str::to_lowercase).collect();
 
             // Determine if the dependency list is sorted prior to
             // adding the new dependency; the new dependency list
             // will be sorted only when the original list is sorted
             // so that user's custom dependency ordering is preserved.
             //
-            // Additionally, if the table is invalid (i.e. contains non-string values)
-            // we still treat it as unsorted for the sake of simplicity.
+            // Any items which aren't strings are ignored, e.g.
+            // `{ include-group = "..." }` in dependency-groups.
             //
             // We account for both case-sensitive and case-insensitive sorting.
-            let sort = deps
-                .iter()
-                .all(Value::is_str)
-                .then(|| {
-                    if deps.iter().tuple_windows().all(|(a, b)| {
-                        matches!(case_insensitive(a, b), Ordering::Less | Ordering::Equal)
-                    }) {
-                        Some(Sort::CaseInsensitive)
-                    } else if deps.iter().tuple_windows().all(|(a, b)| {
-                        matches!(case_sensitive(a, b), Ordering::Less | Ordering::Equal)
-                    }) {
-                        Some(Sort::CaseSensitive)
-                    } else {
-                        None
-                    }
-                })
-                .flatten()
-                .unwrap_or(Sort::Unsorted);
+            let sort = if is_sorted(
+                reqs_lowercase
+                    .iter()
+                    .map(String::as_str)
+                    .map(split_specifiers),
+            ) {
+                Sort::CaseInsensitive
+            } else if is_sorted(reqs.iter().copied().map(split_specifiers)) {
+                Sort::CaseSensitive
+            } else if is_sorted(reqs_lowercase.iter().map(String::as_str)) {
+                Sort::CaseInsensitiveNaive
+            } else if is_sorted(reqs) {
+                Sort::CaseSensitiveNaive
+            } else {
+                Sort::Unsorted
+            };
 
             let req_string = req.to_string();
             let index = match sort {
-                Sort::CaseInsensitive => deps.iter().position(|d| {
-                    case_insensitive(d, &Value::from(req_string.as_str())) == Ordering::Greater
+                Sort::CaseInsensitive => deps.iter().position(|dep| {
+                    dep.as_str().is_some_and(|dep| {
+                        split_specifiers(&dep.to_lowercase())
+                            > split_specifiers(&req_string.to_lowercase())
+                    })
                 }),
-                Sort::CaseSensitive => deps.iter().position(|d| {
-                    case_sensitive(d, &Value::from(req_string.as_str())) == Ordering::Greater
+                Sort::CaseInsensitiveNaive => deps.iter().position(|dep| {
+                    dep.as_str()
+                        .is_some_and(|dep| dep.to_lowercase() > req_string.to_lowercase())
                 }),
+                Sort::CaseSensitive => deps.iter().position(|dep| {
+                    dep.as_str()
+                        .is_some_and(|dep| split_specifiers(dep) > split_specifiers(&req_string))
+                }),
+                Sort::CaseSensitiveNaive => deps
+                    .iter()
+                    .position(|dep| dep.as_str().is_some_and(|dep| *dep > *req_string)),
                 Sort::Unsorted => None,
             };
-            let index = index.unwrap_or(deps.len());
+            let index = index.unwrap_or_else(|| {
+                // The dependency should be added to the end, ignoring any
+                // `include-group` items. This preserves the order for users who
+                // keep their `include-groups` at the bottom.
+                deps.iter()
+                    .enumerate()
+                    .filter_map(|(i, dep)| if dep.is_str() { Some(i + 1) } else { None })
+                    .last()
+                    .unwrap_or(deps.len())
+            });
 
             let mut value = Value::from(req_string.as_str());
 
@@ -1432,6 +1487,14 @@ mod test {
             ("flask[dotenv]", ">=1.0")
         );
         assert_eq!(split_specifiers("flask[dotenv]"), ("flask[dotenv]", ""));
-        assert_eq!(split_specifiers("flask @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"), ("flask", "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"));
+        assert_eq!(
+            split_specifiers(
+                "flask @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"
+            ),
+            (
+                "flask",
+                "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"
+            )
+        );
     }
 }

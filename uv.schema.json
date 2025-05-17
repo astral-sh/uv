@@ -431,6 +431,13 @@
         }
       ]
     },
+    "python-downloads-json-url": {
+      "description": "URL pointing to JSON of custom Python installations.\n\nNote that currently, only local paths are supported.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "python-install-mirror": {
       "description": "Mirror URL for downloading managed Python installations.\n\nBy default, managed Python installations are downloaded from [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone). This variable can be set to a mirror URL to use a different source for Python installations. The provided URL will replace `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g., `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.\n\nDistributions can be read from a local directory by using the `file://` URL scheme.",
       "type": [
@@ -869,6 +876,17 @@
               "$ref": "#/definitions/IndexFormat"
             }
           ]
+        },
+        "ignore-error-codes": {
+          "description": "Status codes that uv should ignore when deciding whether to continue searching in the next index after a failure.\n\n```toml [[tool.uv.index]] name = \"my-index\" url = \"https://<omitted>/simple\" ignore-error-codes = [401, 403] ```",
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/definitions/StatusCode"
+          }
         },
         "name": {
           "description": "The name of the index.\n\nIndex names can be used to reference indexes elsewhere in the configuration. For example, you can pin a package to a specific index by name:\n\n```toml [[tool.uv.index]] name = \"pytorch\" url = \"https://download.pytorch.org/whl/cu121\"\n\n[tool.uv.sources] torch = { index = \"pytorch\" } ```",
@@ -2005,6 +2023,13 @@
         }
       }
     },
+    "StatusCode": {
+      "description": "HTTP status code (100-599)",
+      "type": "integer",
+      "format": "uint16",
+      "maximum": 599.0,
+      "minimum": 100.0
+    },
     "String": {
       "type": "string"
     },
@@ -2319,6 +2344,13 @@
           "type": "string",
           "enum": [
             "cpu"
+          ]
+        },
+        {
+          "description": "Use the PyTorch index for CUDA 12.8.",
+          "type": "string",
+          "enum": [
+            "cu128"
           ]
         },
         {

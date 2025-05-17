@@ -45,8 +45,8 @@ name = "project"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-  "torch>=2.6.0",
-  "torchvision>=0.21.0",
+  "torch>=2.7.0",
+  "torchvision>=0.22.0",
 ]
 ```
 
@@ -197,6 +197,11 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
     torchvision = [
       { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
     ]
+    # ROCm6 support relies on `pytorch-triton-rocm`, which should also be installed from the PyTorch index
+    # (and included in `project.dependencies`).
+    pytorch-triton-rocm = [
+      { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
+    ]
     ```
 
 === "Intel GPUs"
@@ -212,10 +217,10 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
     torchvision = [
       { index = "pytorch-xpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
-    # Intel GPU support relies on `pytorch-triton-xpu` on Linux, which should also be installed from the PyTorch index
+    # Intel GPU support relies on `pytorch-triton-xpu`, which should also be installed from the PyTorch index
     # (and included in `project.dependencies`).
     pytorch-triton-xpu = [
-      { index = "pytorch-xpu", marker = "sys_platform == 'linux'" },
+      { index = "pytorch-xpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
     ]
     ```
 
@@ -227,8 +232,8 @@ name = "project"
 version = "0.1.0"
 requires-python = ">=3.12.0"
 dependencies = [
-  "torch>=2.6.0",
-  "torchvision>=0.21.0",
+  "torch>=2.7.0",
+  "torchvision>=0.22.0",
 ]
 
 [tool.uv.sources]
@@ -260,18 +265,18 @@ name = "project"
 version = "0.1.0"
 requires-python = ">=3.12.0"
 dependencies = [
-  "torch>=2.6.0",
-  "torchvision>=0.21.0",
+  "torch>=2.7.0",
+  "torchvision>=0.22.0",
 ]
 
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
-  { index = "pytorch-cu124", marker = "sys_platform == 'linux'" },
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
 ]
 torchvision = [
   { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
-  { index = "pytorch-cu124", marker = "sys_platform == 'linux'" },
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
 ]
 
 [[tool.uv.index]]
@@ -280,13 +285,13 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [[tool.uv.index]]
-name = "pytorch-cu124"
-url = "https://download.pytorch.org/whl/cu124"
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 ```
 
-Similarly, the following configuration would use PyTorch's Intel GPU builds on Windows and Linux,
-and CPU-only builds on macOS (by way of falling back to PyPI):
+Similarly, the following configuration would use PyTorch's AMD GPU builds on Linux, and CPU-only
+builds on Windows and macOS (by way of falling back to PyPI):
 
 ```toml
 [project]
@@ -294,9 +299,39 @@ name = "project"
 version = "0.1.0"
 requires-python = ">=3.12.0"
 dependencies = [
-  "torch>=2.6.0",
-  "torchvision>=0.21.0",
-  "pytorch-triton-xpu>=3.2.0 ; sys_platform == 'linux'",
+  "torch>=2.7.0",
+  "torchvision>=0.22.0",
+  "pytorch-triton-rocm>=3.3.0 ; sys_platform == 'linux'",
+]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
+]
+torchvision = [
+  { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
+]
+pytorch-triton-rocm = [
+  { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-rocm"
+url = "https://download.pytorch.org/whl/rocm6.3"
+explicit = true
+```
+
+Or, for Intel GPU builds:
+
+```toml
+[project]
+name = "project"
+version = "0.1.0"
+requires-python = ">=3.12.0"
+dependencies = [
+  "torch>=2.7.0",
+  "torchvision>=0.22.0",
+  "pytorch-triton-xpu>=3.3.0 ; sys_platform == 'win32' or sys_platform == 'linux'",
 ]
 
 [tool.uv.sources]
@@ -307,7 +342,7 @@ torchvision = [
   { index = "pytorch-xpu", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
 ]
 pytorch-triton-xpu = [
-  { index = "pytorch-xpu", marker = "sys_platform == 'linux'" },
+  { index = "pytorch-xpu", marker = "sys_platform == 'win32' or sys_platform == 'linux'" },
 ]
 
 [[tool.uv.index]]
@@ -335,30 +370,30 @@ dependencies = []
 
 [project.optional-dependencies]
 cpu = [
-  "torch>=2.6.0",
-  "torchvision>=0.21.0",
+  "torch>=2.7.0",
+  "torchvision>=0.22.0",
 ]
-cu124 = [
-  "torch>=2.6.0",
-  "torchvision>=0.21.0",
+cu128 = [
+  "torch>=2.7.0",
+  "torchvision>=0.22.0",
 ]
 
 [tool.uv]
 conflicts = [
   [
     { extra = "cpu" },
-    { extra = "cu124" },
+    { extra = "cu128" },
   ],
 ]
 
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu124", extra = "cu124" },
+  { index = "pytorch-cu128", extra = "cu128" },
 ]
 torchvision = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu124", extra = "cu124" },
+  { index = "pytorch-cu128", extra = "cu128" },
 ]
 
 [[tool.uv.index]]
@@ -367,8 +402,8 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [[tool.uv.index]]
-name = "pytorch-cu124"
-url = "https://download.pytorch.org/whl/cu124"
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 ```
 

@@ -94,7 +94,9 @@ impl VersionSpecifiers {
                 }
                 _ => {
                     #[cfg(feature = "tracing")]
-                    warn!("Ignoring unsupported gap in `requires-python` version: {next:?} -> {lower:?}");
+                    warn!(
+                        "Ignoring unsupported gap in `requires-python` version: {next:?} -> {lower:?}"
+                    );
                 }
             }
             next = upper;

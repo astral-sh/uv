@@ -293,12 +293,25 @@ impl TestContext {
         self
     }
 
+    /// Adds a filter for platform-specific errors when a file is not executable.
+    #[inline]
+    pub fn with_filtered_not_executable(mut self) -> Self {
+        let pattern = if cfg!(unix) {
+            r"Permission denied \(os error 13\)"
+        } else {
+            r"\%1 is not a valid Win32 application. \(os error 193\)"
+        };
+        self.filters
+            .push((pattern.to_string(), "[PERMISSION DENIED]".to_string()));
+        self
+    }
+
     /// Adds a filter that ignores platform information in a Python installation key.
     pub fn with_filtered_python_keys(mut self) -> Self {
         // Filter platform keys
         let platform_re = r"(?x)
   (                         # We capture the group before the platform
-    (?:cpython|pypy)        # Python implementation
+    (?:cpython|pypy|graalpy)# Python implementation
     -
     \d+\.\d+                # Major and minor version
     (?:                     # The patch version is handled separately
@@ -847,6 +860,20 @@ impl TestContext {
     pub fn build(&self) -> Command {
         let mut command = self.new_command();
         command.arg("build");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    pub fn version(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("version");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    pub fn self_version(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("self").arg("version");
         self.add_shared_options(&mut command, false);
         command
     }
@@ -1605,7 +1632,8 @@ pub async fn download_to_disk(url: &str, path: &Path) {
         .allow_insecure_host(trusted_hosts)
         .build();
     let url: reqwest::Url = url.parse().unwrap();
-    let response = client.for_host(&url).get(url).send().await.unwrap();
+    let client = client.for_host(&url);
+    let response = client.request(http::Method::GET, url).send().await.unwrap();
 
     let mut file = tokio::fs::File::create(path).await.unwrap();
     let mut stream = response.bytes_stream();

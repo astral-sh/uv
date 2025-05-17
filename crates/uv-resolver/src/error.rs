@@ -80,7 +80,9 @@ pub enum ResolveError {
     #[error("Requirements contain conflicting indexes for package `{0}`: `{1}` vs. `{2}`")]
     ConflictingIndexes(PackageName, String, String),
 
-    #[error("Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file.")]
+    #[error(
+        "Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file."
+    )]
     DisallowedUrl(PackageName, String),
 
     #[error(transparent)]
@@ -103,7 +105,9 @@ pub enum ResolveError {
     #[error("Attempted to construct an invalid version specifier")]
     InvalidVersion(#[from] uv_pep440::VersionSpecifierBuildError),
 
-    #[error("In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`")]
+    #[error(
+        "In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`"
+    )]
     UnhashedPackage(PackageName),
 
     #[error("found conflicting distribution in resolution: {0}")]
@@ -123,6 +127,14 @@ pub enum ResolveError {
         kind: &'static str,
         #[source]
         name_error: InvalidNameError,
+    },
+    #[error(
+        "The index returned metadata for the wrong package: expected {request} for {expected}, got {request} for {actual}"
+    )]
+    MismatchedPackageName {
+        request: &'static str,
+        expected: PackageName,
+        actual: PackageName,
     },
 }
 
@@ -828,17 +840,17 @@ fn simplify_derivation_tree_markers(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
 ) {
     match tree {
-        DerivationTree::External(External::NotRoot(ref mut pkg, _)) => {
+        DerivationTree::External(External::NotRoot(pkg, _)) => {
             pkg.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::NoVersions(ref mut pkg, _)) => {
+        DerivationTree::External(External::NoVersions(pkg, _)) => {
             pkg.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::FromDependencyOf(ref mut pkg1, _, ref mut pkg2, _)) => {
+        DerivationTree::External(External::FromDependencyOf(pkg1, _, pkg2, _)) => {
             pkg1.simplify_markers(python_requirement);
             pkg2.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::Custom(ref mut pkg, _, _)) => {
+        DerivationTree::External(External::Custom(pkg, _, _)) => {
             pkg.simplify_markers(python_requirement);
         }
         DerivationTree::Derived(derived) => {

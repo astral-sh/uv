@@ -1,5 +1,5 @@
 /// Available project build backends for use in `pyproject.toml`.
-#[derive(Clone, Copy, Debug, PartialEq, Default, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
@@ -11,7 +11,6 @@ pub enum ProjectBuildBackend {
     #[cfg_attr(feature = "schemars", schemars(skip))]
     /// Use uv as the project build backend.
     Uv,
-    #[default]
     #[serde(alias = "hatchling")]
     #[cfg_attr(feature = "clap", value(alias = "hatchling"))]
     /// Use [hatchling](https://pypi.org/project/hatchling) as the project build backend.
@@ -24,6 +23,10 @@ pub enum ProjectBuildBackend {
     #[serde(alias = "pdm-backend")]
     #[cfg_attr(feature = "clap", value(alias = "pdm-backend"))]
     PDM,
+    /// Use [poetry-core](https://pypi.org/project/poetry-core) as the project build backend.
+    #[serde(alias = "poetry-core")]
+    #[cfg_attr(feature = "clap", value(alias = "poetry-core", alias = "poetry_core"))]
+    Poetry,
     /// Use [setuptools](https://pypi.org/project/setuptools) as the project build backend.
     Setuptools,
     /// Use [maturin](https://pypi.org/project/maturin) as the project build backend.

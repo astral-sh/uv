@@ -25,7 +25,7 @@ use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     BuiltDist, CompatibleDist, DerivationChain, Dist, DistErrorKind, DistributionMetadata,
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, PythonRequirementKind, RemoteSource, Requirement,
+    IndexMetadata, IndexUrl, InstalledDist, Name, PythonRequirementKind, RemoteSource, Requirement,
     ResolvedDist, ResolvedDistRef, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
@@ -63,10 +63,6 @@ use crate::resolver::environment::{
     fork_version_by_marker, fork_version_by_python_requirement, ForkingPossibility,
 };
 pub(crate) use crate::resolver::fork_map::{ForkMap, ForkSet};
-pub(crate) use crate::resolver::urls::Urls;
-use crate::universal_marker::{ConflictMarker, UniversalMarker};
-pub(crate) use provider::MetadataUnavailable;
-
 pub use crate::resolver::index::InMemoryIndex;
 use crate::resolver::indexes::Indexes;
 pub use crate::resolver::provider::{
@@ -74,8 +70,13 @@ pub use crate::resolver::provider::{
     VersionsResponse, WheelMetadataResult,
 };
 pub use crate::resolver::reporter::{BuildId, Reporter};
+use crate::resolver::system::SystemDependency;
+pub(crate) use crate::resolver::urls::Urls;
+use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::yanks::AllowedYanks;
 use crate::{marker, DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap};
+pub(crate) use provider::MetadataUnavailable;
+use uv_torch::TorchStrategy;
 
 mod availability;
 mod batch_prefetch;
@@ -86,6 +87,7 @@ mod index;
 mod indexes;
 mod provider;
 mod reporter;
+mod system;
 mod urls;
 
 /// The number of conflicts a package may accumulate before we re-prioritize and backtrack.
@@ -517,7 +519,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 .term_intersection_for_package(next_id)
                                 .expect("a package was chosen but we don't have a term");
 
-                            if let PubGrubPackageInner::Package { ref name, .. } = &**next_package {
+                            if let PubGrubPackageInner::Package { name, .. } = &**next_package {
                                 // Check if the decision was due to the package being unavailable
                                 if let Some(entry) = self.unavailable_packages.get(name) {
                                     state.pubgrub.add_incompatibility(
@@ -598,6 +600,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     next_id,
                     next_package,
                     &version,
+                    &state.pins,
                     &state.fork_urls,
                     &state.env,
                     &state.python_requirement,
@@ -1055,6 +1058,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 Ok(None)
             }
 
+            PubGrubPackageInner::System(_) => {
+                // We don't care what the actual version is here, just that it's consistent across
+                // the dependency graph.
+                let Some(version) = range.as_singleton() else {
+                    return Ok(None);
+                };
+                Ok(Some(ResolverVersion::Unforked(version.clone())))
+            }
+
             PubGrubPackageInner::Marker { name, .. }
             | PubGrubPackageInner::Extra { name, .. }
             | PubGrubPackageInner::Dev { name, .. }
@@ -1320,7 +1332,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             candidate.choice_kind(),
             filename,
         );
-        self.visit_candidate(&candidate, dist, package, pins, request_sink)?;
+        self.visit_candidate(&candidate, dist, package, name, pins, request_sink)?;
 
         let version = candidate.version().clone();
         Ok(Some(ResolverVersion::Unforked(version)))
@@ -1480,7 +1492,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 base_candidate.choice_kind(),
                 filename,
             );
-            self.visit_candidate(&base_candidate, base_dist, package, pins, request_sink)?;
+            self.visit_candidate(
+                &base_candidate,
+                base_dist,
+                package,
+                name,
+                pins,
+                request_sink,
+            )?;
 
             return Ok(Some(ResolverVersion::Unforked(
                 base_candidate.version().clone(),
@@ -1527,8 +1546,15 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 .collect::<Vec<_>>()
                 .join(", ")
         );
-        self.visit_candidate(candidate, dist, package, pins, request_sink)?;
-        self.visit_candidate(&base_candidate, base_dist, package, pins, request_sink)?;
+        self.visit_candidate(candidate, dist, package, name, pins, request_sink)?;
+        self.visit_candidate(
+            &base_candidate,
+            base_dist,
+            package,
+            name,
+            pins,
+            request_sink,
+        )?;
 
         let forks = vec![
             VersionFork {
@@ -1551,6 +1577,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         candidate: &Candidate,
         dist: &CompatibleDist,
         package: &PubGrubPackage,
+        name: &PackageName,
         pins: &mut FilePins,
         request_sink: &Sender<Request>,
     ) -> Result<(), ResolveError> {
@@ -1562,6 +1589,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if matches!(&**package, PubGrubPackageInner::Package { .. }) {
             if self.dependency_mode.is_transitive() {
                 if self.index.distributions().register(candidate.version_id()) {
+                    if name != dist.name() {
+                        return Err(ResolveError::MismatchedPackageName {
+                            request: "distribution",
+                            expected: name.clone(),
+                            actual: dist.name().clone(),
+                        });
+                    }
                     // Verify that the package is allowed under the hash-checking policy.
                     if !self
                         .hasher
@@ -1619,6 +1653,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         id: Id<PubGrubPackage>,
         package: &PubGrubPackage,
         version: &Version,
+        pins: &FilePins,
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
@@ -1628,6 +1663,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             id,
             package,
             version,
+            pins,
             fork_urls,
             env,
             python_requirement,
@@ -1652,6 +1688,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         id: Id<PubGrubPackage>,
         package: &PubGrubPackage,
         version: &Version,
+        pins: &FilePins,
         fork_urls: &ForkUrls,
         env: &ResolverEnvironment,
         python_requirement: &PythonRequirement,
@@ -1749,6 +1786,34 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
+                // If there was no requires-python on the index page, we may have an incompatible
+                // distribution.
+                if let Some(requires_python) = &metadata.requires_python {
+                    if !python_requirement.target().is_contained_by(requires_python) {
+                        return Ok(Dependencies::Unavailable(
+                            UnavailableVersion::RequiresPython(requires_python.clone()),
+                        ));
+                    }
+                }
+
+                // Identify any system dependencies based on the index URL.
+                let system_dependencies = self
+                    .options
+                    .torch_backend
+                    .as_ref()
+                    .filter(|torch_backend| matches!(torch_backend, TorchStrategy::Auto { .. }))
+                    .and_then(|_| pins.get(name, version).and_then(ResolvedDist::index))
+                    .map(IndexUrl::url)
+                    .and_then(SystemDependency::from_index)
+                    .into_iter()
+                    .inspect(|system_dependency| {
+                        debug!(
+                            "Adding system dependency `{}` for `{package}@{version}`",
+                            system_dependency
+                        );
+                    })
+                    .map(PubGrubDependency::from);
+
                 let requirements = self.flatten_requirements(
                     &metadata.requires_dist,
                     &metadata.dependency_groups,
@@ -1768,10 +1833,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             Some(name),
                         )
                     })
+                    .chain(system_dependencies)
                     .collect()
             }
 
             PubGrubPackageInner::Python(_) => return Ok(Dependencies::Unforkable(Vec::default())),
+
+            PubGrubPackageInner::System(_) => return Ok(Dependencies::Unforkable(Vec::default())),
 
             // Add a dependency on both the marker and base package.
             PubGrubPackageInner::Marker { name, marker } => {
@@ -1789,7 +1857,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             url: None,
                         })
                         .collect(),
-                ))
+                ));
             }
 
             // Add a dependency on both the extra and base package, with and without the marker.
@@ -1817,7 +1885,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                 })
                         })
                         .collect(),
-                ))
+                ));
             }
 
             // Add a dependency on the dependency group, with and without the marker.
@@ -1837,7 +1905,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                             url: None,
                         })
                         .collect(),
-                ))
+                ));
             }
         };
         Ok(Dependencies::Available(dependencies))
@@ -2261,11 +2329,31 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     .boxed_local()
                     .await?;
 
+                if let MetadataResponse::Found(metadata) = &metadata {
+                    if &metadata.metadata.name != dist.name() {
+                        return Err(ResolveError::MismatchedPackageName {
+                            request: "distribution metadata",
+                            expected: dist.name().clone(),
+                            actual: metadata.metadata.name.clone(),
+                        });
+                    }
+                }
+
                 Ok(Some(Response::Dist { dist, metadata }))
             }
 
             Request::Installed(dist) => {
                 let metadata = provider.get_installed_metadata(&dist).boxed_local().await?;
+
+                if let MetadataResponse::Found(metadata) = &metadata {
+                    if &metadata.metadata.name != dist.name() {
+                        return Err(ResolveError::MismatchedPackageName {
+                            request: "installed metadata",
+                            expected: dist.name().clone(),
+                            actual: metadata.metadata.name.clone(),
+                        });
+                    }
+                }
 
                 Ok(Some(Response::Installed { dist, metadata }))
             }
@@ -2334,7 +2422,9 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     if !self.selector.use_highest_version(&package_name, &env) {
                         if let Some((lower, _)) = range.iter().next() {
                             if lower == &Bound::Unbounded {
-                                debug!("Skipping prefetch for unbounded minimum-version range: {package_name} ({range})");
+                                debug!(
+                                    "Skipping prefetch for unbounded minimum-version range: {package_name} ({range})"
+                                );
                                 return Ok(None);
                             }
                         }
@@ -2369,6 +2459,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 // Emit a request to fetch the metadata for this version.
                 if self.index.distributions().register(candidate.version_id()) {
                     let dist = dist.for_resolution().to_owned();
+                    if &package_name != dist.name() {
+                        return Err(ResolveError::MismatchedPackageName {
+                            request: "distribution",
+                            expected: package_name,
+                            actual: dist.name().clone(),
+                        });
+                    }
 
                     let response = match dist {
                         ResolvedDist::Installable { dist, .. } => {
@@ -2503,6 +2600,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             match &**package {
                 PubGrubPackageInner::Root(_) => {}
                 PubGrubPackageInner::Python(_) => {}
+                PubGrubPackageInner::System(_) => {}
                 PubGrubPackageInner::Marker { .. } => {}
                 PubGrubPackageInner::Extra { .. } => {}
                 PubGrubPackageInner::Dev { .. } => {}
@@ -2689,7 +2787,7 @@ impl ForkState {
                     warn_user_once!(
                         "The direct dependency `{name}` is unpinned. \
                         Consider setting a lower bound when using `--resolution lowest` \
-                        to avoid using outdated versions.",
+                        or `--resolution lowest-direct` to avoid using outdated versions.",
                         name = package.name_no_root().unwrap(),
                     );
                 }

@@ -1553,14 +1553,14 @@ fn build_list_files() -> Result<()> {
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
-        .arg("--list"), @r###"
+        .arg("--list"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     Building built_by_uv-0.1.0.tar.gz will include the following files:
+    built_by_uv-0.1.0/PKG-INFO (generated)
     built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
     built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
-    built_by_uv-0.1.0/PKG-INFO (generated)
     built_by_uv-0.1.0/README.md (README.md)
     built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
     built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
@@ -1574,25 +1574,25 @@ fn build_list_files() -> Result<()> {
     built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
     built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
     Building built_by_uv-0.1.0-py3-none-any.whl will include the following files:
-    built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
-    built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
-    built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
-    built_by_uv-0.1.0.dist-info/METADATA (generated)
-    built_by_uv-0.1.0.dist-info/WHEEL (generated)
-    built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
-    built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
-    built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
-    built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
     built_by_uv/__init__.py (src/built_by_uv/__init__.py)
     built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
     built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
     built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
     built_by_uv/cli.py (src/built_by_uv/cli.py)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
+    built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+    built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
+    built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
+    built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
+    built_by_uv-0.1.0.dist-info/WHEEL (generated)
+    built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
+    built_by_uv-0.1.0.dist-info/METADATA (generated)
 
     ----- stderr -----
     Building source distribution (uv build backend)...
     Successfully built output1/built_by_uv-0.1.0.tar.gz
-    "###);
+    ");
     context
         .temp_dir
         .child("output1")
@@ -1611,14 +1611,14 @@ fn build_list_files() -> Result<()> {
         .arg(context.temp_dir.join("output2"))
         .arg("--list")
         .arg("--sdist")
-        .arg("--wheel"), @r###"
+        .arg("--wheel"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     Building built_by_uv-0.1.0.tar.gz will include the following files:
+    built_by_uv-0.1.0/PKG-INFO (generated)
     built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
     built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
-    built_by_uv-0.1.0/PKG-INFO (generated)
     built_by_uv-0.1.0/README.md (README.md)
     built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
     built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
@@ -1632,23 +1632,23 @@ fn build_list_files() -> Result<()> {
     built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
     built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
     Building built_by_uv-0.1.0-py3-none-any.whl will include the following files:
-    built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
-    built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
-    built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
-    built_by_uv-0.1.0.dist-info/METADATA (generated)
-    built_by_uv-0.1.0.dist-info/WHEEL (generated)
-    built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
-    built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
-    built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
-    built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
     built_by_uv/__init__.py (src/built_by_uv/__init__.py)
     built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
     built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
     built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
     built_by_uv/cli.py (src/built_by_uv/cli.py)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
+    built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+    built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
+    built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
+    built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
+    built_by_uv-0.1.0.dist-info/WHEEL (generated)
+    built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
+    built_by_uv-0.1.0.dist-info/METADATA (generated)
 
     ----- stderr -----
-    "###);
+    ");
     context
         .temp_dir
         .child("output2")
@@ -1765,7 +1765,7 @@ fn build_with_symlink() -> Result<()> {
             requires = ["hatchling"]
             build-backend = "hatchling.build"
     "#})?;
-    std::os::unix::fs::symlink(
+    fs_err::os::unix::fs::symlink(
         context.temp_dir.child("pyproject.toml.real"),
         context.temp_dir.child("pyproject.toml"),
     )?;

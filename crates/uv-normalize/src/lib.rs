@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 pub use dist_info_name::DistInfoName;
-pub use extra_name::ExtraName;
+pub use extra_name::{DefaultExtras, ExtraName};
 pub use group_name::{DefaultGroups, GroupName, PipGroupName, DEV_DEPENDENCIES};
 pub use package_name::PackageName;
 

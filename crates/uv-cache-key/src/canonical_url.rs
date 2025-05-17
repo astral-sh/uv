@@ -65,6 +65,8 @@ impl CanonicalUrl {
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("git"));
             if needs_chopping {
                 let last = {
+                    // Unwrap safety: We checked `url.cannot_be_a_base()`, and `url.path()` having
+                    // an extension implies at least one segment.
                     let last = url.path_segments().unwrap().next_back().unwrap();
                     last[..last.len() - 4].to_owned()
                 };
@@ -74,6 +76,7 @@ impl CanonicalUrl {
 
         // Decode any percent-encoded characters in the path.
         if memchr::memchr(b'%', url.path().as_bytes()).is_some() {
+            // Unwrap safety: We checked `url.cannot_be_a_base()`.
             let decoded = url
                 .path_segments()
                 .unwrap()
@@ -270,9 +273,13 @@ mod tests {
 
         // Two URLs should _not_ be considered equal if they request different subdirectories.
         assert_ne!(
-             CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_a")?,
-             CanonicalUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_b")?,
-         );
+            CanonicalUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_a"
+            )?,
+            CanonicalUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_b"
+            )?,
+        );
 
         // Two URLs should _not_ be considered equal if they request different commit tags.
         assert_ne!(
@@ -350,9 +357,13 @@ mod tests {
         // Two URLs should be considered equal if they map to the same repository, even if they
         // request different subdirectories.
         assert_eq!(
-             RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_a")?,
-             RepositoryUrl::parse("git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_b")?,
-         );
+            RepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_a"
+            )?,
+            RepositoryUrl::parse(
+                "git+https://github.com/pypa/sample-namespace-packages.git#subdirectory=pkg_resources/pkg_b"
+            )?,
+        );
 
         // Two URLs should be considered equal if they map to the same repository, even if they
         // request different commit tags.

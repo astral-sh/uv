@@ -84,6 +84,7 @@ pub(crate) async fn install(
         Some(&reporter),
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
     .into_interpreter();
@@ -123,7 +124,11 @@ pub(crate) async fn install(
             // If the user provided an executable name, verify that it matches the `--from` requirement.
             let executable = if let Some(executable) = request.executable {
                 let Ok(executable) = PackageName::from_str(executable) else {
-                    bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{executable}`)", from = from.cyan(), executable = executable.cyan())
+                    bail!(
+                        "Package requirement (`{from}`) provided with `--from` conflicts with install request (`{executable}`)",
+                        from = from.cyan(),
+                        executable = executable.cyan()
+                    )
                 };
                 Some(executable)
             } else {
@@ -160,7 +165,7 @@ pub(crate) async fn install(
             requirement
         }
         // Ex) `ruff@0.6.0`
-        Target::Version(.., name, ref extras, ref version) => {
+        Target::Version(.., name, extras, version) => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
@@ -181,7 +186,7 @@ pub(crate) async fn install(
             }
         }
         // Ex) `ruff@latest`
-        Target::Latest(.., name, ref extras) => {
+        Target::Latest(.., name, extras) => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
@@ -440,7 +445,7 @@ pub(crate) async fn install(
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         };
@@ -572,7 +577,7 @@ pub(crate) async fn install(
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         }

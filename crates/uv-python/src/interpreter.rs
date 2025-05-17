@@ -318,31 +318,37 @@ impl Interpreter {
         &self.markers.python_full_version().version
     }
 
-    /// Returns the full minor Python version.
+    /// Returns the Python version up to the minor component.
     #[inline]
     pub fn python_minor_version(&self) -> Version {
         Version::new(self.python_version().release().iter().take(2).copied())
     }
 
-    /// Return the major version of this Python version.
+    /// Returns the Python version up to the patch component.
+    #[inline]
+    pub fn python_patch_version(&self) -> Version {
+        Version::new(self.python_version().release().iter().take(3).copied())
+    }
+
+    /// Return the major version component of this Python version.
     pub fn python_major(&self) -> u8 {
         let major = self.markers.python_full_version().version.release()[0];
         u8::try_from(major).expect("invalid major version")
     }
 
-    /// Return the minor version of this Python version.
+    /// Return the minor version component of this Python version.
     pub fn python_minor(&self) -> u8 {
         let minor = self.markers.python_full_version().version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
     }
 
-    /// Return the patch version of this Python version.
+    /// Return the patch version component of this Python version.
     pub fn python_patch(&self) -> u8 {
         let minor = self.markers.python_full_version().version.release()[2];
         u8::try_from(minor).expect("invalid patch version")
     }
 
-    /// Returns the Python version as a simple tuple.
+    /// Returns the Python version as a simple tuple, e.g., `(3, 12)`.
     pub fn python_tuple(&self) -> (u8, u8) {
         (self.python_major(), self.python_minor())
     }
@@ -671,6 +677,8 @@ impl Display for StatusCodeError {
 pub enum Error {
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    BrokenSymlink(BrokenSymlink),
     #[error("Python interpreter not found at `{0}`")]
     NotFound(PathBuf),
     #[error("Failed to query Python interpreter at `{path}`")]
@@ -693,6 +701,33 @@ pub enum Error {
     Encode(#[from] rmp_serde::encode::Error),
 }
 
+#[derive(Debug, Error)]
+pub struct BrokenSymlink {
+    pub path: PathBuf,
+    /// Whether the interpreter path looks like a virtual environment.
+    pub venv: bool,
+}
+
+impl Display for BrokenSymlink {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Broken symlink at `{}`, was the underlying Python interpreter removed?",
+            self.path.user_display()
+        )?;
+        if self.venv {
+            write!(
+                f,
+                "\n\n{}{} Consider recreating the environment (e.g., with `{}`)",
+                "hint".bold().cyan(),
+                ":".bold(),
+                "uv venv".green()
+            )?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "result", rename_all = "lowercase")]
 enum InterpreterInfoResult {
@@ -705,7 +740,9 @@ enum InterpreterInfoResult {
 pub enum InterpreterInfoError {
     #[error("Could not detect a glibc or a musl libc (while running on Linux)")]
     LibcNotFound,
-    #[error("Broken Python installation, `platform.mac_ver()` returned an empty value, please reinstall Python")]
+    #[error(
+        "Broken Python installation, `platform.mac_ver()` returned an empty value, please reinstall Python"
+    )]
     BrokenMacVer,
     #[error("Unknown operating system: `{operating_system}`")]
     UnknownOperatingSystem { operating_system: String },
@@ -713,7 +750,9 @@ pub enum InterpreterInfoError {
     UnsupportedPythonVersion { python_version: String },
     #[error("Python executable does not support `-I` flag. Please use Python 3.8 or newer.")]
     UnsupportedPython,
-    #[error("Python installation is missing `distutils`, which is required for packaging on older Python versions. Your system may package it separately, e.g., as `python{python_major}-distutils` or `python{python_major}.{python_minor}-distutils`.")]
+    #[error(
+        "Python installation is missing `distutils`, which is required for packaging on older Python versions. Your system may package it separately, e.g., as `python{python_major}-distutils` or `python{python_major}.{python_minor}-distutils`."
+    )]
     MissingRequiredDistutils {
         python_major: usize,
         python_minor: usize,
@@ -873,7 +912,24 @@ impl InterpreterInfo {
             .and_then(Timestamp::from_path)
             .map_err(|err| {
                 if err.kind() == io::ErrorKind::NotFound {
-                    Error::NotFound(executable.to_path_buf())
+                    // Check if it looks like a venv interpreter where the underlying Python
+                    // installation was removed.
+                    if absolute
+                        .symlink_metadata()
+                        .is_ok_and(|metadata| metadata.is_symlink())
+                    {
+                        let venv = executable
+                            .parent()
+                            .and_then(Path::parent)
+                            .map(|path| path.join("pyvenv.cfg").is_file())
+                            .unwrap_or(false);
+                        Error::BrokenSymlink(BrokenSymlink {
+                            path: executable.to_path_buf(),
+                            venv,
+                        })
+                    } else {
+                        Error::NotFound(executable.to_path_buf())
+                    }
                 } else {
                     err.into()
                 }

@@ -510,6 +510,7 @@ impl CachedClient {
         debug!("Sending revalidation request for: {url}");
         let response = self
             .0
+            .for_host(req.url())
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
@@ -550,6 +551,7 @@ impl CachedClient {
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let response = self
             .0
+            .for_host(&url)
             .execute(req)
             .await
             .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?
@@ -621,8 +623,7 @@ impl CachedClient {
                 .await;
             if result
                 .as_ref()
-                .err()
-                .is_some_and(|err| is_extended_transient_error(err))
+                .is_err_and(|err| is_extended_transient_error(err))
             {
                 let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
                 if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {

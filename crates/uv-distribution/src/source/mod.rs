@@ -1582,7 +1582,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     client
                         .unmanaged
                         .uncached_client(resource.git.repository())
-                        .raw_client(),
+                        .clone(),
                 )
                 .await
             {
@@ -1620,7 +1620,9 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                             // Nothing to do.
                         }
                         Err(err) => {
-                            debug!("Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})");
+                            debug!(
+                                "Failed to fetch `pyproject.toml` via GitHub fast path for: {source} ({err})"
+                            );
                         }
                     }
                 }
@@ -1870,10 +1872,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .github_fast_path(
                 git,
-                client
-                    .unmanaged
-                    .uncached_client(git.repository())
-                    .raw_client(),
+                client.unmanaged.uncached_client(git.repository()).clone(),
             )
             .await?
             .is_some()
@@ -2148,7 +2147,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 return Err(Error::Extract(
                     temp_dir.path().to_string_lossy().into_owned(),
                     err,
-                ))
+                ));
             }
         };
 
@@ -2216,7 +2215,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 return Err(Error::Extract(
                     temp_dir.path().to_string_lossy().into_owned(),
                     err,
-                ))
+                ));
             }
         };
 

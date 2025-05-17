@@ -32,7 +32,7 @@ fn help() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Display uv's version
+      version                    Read or update the project's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
@@ -42,9 +42,10 @@ fn help() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
-      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -111,7 +112,7 @@ fn help_flag() {
       publish  Upload distributions to an index
       cache    Manage uv's cache
       self     Manage the uv executable
-      version  Display uv's version
+      version  Read or update the project's version
       help     Display documentation for a command
 
     Cache options:
@@ -120,9 +121,10 @@ fn help_flag() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
-      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -188,7 +190,7 @@ fn help_short_flag() {
       publish  Upload distributions to an index
       cache    Manage uv's cache
       self     Manage the uv executable
-      version  Display uv's version
+      version  Read or update the project's version
       help     Display documentation for a command
 
     Cache options:
@@ -197,9 +199,10 @@ fn help_short_flag() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
-      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -312,7 +315,7 @@ fn help_subcommand() {
               [env: UV_CACHE_DIR=]
 
     Python options:
-      --managed-python
+          --managed-python
               Require use of uv-managed Python versions.
               
               By default, uv prefers using Python versions it manages. However, it will use system
@@ -321,14 +324,14 @@ fn help_subcommand() {
               
               [env: UV_MANAGED_PYTHON=]
 
-      --no-managed-python
+          --no-managed-python
               Disable use of uv-managed Python versions.
               
               Instead, uv will search for a suitable Python version on the system.
               
               [env: UV_NO_MANAGED_PYTHON=]
 
-      --no-python-downloads
+          --no-python-downloads
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
@@ -437,9 +440,6 @@ fn help_subcommand() {
 
       -h, --help
               Display the concise help for this command
-
-      -V, --version
-              Display the uv version
 
     Use `uv help python <command>` for more information on a specific command.
 
@@ -522,6 +522,13 @@ fn help_subsubcommand() {
               
               [env: UV_PYPY_INSTALL_MIRROR=]
 
+          --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
+              URL pointing to JSON of custom Python installations.
+              
+              Note that currently, only local paths are supported.
+              
+              [env: UV_PYTHON_DOWNLOADS_JSON_URL=]
+
       -r, --reinstall
               Reinstall the requested Python version, if it's already installed.
               
@@ -565,7 +572,7 @@ fn help_subsubcommand() {
               [env: UV_CACHE_DIR=]
 
     Python options:
-      --managed-python
+          --managed-python
               Require use of uv-managed Python versions.
               
               By default, uv prefers using Python versions it manages. However, it will use system
@@ -574,14 +581,14 @@ fn help_subsubcommand() {
               
               [env: UV_MANAGED_PYTHON=]
 
-      --no-managed-python
+          --no-managed-python
               Disable use of uv-managed Python versions.
               
               Instead, uv will search for a suitable Python version on the system.
               
               [env: UV_NO_MANAGED_PYTHON=]
 
-      --no-python-downloads
+          --no-python-downloads
               Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
@@ -691,9 +698,6 @@ fn help_subsubcommand() {
       -h, --help
               Display the concise help for this command
 
-      -V, --version
-              Display the uv version
-
 
     ----- stderr -----
     "#);
@@ -725,9 +729,10 @@ fn help_flag_subcommand() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
-      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -755,8 +760,6 @@ fn help_flag_subcommand() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     Use `uv help python` for more details.
 
@@ -780,15 +783,22 @@ fn help_flag_subsubcommand() {
       [TARGETS]...  The Python version(s) to install [env: UV_PYTHON=]
 
     Options:
-      -i, --install-dir <INSTALL_DIR>  The directory to store the Python installation in [env:
-                                       UV_PYTHON_INSTALL_DIR=]
-          --mirror <MIRROR>            Set the URL to use as the source for downloading Python
-                                       installations [env: UV_PYTHON_INSTALL_MIRROR=]
-          --pypy-mirror <PYPY_MIRROR>  Set the URL to use as the source for downloading PyPy
-                                       installations [env: UV_PYPY_INSTALL_MIRROR=]
-      -r, --reinstall                  Reinstall the requested Python version, if it's already installed
-      -f, --force                      Replace existing Python executables during installation
-          --default                    Use as the default Python version
+      -i, --install-dir <INSTALL_DIR>
+              The directory to store the Python installation in [env: UV_PYTHON_INSTALL_DIR=]
+          --mirror <MIRROR>
+              Set the URL to use as the source for downloading Python installations [env:
+              UV_PYTHON_INSTALL_MIRROR=]
+          --pypy-mirror <PYPY_MIRROR>
+              Set the URL to use as the source for downloading PyPy installations [env:
+              UV_PYPY_INSTALL_MIRROR=]
+          --python-downloads-json-url <PYTHON_DOWNLOADS_JSON_URL>
+              URL pointing to JSON of custom Python installations [env: UV_PYTHON_DOWNLOADS_JSON_URL=]
+      -r, --reinstall
+              Reinstall the requested Python version, if it's already installed
+      -f, --force
+              Replace existing Python executables during installation
+          --default
+              Use as the default Python version
 
     Cache options:
       -n, --no-cache               Avoid reading from or writing to the cache, instead using a temporary
@@ -796,9 +806,10 @@ fn help_flag_subsubcommand() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
-      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -826,8 +837,6 @@ fn help_flag_subsubcommand() {
               Avoid discovering configuration files (`pyproject.toml`, `uv.toml`) [env: UV_NO_CONFIG=]
       -h, --help
               Display the concise help for this command
-      -V, --version
-              Display the uv version
 
     ----- stderr -----
     "#);
@@ -837,7 +846,7 @@ fn help_flag_subsubcommand() {
 fn help_unknown_subcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("foobar"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("foobar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -862,9 +871,9 @@ fn help_unknown_subcommand() {
         self
         version
         generate-shell-completion
-    "###);
+    ");
 
-    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("foo").arg("bar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -889,14 +898,14 @@ fn help_unknown_subcommand() {
         self
         version
         generate-shell-completion
-    "###);
+    ");
 }
 
 #[test]
 fn help_unknown_subsubcommand() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("python").arg("foobar"), @r###"
+    uv_snapshot!(context.filters(), context.help().arg("python").arg("foobar"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -909,7 +918,7 @@ fn help_unknown_subsubcommand() {
         pin
         dir
         uninstall
-    "###);
+    ");
 }
 
 #[test]
@@ -941,7 +950,7 @@ fn help_with_global_option() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Display uv's version
+      version                    Read or update the project's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
@@ -951,9 +960,10 @@ fn help_with_global_option() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
-      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...
@@ -1014,14 +1024,20 @@ fn help_with_help() {
 fn help_with_version() {
     let context = TestContext::new_with_versions(&[]);
 
-    uv_snapshot!(context.filters(), context.help().arg("--version"), @r###"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.help().arg("--version"), @r"
+    success: false
+    exit_code: 2
     ----- stdout -----
-    uv [VERSION] ([COMMIT] DATE)
 
     ----- stderr -----
-    "###);
+    error: unexpected argument '--version' found
+
+      tip: a similar argument exists: '--verbose'
+
+    Usage: uv help --verbose... [COMMAND]...
+
+    For more information, try '--help'.
+    ");
 }
 
 #[test]
@@ -1055,7 +1071,7 @@ fn help_with_no_pager() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Display uv's version
+      version                    Read or update the project's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
@@ -1065,9 +1081,10 @@ fn help_with_no_pager() {
           --cache-dir [CACHE_DIR]  Path to the cache directory [env: UV_CACHE_DIR=]
 
     Python options:
-      --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
-      --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
-      --no-python-downloads  Disable automatic downloads of Python. [env: "UV_PYTHON_DOWNLOADS=never"]
+          --managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=]
+          --no-managed-python    Disable use of uv-managed Python versions [env: UV_NO_MANAGED_PYTHON=]
+          --no-python-downloads  Disable automatic downloads of Python. [env:
+                                 "UV_PYTHON_DOWNLOADS=never"]
 
     Global options:
       -q, --quiet...

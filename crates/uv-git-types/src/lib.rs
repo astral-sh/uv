@@ -5,6 +5,8 @@ pub use crate::reference::GitReference;
 use thiserror::Error;
 use url::Url;
 
+use uv_redacted::redacted_url;
+
 mod github;
 mod oid;
 mod reference;
@@ -59,7 +61,7 @@ impl GitUrl {
                 return Err(GitUrlParseError::UnsupportedGitScheme(
                     unsupported.to_string(),
                     repository,
-                ))
+                ));
             }
         }
         Ok(Self {
@@ -151,6 +153,6 @@ impl From<GitUrl> for Url {
 
 impl std::fmt::Display for GitUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.repository)
+        write!(f, "{}", redacted_url(&self.repository))
     }
 }

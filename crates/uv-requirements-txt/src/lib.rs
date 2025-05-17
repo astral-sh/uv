@@ -393,7 +393,10 @@ impl RequirementsTxt {
                 RequirementsTxtStatement::UnsupportedOption(flag) => {
                     if requirements_txt == Path::new("-") {
                         if flag.cli() {
-                            uv_warnings::warn_user!("Ignoring unsupported option from stdin: `{flag}` (hint: pass `{flag}` on the command line instead)", flag = flag.green());
+                            uv_warnings::warn_user!(
+                                "Ignoring unsupported option from stdin: `{flag}` (hint: pass `{flag}` on the command line instead)",
+                                flag = flag.green()
+                            );
                         } else {
                             uv_warnings::warn_user!(
                                 "Ignoring unsupported option from stdin: `{flag}`",
@@ -402,7 +405,11 @@ impl RequirementsTxt {
                         }
                     } else {
                         if flag.cli() {
-                            uv_warnings::warn_user!("Ignoring unsupported option in `{path}`: `{flag}` (hint: pass `{flag}` on the command line instead)", path = requirements_txt.user_display().cyan(), flag = flag.green());
+                            uv_warnings::warn_user!(
+                                "Ignoring unsupported option in `{path}`: `{flag}` (hint: pass `{flag}` on the command line instead)",
+                                path = requirements_txt.user_display().cyan(),
+                                flag = flag.green()
+                            );
                         } else {
                             uv_warnings::warn_user!(
                                 "Ignoring unsupported option in `{path}`: `{flag}`",
@@ -1068,7 +1075,10 @@ impl Display for RequirementsTxtParserError {
                 write!(f, "Unsupported editable requirement")
             }
             Self::MissingRequirementPrefix(given) => {
-                write!(f, "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?")
+                write!(
+                    f,
+                    "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?"
+                )
             }
             Self::NoBinary { specifier, .. } => {
                 write!(f, "Invalid specifier for `--no-binary`: {specifier}")

@@ -17,7 +17,6 @@ use wiremock::{
 
 #[cfg(feature = "git")]
 use crate::common::{self, decode_token};
-
 use crate::common::{
     build_vendor_links_url, download_to_disk, get_bin, uv_snapshot, venv_bin_path,
     venv_to_interpreter, TestContext,
@@ -247,6 +246,27 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
 }
 
 #[test]
+fn invalid_toml_filename() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let test_toml = context.temp_dir.child("test.toml");
+    test_toml.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("test.toml"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `test.toml` is not a valid PEP 751 filename: expected TOML file to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
 fn invalid_uv_toml_option_disallowed() -> Result<()> {
     let context = TestContext::new("3.12");
     let uv_toml = context.temp_dir.child("uv.toml");
@@ -263,6 +283,36 @@ fn invalid_uv_toml_option_disallowed() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `uv.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn cache_uv_toml_credentials() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r#"
+    [pip]
+    extra-index-url = ["https://public:heron@pypi-proxy.fly.dev/basic-auth/simple/"]
+    "#})?;
+
+    // Provide an extra index with the same username and URL as in `uv.toml` but
+    // no password.
+    uv_snapshot!(context.pip_install()
+        .arg("iniconfig")
+        .arg("--extra-index-url")
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
     );
 
     Ok(())
@@ -363,6 +413,26 @@ dependencies = ["flask==1.0.x"]
     );
 
     Ok(())
+}
+
+#[test]
+fn invalid_python_version() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("flask")
+        .arg("--python-version")
+        .arg("311"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value '311' for '--python-version <PYTHON_VERSION>': Python version `311` has an invalid major version (311)
+
+    For more information, try '--help'.
+    "
+    );
 }
 
 #[test]
@@ -1838,6 +1908,43 @@ fn install_extra_index_url_has_priority() {
     context.assert_command("import flask").failure();
 }
 
+/// Ensure that the index is fetched only once when duplicate indices are specified
+#[tokio::test]
+async fn install_deduplicated_indices() {
+    let context = TestContext::new("3.12");
+
+    let redirect_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(
+            ResponseTemplate::new(302).insert_header("Location", "https://pypi.org/simple/sniffio"),
+        )
+        .expect(1)
+        .mount(&redirect_server)
+        .await;
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("sniffio")  // Use a zero-dependency package
+        .arg("--index")
+        .arg(redirect_server.uri())
+        .arg("--default-index")
+        .arg(redirect_server.uri())
+        .arg("--index-strategy")
+        .arg("unsafe-first-match"),  // Anything but "first-index"
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+}
+
 /// Install a package from a public GitHub repository
 #[test]
 #[cfg(feature = "git")]
@@ -2131,7 +2238,9 @@ fn install_git_private_https_pat_at_ref() {
         ""
     };
 
-    let package = format!("uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac");
+    let package = format!(
+        "uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac"
+    );
     uv_snapshot!(filters, context.pip_install()
         .arg(package), @r###"
     success: true
@@ -3646,7 +3755,7 @@ fn launcher_with_symlink() -> Result<()> {
     );
 
     #[cfg(windows)]
-    if let Err(error) = std::os::windows::fs::symlink_file(
+    if let Err(error) = fs_err::os::windows::fs::symlink_file(
         context.venv.join("Scripts\\simple_launcher.exe"),
         context.temp_dir.join("simple_launcher.exe"),
     ) {
@@ -3659,7 +3768,7 @@ fn launcher_with_symlink() -> Result<()> {
     }
 
     #[cfg(unix)]
-    std::os::unix::fs::symlink(
+    fs_err::os::unix::fs::symlink(
         context.venv.join("bin/simple_launcher"),
         context.temp_dir.join("simple_launcher"),
     )?;
@@ -5442,21 +5551,21 @@ fn install_package_basic_auth_from_keyring() {
         .arg("subprocess")
         .arg("--strict")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
-    Request for public@pypi-proxy.fly.dev
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@pypi-proxy.fly.dev
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###
+    "
     );
 
     context.assert_command("import anyio").success();
@@ -5489,19 +5598,19 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
         .arg("subprocess")
         .arg("--strict")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "foobar"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
-    Request for public@pypi-proxy.fly.dev
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
           hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-    "###
+    "
     );
 }
 
@@ -5532,19 +5641,19 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
         .arg("subprocess")
         .arg("--strict")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"other": "heron"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
-    Request for public@pypi-proxy.fly.dev
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
           hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-    "###
+    "
     );
 }
 
@@ -8046,7 +8155,7 @@ fn install_relocatable() -> Result<()> {
     #[cfg(unix)]
     {
         let script_symlink_path = context.temp_dir.join("black");
-        std::os::unix::fs::symlink(script_path, script_symlink_path.clone())?;
+        fs_err::os::unix::fs::symlink(script_path, script_symlink_path.clone())?;
         Command::new(script_symlink_path.as_os_str())
             .assert()
             .success()
@@ -8176,7 +8285,7 @@ fn install_unsupported_environment_yml() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Conda environment files (i.e. `environment.yml`) are not supported
+    error: Conda environment files (i.e., `environment.yml`) are not supported
     ");
 
     Ok(())
@@ -11103,6 +11212,170 @@ fn pep_751_multiple_sources() -> Result<()> {
 
     ----- stderr -----
     error: Package `typing-extensions` includes both a registry (`packages.wheels`) and an archive source (`packages.archive`)
+    "
+    );
+
+    Ok(())
+}
+
+/// Test that uv doesn't hang if an index returns a distribution for the wrong package.
+#[tokio::test]
+async fn bogus_redirect() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let redirect_server = MockServer::start().await;
+
+    // Configure a bogus redirect where for all packages, anyio is returned.
+    Mock::given(method("GET"))
+        .respond_with(
+            ResponseTemplate::new(302).insert_header("Location", "https://pypi.org/simple/anyio/"),
+        )
+        .mount(&redirect_server)
+        .await;
+
+    uv_snapshot!(
+        context
+            .pip_install()
+            .arg("--default-index")
+            .arg(redirect_server.uri())
+            .arg("sniffio"),
+        @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The index returned metadata for the wrong package: expected distribution for sniffio, got distribution for anyio
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn reserved_script_name() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        "activate.bash" = "project:activate"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#,
+    )?;
+
+    context
+        .temp_dir
+        .child("src")
+        .child("project")
+        .child("__init__.py")
+        .touch()?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    warning: The script name `activate.bash` is reserved for virtual environment activation scripts.
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    "
+    );
+
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [project.scripts]
+        "python" = "project:python"
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    error: Failed to install: project-0.1.0-py3-none-any.whl (project==0.1.0 (from file://[TEMP_DIR]/))
+      Caused by: Scripts must not use the reserved name python
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_dependency() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pylock_toml = context.temp_dir.child("pylock.toml");
+    pylock_toml.write_str(r#"
+        # This file was autogenerated by uv via the following command:
+        #    uv export --cache-dir [CACHE_DIR] -o pylock.toml
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+
+        [[packages]]
+        name = "anyio"
+        version = "4.3.0"
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", upload-time = 2024-02-19T08:36:28Z, size = 159642, hashes = { sha256 = "f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" } }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", upload-time = 2024-02-19T08:36:26Z, size = 85584, hashes = { sha256 = "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" } }]
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+
+        [[packages]]
+        name = "idna"
+        version = "3.6"
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", upload-time = 2023-11-25T15:40:54Z, size = 175426, hashes = { sha256 = "9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca" } }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
+
+        [[packages]]
+        name = "sniffio"
+        version = "1.3.1"
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
+    "#)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "
     );
 

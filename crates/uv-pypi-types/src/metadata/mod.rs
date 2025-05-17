@@ -36,7 +36,9 @@ pub enum MetadataError {
     InvalidPyprojectTomlSyntax(#[source] toml_edit::TomlError),
     #[error(transparent)]
     InvalidPyprojectTomlSchema(toml_edit::de::Error),
-    #[error("`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set")]
+    #[error(
+        "`pyproject.toml` is using the `[project]` table, but the required `project.name` field is not set"
+    )]
     MissingName,
     #[error("Metadata field {0} not found")]
     FieldNotFound(&'static str),
@@ -54,7 +56,9 @@ pub enum MetadataError {
     UnsupportedMetadataVersion(String),
     #[error("The following field was marked as dynamic: {0}")]
     DynamicField(&'static str),
-    #[error("The project uses Poetry's syntax to declare its dependencies, despite including a `project` table in `pyproject.toml`")]
+    #[error(
+        "The project uses Poetry's syntax to declare its dependencies, despite including a `project` table in `pyproject.toml`"
+    )]
     PoetrySyntax,
     #[error("Failed to read `requires.txt` contents")]
     RequiresTxtContents(#[from] std::io::Error),

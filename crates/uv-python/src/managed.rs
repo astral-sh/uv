@@ -120,7 +120,9 @@ impl ManagedPythonInstallations {
     pub fn from_settings(install_dir: Option<PathBuf>) -> Result<Self, Error> {
         if let Some(install_dir) = install_dir {
             Ok(Self::from_path(install_dir))
-        } else if let Some(install_dir) = std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR) {
+        } else if let Some(install_dir) =
+            std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR).filter(|s| !s.is_empty())
+        {
             Ok(Self::from_path(install_dir))
         } else {
             Ok(Self::from_path(
@@ -189,7 +191,7 @@ impl ManagedPythonInstallations {
     /// This ensures a consistent ordering across all platforms.
     pub fn find_all(
         &self,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
         let dirs = match fs_err::read_dir(&self.root) {
             Ok(installation_dirs) => {
                 // Collect sorted directory paths; `read_dir` is not stable across platforms
@@ -213,7 +215,7 @@ impl ManagedPythonInstallations {
                 return Err(Error::ReadError {
                     dir: self.root.clone(),
                     err,
-                })
+                });
             }
         };
         let scratch = self.scratch();
@@ -241,7 +243,7 @@ impl ManagedPythonInstallations {
     /// Iterate over Python installations that support the current platform.
     pub fn find_matching_current_platform(
         &self,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
         let os = Os::from_env();
         let arch = Arch::from_env();
         let libc = Libc::from_env()?;
@@ -267,7 +269,7 @@ impl ManagedPythonInstallations {
     /// - The platform metadata cannot be read
     /// - A directory for the installation cannot be read
     pub fn find_version<'a>(
-        &self,
+        &'a self,
         version: &'a PythonVersion,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
         Ok(self
@@ -347,9 +349,7 @@ impl ManagedPythonInstallation {
         let implementation = match self.implementation() {
             ImplementationName::CPython => "python",
             ImplementationName::PyPy => "pypy",
-            ImplementationName::GraalPy => {
-                unreachable!("Managed installations of GraalPy are not supported")
-            }
+            ImplementationName::GraalPy => "graalpy",
         };
 
         let version = match self.implementation() {
@@ -362,13 +362,14 @@ impl ManagedPythonInstallation {
             }
             // PyPy uses a full version number, even on Windows.
             ImplementationName::PyPy => format!("{}.{}", self.key.major, self.key.minor),
-            ImplementationName::GraalPy => {
-                unreachable!("Managed installations of GraalPy are not supported")
-            }
+            ImplementationName::GraalPy => String::new(),
         };
 
         // On Windows, the executable is just `python.exe` even for alternative variants
-        let variant = if cfg!(unix) {
+        // GraalPy always uses `graalpy.exe` as the main executable
+        let variant = if *self.implementation() == ImplementationName::GraalPy {
+            ""
+        } else if cfg!(unix) {
             self.key.variant.suffix()
         } else if cfg!(windows) && windowed {
             // Use windowed Python that doesn't open a terminal.
@@ -382,10 +383,10 @@ impl ManagedPythonInstallation {
             exe = std::env::consts::EXE_SUFFIX
         );
 
-        let executable = if cfg!(windows) {
-            self.python_dir().join(name)
-        } else if cfg!(unix) {
+        let executable = if cfg!(unix) || *self.implementation() == ImplementationName::GraalPy {
             self.python_dir().join("bin").join(name)
+        } else if cfg!(windows) {
+            self.python_dir().join(name)
         } else {
             unimplemented!("Only Windows and Unix systems are supported.")
         };
@@ -486,7 +487,7 @@ impl ManagedPythonInstallation {
                     );
                 }
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    return Err(Error::MissingExecutable(python.clone()))
+                    return Err(Error::MissingExecutable(python.clone()));
                 }
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(err) => {
@@ -494,7 +495,7 @@ impl ManagedPythonInstallation {
                         from: executable,
                         to: python,
                         err,
-                    })
+                    });
                 }
             }
         }

@@ -7,7 +7,7 @@ use uv_configuration::Upgrade;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
 use uv_requirements_txt::RequirementsTxt;
-use uv_resolver::{Lock, LockError, Preference, PreferenceError, PylockToml, PylockTomlError};
+use uv_resolver::{Lock, LockError, Preference, PreferenceError, PylockToml, PylockTomlErrorKind};
 
 #[derive(Debug, Default)]
 pub struct LockedRequirements {
@@ -105,7 +105,7 @@ pub fn read_lock_requirements(
 pub async fn read_pylock_toml_requirements(
     output_file: &Path,
     upgrade: &Upgrade,
-) -> Result<LockedRequirements, PylockTomlError> {
+) -> Result<LockedRequirements, PylockTomlErrorKind> {
     // As an optimization, skip iterating over the lockfile is we're upgrading all packages anyway.
     if upgrade.is_all() {
         return Ok(LockedRequirements::default());

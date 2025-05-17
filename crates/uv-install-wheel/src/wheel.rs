@@ -18,6 +18,7 @@ use uv_normalize::PackageName;
 use uv_pypi_types::DirectUrl;
 use uv_shell::escape_posix_for_single_quotes;
 use uv_trampoline_builder::windows_script_launcher;
+use uv_warnings::warn_user_once;
 
 use crate::record::RecordEntry;
 use crate::script::{scripts_from_ini, Script};
@@ -186,6 +187,25 @@ pub(crate) fn write_script_entrypoints(
     is_gui: bool,
 ) -> Result<(), Error> {
     for entrypoint in entrypoints {
+        let warn_names = ["activate", "activate_this.py"];
+        if warn_names.contains(&entrypoint.name.as_str())
+            || entrypoint.name.starts_with("activate.")
+        {
+            warn_user_once!(
+                "The script name `{}` is reserved for virtual environment activation scripts.",
+                entrypoint.name
+            );
+        }
+        let reserved_names = ["python", "pythonw", "python3"];
+        if reserved_names.contains(&entrypoint.name.as_str())
+            || entrypoint
+                .name
+                .strip_prefix("python3.")
+                .is_some_and(|suffix| suffix.parse::<u8>().is_ok())
+        {
+            return Err(Error::ReservedScriptName(entrypoint.name.clone()));
+        }
+
         let entrypoint_absolute = entrypoint_path(entrypoint, layout);
 
         let entrypoint_relative = pathdiff::diff_paths(&entrypoint_absolute, site_packages)
@@ -410,7 +430,12 @@ fn install_script(
     let placeholder_python = b"#!python";
     // scripts might be binaries, so we read an exact number of bytes instead of the first line as string
     let mut start = vec![0; placeholder_python.len()];
-    script.read_exact(&mut start)?;
+    match script.read_exact(&mut start) {
+        Ok(()) => {}
+        // Ignore scripts shorter than the buffer.
+        Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {}
+        Err(err) => return Err(Error::Io(err)),
+    }
     let size_and_encoded_hash = if start == placeholder_python {
         let is_gui = {
             let mut buf = vec![0; 1];
@@ -1064,9 +1089,14 @@ mod test {
         );
 
         // If the path is too long, we should not use the `exec` trick.
-        let executable = Path::new("/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3");
+        let executable = Path::new(
+            "/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3",
+        );
         let os_name = "posix";
-        assert_eq!(format_shebang(executable, os_name, false), "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''");
+        assert_eq!(
+            format_shebang(executable, os_name, false),
+            "#!/bin/sh\n'''exec' '/usr/bin/path/to/a/very/long/executable/executable/executable/executable/executable/executable/executable/executable/name/python3' \"$0\" \"$@\"\n' '''"
+        );
     }
 
     #[test]

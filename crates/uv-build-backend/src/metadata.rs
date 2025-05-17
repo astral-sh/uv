@@ -12,7 +12,7 @@ use version_ranges::Ranges;
 use walkdir::WalkDir;
 
 use uv_fs::Simplified;
-use uv_globfilter::{parse_portable_glob, GlobDirFilter};
+use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{
@@ -30,9 +30,13 @@ pub(crate) const DEFAULT_EXCLUDES: &[&str] = &["__pycache__", "*.pyc", "*.pyo"];
 pub enum ValidationError {
     /// The spec isn't clear about what the values in that field would be, and we only support the
     /// default value (UTF-8).
-    #[error("Charsets other than UTF-8 are not supported. Please convert your README to UTF-8 and remove `project.readme.charset`.")]
+    #[error(
+        "Charsets other than UTF-8 are not supported. Please convert your README to UTF-8 and remove `project.readme.charset`."
+    )]
     ReadmeCharset,
-    #[error("Unknown Readme extension `{0}`, can't determine content type. Please use a support extension (`.md`, `.rst`, `.txt`) or set the content type manually.")]
+    #[error(
+        "Unknown Readme extension `{0}`, can't determine content type. Please use a support extension (`.md`, `.rst`, `.txt`) or set the content type manually."
+    )]
     UnknownExtension(String),
     #[error("Can't infer content type because `{}` does not have an extension. Please use a support extension (`.md`, `.rst`, `.txt`) or set the content type manually.", _0.user_display())]
     MissingExtension(PathBuf),
@@ -42,9 +46,13 @@ pub enum ValidationError {
     DescriptionNewlines,
     #[error("Dynamic metadata is not supported")]
     Dynamic,
-    #[error("When `project.license-files` is defined, `project.license` must be an SPDX expression string")]
+    #[error(
+        "When `project.license-files` is defined, `project.license` must be an SPDX expression string"
+    )]
     MixedLicenseGenerations,
-    #[error("Entrypoint groups must consist of letters and numbers separated by dots, invalid group: `{0}`")]
+    #[error(
+        "Entrypoint groups must consist of letters and numbers separated by dots, invalid group: `{0}`"
+    )]
     InvalidGroup(String),
     #[error(
         "Entrypoint names must consist of letters, numbers, dots, underscores and dashes; invalid name: `{0}`"
@@ -260,7 +268,7 @@ impl PyProjectToml {
                     Some("rst") => "text/x-rst",
                     Some("md") => "text/markdown",
                     Some(unknown) => {
-                        return Err(ValidationError::UnknownExtension(unknown.to_owned()).into())
+                        return Err(ValidationError::UnknownExtension(unknown.to_owned()).into());
                     }
                     None => return Err(ValidationError::MissingExtension(path.clone()).into()),
                 }
@@ -388,7 +396,7 @@ impl PyProjectToml {
                     None => None,
                     Some(License::Spdx(license_expression)) => Some(license_expression.clone()),
                     Some(License::Text { .. } | License::File { .. }) => {
-                        return Err(ValidationError::MixedLicenseGenerations.into())
+                        return Err(ValidationError::MixedLicenseGenerations.into());
                     }
                 };
 
@@ -396,10 +404,12 @@ impl PyProjectToml {
                 let mut license_globs_parsed = Vec::new();
                 for license_glob in license_globs {
                     let pep639_glob =
-                        parse_portable_glob(license_glob).map_err(|err| Error::PortableGlob {
-                            field: license_glob.to_string(),
-                            source: err,
-                        })?;
+                        PortableGlobParser::Pep639
+                            .parse(license_glob)
+                            .map_err(|err| Error::PortableGlob {
+                                field: license_glob.to_string(),
+                                source: err,
+                            })?;
                     license_globs_parsed.push(pep639_glob);
                 }
                 let license_globs =
@@ -410,14 +420,18 @@ impl PyProjectToml {
                         }
                     })?;
 
-                for entry in WalkDir::new(root).into_iter().filter_entry(|entry| {
-                    license_globs.match_directory(
-                        entry
-                            .path()
-                            .strip_prefix(root)
-                            .expect("walkdir starts with root"),
-                    )
-                }) {
+                for entry in WalkDir::new(root)
+                    .sort_by_file_name()
+                    .into_iter()
+                    .filter_entry(|entry| {
+                        license_globs.match_directory(
+                            entry
+                                .path()
+                                .strip_prefix(root)
+                                .expect("walkdir starts with root"),
+                        )
+                    })
+                {
                     let entry = entry.map_err(|err| Error::WalkDir {
                         root: root.to_path_buf(),
                         err,

@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::io;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::str::FromStr;
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
+use std::{env, io};
 
 use futures::TryStreamExt;
 use itertools::Itertools;
@@ -15,13 +15,13 @@ use owo_colors::OwoColorize;
 use reqwest_retry::RetryPolicy;
 use serde::Deserialize;
 use thiserror::Error;
-use tokio::io::{AsyncRead, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWriteExt, BufWriter, ReadBuf};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 
-use uv_client::{is_extended_transient_error, WrappedReqwestError};
+use uv_client::{is_extended_transient_error, BaseClient, WrappedReqwestError};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{rename_with_retry, Simplified};
@@ -66,6 +66,8 @@ pub enum Error {
     },
     #[error("Invalid download URL")]
     InvalidUrl(#[from] url::ParseError),
+    #[error("Invalid download URL: {0}")]
+    InvalidUrlFormat(Url),
     #[error("Invalid path in file URL: `{0}`")]
     InvalidFileUrl(String),
     #[error("Failed to create download directory")]
@@ -92,10 +94,18 @@ pub enum Error {
     Mirror(&'static str, &'static str),
     #[error(transparent)]
     LibcDetection(#[from] LibcDetectionError),
-    #[error("Remote python downloads JSON is not yet supported, please use a local path (without `file://` prefix)")]
+    #[error(
+        "Remote python downloads JSON is not yet supported, please use a local path (without `file://` prefix)"
+    )]
     RemoteJSONNotSupported(),
     #[error("The json of the python downloads is invalid: {0}")]
     InvalidPythonDownloadsJSON(String, #[source] serde_json::Error),
+    #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
+    OfflinePythonMissing {
+        file: Box<PythonInstallationKey>,
+        url: Box<Url>,
+        python_builds_dir: PathBuf,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -260,10 +270,11 @@ impl PythonDownloadRequest {
     }
 
     /// Iterate over all [`PythonDownload`]'s that match this request.
-    pub fn iter_downloads(
-        &self,
-    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload> + use<'_>, Error> {
-        Ok(ManagedPythonDownload::iter_all()?
+    pub fn iter_downloads<'a>(
+        &'a self,
+        python_downloads_json_url: Option<&'a str>,
+    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload> + use<'a>, Error> {
+        Ok(ManagedPythonDownload::iter_all(python_downloads_json_url)?
             .filter(move |download| self.satisfied_by_download(download)))
     }
 
@@ -333,30 +344,51 @@ impl PythonDownloadRequest {
     }
 
     pub fn satisfied_by_interpreter(&self, interpreter: &Interpreter) -> bool {
+        let executable = interpreter.sys_executable().display();
         if let Some(version) = self.version() {
             if !version.matches_interpreter(interpreter) {
+                let interpreter_version = interpreter.python_version();
+                debug!(
+                    "Skipping interpreter at `{executable}`: version `{interpreter_version}` does not match request `{version}`"
+                );
                 return false;
             }
         }
         if let Some(os) = self.os() {
-            if &Os::from(interpreter.platform().os()) != os {
+            let interpreter_os = Os::from(interpreter.platform().os());
+            if &interpreter_os != os {
+                debug!(
+                    "Skipping interpreter at `{executable}`: operating system `{interpreter_os}` does not match request `{os}`"
+                );
                 return false;
             }
         }
         if let Some(arch) = self.arch() {
-            if &Arch::from(&interpreter.platform().arch()) != arch {
+            let interpreter_arch = Arch::from(&interpreter.platform().arch());
+            if &interpreter_arch != arch {
+                debug!(
+                    "Skipping interpreter at `{executable}`: architecture `{interpreter_arch}` does not match request `{arch}`"
+                );
                 return false;
             }
         }
         if let Some(implementation) = self.implementation() {
-            if LenientImplementationName::from(interpreter.implementation_name())
+            let interpreter_implementation = interpreter.implementation_name();
+            if LenientImplementationName::from(interpreter_implementation)
                 != LenientImplementationName::from(*implementation)
             {
+                debug!(
+                    "Skipping interpreter at `{executable}`: implementation `{interpreter_implementation}` does not match request `{implementation}`"
+                );
                 return false;
             }
         }
         if let Some(libc) = self.libc() {
-            if &Libc::from(interpreter.platform().os()) != libc {
+            let interpreter_libc = Libc::from(interpreter.platform().os());
+            if &interpreter_libc != libc {
+                debug!(
+                    "Skipping interpreter at `{executable}`: libc `{interpreter_libc}` does not match request `{libc}`"
+                );
                 return false;
             }
         }
@@ -371,7 +403,9 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
             Some(VersionRequest::from(&key.version())),
             match &key.implementation {
                 LenientImplementationName::Known(implementation) => Some(*implementation),
-                LenientImplementationName::Unknown(name) => unreachable!("Managed Python installations are expected to always have known implementation names, found {name}"),
+                LenientImplementationName::Unknown(name) => unreachable!(
+                    "Managed Python installations are expected to always have known implementation names, found {name}"
+                ),
             },
             Some(key.arch),
             Some(key.os),
@@ -490,8 +524,9 @@ impl ManagedPythonDownload {
     /// be searched for — even if a pre-release was not explicitly requested.
     pub fn from_request(
         request: &PythonDownloadRequest,
+        python_downloads_json_url: Option<&str>,
     ) -> Result<&'static ManagedPythonDownload, Error> {
-        if let Some(download) = request.iter_downloads()?.next() {
+        if let Some(download) = request.iter_downloads(python_downloads_json_url)?.next() {
             return Ok(download);
         }
 
@@ -499,7 +534,7 @@ impl ManagedPythonDownload {
             if let Some(download) = request
                 .clone()
                 .with_prereleases(true)
-                .iter_downloads()?
+                .iter_downloads(python_downloads_json_url)?
                 .next()
             {
                 return Ok(download);
@@ -508,30 +543,35 @@ impl ManagedPythonDownload {
 
         Err(Error::NoDownloadFound(request.clone()))
     }
+    //noinspection RsUnresolvedPath - RustRover can't see through the `include!`
 
     /// Iterate over all [`ManagedPythonDownload`]s.
-    pub fn iter_all() -> Result<impl Iterator<Item = &'static ManagedPythonDownload>, Error> {
-        let runtime_source = std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL);
-
+    ///
+    /// Note: The list is generated on the first call to this function.
+    /// so `python_downloads_json_url` is only used in the first call to this function.
+    pub fn iter_all(
+        python_downloads_json_url: Option<&str>,
+    ) -> Result<impl Iterator<Item = &'static ManagedPythonDownload>, Error> {
         let downloads = PYTHON_DOWNLOADS.get_or_try_init(|| {
-            let json_downloads: HashMap<String, JsonPythonDownload> =
-                if let Ok(json_source) = &runtime_source {
-                    if Url::parse(json_source).is_ok() {
-                        return Err(Error::RemoteJSONNotSupported());
-                    }
+            let json_downloads: HashMap<String, JsonPythonDownload> = if let Some(json_source) =
+                python_downloads_json_url
+            {
+                if Url::parse(json_source).is_ok() {
+                    return Err(Error::RemoteJSONNotSupported());
+                }
 
-                    let file = match fs_err::File::open(json_source) {
-                        Ok(file) => file,
-                        Err(e) => { Err(Error::Io(e)) }?,
-                    };
-
-                    serde_json::from_reader(file)
-                        .map_err(|e| Error::InvalidPythonDownloadsJSON(json_source.clone(), e))?
-                } else {
-                    serde_json::from_str(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
-                        Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_string(), e)
-                    })?
+                let file = match fs_err::File::open(json_source) {
+                    Ok(file) => file,
+                    Err(e) => { Err(Error::Io(e)) }?,
                 };
+
+                serde_json::from_reader(file)
+                    .map_err(|e| Error::InvalidPythonDownloadsJSON(json_source.to_string(), e))?
+            } else {
+                serde_json::from_str(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
+                    Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_string(), e)
+                })?
+            };
 
             let result = parse_json_downloads(json_downloads);
             Ok(Cow::Owned(result))
@@ -560,7 +600,7 @@ impl ManagedPythonDownload {
     #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
     pub async fn fetch_with_retry(
         &self,
-        client: &uv_client::BaseClient,
+        client: &BaseClient,
         installation_dir: &Path,
         scratch_dir: &Path,
         reinstall: bool,
@@ -610,7 +650,7 @@ impl ManagedPythonDownload {
     #[instrument(skip(client, installation_dir, scratch_dir, reporter), fields(download = % self.key()))]
     pub async fn fetch(
         &self,
-        client: &uv_client::BaseClient,
+        client: &BaseClient,
         installation_dir: &Path,
         scratch_dir: &Path,
         reinstall: bool,
@@ -626,62 +666,109 @@ impl ManagedPythonDownload {
             return Ok(DownloadResult::AlreadyAvailable(path));
         }
 
-        let filename = url.path_segments().unwrap().next_back().unwrap();
-        let ext = SourceDistExtension::from_path(filename)
+        // We improve filesystem compatibility by using neither the URL-encoded `%2B` nor the `+` it
+        // decodes to.
+        let filename = url
+            .path_segments()
+            .ok_or_else(|| Error::InvalidUrlFormat(url.clone()))?
+            .next_back()
+            .ok_or_else(|| Error::InvalidUrlFormat(url.clone()))?
+            .replace("%2B", "-");
+        debug_assert!(
+            filename
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.'),
+            "Unexpected char in filename: {filename}"
+        );
+        let ext = SourceDistExtension::from_path(&filename)
             .map_err(|err| Error::MissingExtension(url.to_string(), err))?;
-        let (reader, size) = read_url(&url, client).await?;
 
-        let progress = reporter
-            .as_ref()
-            .map(|reporter| (reporter, reporter.on_download_start(&self.key, size)));
-
-        // Download and extract into a temporary directory.
         let temp_dir = tempfile::tempdir_in(scratch_dir).map_err(Error::DownloadDirError)?;
 
-        debug!(
-            "Downloading {url} to temporary location: {}",
-            temp_dir.path().simplified_display()
-        );
+        if let Some(python_builds_dir) = env::var_os(EnvVars::UV_PYTHON_CACHE_DIR) {
+            let python_builds_dir = PathBuf::from(python_builds_dir);
+            fs_err::create_dir_all(&python_builds_dir)?;
+            let hash_prefix = match self.sha256 {
+                Some(sha) => {
+                    // Shorten the hash to avoid too-long-filename errors
+                    &sha[..9]
+                }
+                None => "none",
+            };
+            let target_cache_file = python_builds_dir.join(format!("{hash_prefix}-{filename}"));
 
-        let mut hashers = self
-            .sha256
-            .into_iter()
-            .map(|_| Hasher::from(HashAlgorithm::Sha256))
-            .collect::<Vec<_>>();
-        let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
+            // Download the archive to the cache, or return a reader if we have it in cache.
+            // TODO(konsti): We should "tee" the write so we can do the download-to-cache and unpacking
+            // in one step.
+            let (reader, size): (Box<dyn AsyncRead + Unpin>, Option<u64>) =
+                match fs_err::tokio::File::open(&target_cache_file).await {
+                    Ok(file) => {
+                        debug!(
+                            "Extracting existing `{}`",
+                            target_cache_file.simplified_display()
+                        );
+                        let size = file.metadata().await?.len();
+                        let reader = Box::new(tokio::io::BufReader::new(file));
+                        (reader, Some(size))
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                        // Point the user to which file is missing where and where to download it
+                        if client.connectivity().is_offline() {
+                            return Err(Error::OfflinePythonMissing {
+                                file: Box::new(self.key().clone()),
+                                url: Box::new(url),
+                                python_builds_dir,
+                            });
+                        }
 
-        debug!("Extracting {filename}");
+                        self.download_archive(
+                            &url,
+                            client,
+                            reporter,
+                            &python_builds_dir,
+                            &target_cache_file,
+                        )
+                        .await?;
 
-        match progress {
-            Some((&reporter, progress)) => {
-                let mut reader = ProgressReader::new(&mut hasher, progress, reporter);
-                uv_extract::stream::archive(&mut reader, ext, temp_dir.path())
-                    .await
-                    .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
-            }
-            None => {
-                uv_extract::stream::archive(&mut hasher, ext, temp_dir.path())
-                    .await
-                    .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
-            }
-        }
+                        debug!("Extracting `{}`", target_cache_file.simplified_display());
+                        let file = fs_err::tokio::File::open(&target_cache_file).await?;
+                        let size = file.metadata().await?.len();
+                        let reader = Box::new(tokio::io::BufReader::new(file));
+                        (reader, Some(size))
+                    }
+                    Err(err) => return Err(err.into()),
+                };
 
-        hasher.finish().await.map_err(Error::HashExhaustion)?;
+            // Extract the downloaded archive into a temporary directory.
+            self.extract_reader(
+                reader,
+                temp_dir.path(),
+                &filename,
+                ext,
+                size,
+                reporter,
+                Direction::Extract,
+            )
+            .await?;
+        } else {
+            // Avoid overlong log lines
+            debug!("Downloading {url}");
+            debug!(
+                "Extracting {filename} to temporary location: {}",
+                temp_dir.path().simplified_display()
+            );
 
-        if let Some((&reporter, progress)) = progress {
-            reporter.on_progress(&self.key, progress);
-        }
-
-        // Check the hash
-        if let Some(expected) = self.sha256 {
-            let actual = HashDigest::from(hashers.pop().unwrap()).digest;
-            if !actual.eq_ignore_ascii_case(expected) {
-                return Err(Error::HashMismatch {
-                    installation: self.key.to_string(),
-                    expected: expected.to_string(),
-                    actual: actual.to_string(),
-                });
-            }
+            let (reader, size) = read_url(&url, client).await?;
+            self.extract_reader(
+                reader,
+                temp_dir.path(),
+                &filename,
+                ext,
+                size,
+                reporter,
+                Direction::Download,
+            )
+            .await?;
         }
 
         // Extract the top-level directory.
@@ -701,7 +788,7 @@ impl ManagedPythonDownload {
         // to that date do not.
         #[cfg(unix)]
         {
-            match std::os::unix::fs::symlink(
+            match fs_err::os::unix::fs::symlink(
                 format!("python{}.{}", self.key.major, self.key.minor),
                 extracted.join("bin").join("python"),
             ) {
@@ -727,6 +814,97 @@ impl ManagedPythonDownload {
             })?;
 
         Ok(DownloadResult::Fetched(path))
+    }
+
+    /// Download the managed Python archive into the cache directory.
+    async fn download_archive(
+        &self,
+        url: &Url,
+        client: &BaseClient,
+        reporter: Option<&dyn Reporter>,
+        python_builds_dir: &Path,
+        target_cache_file: &Path,
+    ) -> Result<(), Error> {
+        debug!(
+            "Downloading {} to `{}`",
+            url,
+            target_cache_file.simplified_display()
+        );
+
+        let (mut reader, size) = read_url(url, client).await?;
+        let temp_dir = tempfile::tempdir_in(python_builds_dir)?;
+        let temp_file = temp_dir.path().join("download");
+
+        // Download to a temporary file. We verify the hash when unpacking the file.
+        {
+            let mut archive_writer = BufWriter::new(fs_err::tokio::File::create(&temp_file).await?);
+
+            // Download with or without progress bar.
+            if let Some(reporter) = reporter {
+                let key = reporter.on_request_start(Direction::Download, &self.key, size);
+                tokio::io::copy(
+                    &mut ProgressReader::new(reader, key, reporter),
+                    &mut archive_writer,
+                )
+                .await?;
+                reporter.on_request_complete(Direction::Download, key);
+            } else {
+                tokio::io::copy(&mut reader, &mut archive_writer).await?;
+            }
+
+            archive_writer.flush().await?;
+        }
+        // Move the completed file into place, invalidating the `File` instance.
+        fs_err::rename(&temp_file, target_cache_file)?;
+        Ok(())
+    }
+
+    /// Extract a Python interpreter archive into a (temporary) directory, either from a file or
+    /// from a download stream.
+    async fn extract_reader(
+        &self,
+        reader: impl AsyncRead + Unpin,
+        target: &Path,
+        filename: &String,
+        ext: SourceDistExtension,
+        size: Option<u64>,
+        reporter: Option<&dyn Reporter>,
+        direction: Direction,
+    ) -> Result<(), Error> {
+        let mut hashers = self
+            .sha256
+            .into_iter()
+            .map(|_| Hasher::from(HashAlgorithm::Sha256))
+            .collect::<Vec<_>>();
+        let mut hasher = uv_extract::hash::HashReader::new(reader, &mut hashers);
+
+        if let Some(reporter) = reporter {
+            let progress_key = reporter.on_request_start(direction, &self.key, size);
+            let mut reader = ProgressReader::new(&mut hasher, progress_key, reporter);
+            uv_extract::stream::archive(&mut reader, ext, target)
+                .await
+                .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+            reporter.on_request_complete(direction, progress_key);
+        } else {
+            uv_extract::stream::archive(&mut hasher, ext, target)
+                .await
+                .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
+        }
+        hasher.finish().await.map_err(Error::HashExhaustion)?;
+
+        // Check the hash
+        if let Some(expected) = self.sha256 {
+            let actual = HashDigest::from(hashers.pop().unwrap()).digest;
+            if !actual.eq_ignore_ascii_case(expected) {
+                return Err(Error::HashMismatch {
+                    installation: self.key.to_string(),
+                    expected: expected.to_string(),
+                    actual: actual.to_string(),
+                });
+            }
+        }
+
+        Ok(())
     }
 
     pub fn python_version(&self) -> PythonVersion {
@@ -782,6 +960,7 @@ fn parse_json_downloads(
             let implementation = match entry.name.as_str() {
                 "cpython" => LenientImplementationName::Known(ImplementationName::CPython),
                 "pypy" => LenientImplementationName::Known(ImplementationName::PyPy),
+                "graalpy" => LenientImplementationName::Known(ImplementationName::GraalPy),
                 _ => LenientImplementationName::Unknown(entry.name.clone()),
             };
 
@@ -905,11 +1084,36 @@ impl Display for ManagedPythonDownload {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Download,
+    Extract,
+}
+
+impl Direction {
+    fn as_str(&self) -> &str {
+        match self {
+            Direction::Download => "download",
+            Direction::Extract => "extract",
+        }
+    }
+}
+
+impl Display for Direction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 pub trait Reporter: Send + Sync {
-    fn on_progress(&self, name: &PythonInstallationKey, id: usize);
-    fn on_download_start(&self, name: &PythonInstallationKey, size: Option<u64>) -> usize;
-    fn on_download_progress(&self, id: usize, inc: u64);
-    fn on_download_complete(&self);
+    fn on_request_start(
+        &self,
+        direction: Direction,
+        name: &PythonInstallationKey,
+        size: Option<u64>,
+    ) -> usize;
+    fn on_request_progress(&self, id: usize, inc: u64);
+    fn on_request_complete(&self, direction: Direction, id: usize);
 }
 
 /// An asynchronous reader that reports progress as bytes are read.
@@ -943,7 +1147,7 @@ where
             .poll_read(cx, buf)
             .map_ok(|()| {
                 self.reporter
-                    .on_download_progress(self.index, buf.filled().len() as u64);
+                    .on_request_progress(self.index, buf.filled().len() as u64);
             })
     }
 }
@@ -951,7 +1155,7 @@ where
 /// Convert a [`Url`] into an [`AsyncRead`] stream.
 async fn read_url(
     url: &Url,
-    client: &uv_client::BaseClient,
+    client: &BaseClient,
 ) -> Result<(impl AsyncRead + Unpin, Option<u64>), Error> {
     if url.scheme() == "file" {
         // Loads downloaded distribution from the given `file://` URL.

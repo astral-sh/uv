@@ -12,6 +12,7 @@ use itertools::Itertools;
 use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
+use reqwest_middleware::RequestBuilder;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{RetryPolicy, Retryable, RetryableStrategy};
 use rustc_hash::FxHashSet;
@@ -27,8 +28,8 @@ use url::Url;
 use uv_auth::Credentials;
 use uv_cache::{Cache, Refresh};
 use uv_client::{
-    BaseClient, MetadataFormat, OwnedArchive, RegistryClientBuilder, RequestBuilder,
-    UvRetryableStrategy, DEFAULT_RETRIES,
+    BaseClient, MetadataFormat, OwnedArchive, RegistryClientBuilder, UvRetryableStrategy,
+    DEFAULT_RETRIES,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -107,15 +108,21 @@ pub enum PublishSendError {
     StatusNoBody(StatusCode, #[source] reqwest::Error),
     #[error("Upload failed with status code {0}. Server says: {1}")]
     Status(StatusCode, String),
-    #[error("POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?")]
+    #[error(
+        "POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?"
+    )]
     MethodNotAllowedNoBody,
-    #[error("POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL? Server says: {0}")]
+    #[error(
+        "POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL? Server says: {0}"
+    )]
     MethodNotAllowed(String),
     /// The registry returned a "403 Forbidden".
     #[error("Permission denied (status code {0}): {1}")]
     PermissionDenied(StatusCode, String),
     /// See inline comment.
-    #[error("The request was redirected, but redirects are not allowed when publishing, please use the canonical URL: `{0}`")]
+    #[error(
+        "The request was redirected, but redirects are not allowed when publishing, please use the canonical URL: `{0}`"
+    )]
     RedirectError(Url),
 }
 
@@ -318,10 +325,10 @@ pub async fn check_trusted_publishing(
             }
             // We could check for credentials from the keyring or netrc the auth middleware first, but
             // given that we are in GitHub Actions we check for trusted publishing first.
-            debug!("Running on GitHub Actions without explicit credentials, checking for trusted publishing");
-            match trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
-                .await
-            {
+            debug!(
+                "Running on GitHub Actions without explicit credentials, checking for trusted publishing"
+            );
+            match trusted_publishing::get_token(registry, client.for_host(registry)).await {
                 Ok(token) => Ok(TrustedPublishResult::Configured(token)),
                 Err(err) => {
                     // TODO(konsti): It would be useful if we could differentiate between actual errors
@@ -355,9 +362,7 @@ pub async fn check_trusted_publishing(
                 );
             }
 
-            let token =
-                trusted_publishing::get_token(registry, client.for_host(registry).raw_client())
-                    .await?;
+            let token = trusted_publishing::get_token(registry, client.for_host(registry)).await?;
             Ok(TrustedPublishResult::Configured(token))
         }
         TrustedPublishing::Never => Ok(TrustedPublishResult::Skipped),
@@ -741,16 +746,16 @@ async fn form_metadata(
 /// Build the upload request.
 ///
 /// Returns the request and the reporter progress bar id.
-async fn build_request<'a>(
+async fn build_request(
     file: &Path,
     raw_filename: &str,
     filename: &DistFilename,
     registry: &Url,
-    client: &'a BaseClient,
+    client: &BaseClient,
     credentials: &Credentials,
     form_metadata: &[(&'static str, String)],
     reporter: Arc<impl Reporter>,
-) -> Result<(RequestBuilder<'a>, usize), PublishPrepareError> {
+) -> Result<(RequestBuilder, usize), PublishPrepareError> {
     let mut form = reqwest::multipart::Form::new();
     for (key, value) in form_metadata {
         form = form.text(*key, value.clone());
@@ -962,13 +967,12 @@ mod tests {
         project_urls: Source, https://github.com/unknown/tqdm
         "###);
 
-        let client = BaseClientBuilder::new().build();
         let (request, _) = build_request(
             &file,
             raw_filename,
             &filename,
             &Url::parse("https://example.org/upload").unwrap(),
-            &client,
+            &BaseClientBuilder::new().build(),
             &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
             &form_metadata,
             Arc::new(DummyReporter),
@@ -981,58 +985,31 @@ mod tests {
         }, {
             assert_debug_snapshot!(&request, @r#"
             RequestBuilder {
-                builder: RequestBuilder {
-                    inner: RequestBuilder {
-                        method: POST,
-                        url: Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "example.org",
-                                ),
+                inner: RequestBuilder {
+                    method: POST,
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "example.org",
                             ),
-                            port: None,
-                            path: "/upload",
-                            query: None,
-                            fragment: None,
-                        },
-                        headers: {
-                            "content-type": "multipart/form-data; boundary=[...]",
-                            "content-length": "6803",
-                            "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
-                            "authorization": Sensitive,
-                        },
+                        ),
+                        port: None,
+                        path: "/upload",
+                        query: None,
+                        fragment: None,
                     },
-                    ..
-                },
-                client: RedirectClientWithMiddleware {
-                    client: ClientWithMiddleware {
-                        inner: Client {
-                            accepts: Accepts {
-                                gzip: true,
-                            },
-                            proxies: [
-                                Proxy(
-                                    System(
-                                        {},
-                                    ),
-                                    None,
-                                ),
-                            ],
-                            referer: true,
-                            default_headers: {
-                                "accept": "*/*",
-                                "user-agent": "uv/0.6.14",
-                            },
-                            read_timeout: 30s,
-                        },
-                        ..
+                    headers: {
+                        "content-type": "multipart/form-data; boundary=[...]",
+                        "content-length": "6803",
+                        "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
+                        "authorization": Sensitive,
                     },
-                    redirect_policy: BypassMiddleware,
                 },
+                ..
             }
             "#);
         });
@@ -1041,8 +1018,7 @@ mod tests {
     /// Snapshot the data we send for an upload request for a wheel.
     #[tokio::test]
     async fn upload_request_wheel() {
-        let raw_filename =
-            "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
+        let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
         let file = PathBuf::from("../../scripts/links/").join(raw_filename);
         let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
 
@@ -1140,13 +1116,12 @@ mod tests {
         requires_dist: requests ; extra == 'telegram'
         "###);
 
-        let client = BaseClientBuilder::new().build();
         let (request, _) = build_request(
             &file,
             raw_filename,
             &filename,
             &Url::parse("https://example.org/upload").unwrap(),
-            &client,
+            &BaseClientBuilder::new().build(),
             &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
             &form_metadata,
             Arc::new(DummyReporter),
@@ -1159,58 +1134,31 @@ mod tests {
         }, {
             assert_debug_snapshot!(&request, @r#"
             RequestBuilder {
-                builder: RequestBuilder {
-                    inner: RequestBuilder {
-                        method: POST,
-                        url: Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "example.org",
-                                ),
+                inner: RequestBuilder {
+                    method: POST,
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "example.org",
                             ),
-                            port: None,
-                            path: "/upload",
-                            query: None,
-                            fragment: None,
-                        },
-                        headers: {
-                            "content-type": "multipart/form-data; boundary=[...]",
-                            "content-length": "19330",
-                            "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
-                            "authorization": Sensitive,
-                        },
+                        ),
+                        port: None,
+                        path: "/upload",
+                        query: None,
+                        fragment: None,
                     },
-                    ..
-                },
-                client: RedirectClientWithMiddleware {
-                    client: ClientWithMiddleware {
-                        inner: Client {
-                            accepts: Accepts {
-                                gzip: true,
-                            },
-                            proxies: [
-                                Proxy(
-                                    System(
-                                        {},
-                                    ),
-                                    None,
-                                ),
-                            ],
-                            referer: true,
-                            default_headers: {
-                                "accept": "*/*",
-                                "user-agent": "uv/0.6.14",
-                            },
-                            read_timeout: 30s,
-                        },
-                        ..
+                    headers: {
+                        "content-type": "multipart/form-data; boundary=[...]",
+                        "content-length": "19330",
+                        "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
+                        "authorization": Sensitive,
                     },
-                    redirect_policy: BypassMiddleware,
                 },
+                ..
             }
             "#);
         });

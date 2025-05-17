@@ -19,6 +19,7 @@ use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::Constraints;
 use uv_configuration::{Concurrency, PreviewMode};
+use uv_distribution_types::InstalledDist;
 use uv_distribution_types::{
     IndexUrl, Name, NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirement, UnresolvedRequirementSpecification,
@@ -39,6 +40,7 @@ use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
 use uv_tool::{entrypoint_paths, InstalledTools};
 use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{
@@ -160,18 +162,26 @@ pub(crate) async fn run(
     };
 
     let Some(target) = target.to_str() else {
-        return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"));
+        return Err(anyhow::anyhow!(
+            "Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"
+        ));
     };
 
     if let Some(ref from) = from {
         if has_python_script_ext(Path::new(from)) {
             let package_name = PackageName::from_str(from)?;
             return Err(anyhow::anyhow!(
-                "It looks you provided a Python script to `--from`, which is not supported\n\n{}{} If you meant to run a command from the `{}` package, use the normalized package name instead to disambiguate, e.g., `{}`",
+                "It looks like you provided a Python script to `--from`, which is not supported\n\n{}{} If you meant to run a command from the `{}` package, use the normalized package name instead to disambiguate, e.g., `{}`",
                 "hint".bold().cyan(),
                 ":".bold(),
                 package_name.cyan(),
-                format!("{} --from {} {}", invocation_source, package_name.cyan(), target).green(),
+                format!(
+                    "{} --from {} {}",
+                    invocation_source,
+                    package_name.cyan(),
+                    target
+                )
+                .green(),
             ));
         }
     } else {
@@ -181,7 +191,7 @@ pub(crate) async fn run(
         if has_python_script_ext(target_path) {
             return if target_path.try_exists()? {
                 Err(anyhow::anyhow!(
-                    "It looks you tried to run a Python script at `{}`, which is not supported by `{}`\n\n{}{} Use `{}` instead",
+                    "It looks like you tried to run a Python script at `{}`, which is not supported by `{}`\n\n{}{} Use `{}` instead",
                     target_path.user_display(),
                     invocation_source,
                     "hint".bold().cyan(),
@@ -191,7 +201,7 @@ pub(crate) async fn run(
             } else {
                 let package_name = PackageName::from_str(target)?;
                 Err(anyhow::anyhow!(
-                    "It looks you provided a Python script to run, which is not supported supported by `{}`\n\n{}{} We did not find a script at the requested path. If you meant to run a command from the `{}` package, pass the normalized package name to `--from` to disambiguate, e.g., `{}`",
+                    "It looks like you provided a Python script to run, which is not supported supported by `{}`\n\n{}{} We did not find a script at the requested path. If you meant to run a command from the `{}` package, pass the normalized package name to `--from` to disambiguate, e.g., `{}`",
                     invocation_source,
                     "hint".bold().cyan(),
                     ":".bold(),
@@ -229,7 +239,9 @@ pub(crate) async fn run(
                     return Err(anyhow::anyhow!("No tool command provided"));
                 };
                 let Some(next_target) = next_target.to_str() else {
-                    return Err(anyhow::anyhow!("Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"));
+                    return Err(anyhow::anyhow!(
+                        "Tool command could not be parsed as UTF-8 string. Use `--from` to specify the package name"
+                    ));
                 };
                 target = next_target;
                 args = next_args;
@@ -270,6 +282,7 @@ pub(crate) async fn run(
     ))
     .await;
 
+    let explicit_from = from.is_some();
     let (from, environment) = match result {
         Ok(resolution) => resolution,
         Err(ProjectError::Operation(err)) => {
@@ -304,6 +317,38 @@ pub(crate) async fn run(
 
     // TODO(zanieb): Determine the executable command via the package entry points
     let executable = from.executable();
+    let site_packages = SitePackages::from_environment(&environment)?;
+
+    // Check if the provided command is not part of the executables for the `from` package,
+    // and if it's provided by another package in the environment.
+    let provider_hints = match &from {
+        ToolRequirement::Python => None,
+        ToolRequirement::Package { requirement, .. } => Some(ExecutableProviderHints::new(
+            executable,
+            requirement,
+            &site_packages,
+            invocation_source,
+        )),
+    };
+
+    if let Some(ref provider_hints) = provider_hints {
+        if provider_hints.not_from_any() {
+            if !explicit_from {
+                // If the user didn't use `--from` and the command isn't in the environment, we're now
+                // just invoking an arbitrary executable on the `PATH` and should exit instead.
+                writeln!(printer.stderr(), "{provider_hints}")?;
+                return Ok(ExitStatus::Failure);
+            }
+            // In the case where `--from` is used, we'll warn on failure if the command is not found
+            // TODO(zanieb): Consider if we should require `--with` instead of `--from` in this case?
+            // It'd be a breaking change but would make `uvx` invocations safer.
+        } else if provider_hints.not_from_expected() {
+            // However, if the user used `--from`, we shouldn't fail because they requested that the
+            // package and executable be different. We'll warn if the executable comes from another
+            // package though, because that could be confusing
+            warn_user_once!("{provider_hints}");
+        }
+    }
 
     // Construct the command
     let mut process = if cfg!(windows) {
@@ -322,12 +367,12 @@ pub(crate) async fn run(
                 .iter()
                 .flat_map(std::env::split_paths),
         ),
-    )?;
+    )
+    .context("Failed to build new PATH variable")?;
     process.env(EnvVars::PATH, new_path);
 
     // Spawn and wait for completion
     // Standard input, output, and error streams are all inherited
-    // TODO(zanieb): Throw a nicer error message if the command is not found
     let space = if args.is_empty() { "" } else { " " };
     debug!(
         "Running `{}{space}{}`",
@@ -335,35 +380,17 @@ pub(crate) async fn run(
         args.iter().map(|arg| arg.to_string_lossy()).join(" ")
     );
 
-    let site_packages = SitePackages::from_environment(&environment)?;
-
-    // We check if the provided command is not part of the executables for the `from` package.
-    // If the command is found in other packages, we warn the user about the correct package to use.
-    match &from {
-        ToolRequirement::Python => {}
-        ToolRequirement::Package {
-            requirement: from, ..
-        } => {
-            warn_executable_not_provided_by_package(
-                executable,
-                &from.name,
-                &site_packages,
-                invocation_source,
-            );
-        }
-    }
-
     let handle = match process.spawn() {
         Ok(handle) => Ok(handle),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            if let Some(exit_status) = hint_on_not_found(
-                executable,
-                &from,
-                &site_packages,
-                invocation_source,
-                printer,
-            )? {
-                return Ok(exit_status);
+            if let Some(ref provider_hints) = provider_hints {
+                if provider_hints.not_from_any() && explicit_from {
+                    // We deferred this warning earlier, because `--from` was used and the command
+                    // could have come from the `PATH`. Display a more helpful message instead of the
+                    // OS error.
+                    writeln!(printer.stderr(), "{provider_hints}")?;
+                    return Ok(ExitStatus::Failure);
+                }
             }
             Err(err)
         }
@@ -372,67 +399,6 @@ pub(crate) async fn run(
     .with_context(|| format!("Failed to spawn: `{executable}`"))?;
 
     run_to_completion(handle).await
-}
-
-/// Show a hint when a command fails due to a missing executable.
-///
-/// Returns an exit status if the caller should exit after hinting.
-fn hint_on_not_found(
-    executable: &str,
-    from: &ToolRequirement,
-    site_packages: &SitePackages,
-    invocation_source: ToolRunCommand,
-    printer: Printer,
-) -> anyhow::Result<Option<ExitStatus>> {
-    let from = match from {
-        ToolRequirement::Python => return Ok(None),
-        ToolRequirement::Package {
-            requirement: from, ..
-        } => from,
-    };
-    match get_entrypoints(&from.name, site_packages) {
-        Ok(entrypoints) => {
-            writeln!(
-                printer.stdout(),
-                "The executable `{}` was not found.",
-                executable.cyan(),
-            )?;
-            if entrypoints.is_empty() {
-                warn_user!(
-                    "Package `{}` does not provide any executables.",
-                    from.name.red()
-                );
-            } else {
-                warn_user!(
-                    "An executable named `{}` is not provided by package `{}`.",
-                    executable.cyan(),
-                    from.name.red()
-                );
-                writeln!(
-                    printer.stdout(),
-                    "The following executables are provided by `{}`:",
-                    from.name.green()
-                )?;
-                for (name, _) in entrypoints {
-                    writeln!(printer.stdout(), "- {}", name.cyan())?;
-                }
-                let suggested_command = format!(
-                    "{} --from {} <EXECUTABLE_NAME>",
-                    invocation_source, from.name
-                );
-                writeln!(
-                    printer.stdout(),
-                    "Consider using `{}` instead.",
-                    suggested_command.green()
-                )?;
-            }
-            Ok(Some(ExitStatus::Failure))
-        }
-        Err(err) => {
-            warn!("Failed to get entrypoints for `{from}`: {err}");
-            Ok(None)
-        }
-    }
 }
 
 /// Return the entry points for the specified package.
@@ -517,52 +483,152 @@ async fn show_help(
     Ok(())
 }
 
-/// Display a warning if an executable is not provided by package.
-///
-/// If found in a dependency of the requested package instead of the requested package itself, we will hint to use that instead.
-fn warn_executable_not_provided_by_package(
-    executable: &str,
-    from_package: &PackageName,
-    site_packages: &SitePackages,
+/// A set of hints about the packages that provide an executable.
+#[derive(Debug)]
+struct ExecutableProviderHints<'a> {
+    /// The requested executable for the command
+    executable: &'a str,
+    /// The package from which the executable is expected to come from
+    from: &'a Requirement,
+    /// The packages in the [`PythonEnvironment`] the command will run in
+    site_packages: &'a SitePackages,
+    /// The packages with matching executable names
+    packages: Vec<InstalledDist>,
+    /// The source of the invocation, for suggestions to the user
     invocation_source: ToolRunCommand,
-) {
-    let packages = matching_packages(executable, site_packages);
-    if !packages
-        .iter()
-        .any(|package| package.name() == from_package)
-    {
+}
+
+impl<'a> ExecutableProviderHints<'a> {
+    fn new(
+        executable: &'a str,
+        from: &'a Requirement,
+        site_packages: &'a SitePackages,
+        invocation_source: ToolRunCommand,
+    ) -> Self {
+        let packages = matching_packages(executable, site_packages);
+        ExecutableProviderHints {
+            executable,
+            from,
+            site_packages,
+            packages,
+            invocation_source,
+        }
+    }
+
+    /// If the executable is not provided by the expected package.
+    fn not_from_expected(&self) -> bool {
+        !self
+            .packages
+            .iter()
+            .any(|package| package.name() == &self.from.name)
+    }
+
+    /// If the executable is not provided by any package.
+    fn not_from_any(&self) -> bool {
+        self.packages.is_empty()
+    }
+}
+
+impl std::fmt::Display for ExecutableProviderHints<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self {
+            executable,
+            from,
+            site_packages,
+            packages,
+            invocation_source,
+        } = self;
+
         match packages.as_slice() {
-            [] => {}
+            [] => {
+                let entrypoints = match get_entrypoints(&from.name, site_packages) {
+                    Ok(entrypoints) => entrypoints,
+                    Err(err) => {
+                        warn!("Failed to get entrypoints for `{from}`: {err}");
+                        return Ok(());
+                    }
+                };
+                if entrypoints.is_empty() {
+                    write!(
+                        f,
+                        "Package `{}` does not provide any executables.",
+                        from.name.red()
+                    )?;
+                    return Ok(());
+                }
+                writeln!(
+                    f,
+                    "An executable named `{}` is not provided by package `{}`.",
+                    executable.cyan(),
+                    from.name.cyan(),
+                )?;
+                writeln!(f, "The following executables are available:")?;
+                for (name, _) in &entrypoints {
+                    writeln!(f, "- {}", name.cyan())?;
+                }
+                let name = match entrypoints.as_slice() {
+                    [entrypoint] => entrypoint.0.as_str(),
+                    _ => "<EXECUTABLE-NAME>",
+                };
+                // If the user didn't use `--from`, suggest it
+                if *executable == from.name.as_str() {
+                    let suggested_command =
+                        format!("{} --from {} {name}", invocation_source, from.name);
+                    writeln!(f, "\nUse `{}` instead.", suggested_command.green().bold())?;
+                }
+            }
+            [package] if package.name() == &from.name => {
+                write!(
+                    f,
+                    "An executable named `{}` is provided by package `{}`",
+                    executable.cyan(),
+                    from.name.cyan(),
+                )?;
+            }
             [package] => {
                 let suggested_command = format!(
                     "{invocation_source} --from {} {}",
                     package.name(),
                     executable
                 );
-                warn_user!(
+                write!(
+                    f,
                     "An executable named `{}` is not provided by package `{}` but is available via the dependency `{}`. Consider using `{}` instead.",
                     executable.cyan(),
-                    from_package.cyan(),
+                    from.name.cyan(),
                     package.name().cyan(),
                     suggested_command.green()
-                );
+                )?;
             }
             packages => {
-                let suggested_command = format!("{invocation_source} --from PKG {executable}");
                 let provided_by = packages
                     .iter()
                     .map(uv_distribution_types::Name::name)
                     .map(|name| format!("- {}", name.cyan()))
                     .join("\n");
-                warn_user!(
-                    "An executable named `{}` is not provided by package `{}` but is available via the following dependencies:\n- {}\nConsider using `{}` instead.",
-                    executable.cyan(),
-                    from_package.cyan(),
-                    provided_by,
-                    suggested_command.green(),
-                );
+                if self.not_from_expected() {
+                    let suggested_command = format!("{invocation_source} --from PKG {executable}");
+                    write!(
+                        f,
+                        "An executable named `{}` is not provided by package `{}` but is available via the following dependencies:\n- {}\nConsider using `{}` instead.",
+                        executable.cyan(),
+                        from.name.cyan(),
+                        provided_by,
+                        suggested_command.green(),
+                    )?;
+                } else {
+                    write!(
+                        f,
+                        "An executable named `{}` is provided by package `{}` but is also available via the following dependencies:\n- {}\nUnexpected behavior may occur.",
+                        executable.cyan(),
+                        from.name.cyan(),
+                        provided_by,
+                    )?;
+                }
             }
         }
+
+        Ok(())
     }
 }
 
@@ -641,7 +707,7 @@ async fn get_or_create_environment(
                 return Err(anyhow::anyhow!(
                     "Requesting the 'latest' Python version is not yet supported"
                 )
-                .into())
+                .into());
             }
         };
 
@@ -672,6 +738,7 @@ async fn get_or_create_environment(
         Some(&reporter),
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
     .into_interpreter();

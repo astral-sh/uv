@@ -124,7 +124,7 @@ impl GlobDirFilter {
 #[cfg(test)]
 mod tests {
     use crate::glob_dir_filter::GlobDirFilter;
-    use crate::portable_glob::parse_portable_glob;
+    use crate::PortableGlobParser;
     use std::path::{Path, MAIN_SEPARATOR};
     use tempfile::tempdir;
     use walkdir::WalkDir;
@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn match_directory() {
-        let patterns = PATTERNS.map(|pattern| parse_portable_glob(pattern).unwrap());
+        let patterns = PATTERNS.map(|pattern| PortableGlobParser::Pep639.parse(pattern).unwrap());
         let matcher = GlobDirFilter::from_globs(&patterns).unwrap();
         assert!(matcher.match_directory(&Path::new("path1").join("dir1")));
         assert!(matcher.match_directory(&Path::new("path2").join("dir2")));
@@ -170,11 +170,12 @@ mod tests {
             fs_err::create_dir_all(file.parent().unwrap()).unwrap();
             fs_err::File::create(file).unwrap();
         }
-        let patterns = PATTERNS.map(|pattern| parse_portable_glob(pattern).unwrap());
+        let patterns = PATTERNS.map(|pattern| PortableGlobParser::Pep639.parse(pattern).unwrap());
         let matcher = GlobDirFilter::from_globs(&patterns).unwrap();
 
         // Test the prefix filtering
-        let mut visited: Vec<_> = WalkDir::new(dir.path())
+        let visited: Vec<_> = WalkDir::new(dir.path())
+            .sort_by_file_name()
             .into_iter()
             .filter_entry(|entry| {
                 let relative = entry
@@ -196,7 +197,6 @@ mod tests {
                 relative.replace(MAIN_SEPARATOR, "/")
             })
             .collect();
-        visited.sort();
         assert_eq!(
             visited,
             [
@@ -228,12 +228,13 @@ mod tests {
             fs_err::create_dir_all(file.parent().unwrap()).unwrap();
             fs_err::File::create(file).unwrap();
         }
-        let patterns = PATTERNS.map(|pattern| parse_portable_glob(pattern).unwrap());
+        let patterns = PATTERNS.map(|pattern| PortableGlobParser::Pep639.parse(pattern).unwrap());
 
         let include_matcher = GlobDirFilter::from_globs(&patterns).unwrap();
 
         let walkdir_root = dir.path();
         let mut matches: Vec<_> = WalkDir::new(walkdir_root)
+            .sort_by_file_name()
             .into_iter()
             .filter_entry(|entry| {
                 // TODO(konsti): This should be prettier.

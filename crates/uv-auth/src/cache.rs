@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::fmt::Formatter;
 use std::hash::BuildHasherDefault;
 use std::sync::Arc;
@@ -14,11 +15,28 @@ use crate::Realm;
 
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) enum FetchUrl {
+    /// A full index URL
+    Index(Url),
+    /// A realm URL
+    Realm(Realm),
+}
+
+impl Display for FetchUrl {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::Index(index) => Display::fmt(index, f),
+            Self::Realm(realm) => Display::fmt(realm, f),
+        }
+    }
+}
+
 pub struct CredentialsCache {
     /// A cache per realm and username
     realms: RwLock<FxHashMap<(Realm, Username), Arc<Credentials>>>,
-    /// A cache tracking the result of fetches from external services
-    pub(crate) fetches: FxOnceMap<(Realm, Username), Option<Arc<Credentials>>>,
+    /// A cache tracking the result of realm or index URL fetches from external services
+    pub(crate) fetches: FxOnceMap<(FetchUrl, Username), Option<Arc<Credentials>>>,
     /// A cache per URL, uses a trie for efficient prefix queries.
     urls: RwLock<UrlTrie>,
 }
@@ -241,6 +259,8 @@ impl From<(Realm, Username)> for RealmUsername {
 
 #[cfg(test)]
 mod tests {
+    use crate::credentials::Password;
+
     use super::*;
 
     #[test]
@@ -312,5 +332,24 @@ mod tests {
 
         let url = Url::parse("https://example.com/foobar").unwrap();
         assert_eq!(trie.get(&url), None);
+    }
+
+    #[test]
+    fn test_url_with_credentials() {
+        let username = Username::new(Some(String::from("username")));
+        let password = Password::new(String::from("password"));
+        let credentials = Arc::new(Credentials::Basic {
+            username: username.clone(),
+            password: Some(password),
+        });
+        let cache = CredentialsCache::default();
+        // Insert with URL with credentials and get with redacted URL.
+        let url = Url::parse("https://username:password@example.com/foobar").unwrap();
+        cache.insert(&url, credentials.clone());
+        assert_eq!(cache.get_url(&url, &username), Some(credentials.clone()));
+        // Insert with redacted URL and get with URL with credentials.
+        let url = Url::parse("https://username:password@second-example.com/foobar").unwrap();
+        cache.insert(&url, credentials.clone());
+        assert_eq!(cache.get_url(&url, &username), Some(credentials.clone()));
     }
 }

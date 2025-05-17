@@ -24,6 +24,7 @@ uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-small-str = { workspace = true }
+uv-redacted = { workspace = true }
 uv-static = { workspace = true }
 uv-torch = { workspace = true }
 uv-version = { workspace = true }
@@ -64,4 +65,3 @@ hyper = { version = "1.4.1", features = ["server", "http1"] }
 hyper-util = { version = "0.1.8", features = ["tokio"] }
 insta = { version = "1.40.0", features = ["filters", "json", "redactions"] }
 tokio = { workspace = true }
-wiremock = { workspace = true }

@@ -12,6 +12,11 @@ impl RequiredVersion {
     pub fn contains(&self, version: &Version) -> bool {
         self.0.contains(version)
     }
+
+    /// Returns the underlying [`VersionSpecifiers`].
+    pub fn specifiers(&self) -> &VersionSpecifiers {
+        &self.0
+    }
 }
 
 impl FromStr for RequiredVersion {

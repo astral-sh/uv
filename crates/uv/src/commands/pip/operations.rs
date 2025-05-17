@@ -60,12 +60,10 @@ pub(crate) async fn read_requirements(
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
-        let hint = if requirements.iter().any(|source| {
-            matches!(
-                source,
-                RequirementsSource::Editable(_) | RequirementsSource::SourceTree(_)
-            )
-        }) {
+        let hint = if requirements
+            .iter()
+            .any(|source| matches!(source, RequirementsSource::Editable(_)))
+        {
             "Use `<dir>[extra]` syntax or `-r <file>` instead."
         } else {
             "Use `package[extra]` syntax instead."
@@ -185,25 +183,23 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             });
 
             // If any of the extras were unused, surface a warning.
-            if let ExtrasSpecification::Some(extras) = extras {
-                let mut unused_extras = extras
-                    .iter()
-                    .filter(|extra| {
-                        !resolutions
-                            .iter()
-                            .any(|resolution| resolution.extras.contains(extra))
-                    })
-                    .collect::<Vec<_>>();
-                if !unused_extras.is_empty() {
-                    unused_extras.sort_unstable();
-                    unused_extras.dedup();
-                    let s = if unused_extras.len() == 1 { "" } else { "s" };
-                    return Err(anyhow!(
-                        "Requested extra{s} not found: {}",
-                        unused_extras.iter().join(", ")
-                    )
-                    .into());
-                }
+            let mut unused_extras = extras
+                .explicit_names()
+                .filter(|extra| {
+                    !resolutions
+                        .iter()
+                        .any(|resolution| resolution.extras.contains(extra))
+                })
+                .collect::<Vec<_>>();
+            if !unused_extras.is_empty() {
+                unused_extras.sort_unstable();
+                unused_extras.dedup();
+                let s = if unused_extras.len() == 1 { "" } else { "s" };
+                return Err(anyhow!(
+                    "Requested extra{s} not found: {}",
+                    unused_extras.iter().join(", ")
+                )
+                .into());
             }
 
             // Extend the requirements with the resolved source trees.

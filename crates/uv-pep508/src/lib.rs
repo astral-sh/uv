@@ -443,27 +443,22 @@ fn parse_name<T: Pep508Url>(cursor: &mut Cursor) -> Result<PackageName, Pep508Er
         });
     }
 
-    loop {
-        if let Some((index, char @ ('A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'))) =
-            cursor.peek()
-        {
-            cursor.next();
-            // [.-_] can't be the final character
-            if cursor.peek().is_none() && matches!(char, '.' | '-' | '_') {
-                return Err(Pep508Error {
-                    message: Pep508ErrorSource::String(format!(
-                        "Package name must end with an alphanumeric character, not `{char}`"
-                    )),
-                    start: index,
-                    len: char.len_utf8(),
-                    input: cursor.to_string(),
-                });
-            }
-        } else {
-            let len = cursor.pos() - start;
-            return Ok(PackageName::from_str(cursor.slice(start, len)).unwrap());
-        }
+    cursor.take_while(|char| matches!(char, 'A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'));
+    let len = cursor.pos() - start;
+    // Unwrap-safety: The block above ensures that there is at least one char in the buffer.
+    let last = cursor.slice(start, len).chars().last().unwrap();
+    // [.-_] can't be the final character
+    if !matches!(last, 'A'..='Z' | 'a'..='z' | '0'..='9') {
+        return Err(Pep508Error {
+            message: Pep508ErrorSource::String(format!(
+                "Package name must end with an alphanumeric character, not `{last}`"
+            )),
+            start: cursor.pos() - last.len_utf8(),
+            len: last.len_utf8(),
+            input: cursor.to_string(),
+        });
     }
+    Ok(PackageName::from_str(cursor.slice(start, len)).unwrap())
 }
 
 /// Parse a potential URL from the [`Cursor`], advancing the [`Cursor`] to the end of the URL.
@@ -574,9 +569,9 @@ fn parse_extras_cursor<T: Pep508Url>(
             }
             (Some((pos, other)), false) => {
                 return Err(Pep508Error {
-                    message: Pep508ErrorSource::String(
-                        format!("Expected either `,` (separating extras) or `]` (ending the extras section), found `{other}`")
-                    ),
+                    message: Pep508ErrorSource::String(format!(
+                        "Expected either `,` (separating extras) or `]` (ending the extras section), found `{other}`"
+                    )),
                     start: pos,
                     len: 1,
                     input: cursor.to_string(),
@@ -1125,7 +1120,10 @@ mod tests {
     #[cfg(feature = "non-pep508-extensions")]
     fn direct_url_no_extras() {
         let numpy = crate::UnnamedRequirement::<VerbatimUrl>::from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl").unwrap();
-        assert_eq!(numpy.url.to_string(), "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl");
+        assert_eq!(
+            numpy.url.to_string(),
+            "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl"
+        );
         assert_eq!(*numpy.extras, []);
     }
 
@@ -1529,6 +1527,24 @@ mod tests {
           ^
     "#
         );
+    }
+
+    #[test]
+    fn parse_name_with_star() {
+        assert_snapshot!(
+            parse_pep508_err("wheel-*.whl"),
+            @r"
+        Package name must end with an alphanumeric character, not `-`
+        wheel-*.whl
+             ^
+        ");
+        assert_snapshot!(
+            parse_pep508_err("wheelѦ"),
+            @r"
+        Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `Ѧ`
+        wheelѦ
+             ^
+        ");
     }
 
     #[test]

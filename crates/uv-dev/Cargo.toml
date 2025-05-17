@@ -66,13 +66,10 @@ name = "uv-dev"
 required-features = ["dev"]
 
 [features]
-default = ["performance"]
+default = ["performance", "uv-extract/static"]
 # Actually build the dev CLI.
 dev = []
-performance = [
-  "performance-memory-allocator",
-  "uv-extract/performance"
-]
+performance = ["performance-memory-allocator"]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
 render = ["poloto", "resvg", "tagu"]
 

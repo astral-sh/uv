@@ -219,7 +219,7 @@ impl BatchPrefetcherRunner {
         selector: &CandidateSelector,
         env: &ResolverEnvironment,
     ) -> Result<(), ResolveError> {
-        let VersionsResponse::Found(ref version_map) = &**versions_response else {
+        let VersionsResponse::Found(version_map) = &**versions_response else {
             return Ok(());
         };
 

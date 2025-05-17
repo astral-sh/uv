@@ -31,16 +31,16 @@ $ docker run --rm -it ghcr.io/astral-sh/uv:debian uv --help
 The following distroless images are available:
 
 - `ghcr.io/astral-sh/uv:latest`
-- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.6.14`
-- `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.6` (the latest patch
+- `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}`, e.g., `ghcr.io/astral-sh/uv:0.7.5`
+- `ghcr.io/astral-sh/uv:{major}.{minor}`, e.g., `ghcr.io/astral-sh/uv:0.7` (the latest patch
   version)
 
 And the following derived images are available:
 
 <!-- prettier-ignore -->
-- Based on `alpine:3.20`:
+- Based on `alpine:3.21`:
     - `ghcr.io/astral-sh/uv:alpine`
-    - `ghcr.io/astral-sh/uv:alpine3.20`
+    - `ghcr.io/astral-sh/uv:alpine3.21`
 - Based on `debian:bookworm-slim`:
     - `ghcr.io/astral-sh/uv:debian-slim`
     - `ghcr.io/astral-sh/uv:bookworm-slim`
@@ -48,6 +48,7 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:debian`
     - `ghcr.io/astral-sh/uv:bookworm`
 - Based on `python3.x-alpine`:
+    - `ghcr.io/astral-sh/uv:python3.14-rc-alpine`
     - `ghcr.io/astral-sh/uv:python3.13-alpine`
     - `ghcr.io/astral-sh/uv:python3.12-alpine`
     - `ghcr.io/astral-sh/uv:python3.11-alpine`
@@ -55,6 +56,7 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:python3.9-alpine`
     - `ghcr.io/astral-sh/uv:python3.8-alpine`
 - Based on `python3.x-bookworm`:
+    - `ghcr.io/astral-sh/uv:python3.14-rc-bookworm`
     - `ghcr.io/astral-sh/uv:python3.13-bookworm`
     - `ghcr.io/astral-sh/uv:python3.12-bookworm`
     - `ghcr.io/astral-sh/uv:python3.11-bookworm`
@@ -62,6 +64,7 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:python3.9-bookworm`
     - `ghcr.io/astral-sh/uv:python3.8-bookworm`
 - Based on `python3.x-slim-bookworm`:
+    - `ghcr.io/astral-sh/uv:python3.14-rc-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.13-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.12-bookworm-slim`
     - `ghcr.io/astral-sh/uv:python3.11-bookworm-slim`
@@ -72,7 +75,7 @@ And the following derived images are available:
 
 As with the distroless image, each derived image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
-`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.6.14-alpine`.
+`ghcr.io/astral-sh/uv:{major}.{minor}-{base}`, e.g., `ghcr.io/astral-sh/uv:0.7.5-alpine`.
 
 For more details, see the [GitHub Container](https://github.com/astral-sh/uv/pkgs/container/uv)
 page.
@@ -110,7 +113,7 @@ Note this requires `curl` to be available.
 In either case, it is best practice to pin to a specific uv version, e.g., with:
 
 ```dockerfile
-COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.7.5 /uv /uvx /bin/
 ```
 
 !!! tip
@@ -128,7 +131,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /uvx /bin/
 Or, with the installer:
 
 ```dockerfile
-ADD https://astral.sh/uv/0.6.14/install.sh /uv-installer.sh
+ADD https://astral.sh/uv/0.7.5/install.sh /uv-installer.sh
 ```
 
 ### Installing a project
@@ -554,5 +557,5 @@ Verified OK
 !!! tip
 
     These examples use `latest`, but best practice is to verify the attestation for a specific
-    version tag, e.g., `ghcr.io/astral-sh/uv:0.6.14`, or (even better) the specific image digest,
+    version tag, e.g., `ghcr.io/astral-sh/uv:0.7.5`, or (even better) the specific image digest,
     such as `ghcr.io/astral-sh/uv:0.5.27@sha256:5adf09a5a526f380237408032a9308000d14d5947eafa687ad6c6a2476787b4f`.

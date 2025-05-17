@@ -917,7 +917,9 @@ mod tests {
         let cm = resolve_conflicts(cm, &known_conflicts);
         assert_eq!(
             cm.try_to_string().as_deref(),
-            Some("(python_full_version < '3.10' and sys_platform != 'darwin') or (python_full_version >= '3.10' and sys_platform == 'darwin')")
+            Some(
+                "(python_full_version < '3.10' and sys_platform != 'darwin') or (python_full_version >= '3.10' and sys_platform == 'darwin')"
+            )
         );
 
         let cm = MarkerTree::from_str("python_version >= '3.10' and extra == 'extra-3-pkg-foo'")

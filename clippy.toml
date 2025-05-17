@@ -35,4 +35,7 @@ disallowed-methods = [
   "std::fs::soft_link",
   "std::fs::symlink_metadata",
   "std::fs::write",
+  "std::os::unix::fs::symlink",
+  "std::os::windows::fs::symlink_dir",
+  "std::os::windows::fs::symlink_file",
 ]

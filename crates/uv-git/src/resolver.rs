@@ -53,7 +53,7 @@ impl GitResolver {
     pub async fn github_fast_path(
         &self,
         url: &GitUrl,
-        client: &ClientWithMiddleware,
+        client: ClientWithMiddleware,
     ) -> Result<Option<GitOid>, GitResolverError> {
         let reference = RepositoryReference::from(url);
 
@@ -120,7 +120,7 @@ impl GitResolver {
     pub async fn fetch(
         &self,
         url: &GitUrl,
-        client: impl Into<ClientWithMiddleware>,
+        client: ClientWithMiddleware,
         disable_ssl: bool,
         offline: bool,
         cache: PathBuf,

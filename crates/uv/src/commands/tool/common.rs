@@ -81,7 +81,7 @@ pub(crate) async fn refine_interpreter(
     python_downloads: PythonDownloads,
     cache: &Cache,
 ) -> anyhow::Result<Option<Interpreter>, ProjectError> {
-    let pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(ref no_solution_err)) =
+    let pip::operations::Error::Resolve(uv_resolver::ResolveError::NoSolution(no_solution_err)) =
         err
     else {
         return Ok(None);
@@ -150,6 +150,7 @@ pub(crate) async fn refine_interpreter(
         Some(reporter),
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
     .into_interpreter();

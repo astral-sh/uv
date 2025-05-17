@@ -26127,230 +26127,6 @@
     "sha256": null,
     "variant": "debug"
   },
-  "cpython-3.7.9-darwin-x86_64-none": {
-    "name": "cpython",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "darwin",
-    "libc": "none",
-    "major": 3,
-    "minor": 7,
-    "patch": 9,
-    "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200823/cpython-3.7.9-x86_64-apple-darwin-pgo-20200823T2228.tar.zst",
-    "sha256": null,
-    "variant": null
-  },
-  "cpython-3.7.9-linux-x86_64-gnu": {
-    "name": "cpython",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 7,
-    "patch": 9,
-    "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200822/cpython-3.7.9-x86_64-unknown-linux-gnu-pgo-20200823T0036.tar.zst",
-    "sha256": null,
-    "variant": null
-  },
-  "cpython-3.7.9-windows-i686-none": {
-    "name": "cpython",
-    "arch": {
-      "family": "i686",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 7,
-    "patch": 9,
-    "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200822/cpython-3.7.9-i686-pc-windows-msvc-shared-pgo-20200823T0159.tar.zst",
-    "sha256": null,
-    "variant": null
-  },
-  "cpython-3.7.9-windows-x86_64-none": {
-    "name": "cpython",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 7,
-    "patch": 9,
-    "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200822/cpython-3.7.9-x86_64-pc-windows-msvc-shared-pgo-20200823T0118.tar.zst",
-    "sha256": null,
-    "variant": null
-  },
-  "cpython-3.7.9+debug-darwin-x86_64-none": {
-    "name": "cpython",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "darwin",
-    "libc": "none",
-    "major": 3,
-    "minor": 7,
-    "patch": 9,
-    "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200823/cpython-3.7.9-x86_64-apple-darwin-debug-20200823T2228.tar.zst",
-    "sha256": null,
-    "variant": "debug"
-  },
-  "cpython-3.7.9+debug-linux-x86_64-gnu": {
-    "name": "cpython",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 7,
-    "patch": 9,
-    "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200822/cpython-3.7.9-x86_64-unknown-linux-gnu-debug-20200823T0036.tar.zst",
-    "sha256": null,
-    "variant": "debug"
-  },
-  "cpython-3.7.7-darwin-x86_64-none": {
-    "name": "cpython",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "darwin",
-    "libc": "none",
-    "major": 3,
-    "minor": 7,
-    "patch": 7,
-    "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200530/cpython-3.7.7-x86_64-apple-darwin-pgo-20200530T1845.tar.zst",
-    "sha256": null,
-    "variant": null
-  },
-  "cpython-3.7.7-linux-x86_64-gnu": {
-    "name": "cpython",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 7,
-    "patch": 7,
-    "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200517/cpython-3.7.7-x86_64-unknown-linux-gnu-pgo-20200518T0040.tar.zst",
-    "sha256": null,
-    "variant": null
-  },
-  "cpython-3.7.7-windows-i686-none": {
-    "name": "cpython",
-    "arch": {
-      "family": "i686",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 7,
-    "patch": 7,
-    "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200517/cpython-3.7.7-i686-pc-windows-msvc-shared-pgo-20200517T2153.tar.zst",
-    "sha256": null,
-    "variant": null
-  },
-  "cpython-3.7.7-windows-x86_64-none": {
-    "name": "cpython",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 7,
-    "patch": 7,
-    "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200517/cpython-3.7.7-x86_64-pc-windows-msvc-shared-pgo-20200517T2128.tar.zst",
-    "sha256": null,
-    "variant": null
-  },
-  "cpython-3.7.7+debug-darwin-x86_64-none": {
-    "name": "cpython",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "darwin",
-    "libc": "none",
-    "major": 3,
-    "minor": 7,
-    "patch": 7,
-    "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200530/cpython-3.7.7-x86_64-apple-darwin-debug-20200530T1845.tar.zst",
-    "sha256": null,
-    "variant": "debug"
-  },
-  "cpython-3.7.7+debug-linux-x86_64-gnu": {
-    "name": "cpython",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 7,
-    "patch": 7,
-    "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200517/cpython-3.7.7-x86_64-unknown-linux-gnu-debug-20200518T0040.tar.zst",
-    "sha256": null,
-    "variant": "debug"
-  },
-  "cpython-3.7.6-windows-i686-none": {
-    "name": "cpython",
-    "arch": {
-      "family": "i686",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 7,
-    "patch": 6,
-    "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200216/cpython-3.7.6-windows-x86-shared-pgo-20200217T0110.tar.zst",
-    "sha256": null,
-    "variant": null
-  },
-  "cpython-3.7.6-windows-x86_64-none": {
-    "name": "cpython",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 7,
-    "patch": 6,
-    "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20200216/cpython-3.7.6-windows-amd64-shared-pgo-20200217T0022.tar.zst",
-    "sha256": null,
-    "variant": null
-  },
   "pypy-3.11.11-darwin-aarch64-none": {
     "name": "pypy",
     "arch": {
@@ -28047,8 +27823,24 @@
     "sha256": "0894c468e7de758c509a602a28ef0ba4fbf197ccdf946c7853a7283d9bb2a345",
     "variant": null
   },
-  "pypy-3.7.13-darwin-x86_64-none": {
-    "name": "pypy",
+  "graalpy-3.11.0-darwin-aarch64-none": {
+    "name": "graalpy",
+    "arch": {
+      "family": "aarch64",
+      "variant": null
+    },
+    "os": "darwin",
+    "libc": "none",
+    "major": 3,
+    "minor": 11,
+    "patch": 0,
+    "prerelease": "",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-24.2.1/graalpy-24.2.1-macos-aarch64.tar.gz",
+    "sha256": "61e11d5176d5bb709b919979ef3525f4db1e39c404b59aa54d887f56bf8fab44",
+    "variant": null
+  },
+  "graalpy-3.11.0-darwin-x86_64-none": {
+    "name": "graalpy",
     "arch": {
       "family": "x86_64",
       "variant": null
@@ -28056,15 +27848,15 @@
     "os": "darwin",
     "libc": "none",
     "major": 3,
-    "minor": 7,
-    "patch": 13,
+    "minor": 11,
+    "patch": 0,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.9-osx64.tar.bz2",
-    "sha256": "12d92f578a200d50959e55074b20f29f93c538943e9a6e6522df1a1cc9cef542",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-24.2.1/graalpy-24.2.1-macos-amd64.tar.gz",
+    "sha256": "4bc42b36117c9ab09c4f411ec5a7a85ed58521dd20b529d971bb0ed3d0b7c363",
     "variant": null
   },
-  "pypy-3.7.13-linux-aarch64-gnu": {
-    "name": "pypy",
+  "graalpy-3.11.0-linux-aarch64-gnu": {
+    "name": "graalpy",
     "arch": {
       "family": "aarch64",
       "variant": null
@@ -28072,47 +27864,15 @@
     "os": "linux",
     "libc": "gnu",
     "major": 3,
-    "minor": 7,
-    "patch": 13,
+    "minor": 11,
+    "patch": 0,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.9-aarch64.tar.bz2",
-    "sha256": "dfc62f2c453fb851d10a1879c6e75c31ffebbf2a44d181bb06fcac4750d023fc",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-24.2.1/graalpy-24.2.1-linux-aarch64.tar.gz",
+    "sha256": "2a80800a76ee6b737d6458ba9ab30ce386dfdd5b2b2bec3ee6bc51fd8e51e7c2",
     "variant": null
   },
-  "pypy-3.7.13-linux-i686-gnu": {
-    "name": "pypy",
-    "arch": {
-      "family": "i686",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 7,
-    "patch": 13,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.9-linux32.tar.bz2",
-    "sha256": "3398cece0167b81baa219c9cd54a549443d8c0a6b553ec8ec13236281e0d86cd",
-    "variant": null
-  },
-  "pypy-3.7.13-linux-s390x-gnu": {
-    "name": "pypy",
-    "arch": {
-      "family": "s390x",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 7,
-    "patch": 13,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.9-s390x.tar.bz2",
-    "sha256": "fcab3b9e110379948217cf592229542f53c33bfe881006f95ce30ac815a6df48",
-    "variant": null
-  },
-  "pypy-3.7.13-linux-x86_64-gnu": {
-    "name": "pypy",
+  "graalpy-3.11.0-linux-x86_64-gnu": {
+    "name": "graalpy",
     "arch": {
       "family": "x86_64",
       "variant": null
@@ -28120,15 +27880,15 @@
     "os": "linux",
     "libc": "gnu",
     "major": 3,
-    "minor": 7,
-    "patch": 13,
+    "minor": 11,
+    "patch": 0,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.9-linux64.tar.bz2",
-    "sha256": "c58195124d807ecc527499ee19bc511ed753f4f2e418203ca51bc7e3b124d5d1",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-24.2.1/graalpy-24.2.1-linux-amd64.tar.gz",
+    "sha256": "55872af24819cb99efa2338db057aeda0c8f9dd412a4a6f5ea19b256ee82fd9e",
     "variant": null
   },
-  "pypy-3.7.13-windows-x86_64-none": {
-    "name": "pypy",
+  "graalpy-3.11.0-windows-x86_64-none": {
+    "name": "graalpy",
     "arch": {
       "family": "x86_64",
       "variant": null
@@ -28136,15 +27896,31 @@
     "os": "windows",
     "libc": "none",
     "major": 3,
-    "minor": 7,
-    "patch": 13,
+    "minor": 11,
+    "patch": 0,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.9-win64.zip",
-    "sha256": "8acb184b48fb3c854de0662e4d23a66b90e73b1ab73a86695022c12c745d8b00",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-24.2.1/graalpy-24.2.1-windows-amd64.zip",
+    "sha256": "bad923fb64fa2fc71bb424818aac8dcfe0cc9554abef5235d7c08e597ed778ae",
     "variant": null
   },
-  "pypy-3.7.12-darwin-x86_64-none": {
-    "name": "pypy",
+  "graalpy-3.10.0-darwin-aarch64-none": {
+    "name": "graalpy",
+    "arch": {
+      "family": "aarch64",
+      "variant": null
+    },
+    "os": "darwin",
+    "libc": "none",
+    "major": 3,
+    "minor": 10,
+    "patch": 0,
+    "prerelease": "",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-24.0.2/graalpy-24.0.2-macos-aarch64.tar.gz",
+    "sha256": "568f84b77865f5952b456840e8fa843811e0c32553a2ce777c7b460ad305f3e5",
+    "variant": null
+  },
+  "graalpy-3.10.0-darwin-x86_64-none": {
+    "name": "graalpy",
     "arch": {
       "family": "x86_64",
       "variant": null
@@ -28152,15 +27928,15 @@
     "os": "darwin",
     "libc": "none",
     "major": 3,
-    "minor": 7,
-    "patch": 12,
+    "minor": 10,
+    "patch": 0,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.8-osx64.tar.bz2",
-    "sha256": "76b8eef5b059a7e478f525615482d2a6e9feb83375e3f63c16381d80521a693f",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-24.0.2/graalpy-24.0.2-macos-amd64.tar.gz",
+    "sha256": "6fe7c46c9e4f958217f576afcab8bd65ad4fb7daabf2d25353ab7a9ca45c01d2",
     "variant": null
   },
-  "pypy-3.7.12-linux-aarch64-gnu": {
-    "name": "pypy",
+  "graalpy-3.10.0-linux-aarch64-gnu": {
+    "name": "graalpy",
     "arch": {
       "family": "aarch64",
       "variant": null
@@ -28168,47 +27944,15 @@
     "os": "linux",
     "libc": "gnu",
     "major": 3,
-    "minor": 7,
-    "patch": 12,
+    "minor": 10,
+    "patch": 0,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.8-aarch64-portable.tar.bz2",
-    "sha256": "639c76f128a856747aee23a34276fa101a7a157ea81e76394fbaf80b97dcf2f2",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-24.0.2/graalpy-24.0.2-linux-aarch64.tar.gz",
+    "sha256": "cd7e17bb0a72aefbd3dbc81c340b20d1ab080a7072ccfa9568658bdc6152911f",
     "variant": null
   },
-  "pypy-3.7.12-linux-i686-gnu": {
-    "name": "pypy",
-    "arch": {
-      "family": "i686",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 7,
-    "patch": 12,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.8-linux32.tar.bz2",
-    "sha256": "38429ec6ea1aca391821ee4fbda7358ae86de4600146643f2af2fe2c085af839",
-    "variant": null
-  },
-  "pypy-3.7.12-linux-s390x-gnu": {
-    "name": "pypy",
-    "arch": {
-      "family": "s390x",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 7,
-    "patch": 12,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.8-s390x.tar.bz2",
-    "sha256": "5c2cd3f7cf04cb96f6bcc6b02e271f5d7275867763978e66651b8d1605ef3141",
-    "variant": null
-  },
-  "pypy-3.7.12-linux-x86_64-gnu": {
-    "name": "pypy",
+  "graalpy-3.10.0-linux-x86_64-gnu": {
+    "name": "graalpy",
     "arch": {
       "family": "x86_64",
       "variant": null
@@ -28216,15 +27960,15 @@
     "os": "linux",
     "libc": "gnu",
     "major": 3,
-    "minor": 7,
-    "patch": 12,
+    "minor": 10,
+    "patch": 0,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.8-linux64.tar.bz2",
-    "sha256": "409085db79a6d90bfcf4f576dca1538498e65937acfbe03bd4909bdc262ff378",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-24.0.2/graalpy-24.0.2-linux-amd64.tar.gz",
+    "sha256": "510aa284d258e308bfa4d9df440f7739a2cf977cb9d2a0879269d9bbe485e5a4",
     "variant": null
   },
-  "pypy-3.7.12-windows-x86_64-none": {
-    "name": "pypy",
+  "graalpy-3.10.0-windows-x86_64-none": {
+    "name": "graalpy",
     "arch": {
       "family": "x86_64",
       "variant": null
@@ -28232,15 +27976,31 @@
     "os": "windows",
     "libc": "none",
     "major": 3,
-    "minor": 7,
-    "patch": 12,
+    "minor": 10,
+    "patch": 0,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.8-win64.zip",
-    "sha256": "96df67492bc8d62b2e71dddf5f6c58965a26cac9799c5f4081401af0494b3bcc",
+    "url": "https://github.com/oracle/graalpython/releases/download/graal-24.0.2/graalpy-24.0.2-windows-amd64.zip",
+    "sha256": "eb82db48b43e040ca9b906a00a746dcb6c848f9cb5d0a1a6314224d478568538",
     "variant": null
   },
-  "pypy-3.7.10-darwin-x86_64-none": {
-    "name": "pypy",
+  "graalpy-3.8.5-darwin-aarch64-none": {
+    "name": "graalpy",
+    "arch": {
+      "family": "aarch64",
+      "variant": null
+    },
+    "os": "darwin",
+    "libc": "none",
+    "major": 3,
+    "minor": 8,
+    "patch": 5,
+    "prerelease": "",
+    "url": "https://github.com/oracle/graalpython/releases/download/vm-22.3.1/graalpy-22.3.1-macos-aarch64.tar.gz",
+    "sha256": "01721ddd56094a185403099c0230f3bf1eeb5abbcc96dd3198b193da763329ab",
+    "variant": null
+  },
+  "graalpy-3.8.5-darwin-x86_64-none": {
+    "name": "graalpy",
     "arch": {
       "family": "x86_64",
       "variant": null
@@ -28248,15 +28008,15 @@
     "os": "darwin",
     "libc": "none",
     "major": 3,
-    "minor": 7,
-    "patch": 10,
+    "minor": 8,
+    "patch": 5,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.5-osx64.tar.bz2",
-    "sha256": "b3a7d3099ad83de7c267bb79ae609d5ce73b01800578ffd91ba7e221b13f80db",
+    "url": "https://github.com/oracle/graalpython/releases/download/vm-22.3.1/graalpy-22.3.1-macos-amd64.tar.gz",
+    "sha256": "24af2f441082fad2aa553cde1a1d6356d6c5ca0a6791f7910512593dcd909d09",
     "variant": null
   },
-  "pypy-3.7.10-linux-aarch64-gnu": {
-    "name": "pypy",
+  "graalpy-3.8.5-linux-aarch64-gnu": {
+    "name": "graalpy",
     "arch": {
       "family": "aarch64",
       "variant": null
@@ -28264,47 +28024,15 @@
     "os": "linux",
     "libc": "gnu",
     "major": 3,
-    "minor": 7,
-    "patch": 10,
+    "minor": 8,
+    "patch": 5,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.5-aarch64.tar.bz2",
-    "sha256": "85d83093b3ef5b863f641bc4073d057cc98bb821e16aa9361a5ff4898e70e8ee",
+    "url": "https://github.com/oracle/graalpython/releases/download/vm-22.3.1/graalpy-22.3.1-linux-aarch64.tar.gz",
+    "sha256": "e051246c5a123fe8180fdfb072843224d54bb8b859533d275f8df21700171bb5",
     "variant": null
   },
-  "pypy-3.7.10-linux-i686-gnu": {
-    "name": "pypy",
-    "arch": {
-      "family": "i686",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 7,
-    "patch": 10,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.5-linux32.tar.bz2",
-    "sha256": "3dd8b565203d372829e53945c599296fa961895130342ea13791b17c84ed06c4",
-    "variant": null
-  },
-  "pypy-3.7.10-linux-s390x-gnu": {
-    "name": "pypy",
-    "arch": {
-      "family": "s390x",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 7,
-    "patch": 10,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.5-s390x.tar.bz2",
-    "sha256": "dffdf5d73613be2c6809dc1a3cf3ee6ac2f3af015180910247ff24270b532ed5",
-    "variant": null
-  },
-  "pypy-3.7.10-linux-x86_64-gnu": {
-    "name": "pypy",
+  "graalpy-3.8.5-linux-x86_64-gnu": {
+    "name": "graalpy",
     "arch": {
       "family": "x86_64",
       "variant": null
@@ -28312,31 +28040,15 @@
     "os": "linux",
     "libc": "gnu",
     "major": 3,
-    "minor": 7,
-    "patch": 10,
+    "minor": 8,
+    "patch": 5,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.5-linux64.tar.bz2",
-    "sha256": "9000db3e87b54638e55177e68cbeb30a30fe5d17b6be48a9eb43d65b3ebcfc26",
+    "url": "https://github.com/oracle/graalpython/releases/download/vm-22.3.1/graalpy-22.3.1-linux-amd64.tar.gz",
+    "sha256": "9ef3885c8a498a70de53bc71409f3e60f36e9ce5d3d745b173fedcca1f4abd12",
     "variant": null
   },
-  "pypy-3.7.10-windows-x86_64-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "x86_64",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 7,
-    "patch": 10,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.5-win64.zip",
-    "sha256": "072bd22427178dc4e65d961f50281bd2f56e11c4e4d9f16311c703f69f46ae24",
-    "variant": null
-  },
-  "pypy-3.7.9-darwin-x86_64-none": {
-    "name": "pypy",
+  "graalpy-3.8.2-darwin-x86_64-none": {
+    "name": "graalpy",
     "arch": {
       "family": "x86_64",
       "variant": null
@@ -28344,63 +28056,15 @@
     "os": "darwin",
     "libc": "none",
     "major": 3,
-    "minor": 7,
-    "patch": 9,
+    "minor": 8,
+    "patch": 2,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.3-osx64.tar.bz2",
-    "sha256": "d72b27d5bb60813273f14f07378a08822186a66e216c5d1a768ad295b582438d",
+    "url": "https://github.com/oracle/graalpython/releases/download/vm-20.2.0/graalpython-20.2.0-macos-amd64.tar.gz",
+    "sha256": null,
     "variant": null
   },
-  "pypy-3.7.9-linux-aarch64-gnu": {
-    "name": "pypy",
-    "arch": {
-      "family": "aarch64",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 7,
-    "patch": 9,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.3-aarch64.tar.bz2",
-    "sha256": "ee4aa041558b58de6063dd6df93b3def221c4ca4c900d6a9db5b1b52135703a8",
-    "variant": null
-  },
-  "pypy-3.7.9-linux-i686-gnu": {
-    "name": "pypy",
-    "arch": {
-      "family": "i686",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 7,
-    "patch": 9,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.3-linux32.tar.bz2",
-    "sha256": "7d81b8e9fcd07c067cfe2f519ab770ec62928ee8787f952cadf2d2786246efc8",
-    "variant": null
-  },
-  "pypy-3.7.9-linux-s390x-gnu": {
-    "name": "pypy",
-    "arch": {
-      "family": "s390x",
-      "variant": null
-    },
-    "os": "linux",
-    "libc": "gnu",
-    "major": 3,
-    "minor": 7,
-    "patch": 9,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.3-s390x.tar.bz2",
-    "sha256": "92000d90b9a37f2e9cb7885f2a872adfa9e48e74bf7f84a8b8185c8181f0502d",
-    "variant": null
-  },
-  "pypy-3.7.9-linux-x86_64-gnu": {
-    "name": "pypy",
+  "graalpy-3.8.2-linux-x86_64-gnu": {
+    "name": "graalpy",
     "arch": {
       "family": "x86_64",
       "variant": null
@@ -28408,27 +28072,11 @@
     "os": "linux",
     "libc": "gnu",
     "major": 3,
-    "minor": 7,
-    "patch": 9,
+    "minor": 8,
+    "patch": 2,
     "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.3-linux64.tar.bz2",
-    "sha256": "37e2804c4661c86c857d709d28c7de716b000d31e89766599fdf5a98928b7096",
-    "variant": null
-  },
-  "pypy-3.7.9-windows-i686-none": {
-    "name": "pypy",
-    "arch": {
-      "family": "i686",
-      "variant": null
-    },
-    "os": "windows",
-    "libc": "none",
-    "major": 3,
-    "minor": 7,
-    "patch": 9,
-    "prerelease": "",
-    "url": "https://downloads.python.org/pypy/pypy3.7-v7.3.3-win32.zip",
-    "sha256": "a282ce40aa4f853e877a5dbb38f0a586a29e563ae9ba82fd50c7e5dc465fb649",
+    "url": "https://github.com/oracle/graalpython/releases/download/vm-20.2.0/graalpython-20.2.0-linux-amd64.tar.gz",
+    "sha256": null,
     "variant": null
   }
 }

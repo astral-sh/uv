@@ -8,14 +8,16 @@ use petgraph::visit::IntoNodeReferences;
 use petgraph::{Direction, Graph};
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions};
+use uv_configuration::{
+    DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults, InstallOptions,
+};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItem;
 
 use crate::graph_ops::{marker_reachability, Reachable};
 pub(crate) use crate::lock::export::pylock_toml::PylockTomlPackage;
-pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlError};
+pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;
 use crate::universal_marker::resolve_conflicts;
 use crate::{Installable, Package};
@@ -43,7 +45,7 @@ impl<'lock> ExportableRequirements<'lock> {
     fn from_lock(
         target: &impl Installable<'lock>,
         prune: &[PackageName],
-        extras: &ExtrasSpecification,
+        extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
         annotate: bool,
         install_options: &'lock InstallOptions,

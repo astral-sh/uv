@@ -44,7 +44,7 @@ uv [OPTIONS] <COMMAND>
 </dd>
 <dt><a href="#uv-self"><code>uv self</code></a></dt><dd><p>Manage the uv executable</p>
 </dd>
-<dt><a href="#uv-version"><code>uv version</code></a></dt><dd><p>Display uv&#8217;s version</p>
+<dt><a href="#uv-version"><code>uv version</code></a></dt><dd><p>Read or update the project&#8217;s version</p>
 </dd>
 <dt><a href="#uv-help"><code>uv help</code></a></dt><dd><p>Display documentation for a command</p>
 </dd>
@@ -355,7 +355,7 @@ uv run [OPTIONS] [COMMAND]
 
 </dd><dt id="uv-run--no-group"><a href="#uv-run--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 
-<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
+<p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -481,8 +481,6 @@ uv run [OPTIONS] [COMMAND]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-run--version"><a href="#uv-run--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd><dt id="uv-run--with"><a href="#uv-run--with"><code>--with</code></a> <i>with</i></dt><dd><p>Run with the given packages installed.</p>
 
 <p>When used in a project, these dependencies will be layered on top of the project environment in a separate, ephemeral environment. These dependencies are allowed to conflict with those specified by the project.</p>
@@ -575,6 +573,8 @@ uv init [OPTIONS] [PATH]
 <li><code>flit</code>:  Use <a href='https://pypi.org/project/flit-core'>flit-core</a> as the project build backend</li>
 
 <li><code>pdm</code>:  Use <a href='https://pypi.org/project/pdm-backend'>pdm-backend</a> as the project build backend</li>
+
+<li><code>poetry</code>:  Use <a href='https://pypi.org/project/poetry-core'>poetry-core</a> as the project build backend</li>
 
 <li><code>setuptools</code>:  Use <a href='https://pypi.org/project/setuptools'>setuptools</a> as the project build backend</li>
 
@@ -730,8 +730,6 @@ uv init [OPTIONS] [PATH]
 </dd><dt id="uv-init--verbose"><a href="#uv-init--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-init--version"><a href="#uv-init--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -1070,9 +1068,11 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 
-</dd><dt id="uv-add--raw-sources"><a href="#uv-add--raw-sources"><code>--raw-sources</code></a></dt><dd><p>Add source requirements to <code>project.dependencies</code>, rather than <code>tool.uv.sources</code>.</p>
+</dd><dt id="uv-add--raw"><a href="#uv-add--raw"><code>--raw</code></a>, <code>--raw-sources</code></dt><dd><p>Add a dependency as provided.</p>
 
-<p>By default, uv will use the <code>tool.uv.sources</code> section to record source information for Git, local, editable, and direct URL requirements.</p>
+<p>By default, uv will use the <code>tool.uv.sources</code> section to record source information for Git, local, editable, and direct URL requirements. When <code>--raw</code> is provided, uv will add source requirements to <code>project.dependencies</code>, rather than <code>tool.uv.sources</code>.</p>
+
+<p>Additionally, by default, uv will add bounds to your dependency, e.g., <code>foo&gt;=1.0.0</code>. When <code>--raw</code> is provided, uv will add the dependency without bounds.</p>
 
 </dd><dt id="uv-add--refresh"><a href="#uv-add--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
 
@@ -1113,8 +1113,6 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 </dd><dt id="uv-add--verbose"><a href="#uv-add--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-add--version"><a href="#uv-add--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -1462,8 +1460,6 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-remove--version"><a href="#uv-remove--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ## uv sync
@@ -1757,7 +1753,7 @@ uv sync [OPTIONS]
 
 </dd><dt id="uv-sync--no-group"><a href="#uv-sync--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 
-<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
+<p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -1887,8 +1883,6 @@ uv sync [OPTIONS]
 </dd><dt id="uv-sync--verbose"><a href="#uv-sync--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-sync--version"><a href="#uv-sync--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -2206,15 +2200,13 @@ uv lock [OPTIONS]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-lock--version"><a href="#uv-lock--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ## uv export
 
 Export the project's lockfile to an alternate format.
 
-At present, only `requirements-txt` is supported.
+At present, both `requirements.txt` and `pylock.toml` (PEP 751) formats are supported.
 
 The project is re-locked before exporting unless the `--locked` or `--frozen` flag is provided.
 
@@ -2472,11 +2464,11 @@ uv export [OPTIONS]
 
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
 
-</dd><dt id="uv-export--no-editable"><a href="#uv-export--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
+</dd><dt id="uv-export--no-editable"><a href="#uv-export--no-editable"><code>--no-editable</code></a></dt><dd><p>Export any editable dependencies, including the project and any workspace members, as non-editable</p>
 
 </dd><dt id="uv-export--no-emit-package"><a href="#uv-export--no-emit-package"><code>--no-emit-package</code></a>, <code>--no-install-package</code> <i>no-emit-package</i></dt><dd><p>Do not emit the given package(s).</p>
 
-<p>By default, all of the project&#8217;s dependencies are included in the exported requirements file. The <code>--no-install-package</code> option allows exclusion of specific packages.</p>
+<p>By default, all of the project&#8217;s dependencies are included in the exported requirements file. The <code>--no-emit-package</code> option allows exclusion of specific packages.</p>
 
 </dd><dt id="uv-export--no-emit-project"><a href="#uv-export--no-emit-project"><code>--no-emit-project</code></a>, <code>--no-install-project</code></dt><dd><p>Do not emit the current project.</p>
 
@@ -2492,7 +2484,7 @@ uv export [OPTIONS]
 
 </dd><dt id="uv-export--no-group"><a href="#uv-export--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 
-<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
+<p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -2614,8 +2606,6 @@ uv export [OPTIONS]
 </dd><dt id="uv-export--verbose"><a href="#uv-export--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-export--version"><a href="#uv-export--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -2855,7 +2845,7 @@ uv tree [OPTIONS]
 
 </dd><dt id="uv-tree--no-group"><a href="#uv-tree--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 
-<p>This options always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
+<p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
 
 <p>May be provided multiple times.</p>
 
@@ -3058,8 +3048,6 @@ uv tree [OPTIONS]
 </dd><dt id="uv-tree--verbose"><a href="#uv-tree--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-tree--version"><a href="#uv-tree--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -3433,8 +3421,6 @@ uv tool run [OPTIONS] [COMMAND]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-tool-run--version"><a href="#uv-tool-run--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd><dt id="uv-tool-run--with"><a href="#uv-tool-run--with"><code>--with</code></a> <i>with</i></dt><dd><p>Run with the given packages installed</p>
 
 </dd><dt id="uv-tool-run--with-editable"><a href="#uv-tool-run--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Run with the given packages installed in editable mode</p>
@@ -3775,13 +3761,11 @@ uv tool install [OPTIONS] <PACKAGE>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-tool-install--version"><a href="#uv-tool-install--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
-</dd><dt id="uv-tool-install--with"><a href="#uv-tool-install--with"><code>--with</code></a> <i>with</i></dt><dd><p>Include the following extra requirements</p>
+</dd><dt id="uv-tool-install--with"><a href="#uv-tool-install--with"><code>--with</code></a> <i>with</i></dt><dd><p>Include the following additional requirements</p>
 
 </dd><dt id="uv-tool-install--with-editable"><a href="#uv-tool-install--with-editable"><code>--with-editable</code></a> <i>with-editable</i></dt><dd><p>Include the given packages in editable mode</p>
 
-</dd><dt id="uv-tool-install--with-requirements"><a href="#uv-tool-install--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Run all requirements listed in the given <code>requirements.txt</code> files</p>
+</dd><dt id="uv-tool-install--with-requirements"><a href="#uv-tool-install--with-requirements"><code>--with-requirements</code></a> <i>with-requirements</i></dt><dd><p>Include all requirements listed in the given <code>requirements.txt</code> files</p>
 
 </dd></dl>
 
@@ -4084,8 +4068,6 @@ uv tool upgrade [OPTIONS] <NAME>...
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-tool-upgrade--version"><a href="#uv-tool-upgrade--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv tool list
@@ -4196,11 +4178,11 @@ uv tool list [OPTIONS]
 
 </dd><dt id="uv-tool-list--show-version-specifiers"><a href="#uv-tool-list--show-version-specifiers"><code>--show-version-specifiers</code></a></dt><dd><p>Whether to display the version specifier(s) used to install each tool</p>
 
+</dd><dt id="uv-tool-list--show-with"><a href="#uv-tool-list--show-with"><code>--show-with</code></a></dt><dd><p>Whether to display the additional requirements installed with each tool</p>
+
 </dd><dt id="uv-tool-list--verbose"><a href="#uv-tool-list--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-tool-list--version"><a href="#uv-tool-list--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -4322,8 +4304,6 @@ uv tool uninstall [OPTIONS] <NAME>...
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-tool-uninstall--version"><a href="#uv-tool-uninstall--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv tool update-shell
@@ -4441,8 +4421,6 @@ uv tool update-shell [OPTIONS]
 </dd><dt id="uv-tool-update-shell--verbose"><a href="#uv-tool-update-shell--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-tool-update-shell--version"><a href="#uv-tool-update-shell--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -4579,8 +4557,6 @@ uv tool dir [OPTIONS]
 </dd><dt id="uv-tool-dir--verbose"><a href="#uv-tool-dir--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-tool-dir--version"><a href="#uv-tool-dir--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -4798,6 +4774,11 @@ uv python list [OPTIONS] [REQUEST]
 <p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
 
 <p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
+</dd><dt id="uv-python-list--python-downloads-json-url"><a href="#uv-python-list--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations.</p>
+
+<p>Note that currently, only local paths are supported.</p>
+
+<p>May also be set with the <code>UV_PYTHON_DOWNLOADS_JSON_URL</code> environment variable.</p>
 </dd><dt id="uv-python-list--quiet"><a href="#uv-python-list--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
@@ -4809,8 +4790,6 @@ uv python list [OPTIONS] [REQUEST]
 </dd><dt id="uv-python-list--verbose"><a href="#uv-python-list--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-python-list--version"><a href="#uv-python-list--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -4971,6 +4950,11 @@ uv python install [OPTIONS] [TARGETS]...
 <p>Distributions can be read from a local directory by using the <code>file://</code> URL scheme.</p>
 
 <p>May also be set with the <code>UV_PYPY_INSTALL_MIRROR</code> environment variable.</p>
+</dd><dt id="uv-python-install--python-downloads-json-url"><a href="#uv-python-install--python-downloads-json-url"><code>--python-downloads-json-url</code></a> <i>python-downloads-json-url</i></dt><dd><p>URL pointing to JSON of custom Python installations.</p>
+
+<p>Note that currently, only local paths are supported.</p>
+
+<p>May also be set with the <code>UV_PYTHON_DOWNLOADS_JSON_URL</code> environment variable.</p>
 </dd><dt id="uv-python-install--quiet"><a href="#uv-python-install--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
@@ -4982,8 +4966,6 @@ uv python install [OPTIONS] [TARGETS]...
 </dd><dt id="uv-python-install--verbose"><a href="#uv-python-install--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-python-install--version"><a href="#uv-python-install--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -5123,8 +5105,6 @@ uv python find [OPTIONS] [REQUEST]
 </dd><dt id="uv-python-find--verbose"><a href="#uv-python-find--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-python-find--version"><a href="#uv-python-find--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -5274,8 +5254,6 @@ uv python pin [OPTIONS] [REQUEST]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-python-pin--version"><a href="#uv-python-pin--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv python dir
@@ -5410,8 +5388,6 @@ uv python dir [OPTIONS]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-python-dir--version"><a href="#uv-python-dir--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv python uninstall
@@ -5537,8 +5513,6 @@ uv python uninstall [OPTIONS] <TARGETS>...
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-python-uninstall--version"><a href="#uv-python-uninstall--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ## uv pip
@@ -5553,9 +5527,9 @@ uv pip [OPTIONS] <COMMAND>
 
 <h3 class="cli-reference">Commands</h3>
 
-<dl class="cli-reference"><dt><a href="#uv-pip-compile"><code>uv pip compile</code></a></dt><dd><p>Compile a <code>requirements.in</code> file to a <code>requirements.txt</code> file</p>
+<dl class="cli-reference"><dt><a href="#uv-pip-compile"><code>uv pip compile</code></a></dt><dd><p>Compile a <code>requirements.in</code> file to a <code>requirements.txt</code> or <code>pylock.toml</code> file</p>
 </dd>
-<dt><a href="#uv-pip-sync"><code>uv pip sync</code></a></dt><dd><p>Sync an environment with a <code>requirements.txt</code> file</p>
+<dt><a href="#uv-pip-sync"><code>uv pip sync</code></a></dt><dd><p>Sync an environment with a <code>requirements.txt</code> or <code>pylock.toml</code> file</p>
 </dd>
 <dt><a href="#uv-pip-install"><code>uv pip install</code></a></dt><dd><p>Install packages into an environment</p>
 </dd>
@@ -5575,7 +5549,7 @@ uv pip [OPTIONS] <COMMAND>
 
 ### uv pip compile
 
-Compile a `requirements.in` file to a `requirements.txt` file
+Compile a `requirements.in` file to a `requirements.txt` or `pylock.toml` file
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -6073,6 +6047,8 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 
 <li><code>cpu</code>:  Use the CPU-only PyTorch index</li>
 
+<li><code>cu128</code>:  Use the PyTorch index for CUDA 12.8</li>
+
 <li><code>cu126</code>:  Use the PyTorch index for CUDA 12.6</li>
 
 <li><code>cu125</code>:  Use the PyTorch index for CUDA 12.5</li>
@@ -6133,17 +6109,15 @@ uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-pip-compile--version"><a href="#uv-pip-compile--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv pip sync
 
-Sync an environment with a `requirements.txt` file.
+Sync an environment with a `requirements.txt` or `pylock.toml` file.
 
-When syncing an environment, any packages not listed in the `requirements.txt` file will be removed. To retain extraneous packages, use `uv pip install` instead.
+When syncing an environment, any packages not listed in the `requirements.txt` or `pylock.toml` file will be removed. To retain extraneous packages, use `uv pip install` instead.
 
-The `requirements.txt` file is presumed to be the output of a `pip compile` or `uv export` operation, in which it will include all transitive dependencies. If transitive dependencies are not present in the file, they will not be installed. Use `--strict` to warn if any transitive dependencies are missing.
+The input file is presumed to be the output of a `pip compile` or `uv export` operation, in which it will include all transitive dependencies. If transitive dependencies are not present in the file, they will not be installed. Use `--strict` to warn if any transitive dependencies are missing.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -6548,6 +6522,8 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 
 <li><code>cpu</code>:  Use the CPU-only PyTorch index</li>
 
+<li><code>cu128</code>:  Use the PyTorch index for CUDA 12.8</li>
+
 <li><code>cu126</code>:  Use the PyTorch index for CUDA 12.6</li>
 
 <li><code>cu125</code>:  Use the PyTorch index for CUDA 12.5</li>
@@ -6597,8 +6573,6 @@ uv pip sync [OPTIONS] <SRC_FILE>...
 </dd><dt id="uv-pip-sync--verbose"><a href="#uv-pip-sync--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-pip-sync--version"><a href="#uv-pip-sync--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -7046,7 +7020,7 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 </ul>
 
 <p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p>
-</dd><dt id="uv-pip-install--requirements"><a href="#uv-pip-install--requirements"><code>--requirements</code></a>, <code>--requirement</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Install all packages listed in the given <code>requirements.txt</code> files.</p>
+</dd><dt id="uv-pip-install--requirements"><a href="#uv-pip-install--requirements"><code>--requirements</code></a>, <code>--requirement</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Install all packages listed in the given <code>requirements.txt</code> or <code>pylock.toml</code> files.</p>
 
 <p>If a <code>pyproject.toml</code>, <code>setup.py</code>, or <code>setup.cfg</code> file is provided, uv will extract the requirements for the relevant project.</p>
 
@@ -7094,6 +7068,8 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 <li><code>auto</code>:  Select the appropriate PyTorch index based on the operating system and CUDA driver version</li>
 
 <li><code>cpu</code>:  Use the CPU-only PyTorch index</li>
+
+<li><code>cu128</code>:  Use the PyTorch index for CUDA 12.8</li>
 
 <li><code>cu126</code>:  Use the PyTorch index for CUDA 12.6</li>
 
@@ -7148,8 +7124,6 @@ uv pip install [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>|--editable <EDIT
 </dd><dt id="uv-pip-install--user"><a href="#uv-pip-install--user"><code>--user</code></a></dt><dt id="uv-pip-install--verbose"><a href="#uv-pip-install--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-pip-install--version"><a href="#uv-pip-install--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -7310,8 +7284,6 @@ uv pip uninstall [OPTIONS] <PACKAGE|--requirements <REQUIREMENTS>>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-pip-uninstall--version"><a href="#uv-pip-uninstall--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv pip freeze
@@ -7443,8 +7415,6 @@ uv pip freeze [OPTIONS]
 </dd><dt id="uv-pip-freeze--verbose"><a href="#uv-pip-freeze--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-pip-freeze--version"><a href="#uv-pip-freeze--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -7666,8 +7636,6 @@ uv pip list [OPTIONS]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-pip-list--version"><a href="#uv-pip-list--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv pip show
@@ -7803,8 +7771,6 @@ uv pip show [OPTIONS] [PACKAGE]...
 </dd><dt id="uv-pip-show--verbose"><a href="#uv-pip-show--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-pip-show--version"><a href="#uv-pip-show--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -8019,8 +7985,6 @@ uv pip tree [OPTIONS]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-pip-tree--version"><a href="#uv-pip-tree--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv pip check
@@ -8146,8 +8110,6 @@ uv pip check [OPTIONS]
 </dd><dt id="uv-pip-check--verbose"><a href="#uv-pip-check--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-pip-check--version"><a href="#uv-pip-check--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -8410,8 +8372,6 @@ uv venv [OPTIONS] [PATH]
 </dd><dt id="uv-venv--verbose"><a href="#uv-venv--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-venv--version"><a href="#uv-venv--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -8766,8 +8726,6 @@ uv build [OPTIONS] [SRC]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-build--version"><a href="#uv-build--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd><dt id="uv-build--wheel"><a href="#uv-build--wheel"><code>--wheel</code></a></dt><dd><p>Build a binary distribution (&quot;wheel&quot;) from the given directory</p>
 
 </dd></dl>
@@ -8963,8 +8921,6 @@ uv publish --publish-url https://upload.pypi.org/legacy/ --check-url https://pyp
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-publish--version"><a href="#uv-publish--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ## uv cache
@@ -9103,8 +9059,6 @@ uv cache clean [OPTIONS] [PACKAGE]...
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-cache-clean--version"><a href="#uv-cache-clean--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ### uv cache prune
@@ -9222,8 +9176,6 @@ uv cache prune [OPTIONS]
 </dd><dt id="uv-cache-prune--verbose"><a href="#uv-cache-prune--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-cache-prune--version"><a href="#uv-cache-prune--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -9345,8 +9297,6 @@ uv cache dir [OPTIONS]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-cache-dir--version"><a href="#uv-cache-dir--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
 ## uv self
@@ -9362,6 +9312,8 @@ uv self [OPTIONS] <COMMAND>
 <h3 class="cli-reference">Commands</h3>
 
 <dl class="cli-reference"><dt><a href="#uv-self-update"><code>uv self update</code></a></dt><dd><p>Update uv</p>
+</dd>
+<dt><a href="#uv-self-version"><code>uv self version</code></a></dt><dd><p>Display uv&#8217;s version</p>
 </dd>
 </dl>
 
@@ -9422,6 +9374,8 @@ uv self update [OPTIONS] [TARGET_VERSION]
 <p>Relative paths are resolved with the given directory as the base.</p>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
+
+</dd><dt id="uv-self-update--dry-run"><a href="#uv-self-update--dry-run"><code>--dry-run</code></a></dt><dd><p>Run without performing the update</p>
 
 </dd><dt id="uv-self-update--help"><a href="#uv-self-update--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
@@ -9484,19 +9438,139 @@ uv self update [OPTIONS] [TARGET_VERSION]
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
-</dd><dt id="uv-self-update--version"><a href="#uv-self-update--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
-
 </dd></dl>
 
-## uv version
+### uv self version
 
 Display uv's version
 
 <h3 class="cli-reference">Usage</h3>
 
 ```
-uv version [OPTIONS]
+uv self version [OPTIONS]
 ```
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="uv-self-version--allow-insecure-host"><a href="#uv-self-version--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
+</dd><dt id="uv-self-version--cache-dir"><a href="#uv-self-version--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+
+<p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
+
+<p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
+
+<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
+</dd><dt id="uv-self-version--color"><a href="#uv-self-version--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
+</dd><dt id="uv-self-version--config-file"><a href="#uv-self-version--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+
+<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
+
+<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt id="uv-self-version--directory"><a href="#uv-self-version--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
+</dd><dt id="uv-self-version--help"><a href="#uv-self-version--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+
+</dd><dt id="uv-self-version--managed-python"><a href="#uv-self-version--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
+
+<p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
+
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
+</dd><dt id="uv-self-version--native-tls"><a href="#uv-self-version--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
+
+<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
+
+<p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
+
+<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
+</dd><dt id="uv-self-version--no-cache"><a href="#uv-self-version--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+
+<p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
+</dd><dt id="uv-self-version--no-config"><a href="#uv-self-version--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+
+<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
+
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt id="uv-self-version--no-managed-python"><a href="#uv-self-version--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
+
+<p>Instead, uv will search for a suitable Python version on the system.</p>
+
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
+</dd><dt id="uv-self-version--no-progress"><a href="#uv-self-version--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+
+<p>For example, spinners or progress bars.</p>
+
+<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
+</dd><dt id="uv-self-version--no-python-downloads"><a href="#uv-self-version--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
+
+</dd><dt id="uv-self-version--offline"><a href="#uv-self-version--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+
+<p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
+</dd><dt id="uv-self-version--output-format"><a href="#uv-self-version--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dt id="uv-self-version--project"><a href="#uv-self-version--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
+</dd><dt id="uv-self-version--quiet"><a href="#uv-self-version--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
+
+</dd><dt id="uv-self-version--short"><a href="#uv-self-version--short"><code>--short</code></a></dt><dd><p>Only print the version</p>
+
+</dd><dt id="uv-self-version--verbose"><a href="#uv-self-version--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+
+<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
+
+</dd></dl>
+
+## uv version
+
+Read or update the project's version
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+uv version [OPTIONS] [VALUE]
+```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="uv-version--value"><a href="#uv-version--value"<code>VALUE</code></a></dt><dd><p>Set the project version to this value</p>
+
+<p>To update the project using semantic versioning components instead, use <code>--bump</code>.</p>
+
+</dd></dl>
 
 <h3 class="cli-reference">Options</h3>
 
@@ -9509,6 +9583,17 @@ uv version [OPTIONS]
 <p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
+</dd><dt id="uv-version--bump"><a href="#uv-version--bump"><code>--bump</code></a> <i>bump</i></dt><dd><p>Update the project version using the given semantics</p>
+
+<p>Possible values:</p>
+
+<ul>
+<li><code>major</code>:  Increase the major version (1.2.3 =&gt; 2.0.0)</li>
+
+<li><code>minor</code>:  Increase the minor version (1.2.3 =&gt; 1.3.0)</li>
+
+<li><code>patch</code>:  Increase the patch version (1.2.3 =&gt; 1.2.4)</li>
+</ul>
 </dd><dt id="uv-version--cache-dir"><a href="#uv-version--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
@@ -9539,6 +9624,10 @@ uv version [OPTIONS]
 <p>Relative paths are resolved with the given directory as the base.</p>
 
 <p>See <code>--project</code> to only change the project root directory.</p>
+
+</dd><dt id="uv-version--dry-run"><a href="#uv-version--dry-run"><code>--dry-run</code></a></dt><dd><p>Don&#8217;t write a new version to the <code>pyproject.toml</code></p>
+
+<p>Instead, the version will be displayed.</p>
 
 </dd><dt id="uv-version--help"><a href="#uv-version--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 
@@ -9594,11 +9683,13 @@ uv version [OPTIONS]
 
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 
+</dd><dt id="uv-version--short"><a href="#uv-version--short"><code>--short</code></a></dt><dd><p>Only show the version</p>
+
+<p>By default, uv will show the project name before the version.</p>
+
 </dd><dt id="uv-version--verbose"><a href="#uv-version--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-version--version"><a href="#uv-version--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
@@ -9773,8 +9864,6 @@ uv help [OPTIONS] [COMMAND]...
 </dd><dt id="uv-help--verbose"><a href="#uv-help--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd><dt id="uv-help--version"><a href="#uv-help--version"><code>--version</code></a>, <code>-V</code></dt><dd><p>Display the uv version</p>
 
 </dd></dl>
 
