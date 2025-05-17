@@ -9,7 +9,6 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use tracing::debug;
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -147,6 +146,7 @@ pub(crate) async fn lock(
                 python_preference,
                 python_downloads,
                 &install_mirrors,
+                false,
                 no_config,
                 Some(false),
                 cache,
@@ -161,6 +161,7 @@ pub(crate) async fn lock(
                 python_preference,
                 python_downloads,
                 &install_mirrors,
+                false,
                 no_config,
                 Some(false),
                 cache,
@@ -333,7 +334,7 @@ impl<'env> LockOperation<'env> {
 
                 // If the lockfile changed, return an error.
                 if matches!(result, LockResult::Changed(_, _)) {
-                    return Err(ProjectError::LockMismatch);
+                    return Err(ProjectError::LockMismatch(Box::new(result.into_lock())));
                 }
 
                 Ok(result)
@@ -530,9 +531,13 @@ async fn do_lock(
         if requires_python.is_unbounded() {
             let default =
                 RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-            warn_user_once!("The workspace `requires-python` value (`{requires_python}`) does not contain a lower bound. Add a lower bound to indicate the minimum compatible Python version (e.g., `{default}`).");
+            warn_user_once!(
+                "The workspace `requires-python` value (`{requires_python}`) does not contain a lower bound. Add a lower bound to indicate the minimum compatible Python version (e.g., `{default}`)."
+            );
         } else if requires_python.is_exact_without_patch() {
-            warn_user_once!("The workspace `requires-python` value (`{requires_python}`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `{requires_python}.0`). Did you mean `{requires_python}.*`?");
+            warn_user_once!(
+                "The workspace `requires-python` value (`{requires_python}`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `{requires_python}.0`). Did you mean `{requires_python}.*`?"
+            );
         }
         requires_python
     } else {
@@ -567,6 +572,13 @@ async fn do_lock(
     let python_requirement =
         PythonRequirement::from_requires_python(interpreter, requires_python.clone());
 
+    // Initialize the client.
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .keyring(*keyring_provider)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
@@ -589,14 +601,10 @@ async fn do_lock(
     }
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .url_auth_policies(UrlAuthPolicies::from(index_locations))
-        .index_urls(index_locations.index_urls())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
+        .index_locations(index_locations)
         .index_strategy(*index_strategy)
-        .keyring(*keyring_provider)
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -1012,8 +1020,12 @@ impl ValidatedLock {
         if let Err((fork_markers_union, environments_union)) = lock.check_marker_coverage() {
             warn_user!(
                 "Ignoring existing lockfile due to fork markers not covering the supported environments: `{}` vs `{}`",
-                fork_markers_union.try_to_string().unwrap_or("true".to_string()),
-                environments_union.try_to_string().unwrap_or("true".to_string()),
+                fork_markers_union
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
+                environments_union
+                    .try_to_string()
+                    .unwrap_or("true".to_string()),
             );
             return Ok(Self::Versions(lock));
         }
@@ -1179,7 +1191,8 @@ impl ValidatedLock {
             }
             SatisfiesResult::MissingLocalIndex(name, version, index) => {
                 debug!(
-                    "Ignoring existing lockfile due to missing local index: `{name}` `{version}` from `{}`", index.display()
+                    "Ignoring existing lockfile due to missing local index: `{name}` `{version}` from `{}`",
+                    index.display()
                 );
                 Ok(Self::Preferable(lock))
             }

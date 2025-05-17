@@ -27,13 +27,18 @@ pub enum DistExtension {
 )]
 #[rkyv(derive(Debug))]
 pub enum SourceDistExtension {
-    Zip,
-    TarGz,
+    Tar,
     TarBz2,
+    TarGz,
+    TarLz,
+    TarLzma,
     TarXz,
     TarZst,
-    TarLzma,
-    Tar,
+    Tbz,
+    Tgz,
+    Tlz,
+    Txz,
+    Zip,
 }
 
 impl DistExtension {
@@ -71,14 +76,15 @@ impl SourceDistExtension {
         match extension {
             "zip" => Ok(Self::Zip),
             "tar" => Ok(Self::Tar),
-            "tgz" => Ok(Self::TarGz),
-            "tbz" => Ok(Self::TarBz2),
-            "txz" => Ok(Self::TarXz),
-            "tlz" => Ok(Self::TarLzma),
+            "tgz" => Ok(Self::Tgz),
+            "tbz" => Ok(Self::Tbz),
+            "txz" => Ok(Self::Txz),
+            "tlz" => Ok(Self::Tlz),
             "gz" if is_tar(path.as_ref()) => Ok(Self::TarGz),
             "bz2" if is_tar(path.as_ref()) => Ok(Self::TarBz2),
             "xz" if is_tar(path.as_ref()) => Ok(Self::TarXz),
-            "lz" | "lzma" if is_tar(path.as_ref()) => Ok(Self::TarLzma),
+            "lz" if is_tar(path.as_ref()) => Ok(Self::TarLz),
+            "lzma" if is_tar(path.as_ref()) => Ok(Self::TarLzma),
             "zst" if is_tar(path.as_ref()) => Ok(Self::TarZst),
             _ => Err(ExtensionError::SourceDist),
         }
@@ -87,13 +93,18 @@ impl SourceDistExtension {
     /// Return the name for the extension.
     pub fn name(&self) -> &'static str {
         match self {
-            Self::Zip => "zip",
-            Self::TarGz => "tar.gz",
+            Self::Tar => "tar",
             Self::TarBz2 => "tar.bz2",
+            Self::TarGz => "tar.gz",
+            Self::TarLz => "tar.lz",
+            Self::TarLzma => "tar.lzma",
             Self::TarXz => "tar.xz",
             Self::TarZst => "tar.zst",
-            Self::TarLzma => "tar.lzma",
-            Self::Tar => "tar",
+            Self::Tbz => "tbz",
+            Self::Tgz => "tgz",
+            Self::Tlz => "tlz",
+            Self::Txz => "txz",
+            Self::Zip => "zip",
         }
     }
 }
@@ -106,8 +117,12 @@ impl Display for SourceDistExtension {
 
 #[derive(Error, Debug)]
 pub enum ExtensionError {
-    #[error("`.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`")]
+    #[error(
+        "`.whl`, `.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`"
+    )]
     Dist,
-    #[error("`.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`")]
+    #[error(
+        "`.tar.gz`, `.zip`, `.tar.bz2`, `.tar.lz`, `.tar.lzma`, `.tar.xz`, `.tar.zst`, `.tar`, `.tbz`, `.tgz`, `.tlz`, or `.txz`"
+    )]
     SourceDist,
 }

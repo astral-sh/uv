@@ -6,6 +6,7 @@ use itertools::Itertools;
 use tracing::debug;
 use uv_dirs::user_uv_config_dir;
 use uv_fs::Simplified;
+use uv_warnings::warn_user_once;
 
 use crate::PythonRequest;
 
@@ -69,7 +70,26 @@ impl PythonVersionFile {
         working_directory: impl AsRef<Path>,
         options: &DiscoveryOptions<'_>,
     ) -> Result<Option<Self>, std::io::Error> {
-        let Some(path) = Self::find_nearest(working_directory, options) else {
+        let Some(path) = Self::find_nearest(&working_directory, options) else {
+            if let Some(stop_discovery_at) = options.stop_discovery_at {
+                if stop_discovery_at == working_directory.as_ref() {
+                    debug!(
+                        "No Python version file found in workspace: {}",
+                        working_directory.as_ref().display()
+                    );
+                } else {
+                    debug!(
+                        "No Python version file found between working directory `{}` and workspace root `{}`",
+                        working_directory.as_ref().display(),
+                        stop_discovery_at.display()
+                    );
+                }
+            } else {
+                debug!(
+                    "No Python version file found in ancestors of working directory: {}",
+                    working_directory.as_ref().display()
+                );
+            }
             // Not found in directory or its ancestors. Looking in user-level config.
             return Ok(match user_uv_config_dir() {
                 Some(user_dir) => Self::discover_user_config(user_dir, options)
@@ -152,6 +172,17 @@ impl PythonVersionFile {
                     })
                     .map(ToString::to_string)
                     .map(|version| PythonRequest::parse(&version))
+                    .filter(|request| {
+                        if let PythonRequest::ExecutableName(name) = request {
+                            warn_user_once!(
+                                "Ignoring unsupported Python request `{name}` in version file: {}",
+                                path.display()
+                            );
+                            false
+                        } else {
+                            true
+                        }
+                    })
                     .collect();
                 Ok(Some(Self { path, versions }))
             }

@@ -17,20 +17,21 @@ use uv_cache::Cache;
 use uv_cli::ExternalCommand;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, DependencyGroups, DryRun, EditableMode, ExtrasSpecification, InstallOptions,
-    PreviewMode,
+    Concurrency, Constraints, DependencyGroups, DryRun, EditableMode, ExtrasSpecification,
+    InstallOptions, PreviewMode,
 };
+use uv_distribution_types::Requirement;
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified};
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::{DefaultGroups, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_python::{
     EnvironmentPreference, Interpreter, PyVenvConfiguration, PythonDownloads, PythonEnvironment,
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
-use uv_resolver::Lock;
+use uv_resolver::{Installable, Lock, Preference};
 use uv_scripts::Pep723Item;
 use uv_settings::PythonInstallMirrors;
 use uv_shell::runnable::WindowsRunnable;
@@ -48,8 +49,9 @@ use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     default_dependency_groups, script_specification, update_environment,
-    validate_project_requires_python, EnvironmentSpecification, ProjectEnvironment, ProjectError,
-    ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
+    validate_project_requires_python, EnvironmentSpecification, PreferenceSource,
+    ProjectEnvironment, ProjectError, ScriptEnvironment, ScriptInterpreter, UniversalState,
+    WorkspacePython,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
@@ -186,6 +188,9 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     // Initialize any output reporters.
     let download_reporter = PythonDownloadReporter::single(printer);
 
+    // The lockfile used for the base environment.
+    let mut base_lock: Option<(Lock, PathBuf)> = None;
+
     // Determine whether the command to execute is a PEP 723 script.
     let temp_dir;
     let script_interpreter = if let Some(script) = script {
@@ -223,6 +228,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 python_preference,
                 python_downloads,
                 &install_mirrors,
+                no_sync,
                 no_config,
                 active.map_or(Some(false), Some),
                 cache,
@@ -267,7 +273,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     )
                     .with_context("script")
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -283,7 +289,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             match project::sync::do_sync(
                 target,
                 &environment,
-                &extras,
+                &extras.with_defaults(DefaultExtras::default()),
                 &dev.with_defaults(DefaultGroups::default()),
                 editable,
                 install_options,
@@ -312,10 +318,14 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     )
                     .with_context("script")
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }
+
+            // Respect any locked preferences when resolving `--with` dependencies downstream.
+            let install_path = target.install_path().to_path_buf();
+            base_lock = Some((lock, install_path));
 
             Some(environment.into_interpreter())
         } else {
@@ -342,6 +352,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_preference,
                     python_downloads,
                     &install_mirrors,
+                    no_sync,
                     no_config,
                     active.map_or(Some(false), Some),
                     cache,
@@ -351,10 +362,28 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 .await?
                 .into_environment()?;
 
+                let build_constraints = script
+                    .metadata()
+                    .tool
+                    .as_ref()
+                    .and_then(|tool| {
+                        tool.uv
+                            .as_ref()
+                            .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+                    })
+                    .map(|constraints| {
+                        Constraints::from_requirements(
+                            constraints
+                                .iter()
+                                .map(|constraint| Requirement::from(constraint.clone())),
+                        )
+                    });
+
                 match update_environment(
                     environment,
                     spec,
                     modifications,
+                    build_constraints.unwrap_or_default(),
                     &settings,
                     &network_settings,
                     &sync_state,
@@ -385,7 +414,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                         )
                         .with_context("script")
                         .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 }
@@ -398,6 +427,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     python_preference,
                     python_downloads,
                     &install_mirrors,
+                    no_sync,
                     no_config,
                     active.map_or(Some(false), Some),
                     cache,
@@ -423,9 +453,6 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     } else {
         None
     };
-
-    // The lockfile used for the base environment.
-    let mut lock: Option<(Lock, PathBuf)> = None;
 
     // Discover and sync the base environment.
     let workspace_cache = WorkspaceCache::default();
@@ -512,8 +539,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
         if no_project {
             // If the user ran with `--no-project` and provided a project-only setting, warn.
-            if !extras.is_empty() {
-                warn_user!("Extras have no effect when used alongside `--no-project`");
+            for flag in extras.history().as_flags_pretty() {
+                warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
             for flag in dev.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
@@ -529,8 +556,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             }
         } else if project.is_none() {
             // If we can't find a project and the user provided a project-only setting, warn.
-            if !extras.is_empty() {
-                warn_user!("Extras have no effect when used outside of a project");
+            for flag in extras.history().as_flags_pretty() {
+                warn_user!("`{flag}` has no effect when used outside of a project");
             }
             for flag in dev.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
@@ -589,6 +616,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Some(&download_reporter),
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
+                    install_mirrors.python_downloads_json_url.as_deref(),
                 )
                 .await?
                 .into_interpreter();
@@ -623,6 +651,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     &network_settings,
                     python_preference,
                     python_downloads,
+                    no_sync,
                     no_config,
                     active,
                     cache,
@@ -639,7 +668,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // If we're not syncing, we should still attempt to respect the locked preferences
                 // in any `--with` requirements.
                 if !isolated && !requirements.is_empty() {
-                    lock = LockTarget::from(project.workspace())
+                    base_lock = LockTarget::from(project.workspace())
                         .read()
                         .await
                         .ok()
@@ -650,7 +679,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 // Validate that any referenced dependency groups are defined in the workspace.
 
                 // Determine the default groups to include.
-                let defaults = default_dependency_groups(project.pyproject_toml())?;
+                let default_groups = default_dependency_groups(project.pyproject_toml())?;
+
+                // Determine the default extras to include.
+                let default_extras = DefaultExtras::default();
 
                 // Determine the lock mode.
                 let mode = if frozen {
@@ -685,7 +717,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                             network_settings.native_tls,
                         )
                         .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 };
@@ -736,7 +768,8 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 };
 
                 let install_options = InstallOptions::default();
-                let dev = dev.with_defaults(defaults);
+                let dev = dev.with_defaults(default_groups);
+                let extras = extras.with_defaults(default_extras);
 
                 // Validate that the set of requested extras and development groups are defined in the lockfile.
                 target.validate_extras(&extras)?;
@@ -773,12 +806,12 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                             network_settings.native_tls,
                         )
                         .report(err)
-                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     }
                     Err(err) => return Err(err.into()),
                 }
 
-                lock = Some((
+                base_lock = Some((
                     result.into_lock(),
                     project.workspace().install_path().to_owned(),
                 ));
@@ -818,6 +851,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     Some(&download_reporter),
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
+                    install_mirrors.python_downloads_json_url.as_deref(),
                 )
                 .await?;
 
@@ -869,17 +903,41 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
     };
 
     // If necessary, create an environment for the ephemeral requirements or command.
+    let base_site_packages = SitePackages::from_interpreter(&base_interpreter)?;
     let ephemeral_env = match spec {
         None => None,
-        Some(spec) if can_skip_ephemeral(&spec, &base_interpreter, &settings) => None,
+        Some(spec)
+            if can_skip_ephemeral(&spec, &base_interpreter, &base_site_packages, &settings) =>
+        {
+            None
+        }
         Some(spec) => {
             debug!("Syncing ephemeral requirements");
 
+            // Read the build constraints from the lock file.
+            let build_constraints = base_lock
+                .as_ref()
+                .map(|(lock, path)| lock.build_constraints(path));
+
+            // Read the preferences.
+            let spec = EnvironmentSpecification::from(spec).with_preferences(
+                if let Some((lock, install_path)) = base_lock.as_ref() {
+                    // If we have a lockfile, use the locked versions as preferences.
+                    PreferenceSource::Lock { lock, install_path }
+                } else {
+                    // Otherwise, extract preferences from the base environment.
+                    PreferenceSource::Entries(
+                        base_site_packages
+                            .iter()
+                            .filter_map(Preference::from_installed)
+                            .collect::<Vec<_>>(),
+                    )
+                },
+            );
+
             let result = CachedEnvironment::from_spec(
-                EnvironmentSpecification::from(spec).with_lock(
-                    lock.as_ref()
-                        .map(|(lock, install_path)| (lock, install_path.as_ref())),
-                ),
+                spec,
+                build_constraints.unwrap_or_default(),
                 &base_interpreter,
                 &settings,
                 &network_settings,
@@ -910,7 +968,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     )
                     .with_context("`--with`")
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -937,14 +995,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 
         // If `--system-site-packages` is enabled, add the system site packages to the ephemeral
         // environment.
-        if if base_interpreter.is_virtualenv() {
-            {
-                PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
-                    .is_ok_and(|cfg| cfg.include_system_site_packages())
-            }
-        } else {
-            false
-        } {
+        if base_interpreter.is_virtualenv()
+            && PyVenvConfiguration::parse(base_interpreter.sys_prefix().join("pyvenv.cfg"))
+                .is_ok_and(|cfg| cfg.include_system_site_packages())
+        {
             ephemeral_env.set_system_site_packages()?;
         } else {
             ephemeral_env.clear_system_site_packages()?;
@@ -1083,13 +1137,10 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
 /// Returns `true` if we can skip creating an additional ephemeral environment in `uv run`.
 fn can_skip_ephemeral(
     spec: &RequirementsSpecification,
-    base_interpreter: &Interpreter,
+    interpreter: &Interpreter,
+    site_packages: &SitePackages,
     settings: &ResolverInstallerSettings,
 ) -> bool {
-    let Ok(site_packages) = SitePackages::from_interpreter(base_interpreter) else {
-        return false;
-    };
-
     if !(settings.reinstall.is_none() && settings.reinstall.is_none()) {
         return false;
     }
@@ -1098,7 +1149,7 @@ fn can_skip_ephemeral(
         &spec.requirements,
         &spec.constraints,
         &spec.overrides,
-        &base_interpreter.resolver_marker_environment(),
+        &interpreter.resolver_marker_environment(),
     ) {
         // If the requirements are already satisfied, we're done.
         Ok(SatisfiesResult::Fresh {
@@ -1511,7 +1562,7 @@ fn read_recursion_depth_from_environment_variable() -> anyhow::Result<u32> {
         Err(VarError::NotPresent) => return Ok(0),
         Err(e) => {
             return Err(e)
-                .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH))
+                .with_context(|| format!("invalid value for {}", EnvVars::UV_RUN_RECURSION_DEPTH));
         }
     };
 

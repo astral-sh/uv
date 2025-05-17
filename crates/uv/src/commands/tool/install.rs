@@ -9,7 +9,7 @@ use tracing::{debug, trace};
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::BaseClientBuilder;
-use uv_configuration::{Concurrency, DryRun, PreviewMode, Reinstall, Upgrade};
+use uv_configuration::{Concurrency, Constraints, DryRun, PreviewMode, Reinstall, Upgrade};
 use uv_distribution_types::{
     NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirementSpecification,
@@ -27,7 +27,7 @@ use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
-use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::project::{
     resolve_environment, resolve_names, sync_environment, update_environment,
     EnvironmentSpecification, PlatformState, ProjectError,
@@ -48,6 +48,7 @@ pub(crate) async fn install(
     with: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     force: bool,
@@ -83,6 +84,7 @@ pub(crate) async fn install(
         Some(&reporter),
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
     .into_interpreter();
@@ -122,7 +124,11 @@ pub(crate) async fn install(
             // If the user provided an executable name, verify that it matches the `--from` requirement.
             let executable = if let Some(executable) = request.executable {
                 let Ok(executable) = PackageName::from_str(executable) else {
-                    bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{executable}`)", from = from.cyan(), executable = executable.cyan())
+                    bail!(
+                        "Package requirement (`{from}`) provided with `--from` conflicts with install request (`{executable}`)",
+                        from = from.cyan(),
+                        executable = executable.cyan()
+                    )
                 };
                 Some(executable)
             } else {
@@ -159,7 +165,7 @@ pub(crate) async fn install(
             requirement
         }
         // Ex) `ruff@0.6.0`
-        Target::Version(.., name, ref extras, ref version) => {
+        Target::Version(.., name, extras, version) => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
@@ -180,7 +186,7 @@ pub(crate) async fn install(
             }
         }
         // Ex) `ruff@latest`
-        Target::Latest(.., name, ref extras) => {
+        Target::Latest(.., name, extras) => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
@@ -290,6 +296,14 @@ pub(crate) async fn install(
     )
     .await?;
 
+    // Resolve the build constraints.
+    let build_constraints: Vec<Requirement> =
+        operations::read_constraints(build_constraints, &client_builder)
+            .await?
+            .into_iter()
+            .map(|constraint| constraint.requirement)
+            .collect();
+
     // Convert to tool options.
     let options = ToolOptions::from(options);
 
@@ -362,6 +376,7 @@ pub(crate) async fn install(
             if requirements == tool_receipt.requirements()
                 && constraints == tool_receipt.constraints()
                 && overrides == tool_receipt.overrides()
+                && build_constraints == tool_receipt.build_constraints()
             {
                 if *tool_receipt.options() != options {
                     // ...but the options differ, we need to update the receipt.
@@ -410,6 +425,7 @@ pub(crate) async fn install(
             environment,
             spec,
             Modifications::Exact,
+            Constraints::from_requirements(build_constraints.iter().cloned()),
             &settings,
             &network_settings,
             &state,
@@ -429,7 +445,7 @@ pub(crate) async fn install(
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         };
@@ -540,6 +556,7 @@ pub(crate) async fn install(
             environment,
             &resolution.into(),
             Modifications::Exact,
+            Constraints::from_requirements(build_constraints.iter().cloned()),
             (&settings).into(),
             &network_settings,
             &state,
@@ -560,7 +577,7 @@ pub(crate) async fn install(
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         }
@@ -576,6 +593,7 @@ pub(crate) async fn install(
         requirements,
         constraints,
         overrides,
+        build_constraints,
         printer,
     )
 }

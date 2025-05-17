@@ -134,13 +134,17 @@ pub enum Error {
     )]
     MissingHashes { distribution: String },
 
-    #[error("Hash-checking is enabled, but no hashes were computed for: `{distribution}`\n\nExpected:\n{expected}")]
+    #[error(
+        "Hash-checking is enabled, but no hashes were computed for: `{distribution}`\n\nExpected:\n{expected}"
+    )]
     MissingActualHashes {
         distribution: String,
         expected: String,
     },
 
-    #[error("Hash-checking is enabled, but no hashes were provided for: `{distribution}`\n\nComputed:\n{actual}")]
+    #[error(
+        "Hash-checking is enabled, but no hashes were provided for: `{distribution}`\n\nComputed:\n{actual}"
+    )]
     MissingExpectedHashes {
         distribution: String,
         actual: String,

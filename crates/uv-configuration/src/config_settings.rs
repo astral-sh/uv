@@ -29,7 +29,7 @@ impl FromStr for ConfigSettingEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema), schemars(untagged))]
 enum ConfigSettingValue {
     /// The value consists of a single string.
     String(String),

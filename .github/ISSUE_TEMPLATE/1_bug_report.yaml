@@ -13,6 +13,8 @@ body:
       description: |
         A clear and concise description of the bug, including [a minimal reproducible example](https://docs.astral.sh/uv/reference/troubleshooting/reproducible-examples/).
         If we cannot reproduce the bug, it is unlikely that we will be able to help you.
+
+        Please include the full output of uv with the complete error message.
     validations:
       required: true
 
@@ -27,7 +29,7 @@ body:
   - type: input
     attributes:
       label: Version
-      description: What version of uv are you using? (see `uv version`)
+      description: What version of uv are you using? (see `uv self version`)
       placeholder: e.g., uv 0.5.20 (1c17662b3 2025-01-15)
     validations:
       required: true

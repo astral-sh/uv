@@ -7,7 +7,7 @@ use uv_configuration::Upgrade;
 use uv_fs::CWD;
 use uv_git::ResolvedRepositoryReference;
 use uv_requirements_txt::RequirementsTxt;
-use uv_resolver::{Lock, LockError, Preference, PreferenceError};
+use uv_resolver::{Lock, LockError, Preference, PreferenceError, PylockToml, PylockTomlErrorKind};
 
 #[derive(Debug, Default)]
 pub struct LockedRequirements {
@@ -17,20 +17,25 @@ pub struct LockedRequirements {
     pub git: Vec<ResolvedRepositoryReference>,
 }
 
+impl LockedRequirements {
+    /// Create a [`LockedRequirements`] from a list of preferences.
+    pub fn from_preferences(preferences: Vec<Preference>) -> Self {
+        Self {
+            preferences,
+            ..LockedRequirements::default()
+        }
+    }
+}
+
 /// Load the preferred requirements from an existing `requirements.txt`, applying the upgrade strategy.
 pub async fn read_requirements_txt(
-    output_file: Option<&Path>,
+    output_file: &Path,
     upgrade: &Upgrade,
 ) -> Result<Vec<Preference>> {
     // As an optimization, skip reading the lockfile is we're upgrading all packages anyway.
     if upgrade.is_all() {
         return Ok(Vec::new());
     }
-
-    // If the lockfile doesn't exist, don't respect any pinned versions.
-    let Some(output_file) = output_file.filter(|path| path.exists()) else {
-        return Ok(Vec::new());
-    };
 
     // Parse the requirements from the lockfile.
     let requirements_txt = RequirementsTxt::parse(
@@ -89,6 +94,43 @@ pub fn read_lock_requirements(
 
         // Map each entry in the lockfile to a Git SHA.
         if let Some(git_ref) = package.as_git_ref()? {
+            git.push(git_ref);
+        }
+    }
+
+    Ok(LockedRequirements { preferences, git })
+}
+
+/// Load the preferred requirements from an existing `pylock.toml` file, applying the upgrade strategy.
+pub async fn read_pylock_toml_requirements(
+    output_file: &Path,
+    upgrade: &Upgrade,
+) -> Result<LockedRequirements, PylockTomlErrorKind> {
+    // As an optimization, skip iterating over the lockfile is we're upgrading all packages anyway.
+    if upgrade.is_all() {
+        return Ok(LockedRequirements::default());
+    }
+
+    // Read the `pylock.toml` from disk, and deserialize it from TOML.
+    let content = fs_err::tokio::read_to_string(&output_file).await?;
+    let lock = toml::from_str::<PylockToml>(&content)?;
+
+    let mut preferences = Vec::new();
+    let mut git = Vec::new();
+
+    for package in &lock.packages {
+        // Skip the distribution if it's not included in the upgrade strategy.
+        if upgrade.contains(&package.name) {
+            continue;
+        }
+
+        // Map each entry in the lockfile to a preference.
+        if let Some(preference) = Preference::from_pylock_toml(package)? {
+            preferences.push(preference);
+        }
+
+        // Map each entry in the lockfile to a Git SHA.
+        if let Some(git_ref) = package.as_git_ref() {
             git.push(git_ref);
         }
     }

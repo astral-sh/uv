@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use thiserror::Error;
-use tracing::warn;
+use tracing::error;
 
 use uv_normalize::{GroupName, DEV_DEPENDENCIES};
 use uv_pep508::Pep508Error;
@@ -74,9 +74,10 @@ impl FlatDependencyGroups {
                             .extend(resolved.get(include_group).into_iter().flatten().cloned());
                     }
                     DependencyGroupSpecifier::Object(map) => {
-                        warn!(
-                            "Ignoring Dependency Object Specifier referenced by `{name}`: {map:?}"
-                        );
+                        return Err(DependencyGroupError::DependencyObjectSpecifierNotSupported(
+                            name.clone(),
+                            map.clone(),
+                        ));
                     }
                 }
             }
@@ -150,10 +151,14 @@ pub enum DependencyGroupError {
     ),
     #[error("Failed to find group `{0}` included by `{1}`")]
     GroupNotFound(GroupName, GroupName),
-    #[error("Group `{0}` includes the `dev` group (`include = \"dev\"`), but only `tool.uv.dev-dependencies` was found. To reference the `dev` group via an `include`, remove the `tool.uv.dev-dependencies` section and add any development dependencies to the `dev` entry in the `[dependency-groups]` table instead.")]
+    #[error(
+        "Group `{0}` includes the `dev` group (`include = \"dev\"`), but only `tool.uv.dev-dependencies` was found. To reference the `dev` group via an `include`, remove the `tool.uv.dev-dependencies` section and add any development dependencies to the `dev` entry in the `[dependency-groups]` table instead."
+    )]
     DevGroupInclude(GroupName),
     #[error("Detected a cycle in `dependency-groups`: {0}")]
     DependencyGroupCycle(Cycle),
+    #[error("Group `{0}` contains an unknown dependency object specifier: {1:?}")]
+    DependencyObjectSpecifierNotSupported(GroupName, BTreeMap<String, String>),
 }
 
 impl DependencyGroupError {

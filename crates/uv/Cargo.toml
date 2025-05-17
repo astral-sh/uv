@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.6.13"
+version = "0.7.5"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -43,6 +43,7 @@ uv-platform-tags = { workspace = true }
 uv-publish = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["schemars"] }
+uv-redacted = { workspace = true }
 uv-requirements = { workspace = true }
 uv-requirements-txt = { workspace = true }
 uv-resolver = { workspace = true }
@@ -123,6 +124,7 @@ reqwest = { workspace = true, features = ["blocking"], default-features = false 
 similar = { version = "2.6.0" }
 tar = { workspace = true }
 tempfile = { workspace = true }
+wiremock = { workspace = true }
 zip = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
@@ -135,30 +137,44 @@ ignored = [
 ]
 
 [features]
-default = ["python", "python-managed", "pypi", "git", "performance", "crates-io", "slow-tests", "test-ecosystem"]
+default = ["performance", "uv-distribution/static", "default-tests"]
 # Use better memory allocators, etc.
-performance = [
-    "performance-memory-allocator",
-    "uv-distribution/performance",
-]
+performance = ["performance-memory-allocator"]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
+
+# Adds self-update functionality. This feature is only enabled for uv's cargo-dist installer
+# and should be left unselected when building uv for package managers.
+self-update = ["axoupdater", "uv-cli/self-update"]
+
+# Features for development only.
 tracing-durations-export = ["dep:tracing-durations-export", "uv-resolver/tracing-durations-export"]
 
-# Introduces a dependency on a local Python installation.
-python = []
-# Introduces a dependency on a local Python installation with specific patch versions.
-python-patch = []
-# Introduces a dependency on managed Python installations.
-python-managed = []
-# Introduces a dependency on PyPI.
-pypi = []
-# Introduces a dependency on Git.
-git = []
-# Introduces a dependency on crates.io.
+# Features that only apply when running tests, no-ops otherwise.
+default-tests = [
+    "crates-io",
+    "git",
+    "pypi",
+    "python",
+    "python-managed",
+    "slow-tests",
+    "test-ecosystem"
+]
+# Introduces a testing dependency on crates.io.
 crates-io = []
+# Introduces a testing dependency on Git.
+git = []
+# Introduces a testing dependency on PyPI.
+pypi = []
+# Introduces a testing dependency on a local Python installation.
+python = []
+# Introduces a testing dependency on a local Python installation with specific patch versions.
+python-patch = []
+# Introduces a testing dependency on managed Python installations.
+python-managed = []
 # Include "slow" test cases.
 slow-tests = []
 # Includes test cases that require ecosystem packages
 test-ecosystem = []
-# Adds self-update functionality.
-self-update = ["axoupdater", "uv-cli/self-update"]
+
+[package.metadata.dist]
+dist = true

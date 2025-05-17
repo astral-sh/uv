@@ -237,6 +237,7 @@ impl RequirementSatisfaction {
                         DirInfo {
                             editable: installed_editable,
                         },
+                    subdirectory: None,
                 } = direct_url.as_ref()
                 else {
                     return Self::Mismatch;

@@ -53,7 +53,9 @@ pub(crate) fn main(args: &Args) -> Result<()> {
                     println!("Up-to-date: {filename}");
                 } else {
                     let comparison = StrComparison::new(&current, &reference_string);
-                    bail!("{filename} changed, please run `cargo dev generate-cli-reference`:\n{comparison}");
+                    bail!(
+                        "{filename} changed, please run `cargo dev generate-cli-reference`:\n{comparison}"
+                    );
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -232,9 +234,15 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
                 let id = format!("{name_key}--{long}");
 
                 output.push_str(&format!("<dt id=\"{id}\">"));
-                output.push_str(&format!("<a href=\"#{id}\"><code>--{long}</code></a>",));
+                output.push_str(&format!("<a href=\"#{id}\"><code>--{long}</code></a>"));
+                for long_alias in opt.get_all_aliases().into_iter().flatten() {
+                    output.push_str(&format!(", <code>--{long_alias}</code>"));
+                }
                 if let Some(short) = opt.get_short() {
                     output.push_str(&format!(", <code>-{short}</code>"));
+                }
+                for short_alias in opt.get_all_short_aliases().into_iter().flatten() {
+                    output.push_str(&format!(", <code>-{short_alias}</code>"));
                 }
 
                 // Re-implements private `Arg::is_takes_value_set` used in `Command::get_opts`

@@ -75,6 +75,7 @@ pub use crate::requirement::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
+pub use crate::status_code_strategy::*;
 pub use crate::traits::*;
 
 mod annotation;
@@ -101,6 +102,7 @@ mod requirement;
 mod resolution;
 mod resolved;
 mod specified_requirement;
+mod status_code_strategy;
 mod traits;
 
 #[derive(Debug, Clone)]
@@ -840,6 +842,28 @@ impl Name for Dist {
         match self {
             Self::Built(dist) => dist.name(),
             Self::Source(dist) => dist.name(),
+        }
+    }
+}
+
+impl Name for CompatibleDist<'_> {
+    fn name(&self) -> &PackageName {
+        match self {
+            CompatibleDist::InstalledDist(dist) => dist.name(),
+            CompatibleDist::SourceDist {
+                sdist,
+                prioritized: _,
+            } => sdist.name(),
+            CompatibleDist::CompatibleWheel {
+                wheel,
+                priority: _,
+                prioritized: _,
+            } => wheel.name(),
+            CompatibleDist::IncompatibleWheel {
+                sdist,
+                wheel: _,
+                prioritized: _,
+            } => sdist.name(),
         }
     }
 }

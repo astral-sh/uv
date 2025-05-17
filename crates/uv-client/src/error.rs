@@ -7,6 +7,7 @@ use url::Url;
 
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_normalize::PackageName;
+use uv_redacted::redacted_url;
 
 use crate::middleware::OfflineError;
 use crate::{html, FlatIndexError};
@@ -197,10 +198,10 @@ pub enum ErrorKind {
     #[error("Failed to fetch: `{0}`")]
     WrappedReqwestError(Url, #[source] WrappedReqwestError),
 
-    #[error("Received some unexpected JSON from {url}")]
+    #[error("Received some unexpected JSON from {}", redacted_url(url))]
     BadJson { source: serde_json::Error, url: Url },
 
-    #[error("Received some unexpected HTML from {url}")]
+    #[error("Received some unexpected HTML from {}", redacted_url(url))]
     BadHtml { source: html::Error, url: Url },
 
     #[error("Failed to read zip with range requests: `{0}`")]

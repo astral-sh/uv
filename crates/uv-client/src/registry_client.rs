@@ -7,23 +7,23 @@ use std::time::Duration;
 
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, StreamExt, TryStreamExt};
-use http::HeaderMap;
+use http::{HeaderMap, StatusCode};
 use itertools::Either;
-use reqwest::{Proxy, Response, StatusCode};
+use reqwest::{Proxy, Response};
 use reqwest_middleware::ClientWithMiddleware;
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{info_span, instrument, trace, warn, Instrument};
+use tracing::{debug, info_span, instrument, trace, warn, Instrument};
 use url::Url;
 
-use uv_auth::UrlAuthPolicies;
+use uv_auth::Indexes;
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexMetadataRef, IndexUrl,
-    IndexUrls, Name,
+    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
+    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -31,6 +31,7 @@ use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_pypi_types::{ResolutionMetadata, SimpleJson};
+use uv_redacted::redacted_url;
 use uv_small_str::SmallString;
 use uv_torch::TorchStrategy;
 
@@ -69,8 +70,11 @@ impl RegistryClientBuilder<'_> {
 
 impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
-    pub fn index_urls(mut self, index_urls: IndexUrls) -> Self {
-        self.index_urls = index_urls;
+    pub fn index_locations(mut self, index_locations: &IndexLocations) -> Self {
+        self.index_urls = index_locations.index_urls();
+        self.base_client_builder = self
+            .base_client_builder
+            .indexes(Indexes::from(index_locations));
         self
     }
 
@@ -115,14 +119,6 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn native_tls(mut self, native_tls: bool) -> Self {
         self.base_client_builder = self.base_client_builder.native_tls(native_tls);
-        self
-    }
-
-    #[must_use]
-    pub fn url_auth_policies(mut self, url_auth_policies: UrlAuthPolicies) -> Self {
-        self.base_client_builder = self
-            .base_client_builder
-            .url_auth_policies(url_auth_policies);
         self
     }
 
@@ -336,12 +332,29 @@ impl RegistryClient {
                     let _permit = download_concurrency.acquire().await;
                     match index.format {
                         IndexFormat::Simple => {
-                            if let Some(metadata) = self
-                                .simple_single_index(package_name, index.url, capabilities)
+                            let status_code_strategy =
+                                self.index_urls.status_code_strategy_for(index.url);
+                            match self
+                                .simple_single_index(
+                                    package_name,
+                                    index.url,
+                                    capabilities,
+                                    &status_code_strategy,
+                                )
                                 .await?
                             {
-                                results.push((index.url, MetadataFormat::Simple(metadata)));
-                                break;
+                                SimpleMetadataSearchOutcome::Found(metadata) => {
+                                    results.push((index.url, MetadataFormat::Simple(metadata)));
+                                    break;
+                                }
+                                // Package not found, so we will continue on to the next index (if there is one)
+                                SimpleMetadataSearchOutcome::NotFound => {}
+                                // The search failed because of an HTTP status code that we don't ignore for
+                                // this index. We end our search here.
+                                SimpleMetadataSearchOutcome::StatusCodeFailure(status_code) => {
+                                    debug!("Indexes search failed because of status code failure: {status_code}");
+                                    break;
+                                }
                             }
                         }
                         IndexFormat::Flat => {
@@ -362,9 +375,21 @@ impl RegistryClient {
                         let _permit = download_concurrency.acquire().await;
                         match index.format {
                             IndexFormat::Simple => {
-                                let metadata = self
-                                    .simple_single_index(package_name, index.url, capabilities)
-                                    .await?;
+                                // For unsafe matches, ignore authentication failures.
+                                let status_code_strategy =
+                                    IndexStatusCodeStrategy::ignore_authentication_error_codes();
+                                let metadata = match self
+                                    .simple_single_index(
+                                        package_name,
+                                        index.url,
+                                        capabilities,
+                                        &status_code_strategy,
+                                    )
+                                    .await?
+                                {
+                                    SimpleMetadataSearchOutcome::Found(metadata) => Some(metadata),
+                                    _ => None,
+                                };
                                 Ok((index.url, metadata.map(MetadataFormat::Simple)))
                             }
                             IndexFormat::Flat => {
@@ -443,14 +468,13 @@ impl RegistryClient {
     ///
     /// The index can either be a PEP 503-compatible remote repository, or a local directory laid
     /// out in the same format.
-    ///
-    /// Returns `Ok(None)` if the package is not found in the index.
     async fn simple_single_index(
         &self,
         package_name: &PackageName,
         index: &IndexUrl,
         capabilities: &IndexCapabilities,
-    ) -> Result<Option<OwnedArchive<SimpleMetadata>>, Error> {
+        status_code_strategy: &IndexStatusCodeStrategy,
+    ) -> Result<SimpleMetadataSearchOutcome, Error> {
         // Format the URL for PyPI.
         let mut url = index.url().clone();
         url.path_segments_mut()
@@ -461,7 +485,10 @@ impl RegistryClient {
             // ref https://github.com/servo/rust-url/issues/333
             .push("");
 
-        trace!("Fetching metadata for {package_name} from {url}");
+        trace!(
+            "Fetching metadata for {package_name} from {}",
+            redacted_url(&url)
+        );
 
         let cache_entry = self.cache.entry(
             CacheBucket::Simple,
@@ -492,27 +519,31 @@ impl RegistryClient {
         };
 
         match result {
-            Ok(metadata) => Ok(Some(metadata)),
+            Ok(metadata) => Ok(SimpleMetadataSearchOutcome::Found(metadata)),
             Err(err) => match err.into_kind() {
                 // The package could not be found in the remote index.
-                ErrorKind::WrappedReqwestError(url, err) => match err.status() {
-                    Some(StatusCode::NOT_FOUND) => Ok(None),
-                    Some(StatusCode::UNAUTHORIZED) => {
-                        capabilities.set_unauthorized(index.clone());
-                        Ok(None)
+                ErrorKind::WrappedReqwestError(url, err) => {
+                    let Some(status_code) = err.status() else {
+                        return Err(ErrorKind::WrappedReqwestError(url, err).into());
+                    };
+                    let decision =
+                        status_code_strategy.handle_status_code(status_code, index, capabilities);
+                    if let IndexStatusCodeDecision::Fail(status_code) = decision {
+                        if !matches!(
+                            status_code,
+                            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+                        ) {
+                            return Err(ErrorKind::WrappedReqwestError(url, err).into());
+                        }
                     }
-                    Some(StatusCode::FORBIDDEN) => {
-                        capabilities.set_forbidden(index.clone());
-                        Ok(None)
-                    }
-                    _ => Err(ErrorKind::WrappedReqwestError(url, err).into()),
-                },
+                    Ok(SimpleMetadataSearchOutcome::from(decision))
+                }
 
                 // The package is unavailable due to a lack of connectivity.
-                ErrorKind::Offline(_) => Ok(None),
+                ErrorKind::Offline(_) => Ok(SimpleMetadataSearchOutcome::NotFound),
 
                 // The package could not be found in the local index.
-                ErrorKind::FileNotFound(_) => Ok(None),
+                ErrorKind::FileNotFound(_) => Ok(SimpleMetadataSearchOutcome::NotFound),
 
                 err => Err(err.into()),
             },
@@ -961,6 +992,26 @@ impl RegistryClient {
             )
         } else {
             std::io::Error::new(std::io::ErrorKind::Other, err)
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum SimpleMetadataSearchOutcome {
+    /// Simple metadata was found
+    Found(OwnedArchive<SimpleMetadata>),
+    /// Simple metadata was not found
+    NotFound,
+    /// A status code failure was encountered when searching for
+    /// simple metadata and our strategy did not ignore it
+    StatusCodeFailure(StatusCode),
+}
+
+impl From<IndexStatusCodeDecision> for SimpleMetadataSearchOutcome {
+    fn from(item: IndexStatusCodeDecision) -> Self {
+        match item {
+            IndexStatusCodeDecision::Ignore => Self::NotFound,
+            IndexStatusCodeDecision::Fail(status_code) => Self::StatusCodeFailure(status_code),
         }
     }
 }

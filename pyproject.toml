@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "uv"
-version = "0.6.13"
+version = "0.7.5"
 description = "An extremely fast Python package and project manager, written in Rust."
 authors = [{ name = "Astral Software Inc.", email = "hey@astral.sh" }]
 requires-python = ">=3.8"
@@ -86,6 +86,7 @@ version_files = [
   "docs/guides/integration/pre-commit.md",
   "docs/guides/integration/github.md",
   "docs/guides/integration/aws-lambda.md",
+  "docs/configuration/build-backend.md",
 ]
 
 [tool.mypy]

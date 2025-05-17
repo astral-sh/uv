@@ -2,7 +2,7 @@ use tracing::debug;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
-use uv_configuration::{Concurrency, PreviewMode};
+use uv_configuration::{Concurrency, Constraints, PreviewMode};
 use uv_distribution_types::{Name, Resolution};
 use uv_python::{Interpreter, PythonEnvironment};
 
@@ -28,6 +28,7 @@ impl CachedEnvironment {
     /// Get or create an [`CachedEnvironment`] based on a given set of requirements.
     pub(crate) async fn from_spec(
         spec: EnvironmentSpecification<'_>,
+        build_constraints: Constraints,
         interpreter: &Interpreter,
         settings: &ResolverInstallerSettings,
         network_settings: &NetworkSettings,
@@ -99,6 +100,7 @@ impl CachedEnvironment {
             venv,
             &resolution,
             Modifications::Exact,
+            build_constraints,
             settings.into(),
             network_settings,
             state,

@@ -158,6 +158,11 @@ impl EnvVars {
     /// will compile Python source files to bytecode after installation.
     pub const UV_COMPILE_BYTECODE: &'static str = "UV_COMPILE_BYTECODE";
 
+    /// Equivalent to the `--no-editable` command-line argument. If set, uv
+    /// installs any editable dependencies, including the project and any workspace members, as
+    /// non-editable
+    pub const UV_NO_EDITABLE: &'static str = "UV_NO_EDITABLE";
+
     /// Equivalent to the `--no-binary` command-line argument. If set, uv will install
     /// all packages from source. The resolver will still use pre-built wheels to
     /// extract package metadata, if available.
@@ -264,6 +269,10 @@ impl EnvVars {
     ///
     /// Note that currently, only local paths are supported.
     pub const UV_PYTHON_DOWNLOADS_JSON_URL: &'static str = "UV_PYTHON_DOWNLOADS_JSON_URL";
+
+    /// Specifies the directory for caching the archives of managed Python installations before
+    /// installation.
+    pub const UV_PYTHON_CACHE_DIR: &'static str = "UV_PYTHON_CACHE_DIR";
 
     /// Managed Python installations are downloaded from the Astral
     /// [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project.
@@ -593,11 +602,27 @@ impl EnvVars {
 
     /// Use to set the stack size used by uv.
     ///
-    /// The value is in bytes, and the default is typically 2MB (2097152).
+    /// The value is in bytes, and if both `UV_STACK_SIZE` are `RUST_MIN_STACK` unset, uv uses a 4MB
+    /// (4194304) stack. `UV_STACK_SIZE` takes precedence over `RUST_MIN_STACK`.
+    ///
     /// Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
     /// stack size, because we actually spawn our own main2 thread to work around
     /// the fact that Windows' real main thread is only 1MB. That thread has size
-    /// `max(RUST_MIN_STACK, 4MB)`.
+    /// `max(UV_STACK_SIZE, 1MB)`.
+    pub const UV_STACK_SIZE: &'static str = "UV_STACK_SIZE";
+
+    /// Use to set the stack size used by uv.
+    ///
+    /// The value is in bytes, and if both `UV_STACK_SIZE` are `RUST_MIN_STACK` unset, uv uses a 4MB
+    /// (4194304) stack. `UV_STACK_SIZE` takes precedence over `RUST_MIN_STACK`.
+    ///
+    /// Prefer setting `UV_STACK_SIZE`, since `RUST_MIN_STACK` also affects subprocesses, such as
+    /// build backends that use Rust code.
+    ///
+    /// Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
+    /// stack size, because we actually spawn our own main2 thread to work around
+    /// the fact that Windows' real main thread is only 1MB. That thread has size
+    /// `max(RUST_MIN_STACK, 1MB)`.
     pub const RUST_MIN_STACK: &'static str = "RUST_MIN_STACK";
 
     /// The directory containing the `Cargo.toml` manifest for a package.

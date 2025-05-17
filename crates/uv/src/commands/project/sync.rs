@@ -7,24 +7,24 @@ use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
-use uv_client::{FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
-    ExtrasSpecification, HashCheckingMode, InstallOptions, PreviewMode,
+    Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
+    ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions,
+    PreviewMode,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
-    DirectorySourceDist, Dist, Index, Resolution, ResolvedDist, SourceDist,
+    DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
-use uv_normalize::{DefaultGroups, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl, ParsedUrl};
 use uv_python::{PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_resolver::{FlatIndex, Installable};
+use uv_resolver::{FlatIndex, Installable, Lock};
 use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{BuildIsolation, HashStrategy};
@@ -108,16 +108,24 @@ pub(crate) async fn sync(
         if project.workspace().pyproject_toml().has_scripts()
             && !project.workspace().pyproject_toml().is_package()
         {
-            warn_user!("Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`");
+            warn_user!(
+                "Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`"
+            );
         }
 
         SyncTarget::Project(project)
     };
 
     // Determine the default groups to include.
-    let defaults = match &target {
+    let default_groups = match &target {
         SyncTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
         SyncTarget::Script(..) => DefaultGroups::default(),
+    };
+
+    // Determine the default extras to include.
+    let default_extras = match &target {
+        SyncTarget::Project(_project) => DefaultExtras::default(),
+        SyncTarget::Script(..) => DefaultExtras::default(),
     };
 
     // Discover or create the virtual environment.
@@ -130,6 +138,7 @@ pub(crate) async fn sync(
                 &network_settings,
                 python_preference,
                 python_downloads,
+                false,
                 no_config,
                 active,
                 cache,
@@ -146,6 +155,7 @@ pub(crate) async fn sync(
                 python_preference,
                 python_downloads,
                 &install_mirrors,
+                false,
                 no_config,
                 active,
                 cache,
@@ -274,12 +284,33 @@ pub(crate) async fn sync(
                 ));
             }
 
+            // Parse the requirements from the script.
             let spec = script_specification(Pep723ItemRef::Script(script), &settings.resolver)?
                 .unwrap_or_default();
+
+            // Parse the build constraints from the script.
+            let build_constraints = script
+                .metadata
+                .tool
+                .as_ref()
+                .and_then(|tool| {
+                    tool.uv
+                        .as_ref()
+                        .and_then(|uv| uv.build_constraint_dependencies.as_ref())
+                })
+                .map(|constraints| {
+                    Constraints::from_requirements(
+                        constraints
+                            .iter()
+                            .map(|constraint| Requirement::from(constraint.clone())),
+                    )
+                });
+
             match update_environment(
                 Deref::deref(&environment).clone(),
                 spec,
                 modifications,
+                build_constraints.unwrap_or_default(),
                 &settings,
                 &network_settings,
                 &PlatformState::default(),
@@ -301,7 +332,7 @@ pub(crate) async fn sync(
                         network_settings.native_tls,
                     )
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -327,7 +358,7 @@ pub(crate) async fn sync(
         SyncTarget::Script(script) => LockTarget::from(script),
     };
 
-    let lock = match LockOperation::new(
+    let outcome = match LockOperation::new(
         mode,
         &settings.resolver,
         &network_settings,
@@ -379,68 +410,24 @@ pub(crate) async fn sync(
                     }
                 }
             }
-            result.into_lock()
+            Outcome::Success(result.into_lock())
         }
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+        }
+        Err(ProjectError::LockMismatch(lock)) if dry_run.enabled() => {
+            // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
+            // sync operation, but exit with a non-zero status.
+            Outcome::LockMismatch(lock)
         }
         Err(err) => return Err(err.into()),
     };
 
     // Identify the installation target.
-    let sync_target = match &target {
-        SyncTarget::Project(project) => {
-            match &project {
-                VirtualProject::Project(project) => {
-                    if all_packages {
-                        InstallTarget::Workspace {
-                            workspace: project.workspace(),
-                            lock: &lock,
-                        }
-                    } else if let Some(package) = package.as_ref() {
-                        InstallTarget::Project {
-                            workspace: project.workspace(),
-                            name: package,
-                            lock: &lock,
-                        }
-                    } else {
-                        // By default, install the root package.
-                        InstallTarget::Project {
-                            workspace: project.workspace(),
-                            name: project.project_name(),
-                            lock: &lock,
-                        }
-                    }
-                }
-                VirtualProject::NonProject(workspace) => {
-                    if all_packages {
-                        InstallTarget::NonProjectWorkspace {
-                            workspace,
-                            lock: &lock,
-                        }
-                    } else if let Some(package) = package.as_ref() {
-                        InstallTarget::Project {
-                            workspace,
-                            name: package,
-                            lock: &lock,
-                        }
-                    } else {
-                        // By default, install the entire workspace.
-                        InstallTarget::NonProjectWorkspace {
-                            workspace,
-                            lock: &lock,
-                        }
-                    }
-                }
-            }
-        }
-        SyncTarget::Script(script) => InstallTarget::Script {
-            script,
-            lock: &lock,
-        },
-    };
+    let sync_target =
+        identify_installation_target(&target, outcome.lock(), all_packages, package.as_ref());
 
     let state = state.fork();
 
@@ -448,8 +435,8 @@ pub(crate) async fn sync(
     match do_sync(
         sync_target,
         &environment,
-        &extras,
-        &dev.with_defaults(defaults),
+        &extras.with_defaults(default_extras),
+        &dev.with_defaults(default_groups),
         editable,
         install_options,
         modifications,
@@ -470,12 +457,84 @@ pub(crate) async fn sync(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     }
 
-    Ok(ExitStatus::Success)
+    match outcome {
+        Outcome::Success(..) => Ok(ExitStatus::Success),
+        Outcome::LockMismatch(lock) => Err(ProjectError::LockMismatch(lock).into()),
+    }
+}
+
+/// The outcome of a `lock` operation within a `sync` operation.
+#[derive(Debug)]
+enum Outcome {
+    /// The `lock` operation was successful.
+    Success(Lock),
+    /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
+    LockMismatch(Box<Lock>),
+}
+
+impl Outcome {
+    /// Return the [`Lock`] associated with this outcome.
+    fn lock(&self) -> &Lock {
+        match self {
+            Self::Success(lock) => lock,
+            Self::LockMismatch(lock) => lock,
+        }
+    }
+}
+
+fn identify_installation_target<'a>(
+    target: &'a SyncTarget,
+    lock: &'a Lock,
+    all_packages: bool,
+    package: Option<&'a PackageName>,
+) -> InstallTarget<'a> {
+    match &target {
+        SyncTarget::Project(project) => {
+            match &project {
+                VirtualProject::Project(project) => {
+                    if all_packages {
+                        InstallTarget::Workspace {
+                            workspace: project.workspace(),
+                            lock,
+                        }
+                    } else if let Some(package) = package {
+                        InstallTarget::Project {
+                            workspace: project.workspace(),
+                            name: package,
+                            lock,
+                        }
+                    } else {
+                        // By default, install the root package.
+                        InstallTarget::Project {
+                            workspace: project.workspace(),
+                            name: project.project_name(),
+                            lock,
+                        }
+                    }
+                }
+                VirtualProject::NonProject(workspace) => {
+                    if all_packages {
+                        InstallTarget::NonProjectWorkspace { workspace, lock }
+                    } else if let Some(package) = package {
+                        InstallTarget::Project {
+                            workspace,
+                            name: package,
+                            lock,
+                        }
+                    } else {
+                        // By default, install the entire workspace.
+                        InstallTarget::NonProjectWorkspace { workspace, lock }
+                    }
+                }
+            }
+        }
+        SyncTarget::Script(script) => InstallTarget::Script { script, lock },
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -510,7 +569,7 @@ impl Deref for SyncEnvironment {
 pub(super) async fn do_sync(
     target: InstallTarget<'_>,
     venv: &PythonEnvironment,
-    extras: &ExtrasSpecification,
+    extras: &ExtrasSpecificationWithDefaults,
     dev: &DependencyGroupsWithDefaults,
     editable: EditableMode,
     install_options: InstallOptions,
@@ -542,6 +601,12 @@ pub(super) async fn do_sync(
         build_options,
         sources,
     } = settings;
+
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .keyring(keyring_provider)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Validate that the Python version is supported by the lockfile.
     if !target
@@ -623,14 +688,10 @@ pub(super) async fn do_sync(
     store_credentials_from_target(target);
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .url_auth_policies(UrlAuthPolicies::from(index_locations))
-        .index_urls(index_locations.index_urls())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
+        .index_locations(index_locations)
         .index_strategy(index_strategy)
-        .keyring(keyring_provider)
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
         .build();

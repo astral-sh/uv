@@ -261,7 +261,7 @@ When defining an index, an `explicit` flag can be included to indicate that the 
 be used for packages that explicitly specify it in `tool.uv.sources`. If `explicit` is not set,
 other packages may be resolved from the index, if not found elsewhere.
 
-```toml title="pyproject.toml" hl_lines="3"
+```toml title="pyproject.toml" hl_lines="4"
 [[tool.uv.index]]
 name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
@@ -511,10 +511,12 @@ torch = [
 [[tool.uv.index]]
 name = "torch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [[tool.uv.index]]
 name = "torch-gpu"
 url = "https://download.pytorch.org/whl/cu124"
+explicit = true
 ```
 
 ### Disabling sources

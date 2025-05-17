@@ -2,6 +2,7 @@ use base64::prelude::BASE64_STANDARD;
 use base64::read::DecoderReader;
 use base64::write::EncoderWriter;
 use std::borrow::Cow;
+use std::fmt;
 
 use netrc::Netrc;
 use reqwest::header::HeaderValue;
@@ -18,7 +19,7 @@ pub enum Credentials {
         /// The username to use for authentication.
         username: Username,
         /// The password to use for authentication.
-        password: Option<String>,
+        password: Option<Password>,
     },
     Bearer {
         /// The token to use for authentication.
@@ -67,13 +68,32 @@ impl From<Option<String>> for Username {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Default)]
+pub struct Password(String);
+
+impl Password {
+    pub fn new(password: String) -> Self {
+        Self(password)
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl fmt::Debug for Password {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "****")
+    }
+}
+
 impl Credentials {
     /// Create a set of HTTP Basic Authentication credentials.
     #[allow(dead_code)]
     pub fn basic(username: Option<String>, password: Option<String>) -> Self {
         Self::Basic {
             username: Username::new(username),
-            password,
+            password: password.map(Password),
         }
     }
 
@@ -106,7 +126,7 @@ impl Credentials {
 
     pub fn password(&self) -> Option<&str> {
         match self {
-            Self::Basic { password, .. } => password.as_deref(),
+            Self::Basic { password, .. } => password.as_ref().map(Password::as_str),
             Self::Bearer { .. } => None,
         }
     }
@@ -135,7 +155,7 @@ impl Credentials {
 
         Some(Credentials::Basic {
             username: Username::new(Some(entry.login.clone())),
-            password: Some(entry.password.clone()),
+            password: Some(Password(entry.password.clone())),
         })
     }
 
@@ -161,10 +181,12 @@ impl Credentials {
             }
             .into(),
             password: url.password().map(|password| {
-                percent_encoding::percent_decode_str(password)
-                    .decode_utf8()
-                    .expect("An encoded password should always decode")
-                    .into_owned()
+                Password(
+                    percent_encoding::percent_decode_str(password)
+                        .decode_utf8()
+                        .expect("An encoded password should always decode")
+                        .into_owned(),
+                )
             }),
         })
     }
@@ -228,7 +250,7 @@ impl Credentials {
             };
             return Some(Self::Basic {
                 username: Username::new(username),
-                password,
+                password: password.map(Password),
             });
         }
 
@@ -406,5 +428,17 @@ mod tests {
 
         assert_debug_snapshot!(header, @r###""Basic dXNlcjpwYXNzd29yZD09""###);
         assert_eq!(Credentials::from_header_value(&header), Some(credentials));
+    }
+
+    // Test that we don't include the password in debug messages.
+    #[test]
+    fn test_password_obfuscation() {
+        let credentials =
+            Credentials::basic(Some(String::from("user")), Some(String::from("password")));
+        let debugged = format!("{credentials:?}");
+        assert_eq!(
+            debugged,
+            "Basic { username: Username(Some(\"user\")), password: Some(****) }"
+        );
     }
 }

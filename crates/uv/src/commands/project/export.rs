@@ -1,20 +1,22 @@
 use std::env;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::path::{Path, PathBuf};
-use uv_settings::PythonInstallMirrors;
 
 use uv_cache::Cache;
 use uv_configuration::{
     Concurrency, DependencyGroups, EditableMode, ExportFormat, ExtrasSpecification, InstallOptions,
     PreviewMode,
 };
-use uv_normalize::{DefaultGroups, PackageName};
+use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
-use uv_resolver::RequirementsTxtExport;
+use uv_requirements::is_pylock_toml;
+use uv_resolver::{PylockToml, RequirementsTxtExport};
 use uv_scripts::{Pep723ItemRef, Pep723Script};
+use uv_settings::PythonInstallMirrors;
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, Workspace, WorkspaceCache};
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
@@ -51,7 +53,7 @@ impl<'lock> From<&'lock ExportTarget> for LockTarget<'lock> {
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn export(
     project_dir: &Path,
-    format: ExportFormat,
+    format: Option<ExportFormat>,
     all_packages: bool,
     package: Option<PackageName>,
     prune: Vec<PackageName>,
@@ -109,11 +111,19 @@ pub(crate) async fn export(
     };
 
     // Determine the default groups to include.
-    let defaults = match &target {
+    let default_groups = match &target {
         ExportTarget::Project(project) => default_dependency_groups(project.pyproject_toml())?,
         ExportTarget::Script(_) => DefaultGroups::default(),
     };
-    let dev = dev.with_defaults(defaults);
+
+    // Determine the default extras to include.
+    let default_extras = match &target {
+        ExportTarget::Project(_project) => DefaultExtras::default(),
+        ExportTarget::Script(_) => DefaultExtras::default(),
+    };
+
+    let dev = dev.with_defaults(default_groups);
+    let extras = extras.with_defaults(default_extras);
 
     // Find an interpreter for the project, unless `--frozen` is set.
     let interpreter = if frozen {
@@ -128,6 +138,7 @@ pub(crate) async fn export(
                 python_downloads,
                 &install_mirrors,
                 no_config,
+                false,
                 Some(false),
                 cache,
                 printer,
@@ -142,6 +153,7 @@ pub(crate) async fn export(
                 python_preference,
                 python_downloads,
                 &install_mirrors,
+                false,
                 no_config,
                 Some(false),
                 cache,
@@ -188,7 +200,7 @@ pub(crate) async fn export(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -252,6 +264,41 @@ pub(crate) async fn export(
     // Write the resolved dependencies to the output channel.
     let mut writer = OutputWriter::new(!quiet || output_file.is_none(), output_file.as_deref());
 
+    // Determine the output format.
+    let format = format.unwrap_or_else(|| {
+        if output_file
+            .as_deref()
+            .and_then(Path::extension)
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("txt"))
+        {
+            ExportFormat::RequirementsTxt
+        } else if output_file
+            .as_deref()
+            .and_then(Path::file_name)
+            .and_then(OsStr::to_str)
+            .is_some_and(is_pylock_toml)
+        {
+            ExportFormat::PylockToml
+        } else {
+            ExportFormat::RequirementsTxt
+        }
+    });
+
+    // If the user is exporting to PEP 751, ensure the filename matches the specification.
+    if matches!(format, ExportFormat::PylockToml) {
+        if let Some(file_name) = output_file
+            .as_deref()
+            .and_then(Path::file_name)
+            .and_then(OsStr::to_str)
+        {
+            if !is_pylock_toml(file_name) {
+                return Err(anyhow!(
+                    "Expected the output filename to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`); `{file_name}` won't be recognized as a `pylock.toml` file in subsequent commands",
+                ));
+            }
+        }
+    }
+
     // Generate the export.
     match format {
         ExportFormat::RequirementsTxt => {
@@ -275,6 +322,26 @@ pub(crate) async fn export(
                 writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
             }
             write!(writer, "{export}")?;
+        }
+        ExportFormat::PylockToml => {
+            let export = PylockToml::from_lock(
+                &target,
+                &prune,
+                &extras,
+                &dev,
+                include_annotations,
+                &install_options,
+            )?;
+
+            if include_header {
+                writeln!(
+                    writer,
+                    "{}",
+                    "# This file was autogenerated by uv via the following command:".green()
+                )?;
+                writeln!(writer, "{}", format!("#    {}", cmd()).green())?;
+            }
+            write!(writer, "{}", export.to_toml()?)?;
         }
     }
 

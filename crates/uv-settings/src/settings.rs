@@ -141,6 +141,9 @@ pub struct Options {
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub r#package: Option<serde::de::IgnoredAny>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub build_backend: Option<serde::de::IgnoredAny>,
 }
 
 impl Options {
@@ -816,21 +819,40 @@ pub struct PythonInstallMirrors {
         "#
     )]
     pub pypy_install_mirror: Option<String>,
+
+    /// URL pointing to JSON of custom Python installations.
+    ///
+    /// Note that currently, only local paths are supported.
+    #[option(
+        default = "None",
+        value_type = "str",
+        example = r#"
+            python-downloads-json-url = "/etc/uv/python-downloads.json"
+        "#
+    )]
+    pub python_downloads_json_url: Option<String>,
 }
 
 impl Default for PythonInstallMirrors {
     fn default() -> Self {
-        PythonInstallMirrors::resolve(None, None)
+        PythonInstallMirrors::resolve(None, None, None)
     }
 }
 
 impl PythonInstallMirrors {
-    pub fn resolve(python_mirror: Option<String>, pypy_mirror: Option<String>) -> Self {
+    pub fn resolve(
+        python_mirror: Option<String>,
+        pypy_mirror: Option<String>,
+        python_downloads_json_url: Option<String>,
+    ) -> Self {
         let python_mirror_env = std::env::var(EnvVars::UV_PYTHON_INSTALL_MIRROR).ok();
         let pypy_mirror_env = std::env::var(EnvVars::UV_PYPY_INSTALL_MIRROR).ok();
+        let python_downloads_json_url_env =
+            std::env::var(EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL).ok();
         PythonInstallMirrors {
             python_install_mirror: python_mirror_env.or(python_mirror),
             pypy_install_mirror: pypy_mirror_env.or(pypy_mirror),
+            python_downloads_json_url: python_downloads_json_url_env.or(python_downloads_json_url),
         }
     }
 }
@@ -1811,6 +1833,7 @@ pub struct OptionsWire {
     // install_mirror: PythonInstallMirrors,
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
+    python_downloads_json_url: Option<String>,
 
     // #[serde(flatten)]
     // publish: PublishOptions
@@ -1842,7 +1865,6 @@ pub struct OptionsWire {
     dev_dependencies: Option<serde::de::IgnoredAny>,
 
     // Build backend
-    #[allow(dead_code)]
     build_backend: Option<serde::de::IgnoredAny>,
 }
 
@@ -1859,6 +1881,7 @@ impl From<OptionsWire> for Options {
             python_downloads,
             python_install_mirror,
             pypy_install_mirror,
+            python_downloads_json_url,
             concurrent_downloads,
             concurrent_builds,
             concurrent_installs,
@@ -1907,7 +1930,7 @@ impl From<OptionsWire> for Options {
             managed,
             package,
             // Used by the build backend
-            build_backend: _,
+            build_backend,
         } = value;
 
         Self {
@@ -1956,6 +1979,7 @@ impl From<OptionsWire> for Options {
             },
             pip,
             cache_keys,
+            build_backend,
             override_dependencies,
             constraint_dependencies,
             build_constraint_dependencies,
@@ -1964,6 +1988,7 @@ impl From<OptionsWire> for Options {
             install_mirrors: PythonInstallMirrors::resolve(
                 python_install_mirror,
                 pypy_install_mirror,
+                python_downloads_json_url,
             ),
             conflicts,
             publish: PublishOptions {

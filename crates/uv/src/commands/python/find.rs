@@ -124,6 +124,7 @@ pub(crate) async fn find_script(
         python_preference,
         python_downloads,
         &PythonInstallMirrors::default(),
+        false,
         no_config,
         Some(false),
         cache,

@@ -35,7 +35,7 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{registry_pythons, WindowsPython};
-use crate::{Interpreter, PythonVersion};
+use crate::{BrokenSymlink, Interpreter, PythonVersion};
 
 /// A request to find a Python installation.
 ///
@@ -239,7 +239,7 @@ pub enum Error {
     InvalidVersionRequest(String),
 
     // TODO(zanieb): Is this error case necessary still? We should probably drop it.
-    #[error("Interpreter discovery for `{0}` requires `{1}` but only {2} is allowed")]
+    #[error("Interpreter discovery for `{0}` requires `{1}` but only `{2}` is allowed")]
     SourceNotAllowed(PythonRequest, PythonSource, PythonPreference),
 }
 
@@ -563,7 +563,7 @@ fn find_all_minor(
     implementation: Option<&ImplementationName>,
     version_request: &VersionRequest,
     dir: &Path,
-) -> impl Iterator<Item = PathBuf> {
+) -> impl Iterator<Item = PathBuf> + use<> {
     match version_request {
         &VersionRequest::Any
         | VersionRequest::Default
@@ -815,7 +815,8 @@ impl Error {
                     );
                     false
                 }
-                InterpreterError::NotFound(path) => {
+                InterpreterError::NotFound(path)
+                | InterpreterError::BrokenSymlink(BrokenSymlink { path, .. }) => {
                     // If the interpreter is from an active, valid virtual environment, we should
                     // fail because it's broken
                     if let Some(Ok(true)) = matches!(source, PythonSource::ActiveEnvironment)
@@ -894,11 +895,13 @@ pub fn find_python_installations<'a>(
                 debug!("Checking for Python interpreter at {request}");
                 match python_installation_from_executable(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_)) => Ok(Err(PythonNotFound {
-                        request: request.clone(),
-                        python_preference: preference,
-                        environment_preference: environments,
-                    })),
+                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
+                        Ok(Err(PythonNotFound {
+                            request: request.clone(),
+                            python_preference: preference,
+                            environment_preference: environments,
+                        }))
+                    }
                     Err(err) => Err(Error::Query(
                         Box::new(err),
                         path.clone(),
@@ -918,11 +921,13 @@ pub fn find_python_installations<'a>(
                 debug!("Checking for Python interpreter in {request}");
                 match python_installation_from_directory(path, cache) {
                     Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_)) => Ok(Err(PythonNotFound {
-                        request: request.clone(),
-                        python_preference: preference,
-                        environment_preference: environments,
-                    })),
+                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenSymlink(_)) => {
+                        Ok(Err(PythonNotFound {
+                            request: request.clone(),
+                            python_preference: preference,
+                            environment_preference: environments,
+                        }))
+                    }
                     Err(err) => Err(Error::Query(
                         Box::new(err),
                         path.clone(),
@@ -2177,7 +2182,7 @@ impl VersionRequest {
                 (version.major(), version.minor(), version.patch())
                     == (*major, *minor, Some(*patch))
             }
-            Self::Range(specifiers, _) => specifiers.contains(&version.version),
+            Self::Range(specifiers, _) => specifiers.contains(&version.version.only_release()),
             Self::MajorMinorPrerelease(major, minor, prerelease, _) => {
                 (version.major(), version.minor(), version.pre())
                     == (*major, *minor, Some(*prerelease))
@@ -2294,9 +2299,9 @@ impl VersionRequest {
         match self {
             Self::Default => false,
             Self::Any => true,
-            Self::Major(..) => true,
-            Self::MajorMinor(..) => true,
-            Self::MajorMinorPatch(..) => true,
+            Self::Major(..) => false,
+            Self::MajorMinor(..) => false,
+            Self::MajorMinorPatch(..) => false,
             Self::MajorMinorPrerelease(..) => true,
             Self::Range(specifiers, _) => specifiers.iter().any(VersionSpecifier::any_prerelease),
         }
@@ -2641,6 +2646,12 @@ impl fmt::Display for PythonNotFound {
             PythonRequest::Default | PythonRequest::Any => {
                 write!(f, "No interpreter found in {sources}")
             }
+            PythonRequest::File(_) => {
+                write!(f, "No interpreter found at {}", self.request)
+            }
+            PythonRequest::Directory(_) => {
+                write!(f, "No interpreter found in {}", self.request)
+            }
             _ => {
                 write!(f, "No interpreter found for {} in {sources}", self.request)
             }
@@ -2705,12 +2716,15 @@ mod tests {
     use std::{path::PathBuf, str::FromStr};
 
     use assert_fs::{prelude::*, TempDir};
+    use target_lexicon::{Aarch64Architecture, Architecture};
     use test_log::test;
     use uv_pep440::{Prerelease, PrereleaseKind, VersionSpecifiers};
 
     use crate::{
         discovery::{PythonRequest, VersionRequest},
+        downloads::PythonDownloadRequest,
         implementation::ImplementationName,
+        platform::{Arch, Libc, Os},
     };
 
     use super::{Error, PythonVariant};
@@ -2763,6 +2777,7 @@ mod tests {
             PythonRequest::parse("cpython"),
             PythonRequest::Implementation(ImplementationName::CPython)
         );
+
         assert_eq!(
             PythonRequest::parse("cpython3.12.2"),
             PythonRequest::ImplementationVersion(
@@ -2770,6 +2785,78 @@ mod tests {
                 VersionRequest::from_str("3.12.2").unwrap(),
             )
         );
+
+        assert_eq!(
+            PythonRequest::parse("cpython-3.13.2"),
+            PythonRequest::Key(PythonDownloadRequest {
+                version: Some(VersionRequest::MajorMinorPatch(
+                    3,
+                    13,
+                    2,
+                    PythonVariant::Default
+                )),
+                implementation: Some(ImplementationName::CPython),
+                arch: None,
+                os: None,
+                libc: None,
+                prereleases: None
+            })
+        );
+        assert_eq!(
+            PythonRequest::parse("cpython-3.13.2-macos-aarch64-none"),
+            PythonRequest::Key(PythonDownloadRequest {
+                version: Some(VersionRequest::MajorMinorPatch(
+                    3,
+                    13,
+                    2,
+                    PythonVariant::Default
+                )),
+                implementation: Some(ImplementationName::CPython),
+                arch: Some(Arch {
+                    family: Architecture::Aarch64(Aarch64Architecture::Aarch64),
+                    variant: None
+                }),
+                os: Some(Os(target_lexicon::OperatingSystem::Darwin(None))),
+                libc: Some(Libc::None),
+                prereleases: None
+            })
+        );
+        assert_eq!(
+            PythonRequest::parse("any-3.13.2"),
+            PythonRequest::Key(PythonDownloadRequest {
+                version: Some(VersionRequest::MajorMinorPatch(
+                    3,
+                    13,
+                    2,
+                    PythonVariant::Default
+                )),
+                implementation: None,
+                arch: None,
+                os: None,
+                libc: None,
+                prereleases: None
+            })
+        );
+        assert_eq!(
+            PythonRequest::parse("any-3.13.2-any-aarch64"),
+            PythonRequest::Key(PythonDownloadRequest {
+                version: Some(VersionRequest::MajorMinorPatch(
+                    3,
+                    13,
+                    2,
+                    PythonVariant::Default
+                )),
+                implementation: None,
+                arch: Some(Arch {
+                    family: Architecture::Aarch64(Aarch64Architecture::Aarch64),
+                    variant: None
+                }),
+                os: None,
+                libc: None,
+                prereleases: None
+            })
+        );
+
         assert_eq!(
             PythonRequest::parse("pypy"),
             PythonRequest::Implementation(ImplementationName::PyPy)

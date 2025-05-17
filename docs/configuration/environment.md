@@ -225,6 +225,12 @@ Equivalent to the `--no-config` command-line argument. If set, uv will not read
 any configuration files from the current directory, parent directories, or user configuration
 directories.
 
+### `UV_NO_EDITABLE`
+
+Equivalent to the `--no-editable` command-line argument. If set, uv
+installs any editable dependencies, including the project and any workspace members, as
+non-editable
+
 ### `UV_NO_ENV_FILE`
 
 Ignore `.env` files when executing `uv run` commands.
@@ -333,6 +339,11 @@ this Python interpreter for all operations.
 
 Specifies the directory to place links to installed, managed Python executables.
 
+### `UV_PYTHON_CACHE_DIR`
+
+Specifies the directory for caching the archives of managed Python installations before
+installation.
+
 ### `UV_PYTHON_DOWNLOADS`
 
 Equivalent to the
@@ -379,6 +390,18 @@ uv will require that all dependencies have a hash specified in the requirements 
 
 Equivalent to the `--resolution` command-line argument. For example, if set to
 `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
+
+### `UV_STACK_SIZE`
+
+Use to set the stack size used by uv.
+
+The value is in bytes, and if both `UV_STACK_SIZE` are `RUST_MIN_STACK` unset, uv uses a 4MB
+(4194304) stack. `UV_STACK_SIZE` takes precedence over `RUST_MIN_STACK`.
+
+Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
+stack size, because we actually spawn our own main2 thread to work around
+the fact that Windows' real main thread is only 1MB. That thread has size
+`max(UV_STACK_SIZE, 1MB)`.
 
 ### `UV_SYSTEM_PYTHON`
 
@@ -568,11 +591,16 @@ for more.
 
 Use to set the stack size used by uv.
 
-The value is in bytes, and the default is typically 2MB (2097152).
+The value is in bytes, and if both `UV_STACK_SIZE` are `RUST_MIN_STACK` unset, uv uses a 4MB
+(4194304) stack. `UV_STACK_SIZE` takes precedence over `RUST_MIN_STACK`.
+
+Prefer setting `UV_STACK_SIZE`, since `RUST_MIN_STACK` also affects subprocesses, such as
+build backends that use Rust code.
+
 Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
 stack size, because we actually spawn our own main2 thread to work around
 the fact that Windows' real main thread is only 1MB. That thread has size
-`max(RUST_MIN_STACK, 4MB)`.
+`max(RUST_MIN_STACK, 1MB)`.
 
 ### `SHELL`
 

@@ -291,7 +291,7 @@ fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes>
             return Err(syn::Error::new(
                 meta.path.span(),
                 format!(
-                    "Deprecated meta {:?} is not supported by ruff's option macro.",
+                    "Deprecated meta {:?} is not supported by uv's option macro.",
                     meta.path.get_ident()
                 ),
             ));
@@ -332,7 +332,7 @@ fn parse_deprecated_attribute(attribute: &Attribute) -> syn::Result<DeprecatedAt
             return Err(syn::Error::new(
                 meta.path.span(),
                 format!(
-                    "Deprecated meta {:?} is not supported by ruff's option macro.",
+                    "Deprecated meta {:?} is not supported by uv's option macro.",
                     meta.path.get_ident()
                 ),
             ));

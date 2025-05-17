@@ -10,14 +10,7 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::instrument;
-use uv_auth::UrlAuthPolicies;
 
-use crate::commands::pip::operations;
-use crate::commands::project::{find_requires_python, ProjectError};
-use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::ExitStatus;
-use crate::printer::Printer;
-use crate::settings::{NetworkSettings, ResolverSettings};
 use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
@@ -44,6 +37,13 @@ use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
+
+use crate::commands::pip::operations;
+use crate::commands::project::{find_requires_python, ProjectError};
+use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::ExitStatus;
+use crate::printer::Printer;
+use crate::settings::{NetworkSettings, ResolverSettings};
 
 #[derive(Debug, Error)]
 enum Error {
@@ -260,8 +260,7 @@ async fn build_impl(
         let workspace = match workspace {
             Ok(ref workspace) => workspace,
             Err(err) => {
-                return Err(anyhow::Error::from(err)
-                    .context("`--package` was provided, but no workspace was found"));
+                return Err(err).context("`--package` was provided, but no workspace was found");
             }
         };
 
@@ -273,7 +272,13 @@ async fn build_impl(
         if !package.pyproject_toml().is_package() {
             let name = &package.project().name;
             let pyproject_toml = package.root().join("pyproject.toml");
-            return Err(anyhow::anyhow!("Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```", name.cyan(), "build-system".green(), "setuptools".cyan(), pyproject_toml.user_display().cyan()));
+            return Err(anyhow::anyhow!(
+                "Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```",
+                name.cyan(),
+                "build-system".green(),
+                "setuptools".cyan(),
+                pyproject_toml.user_display().cyan()
+            ));
         }
 
         vec![AnnotatedSource::from(Source::Directory(Cow::Borrowed(
@@ -289,8 +294,8 @@ async fn build_impl(
         let workspace = match workspace {
             Ok(ref workspace) => workspace,
             Err(err) => {
-                return Err(anyhow::Error::from(err)
-                    .context("`--all-packages` was provided, but no workspace was found"));
+                return Err(err)
+                    .context("`--all-packages` was provided, but no workspace was found");
             }
         };
 
@@ -312,7 +317,13 @@ async fn build_impl(
             let member = workspace.packages().values().next().unwrap();
             let name = &member.project().name;
             let pyproject_toml = member.root().join("pyproject.toml");
-            return Err(anyhow::anyhow!("Workspace does not contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```", name.cyan(), "setuptools".cyan(), "build-system".green(), pyproject_toml.user_display().cyan()));
+            return Err(anyhow::anyhow!(
+                "Workspace does not contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```",
+                name.cyan(),
+                "setuptools".cyan(),
+                "build-system".green(),
+                pyproject_toml.user_display().cyan()
+            ));
         }
 
         packages
@@ -333,14 +344,13 @@ async fn build_impl(
             cache,
             printer,
             index_locations,
-            &client_builder,
+            client_builder.clone(),
             hash_checking,
             build_logs,
             force_pep517,
             build_constraints,
             *no_build_isolation,
             no_build_isolation_package,
-            network_settings,
             *index_strategy,
             *keyring_provider,
             *exclude_newer,
@@ -411,14 +421,13 @@ async fn build_package(
     cache: &Cache,
     printer: Printer,
     index_locations: &IndexLocations,
-    client_builder: &BaseClientBuilder<'_>,
+    client_builder: BaseClientBuilder<'_>,
     hash_checking: Option<HashCheckingMode>,
     build_logs: bool,
     force_pep517: bool,
     build_constraints: &[RequirementsSource],
     no_build_isolation: bool,
     no_build_isolation_package: &[PackageName],
-    network_settings: &NetworkSettings,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
     exclude_newer: Option<ExcludeNewer>,
@@ -480,11 +489,12 @@ async fn build_package(
         EnvironmentPreference::Any,
         python_preference,
         python_downloads,
-        client_builder,
+        &client_builder,
         cache,
         Some(&PythonDownloadReporter::single(printer)),
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
     .into_interpreter();
@@ -501,7 +511,8 @@ async fn build_package(
     }
 
     // Read build constraints.
-    let build_constraints = operations::read_constraints(build_constraints, client_builder).await?;
+    let build_constraints =
+        operations::read_constraints(build_constraints, &client_builder).await?;
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
@@ -519,17 +530,14 @@ async fn build_package(
 
     let build_constraints = Constraints::from_requirements(
         build_constraints
-            .iter()
-            .map(|constraint| constraint.requirement.clone()),
+            .into_iter()
+            .map(|constraint| constraint.requirement),
     );
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .url_auth_policies(UrlAuthPolicies::from(index_locations))
-        .index_urls(index_locations.index_urls())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
+        .index_locations(index_locations)
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
         .markers(interpreter.markers())

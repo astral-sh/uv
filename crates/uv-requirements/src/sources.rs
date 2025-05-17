@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -5,7 +6,6 @@ use console::Term;
 
 use uv_fs::{Simplified, CWD};
 use uv_requirements_txt::RequirementsTxtRequirement;
-use uv_warnings::warn_user;
 
 #[derive(Debug, Clone)]
 pub enum RequirementsSource {
@@ -13,6 +13,8 @@ pub enum RequirementsSource {
     Package(RequirementsTxtRequirement),
     /// An editable path was provided on the command line (e.g., `pip install -e ../flask`).
     Editable(RequirementsTxtRequirement),
+    /// Dependencies were provided via a `pylock.toml` file.
+    PylockToml(PathBuf),
     /// Dependencies were provided via a `requirements.txt` file (e.g., `pip install -r requirements.txt`).
     RequirementsTxt(PathBuf),
     /// Dependencies were provided via a `pyproject.toml` file (e.g., `pip-compile pyproject.toml`).
@@ -21,65 +23,134 @@ pub enum RequirementsSource {
     SetupPy(PathBuf),
     /// Dependencies were provided via a `setup.cfg` file (e.g., `pip-compile setup.cfg`).
     SetupCfg(PathBuf),
-    /// Dependencies were provided via a path to a source tree (e.g., `pip install .`).
-    SourceTree(PathBuf),
+    /// Dependencies were provided via an unsupported Conda `environment.yml` file (e.g., `pip install -r environment.yml`).
+    EnvironmentYml(PathBuf),
 }
 
 impl RequirementsSource {
     /// Parse a [`RequirementsSource`] from a [`PathBuf`]. The file type is determined by the file
     /// extension.
-    pub fn from_requirements_file(path: PathBuf) -> Self {
+    pub fn from_requirements_file(path: PathBuf) -> Result<Self> {
         if path.ends_with("pyproject.toml") {
-            Self::PyprojectToml(path)
+            Ok(Self::PyprojectToml(path))
         } else if path.ends_with("setup.py") {
-            Self::SetupPy(path)
+            Ok(Self::SetupPy(path))
         } else if path.ends_with("setup.cfg") {
-            Self::SetupCfg(path)
+            Ok(Self::SetupCfg(path))
+        } else if path.ends_with("environment.yml") {
+            Ok(Self::EnvironmentYml(path))
+        } else if path
+            .file_name()
+            .is_some_and(|file_name| file_name.to_str().is_some_and(is_pylock_toml))
+        {
+            Ok(Self::PylockToml(path))
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
+        {
+            Err(anyhow::anyhow!(
+                "`{}` is not a valid PEP 751 filename: expected TOML file to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`)",
+                path.user_display(),
+            ))
         } else {
-            Self::RequirementsTxt(path)
+            Ok(Self::RequirementsTxt(path))
         }
     }
 
     /// Parse a [`RequirementsSource`] from a `requirements.txt` file.
-    pub fn from_requirements_txt(path: PathBuf) -> Self {
-        for filename in ["pyproject.toml", "setup.py", "setup.cfg"] {
-            if path.ends_with(filename) {
-                warn_user!(
-                    "The file `{}` appears to be a `{}` file, but requirements must be specified in `requirements.txt` format.",
+    pub fn from_requirements_txt(path: PathBuf) -> Result<Self> {
+        for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
+            if path.ends_with(file_name) {
+                return Err(anyhow::anyhow!(
+                    "The file `{}` appears to be a `{}` file, but requirements must be specified in `requirements.txt` format",
                     path.user_display(),
-                    filename
-                );
+                    file_name
+                ));
             }
         }
-        Self::RequirementsTxt(path)
+        if path
+            .file_name()
+            .and_then(OsStr::to_str)
+            .is_some_and(is_pylock_toml)
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a `pylock.toml` file, but requirements must be specified in `requirements.txt` format",
+                path.user_display(),
+            ));
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a TOML file, but requirements must be specified in `requirements.txt` format",
+                path.user_display(),
+            ));
+        }
+        Ok(Self::RequirementsTxt(path))
     }
 
     /// Parse a [`RequirementsSource`] from a `constraints.txt` file.
-    pub fn from_constraints_txt(path: PathBuf) -> Self {
-        for filename in ["pyproject.toml", "setup.py", "setup.cfg"] {
-            if path.ends_with(filename) {
-                warn_user!(
-                    "The file `{}` appears to be a `{}` file, but constraints must be specified in `requirements.txt` format.",
+    pub fn from_constraints_txt(path: PathBuf) -> Result<Self> {
+        for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
+            if path.ends_with(file_name) {
+                return Err(anyhow::anyhow!(
+                    "The file `{}` appears to be a `{}` file, but constraints must be specified in `requirements.txt` format",
                     path.user_display(),
-                    filename
-                );
+                    file_name
+                ));
             }
         }
-        Self::RequirementsTxt(path)
+        if path
+            .file_name()
+            .and_then(OsStr::to_str)
+            .is_some_and(is_pylock_toml)
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a `pylock.toml` file, but constraints must be specified in `requirements.txt` format",
+                path.user_display(),
+            ));
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a TOML file, but constraints must be specified in `requirements.txt` format",
+                path.user_display(),
+            ));
+        }
+        Ok(Self::RequirementsTxt(path))
     }
 
     /// Parse a [`RequirementsSource`] from an `overrides.txt` file.
-    pub fn from_overrides_txt(path: PathBuf) -> Self {
-        for filename in ["pyproject.toml", "setup.py", "setup.cfg"] {
-            if path.ends_with(filename) {
-                warn_user!(
-                    "The file `{}` appears to be a `{}` file, but overrides must be specified in `requirements.txt` format.",
+    pub fn from_overrides_txt(path: PathBuf) -> Result<Self> {
+        for file_name in ["pyproject.toml", "setup.py", "setup.cfg"] {
+            if path.ends_with(file_name) {
+                return Err(anyhow::anyhow!(
+                    "The file `{}` appears to be a `{}` file, but overrides must be specified in `requirements.txt` format",
                     path.user_display(),
-                    filename
-                );
+                    file_name
+                ));
             }
         }
-        Self::RequirementsTxt(path)
+        if path
+            .file_name()
+            .and_then(OsStr::to_str)
+            .is_some_and(is_pylock_toml)
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a `pylock.toml` file, but overrides must be specified in `requirements.txt` format",
+                path.user_display(),
+            ));
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
+        {
+            return Err(anyhow::anyhow!(
+                "The file `{}` appears to be a TOML file, but overrides must be specified in `requirements.txt` format",
+                path.user_display(),
+            ));
+        }
+        Ok(Self::RequirementsTxt(path))
     }
 
     /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a positional
@@ -97,16 +168,20 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local requirements file but was passed as a package name. Did you mean `-r {name}`?"
                 );
-                let confirmation = uv_console::confirm(&prompt, &term, true)?;
+                let confirmation =
+                    uv_console::confirm(&prompt, &term, true).context("Confirm prompt failed")?;
                 if confirmation {
-                    return Ok(Self::from_requirements_file(name.into()));
+                    return Self::from_requirements_file(name.into());
                 }
             }
         }
 
         // Similarly, if the user provided a `pyproject.toml` file without `-r` (as in
         // `uv pip install pyproject.toml`), prompt them to correct it.
-        if (name == "pyproject.toml" || name == "setup.py" || name == "setup.cfg")
+        if (name == "pyproject.toml"
+            || name == "setup.py"
+            || name == "setup.cfg"
+            || is_pylock_toml(name))
             && Path::new(&name).is_file()
         {
             let term = Term::stderr();
@@ -114,9 +189,10 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local metadata file but was passed as a package name. Did you mean `-r {name}`?"
                 );
-                let confirmation = uv_console::confirm(&prompt, &term, true)?;
+                let confirmation =
+                    uv_console::confirm(&prompt, &term, true).context("Confirm prompt failed")?;
                 if confirmation {
-                    return Ok(Self::from_requirements_file(name.into()));
+                    return Self::from_requirements_file(name.into());
                 }
             }
         }
@@ -142,16 +218,20 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local requirements file but was passed as a package name. Did you mean `--with-requirements {name}`?"
                 );
-                let confirmation = uv_console::confirm(&prompt, &term, true)?;
+                let confirmation =
+                    uv_console::confirm(&prompt, &term, true).context("Confirm prompt failed")?;
                 if confirmation {
-                    return Ok(Self::from_requirements_file(name.into()));
+                    return Self::from_requirements_file(name.into());
                 }
             }
         }
 
         // Similarly, if the user provided a `pyproject.toml` file without `--with-requirements` (as in
         // `uvx --with pyproject.toml ruff`), prompt them to correct it.
-        if (name == "pyproject.toml" || name == "setup.py" || name == "setup.cfg")
+        if (name == "pyproject.toml"
+            || name == "setup.py"
+            || name == "setup.cfg"
+            || is_pylock_toml(name))
             && Path::new(&name).is_file()
         {
             let term = Term::stderr();
@@ -159,9 +239,10 @@ impl RequirementsSource {
                 let prompt = format!(
                     "`{name}` looks like a local metadata file but was passed as a package name. Did you mean `--with-requirements {name}`?"
                 );
-                let confirmation = uv_console::confirm(&prompt, &term, true)?;
+                let confirmation =
+                    uv_console::confirm(&prompt, &term, true).context("Confirm prompt failed")?;
                 if confirmation {
-                    return Ok(Self::from_requirements_file(name.into()));
+                    return Self::from_requirements_file(name.into());
                 }
             }
         }
@@ -188,12 +269,6 @@ impl RequirementsSource {
         Ok(Self::Package(requirement))
     }
 
-    /// Parse a [`RequirementsSource`] from a user-provided string, assumed to be a path to a source
-    /// tree.
-    pub fn from_source_tree(path: PathBuf) -> Self {
-        Self::SourceTree(path)
-    }
-
     /// Returns `true` if the source allows extras to be specified.
     pub fn allows_extras(&self) -> bool {
         matches!(
@@ -213,13 +288,20 @@ impl std::fmt::Display for RequirementsSource {
         match self {
             Self::Package(package) => write!(f, "{package:?}"),
             Self::Editable(path) => write!(f, "-e {path:?}"),
-            Self::RequirementsTxt(path)
+            Self::PylockToml(path)
+            | Self::RequirementsTxt(path)
             | Self::PyprojectToml(path)
             | Self::SetupPy(path)
             | Self::SetupCfg(path)
-            | Self::SourceTree(path) => {
+            | Self::EnvironmentYml(path) => {
                 write!(f, "{}", path.simplified_display())
             }
         }
     }
+}
+
+/// Returns `true` if a file name matches the `pylock.toml` pattern defined in PEP 751.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
+pub fn is_pylock_toml(file_name: &str) -> bool {
+    file_name.starts_with("pylock.") && file_name.ends_with(".toml")
 }

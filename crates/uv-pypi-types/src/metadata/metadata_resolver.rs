@@ -182,7 +182,7 @@ impl ResolutionMetadata {
             match field.as_str() {
                 "dependencies" => return Err(MetadataError::DynamicField("dependencies")),
                 "optional-dependencies" => {
-                    return Err(MetadataError::DynamicField("optional-dependencies"))
+                    return Err(MetadataError::DynamicField("optional-dependencies"));
                 }
                 "requires-python" => return Err(MetadataError::DynamicField("requires-python")),
                 // When building from a source distribution, the version is known from the filename and

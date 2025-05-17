@@ -45,8 +45,8 @@ jobs:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -54,7 +54,7 @@ jobs:
       - name: "Prep README.md"
         run: python scripts/transform_readme.py --target pypi
       - name: "Build sdist"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           command: sdist
           args: --out dist
@@ -74,7 +74,7 @@ jobs:
 
       # uv-build
       - name: "Build sdist uv-build"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           command: sdist
           args: --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
@@ -93,8 +93,8 @@ jobs:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -103,7 +103,7 @@ jobs:
 
       # uv
       - name: "Build wheels - x86_64"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: x86_64
           args: --release --locked --out dist --features self-update
@@ -133,7 +133,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build - x86_64"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: x86_64
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
@@ -147,8 +147,8 @@ jobs:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: arm64
@@ -157,7 +157,7 @@ jobs:
 
       # uv
       - name: "Build wheels - aarch64"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: aarch64
           args: --release --locked --out dist --features self-update
@@ -193,7 +193,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build - aarch64"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: aarch64
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
@@ -221,8 +221,8 @@ jobs:
           - target: aarch64-pc-windows-msvc
             arch: x64 # not relevant here
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.platform.arch }}
@@ -231,7 +231,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.platform.target }}
           args: --release --locked --out dist --features self-update
@@ -265,7 +265,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.platform.target }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
@@ -291,8 +291,8 @@ jobs:
           - { target: "i686-unknown-linux-gnu", cc: "gcc -m32" }
           - { target: "x86_64-unknown-linux-gnu", cc: "gcc" }
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -301,7 +301,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.target }}
           # Generally, we try to build in a target docker container. In this case however, a
@@ -366,7 +366,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.target }}
           manylinux: auto
@@ -401,8 +401,8 @@ jobs:
             arch: arm
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -410,7 +410,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.platform.target }}
           # On `aarch64`, use `manylinux: 2_28`; otherwise, use `manylinux: auto`.
@@ -460,7 +460,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.platform.target }}
           # On `aarch64`, use `manylinux: 2_28`; otherwise, use `manylinux: auto`.
@@ -500,8 +500,8 @@ jobs:
             arch: s390x
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -509,7 +509,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.platform.target }}
           manylinux: auto
@@ -559,7 +559,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.platform.target }}
           manylinux: auto
@@ -604,8 +604,8 @@ jobs:
             maturin_docker_options: -e JEMALLOC_SYS_WITH_LG_PAGE=16
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -613,7 +613,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.platform.target }}
           manylinux: auto
@@ -671,7 +671,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.platform.target }}
           manylinux: auto
@@ -700,8 +700,8 @@ jobs:
           - x86_64-unknown-linux-musl
           - i686-unknown-linux-musl
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
@@ -710,7 +710,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
@@ -757,7 +757,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels uv-build"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.target }}
           manylinux: musllinux_1_1
@@ -795,8 +795,8 @@ jobs:
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: actions/setup-python@8d9ed9ac5c53483de85588cdf95a591a75ab9f55 # v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: "Prep README.md"
@@ -804,7 +804,7 @@ jobs:
 
       # uv
       - name: "Build wheels"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1
@@ -871,7 +871,7 @@ jobs:
 
       # uv-build
       - name: "Build wheels"
-        uses: PyO3/maturin-action@22fe573c6ed0c03ab9b84e631cbfa49bddf6e20e # v1.47.3
+        uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.platform.target }}
           manylinux: musllinux_1_1

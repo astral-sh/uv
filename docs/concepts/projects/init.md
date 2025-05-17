@@ -202,8 +202,8 @@ build-backend = "hatchling.build"
 !!! tip
 
     You can select a different build backend template by using `--build-backend` with `hatchling`,
-    `flit-core`, `pdm-backend`, `setuptools`, `maturin`, or `scikit-build-core`. An alternative
-    backend is required if you want to create a [library with extension modules](#projects-with-extension-modules).
+    `uv_build`, `flit-core`, `pdm-backend`, `setuptools`, `maturin`, or `scikit-build-core`. An
+    alternative backend is required if you want to create a [library with extension modules](#projects-with-extension-modules).
 
 The created module defines a simple API function:
 

@@ -230,6 +230,7 @@ fn install_hardlink() -> Result<()> {
 
 /// Install a package into a virtual environment using symlink semantics.
 #[test]
+#[cfg(unix)] // Windows does not allow symlinks by default
 fn install_symlink() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -1086,7 +1087,10 @@ fn install_local_wheel() -> Result<()> {
 
     // Download a wheel.
     let archive = context.temp_dir.child("tomli-2.0.1-py3-none-any.whl");
-    download_to_disk("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl", &archive);
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -1223,7 +1227,10 @@ fn mismatched_version() -> Result<()> {
 
     // Download a wheel.
     let archive = context.temp_dir.child("tomli-3.7.2-py3-none-any.whl");
-    download_to_disk("https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl", &archive);
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl",
+        &archive,
+    );
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -3439,14 +3446,14 @@ fn require_hashes_unknown_algorithm() -> Result<()> {
 
     uv_snapshot!(context.pip_sync()
         .arg("requirements.txt")
-        .arg("--require-hashes"), @r###"
+        .arg("--require-hashes"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, or `sha512`) on: `foo`
-    "###
+    error: Unsupported hash algorithm (expected one of: `md5`, `sha256`, `sha384`, `sha512`, or `blake2b`) on: `foo`
+    "
     );
 
     Ok(())
@@ -5728,6 +5735,357 @@ fn semicolon_no_space() -> Result<()> {
     iniconfig @ https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl;python_version > '3.10'
                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 3 packages in [TIME]
+    "
+    );
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 3 packages in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     + iniconfig==2.0.0
+     - sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
+/// Avoid erroring for packages that only include wheels, and _don't_ include a wheel for the
+/// current platform, but are omitted by markers anyway.
+///
+/// See: <https://github.com/astral-sh/uv/issues/13127>
+#[test]
+fn pep_751_wheel_only() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12.0"
+        dependencies = ["torch"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    // If there's no compatible wheel for a package we _don't_ need to install (e.g., anything
+    // CUDA-related), succeed.
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--dry-run")
+        .arg("--python-platform")
+        .arg("macos"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Would download 9 packages
+    Would install 9 packages
+     + filelock==3.13.1
+     + fsspec==2024.3.1
+     + jinja2==3.1.3
+     + markupsafe==2.1.5
+     + mpmath==1.3.0
+     + networkx==3.2.1
+     + sympy==1.12
+     + torch==2.2.1
+     + typing-extensions==4.10.0
+    "
+    );
+
+    // However, if there's no compatible wheel for a package that we _do_ need to install, we should
+    // error
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--dry-run")
+        .arg("--python-platform")
+        .arg("macos")
+        .arg("--python-version")
+        .arg("3.8"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `torch` can't be installed because it doesn't have a source distribution or wheel for the current platform
+
+    hint: You're using CPython 3.8 (`cp38`), but `torch` (v2.2.1) only has wheels with the following Python implementation tag: `cp312`
+    "
+    );
+
+    Ok(())
+}
+
+/// Respect `--no-binary` et al when installing from a `pylock.toml`.
+#[test]
+fn pep_751_build_options() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--no-binary")
+        .arg("anyio"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.8.0
+     + idna==3.10
+     + sniffio==1.3.1
+     + typing-extensions==4.12.2
+    "
+    );
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["odrive"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--no-binary")
+        .arg("odrive"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `odrive` can't be installed because it is marked as `--no-binary` but has no source distribution
+    "
+    );
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["source-distribution"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--only-binary")
+        .arg("source-distribution"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Package `source-distribution` can't be installed because it is marked as `--no-build` but has no binary distribution
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--no-binary")
+        .arg("source-distribution"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Uninstalled 4 packages in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.8.0
+     - idna==3.10
+     - sniffio==1.3.1
+     + source-distribution==0.0.3
+     - typing-extensions==4.12.2
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_direct_url_tags() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["MarkupSafe @ https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl"]
+        "#,
+    )?;
+
+    context
+        .export()
+        .arg("-o")
+        .arg("pylock.toml")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--python-platform")
+        .arg("linux"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to determine installation plan
+      Caused by: A URL dependency is incompatible with the current platform: https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl
+    "
+    );
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml")
+        .arg("--python-platform")
+        .arg("macos"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + markupsafe==3.0.2 (from https://files.pythonhosted.org/packages/6b/b0/18f76bba336fa5aecf79d45dcd6c806c280ec44538b3c13671d49099fdd0/MarkupSafe-3.0.2-cp312-cp312-macosx_11_0_arm64.whl)
+    "
     );
 
     Ok(())

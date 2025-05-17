@@ -23,6 +23,7 @@ uv-pypi-types = { workspace = true }
 astral-tokio-tar = { workspace = true }
 async-compression = { workspace = true, features = ["bzip2", "gzip", "zstd", "xz"] }
 async_zip = { workspace = true }
+blake2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 md-5 = { workspace = true }
@@ -39,7 +40,8 @@ zip = { workspace = true }
 
 [features]
 default = []
-performance = ["xz2/static"]
+# Avoid a liblzma.so dependency
+static = ["xz2/static"]
 
 [package.metadata.cargo-shear]
 ignored = ["xz2"]

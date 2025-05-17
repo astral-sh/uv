@@ -301,7 +301,7 @@ fn rename_module() -> Result<()> {
         module-name = "bar"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.7"]
+        requires = ["uv_build>=0.5,<0.8"]
         build-backend = "uv_build"
     "#})?;
 
@@ -387,7 +387,7 @@ fn rename_module_editable_build() -> Result<()> {
         module-name = "bar"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.7"]
+        requires = ["uv_build>=0.5,<0.8"]
         build-backend = "uv_build"
     "#})?;
 
@@ -449,8 +449,11 @@ fn build_module_name_normalization() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.7"]
+        requires = ["uv_build>=0.5,<0.8"]
         build-backend = "uv_build"
+
+        [tool.uv.build-backend]
+        module-name = "Django_plugin"
     "#})?;
     fs_err::create_dir_all(context.temp_dir.join("src"))?;
 
@@ -458,28 +461,28 @@ fn build_module_name_normalization() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-wheel")
-        .arg(&wheel_dir), @r###"
+        .arg(&wheel_dir), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module directory at: `src/django_plugin`
-    "###);
+    error: Missing module directory for `Django_plugin` in `src`. Found: ``
+    ");
 
     fs_err::create_dir_all(context.temp_dir.join("src/Django_plugin"))?;
     // Error case 2: A matching module, but no `__init__.py`.
     uv_snapshot!(context
         .build_backend()
         .arg("build-wheel")
-        .arg(&wheel_dir), @r###"
+        .arg(&wheel_dir), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected an `__init__.py` at: `src/Django_plugin/__init__.py`
-    "###);
+    error: Expected a Python module directory at: `src/Django_plugin/__init__.py`
+    ");
 
     // Use `Django_plugin` instead of `django_plugin`
     context
@@ -521,7 +524,7 @@ fn build_module_name_normalization() -> Result<()> {
     ----- stderr -----
     ");
 
-    // Error case 3: Multiple modules a matching name.
+    // Former error case 3, now accepted: Multiple modules a matching name.
     // Requires a case-sensitive filesystem.
     #[cfg(target_os = "linux")]
     {
@@ -534,16 +537,107 @@ fn build_module_name_normalization() -> Result<()> {
             .build_backend()
             .arg("build-wheel")
             .arg(&wheel_dir), @r"
-        success: false
-        exit_code: 2
+        success: true
+        exit_code: 0
         ----- stdout -----
+        django_plugin-1.0.0-py3-none-any.whl
 
         ----- stderr -----
-        error: Expected an `__init__.py` at `django_plugin`, found multiple:
-        * `src/Django_plugin`
-        * `src/django_plugin`
         ");
     }
+
+    Ok(())
+}
+
+#[test]
+fn build_sdist_with_long_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let temp_dir = TempDir::new()?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<0.8"]
+        build-backend = "uv_build"
+    "#})?;
+    context
+        .temp_dir
+        .child("src/foo/__init__.py")
+        .write_str(r#"print("Hi from foo")"#)?;
+
+    let long_path = format!("src/foo/l{}ng/__init__.py", "o".repeat(100));
+    context
+        .temp_dir
+        .child(long_path)
+        .write_str(r#"print("Hi from foo")"#)?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-sdist")
+        .arg(temp_dir.path())
+        .env("UV_PREVIEW", "1"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    foo-1.0.0.tar.gz
+
+    ----- stderr -----
+    "###);
+
+    Ok(())
+}
+
+#[test]
+fn sdist_error_without_module() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let temp_dir = TempDir::new()?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<0.8"]
+        build-backend = "uv_build"
+    "#})?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-sdist")
+        .arg(temp_dir.path())
+        .env("UV_PREVIEW", "1"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Missing source directory at: `src`
+    ");
+
+    fs_err::create_dir(context.temp_dir.join("src"))?;
+
+    uv_snapshot!(context
+        .build_backend()
+        .arg("build-sdist")
+        .arg(temp_dir.path())
+        .env("UV_PREVIEW", "1"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Missing module directory for `foo` in `src`. Found: ``
+    ");
 
     Ok(())
 }

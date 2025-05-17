@@ -74,7 +74,7 @@ impl InstalledTools {
     /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/tools`
     /// 3. A directory in the local data directory, e.g., `./.uv/tools`
     pub fn from_settings() -> Result<Self, Error> {
-        if let Some(tool_dir) = std::env::var_os(EnvVars::UV_TOOL_DIR) {
+        if let Some(tool_dir) = std::env::var_os(EnvVars::UV_TOOL_DIR).filter(|s| !s.is_empty()) {
             Ok(Self::from_path(std::path::absolute(tool_dir)?))
         } else {
             Ok(Self::from_path(
@@ -227,19 +227,22 @@ impl InstalledTools {
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(
                 interpreter_path,
             ))) => {
-                if interpreter_path.is_symlink() {
-                    let target_path = fs_err::read_link(&interpreter_path)?;
-                    warn!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
-                        interpreter_path.user_display(),
-                        target_path.user_display()
-                    );
-                } else {
-                    warn!(
-                        "Ignoring existing virtual environment with missing Python interpreter: {}",
-                        interpreter_path.user_display()
-                    );
-                }
+                warn!(
+                    "Ignoring existing virtual environment with missing Python interpreter: {}",
+                    interpreter_path.user_display()
+                );
+
+                Ok(None)
+            }
+            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenSymlink(
+                broken_symlink,
+            ))) => {
+                let target_path = fs_err::read_link(&broken_symlink.path)?;
+                warn!(
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                    broken_symlink.path.user_display(),
+                    target_path.user_display()
+                );
 
                 Ok(None)
             }

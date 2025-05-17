@@ -11,7 +11,7 @@ pub use crate::discovery::{
 pub use crate::environment::{InvalidEnvironmentKind, PythonEnvironment};
 pub use crate::implementation::ImplementationName;
 pub use crate::installation::{PythonInstallation, PythonInstallationKey};
-pub use crate::interpreter::{Error as InterpreterError, Interpreter};
+pub use crate::interpreter::{BrokenSymlink, Error as InterpreterError, Interpreter};
 pub use crate::pointer_size::PointerSize;
 pub use crate::prefix::Prefix;
 pub use crate::python_version::PythonVersion;
@@ -636,12 +636,12 @@ mod tests {
         })??;
         assert!(
             matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPath,
-                interpreter: _
-            }
-        ),
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPath,
+                    interpreter: _
+                }
+            ),
             "We should skip the Python 2 installation and find the Python 3 interpreter; got {python:?}"
         );
         assert_eq!(python.interpreter().sys_executable(), python3.path());
@@ -937,12 +937,12 @@ mod tests {
             })??;
         assert!(
             matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPathFirst,
-                interpreter: _
-            }
-        ),
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPathFirst,
+                    interpreter: _
+                }
+            ),
             "We should skip the active environment in favor of the requested version; got {python:?}"
         );
 

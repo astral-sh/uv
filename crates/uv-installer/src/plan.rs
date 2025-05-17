@@ -99,7 +99,9 @@ impl<'a> Planner<'a> {
                         let source = RequirementSource::from(dist);
                         match RequirementSatisfaction::check(installed, &source) {
                             RequirementSatisfaction::Mismatch => {
-                                debug!("Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}");
+                                debug!(
+                                    "Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}"
+                                );
                             }
                             RequirementSatisfaction::Satisfied => {
                                 debug!("Requirement already installed: {installed}");
@@ -203,11 +205,15 @@ impl<'a> Planner<'a> {
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
                             }
-                            debug!("Cached URL wheel requirement does not match expected hash policy for: {wheel}");
+                            debug!(
+                                "Cached URL wheel requirement does not match expected hash policy for: {wheel}"
+                            );
                         }
                         Ok(None) => {}
                         Err(err) => {
-                            debug!("Failed to deserialize cached URL wheel requirement for: {wheel} ({err})");
+                            debug!(
+                                "Failed to deserialize cached URL wheel requirement for: {wheel} ({err})"
+                            );
                         }
                     }
                 }
@@ -241,39 +247,43 @@ impl<'a> Planner<'a> {
                         .entry(format!("{}.rev", wheel.filename.cache_key()));
 
                     match LocalArchivePointer::read_from(&cache_entry) {
-                        Ok(Some(pointer)) => {
-                            match Timestamp::from_path(&wheel.install_path) {
-                                Ok(timestamp) => {
-                                    if pointer.is_up_to_date(timestamp) {
-                                        let cache_info = pointer.to_cache_info();
-                                        let archive = pointer.into_archive();
-                                        if archive.satisfies(hasher.get(dist.as_ref())) {
-                                            let cached_dist = CachedDirectUrlDist {
-                                                filename: wheel.filename.clone(),
-                                                url: VerbatimParsedUrl {
-                                                    parsed_url: wheel.parsed_url(),
-                                                    verbatim: wheel.url.clone(),
-                                                },
-                                                hashes: archive.hashes,
-                                                cache_info,
-                                                path: cache.archive(&archive.id).into_boxed_path(),
-                                            };
+                        Ok(Some(pointer)) => match Timestamp::from_path(&wheel.install_path) {
+                            Ok(timestamp) => {
+                                if pointer.is_up_to_date(timestamp) {
+                                    let cache_info = pointer.to_cache_info();
+                                    let archive = pointer.into_archive();
+                                    if archive.satisfies(hasher.get(dist.as_ref())) {
+                                        let cached_dist = CachedDirectUrlDist {
+                                            filename: wheel.filename.clone(),
+                                            url: VerbatimParsedUrl {
+                                                parsed_url: wheel.parsed_url(),
+                                                verbatim: wheel.url.clone(),
+                                            },
+                                            hashes: archive.hashes,
+                                            cache_info,
+                                            path: cache.archive(&archive.id).into_boxed_path(),
+                                        };
 
-                                            debug!("Path wheel requirement already cached: {cached_dist}");
-                                            cached.push(CachedDist::Url(cached_dist));
-                                            continue;
-                                        }
-                                        debug!("Cached path wheel requirement does not match expected hash policy for: {wheel}");
+                                        debug!(
+                                            "Path wheel requirement already cached: {cached_dist}"
+                                        );
+                                        cached.push(CachedDist::Url(cached_dist));
+                                        continue;
                                     }
-                                }
-                                Err(err) => {
-                                    debug!("Failed to get timestamp for wheel {wheel} ({err})");
+                                    debug!(
+                                        "Cached path wheel requirement does not match expected hash policy for: {wheel}"
+                                    );
                                 }
                             }
-                        }
+                            Err(err) => {
+                                debug!("Failed to get timestamp for wheel {wheel} ({err})");
+                            }
+                        },
                         Ok(None) => {}
                         Err(err) => {
-                            debug!("Failed to deserialize cached path wheel requirement for: {wheel} ({err})");
+                            debug!(
+                                "Failed to deserialize cached path wheel requirement for: {wheel} ({err})"
+                            );
                         }
                     }
                 }
@@ -315,8 +325,7 @@ impl<'a> Planner<'a> {
 
                             warn!(
                                 "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                                sdist,
-                                wheel.filename
+                                sdist, wheel.filename
                             );
                         }
                         Ok(None) => {}
@@ -340,8 +349,7 @@ impl<'a> Planner<'a> {
 
                         warn!(
                             "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                            sdist,
-                            wheel.filename
+                            sdist, wheel.filename
                         );
                     }
                 }
@@ -364,8 +372,7 @@ impl<'a> Planner<'a> {
 
                             warn!(
                                 "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                                sdist,
-                                wheel.filename
+                                sdist, wheel.filename
                             );
                         }
                         Ok(None) => {}
@@ -397,8 +404,7 @@ impl<'a> Planner<'a> {
 
                             warn!(
                                 "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                                sdist,
-                                wheel.filename
+                                sdist, wheel.filename
                             );
                         }
                         Ok(None) => {}

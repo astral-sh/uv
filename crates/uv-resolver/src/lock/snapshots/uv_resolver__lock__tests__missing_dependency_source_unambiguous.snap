@@ -72,6 +72,7 @@ Ok(
                             size: Some(
                                 0,
                             ),
+                            upload_time: None,
                         },
                     },
                 ),
@@ -119,6 +120,7 @@ Ok(
                             size: Some(
                                 0,
                             ),
+                            upload_time: None,
                         },
                     },
                 ),

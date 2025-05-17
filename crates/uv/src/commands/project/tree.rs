@@ -4,7 +4,6 @@ use anstream::print;
 use anyhow::{Error, Result};
 use futures::StreamExt;
 use tokio::sync::Semaphore;
-use uv_auth::UrlAuthPolicies;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
 use uv_client::RegistryClientBuilder;
@@ -92,6 +91,7 @@ pub(crate) async fn tree(
                 python_preference,
                 python_downloads,
                 &install_mirrors,
+                false,
                 no_config,
                 Some(false),
                 cache,
@@ -107,6 +107,7 @@ pub(crate) async fn tree(
                 python_preference,
                 python_downloads,
                 &install_mirrors,
+                false,
                 no_config,
                 Some(false),
                 cache,
@@ -151,7 +152,7 @@ pub(crate) async fn tree(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -212,7 +213,7 @@ pub(crate) async fn tree(
             .native_tls(network_settings.native_tls)
             .connectivity(network_settings.connectivity)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())
-            .url_auth_policies(UrlAuthPolicies::from(index_locations))
+            .index_locations(index_locations)
             .keyring(*keyring_provider)
             .build();
             let download_concurrency = Semaphore::new(concurrency.downloads);

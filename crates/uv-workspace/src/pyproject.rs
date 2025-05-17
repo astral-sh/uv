@@ -18,7 +18,7 @@ use rustc_hash::{FxBuildHasher, FxHashSet};
 use serde::{de::IntoDeserializer, de::SeqAccess, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 use url::Url;
-
+use uv_build_backend::BuildBackendSettings;
 use uv_distribution_types::{Index, IndexName, RequirementSource};
 use uv_fs::{relative_to, PortablePathBuf};
 use uv_git_types::GitReference;
@@ -343,7 +343,7 @@ pub struct ToolUv {
 
     /// The list of `dependency-groups` to install by default.
     ///
-    /// Can also be the literal "all" to default enable all groups.
+    /// Can also be the literal `"all"` to default enable all groups.
     #[option(
         default = r#"["dev"]"#,
         value_type = r#"str | list[str]"#,
@@ -583,6 +583,15 @@ pub struct ToolUv {
         "#
     )]
     pub conflicts: Option<SchemaConflicts>,
+
+    // Only exists on this type for schema and docs generation, the build backend settings are
+    // never merged in a workspace and read separately by the backend code.
+    /// Configuration for the uv build backend.
+    ///
+    /// Note that those settings only apply when using the `uv_build` backend, other build backends
+    /// (such as hatchling) have their own configuration.
+    #[option_group]
+    pub build_backend: Option<BuildBackendSettings>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -1378,9 +1387,38 @@ impl Source {
         tag: Option<String>,
         branch: Option<String>,
         root: &Path,
+        existing_sources: Option<&BTreeMap<PackageName, Sources>>,
     ) -> Result<Option<Source>, SourceError> {
-        // If we resolved to a non-Git source, and the user specified a Git reference, error.
-        if !matches!(source, RequirementSource::Git { .. }) {
+        // If the user specified a Git reference for a non-Git source, try existing Git sources before erroring.
+        if !matches!(source, RequirementSource::Git { .. })
+            && (branch.is_some() || tag.is_some() || rev.is_some())
+        {
+            if let Some(sources) = existing_sources {
+                if let Some(package_sources) = sources.get(name) {
+                    for existing_source in package_sources.iter() {
+                        if let Source::Git {
+                            git,
+                            subdirectory,
+                            marker,
+                            extra,
+                            group,
+                            ..
+                        } = existing_source
+                        {
+                            return Ok(Some(Source::Git {
+                                git: git.clone(),
+                                subdirectory: subdirectory.clone(),
+                                rev,
+                                tag,
+                                branch,
+                                marker: *marker,
+                                extra: extra.clone(),
+                                group: group.clone(),
+                            }));
+                        }
+                    }
+                }
+            }
             if let Some(rev) = rev {
                 return Err(SourceError::UnusedRev(name.to_string(), rev));
             }

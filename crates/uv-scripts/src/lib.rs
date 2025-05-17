@@ -455,14 +455,9 @@ impl ScriptTag {
         // > consists of only a single #).
         let mut toml = vec![];
 
-        // Extract the content that follows the metadata block.
-        let mut python_script = vec![];
-
-        while let Some(line) = lines.next() {
+        for line in lines {
             // Remove the leading `#`.
             let Some(line) = line.strip_prefix('#') else {
-                python_script.push(line);
-                python_script.extend(lines);
                 break;
             };
 
@@ -474,8 +469,6 @@ impl ScriptTag {
 
             // Otherwise, the line _must_ start with ` `.
             let Some(line) = line.strip_prefix(' ') else {
-                python_script.push(line);
-                python_script.extend(lines);
                 break;
             };
 
@@ -517,7 +510,12 @@ impl ScriptTag {
         // Join the lines into a single string.
         let prelude = prelude.to_string();
         let metadata = toml.join("\n") + "\n";
-        let postlude = python_script.join("\n") + "\n";
+        let postlude = contents
+            .lines()
+            .skip(index + 1)
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n";
 
         Ok(Some(Self {
             prelude,

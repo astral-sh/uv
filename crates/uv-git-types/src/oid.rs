@@ -20,7 +20,7 @@ impl GitOid {
 
     /// Return a truncated representation, i.e., the first 16 characters of the SHA.
     pub fn as_short_str(&self) -> &str {
-        &self.as_str()[..16]
+        self.as_str().get(..16).unwrap_or(self.as_str())
     }
 }
 

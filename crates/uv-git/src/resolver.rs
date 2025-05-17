@@ -56,6 +56,11 @@ impl GitResolver {
     ) -> Result<Option<GitOid>, GitResolverError> {
         let reference = RepositoryReference::from(url);
 
+        // If the URL is already precise, return it.
+        if let Some(precise) = url.precise() {
+            return Ok(Some(precise));
+        }
+
         // If we know the precise commit already, return it.
         if let Some(precise) = self.get(&reference) {
             return Ok(Some(*precise));
@@ -72,7 +77,7 @@ impl GitResolver {
 
         let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{rev}");
 
-        debug!("Attempting GitHub fast path for: {url}");
+        debug!("Querying GitHub for commit at: {url}");
         let mut request = client.get(&url);
         request = request.header("Accept", "application/vnd.github.3.sha");
         request = request.header(

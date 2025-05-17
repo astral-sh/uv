@@ -395,9 +395,13 @@ impl RunSettings {
             locked,
             frozen,
             extras: ExtrasSpecification::from_args(
-                flag(all_extras, no_all_extras).unwrap_or_default(),
-                no_extra,
                 extra.unwrap_or_default(),
+                no_extra,
+                // TODO(blueraft): support no_default_extras
+                false,
+                // TODO(blueraft): support only_extra
+                vec![],
+                flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
             dev: DependencyGroups::from_args(
                 dev,
@@ -459,6 +463,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) with_editable: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
     pub(crate) python: Option<String>,
@@ -486,6 +491,7 @@ impl ToolRunSettings {
             with_requirements,
             constraints,
             overrides,
+            build_constraints,
             isolated,
             env_file,
             no_env_file,
@@ -500,18 +506,26 @@ impl ToolRunSettings {
         // If `--upgrade` was passed explicitly, warn.
         if installer.upgrade || !installer.upgrade_package.is_empty() {
             if with.is_empty() && with_requirements.is_empty() {
-                warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool.");
+                warn_user_once!(
+                    "Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool."
+                );
             } else {
-                warn_user_once!("Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to upgrade any `--with` dependencies.");
+                warn_user_once!(
+                    "Tools cannot be upgraded via `{invocation_source}`; use `uv tool upgrade --all` to upgrade all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to upgrade any `--with` dependencies."
+                );
             }
         }
 
         // If `--reinstall` was passed explicitly, warn.
         if installer.reinstall || !installer.reinstall_package.is_empty() {
             if with.is_empty() && with_requirements.is_empty() {
-                warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --all --reinstall` to reinstall all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool.");
+                warn_user_once!(
+                    "Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --all --reinstall` to reinstall all installed tools, or `{invocation_source} package@latest` to run the latest version of a tool."
+                );
             } else {
-                warn_user_once!("Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --all --reinstall` to reinstall all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to reinstall any `--with` dependencies.");
+                warn_user_once!(
+                    "Tools cannot be reinstalled via `{invocation_source}`; use `uv tool upgrade --all --reinstall` to reinstall all installed tools, `{invocation_source} package@latest` to run the latest version of a tool, or `{invocation_source} --refresh package` to reinstall any `--with` dependencies."
+                );
             }
         }
 
@@ -553,6 +567,10 @@ impl ToolRunSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            build_constraints: build_constraints
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             isolated,
             show_resolution,
             python: python.and_then(Maybe::into_option),
@@ -577,6 +595,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) with_editable: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
     pub(crate) options: ResolverInstallerOptions,
@@ -599,6 +618,7 @@ impl ToolInstallSettings {
             with_requirements,
             constraints,
             overrides,
+            build_constraints,
             installer,
             force,
             build,
@@ -641,6 +661,10 @@ impl ToolInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             overrides: overrides
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
@@ -756,6 +780,7 @@ impl ToolUpgradeSettings {
 pub(crate) struct ToolListSettings {
     pub(crate) show_paths: bool,
     pub(crate) show_version_specifiers: bool,
+    pub(crate) show_with: bool,
 }
 
 impl ToolListSettings {
@@ -765,6 +790,7 @@ impl ToolListSettings {
         let ToolListArgs {
             show_paths,
             show_version_specifiers,
+            show_with,
             python_preference: _,
             no_python_downloads: _,
         } = args;
@@ -772,6 +798,7 @@ impl ToolListSettings {
         Self {
             show_paths,
             show_version_specifiers,
+            show_with,
         }
     }
 }
@@ -833,12 +860,13 @@ pub(crate) struct PythonListSettings {
     pub(crate) all_versions: bool,
     pub(crate) show_urls: bool,
     pub(crate) output_format: PythonListFormat,
+    pub(crate) python_downloads_json_url: Option<String>,
 }
 
 impl PythonListSettings {
     /// Resolve the [`PythonListSettings`] from the CLI and filesystem configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: PythonListArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: PythonListArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PythonListArgs {
             request,
             all_versions,
@@ -848,7 +876,17 @@ impl PythonListSettings {
             only_downloads,
             show_urls,
             output_format,
+            python_downloads_json_url: python_downloads_json_url_arg,
         } = args;
+
+        let options = filesystem.map(FilesystemOptions::into_options);
+        let python_downloads_json_url_option = match options {
+            Some(options) => options.install_mirrors.python_downloads_json_url,
+            None => None,
+        };
+
+        let python_downloads_json_url =
+            python_downloads_json_url_arg.or(python_downloads_json_url_option);
 
         let kinds = if only_installed {
             PythonListKinds::Installed
@@ -866,6 +904,7 @@ impl PythonListSettings {
             all_versions,
             show_urls,
             output_format,
+            python_downloads_json_url,
         }
     }
 }
@@ -897,6 +936,7 @@ pub(crate) struct PythonInstallSettings {
     pub(crate) force: bool,
     pub(crate) python_install_mirror: Option<String>,
     pub(crate) pypy_install_mirror: Option<String>,
+    pub(crate) python_downloads_json_url: Option<String>,
     pub(crate) default: bool,
 }
 
@@ -905,15 +945,18 @@ impl PythonInstallSettings {
     #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn resolve(args: PythonInstallArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let options = filesystem.map(FilesystemOptions::into_options);
-        let (python_mirror, pypy_mirror) = match options {
+        let (python_mirror, pypy_mirror, python_downloads_json_url) = match options {
             Some(options) => (
                 options.install_mirrors.python_install_mirror,
                 options.install_mirrors.pypy_install_mirror,
+                options.install_mirrors.python_downloads_json_url,
             ),
-            None => (None, None),
+            None => (None, None, None),
         };
         let python_mirror = args.mirror.or(python_mirror);
         let pypy_mirror = args.pypy_mirror.or(pypy_mirror);
+        let python_downloads_json_url =
+            args.python_downloads_json_url.or(python_downloads_json_url);
 
         let PythonInstallArgs {
             install_dir,
@@ -922,6 +965,7 @@ impl PythonInstallSettings {
             force,
             mirror: _,
             pypy_mirror: _,
+            python_downloads_json_url: _,
             default,
         } = args;
 
@@ -932,6 +976,7 @@ impl PythonInstallSettings {
             force,
             python_install_mirror: python_mirror,
             pypy_install_mirror: pypy_mirror,
+            python_downloads_json_url,
             default,
         }
     }
@@ -1114,9 +1159,13 @@ impl SyncSettings {
             script,
             active: flag(active, no_active),
             extras: ExtrasSpecification::from_args(
-                flag(all_extras, no_all_extras).unwrap_or_default(),
-                no_extra,
                 extra.unwrap_or_default(),
+                no_extra,
+                // TODO(blueraft): support no_default_extras
+                false,
+                // TODO(blueraft): support only_extra
+                vec![],
+                flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
             dev: DependencyGroups::from_args(
                 dev,
@@ -1211,7 +1260,7 @@ pub(crate) struct AddSettings {
     pub(crate) dependency_type: DependencyType,
     pub(crate) editable: Option<bool>,
     pub(crate) extras: Vec<ExtraName>,
-    pub(crate) raw_sources: bool,
+    pub(crate) raw: bool,
     pub(crate) rev: Option<String>,
     pub(crate) tag: Option<String>,
     pub(crate) branch: Option<String>,
@@ -1239,7 +1288,7 @@ impl AddSettings {
             editable,
             no_editable,
             extra,
-            raw_sources,
+            raw,
             rev,
             tag,
             branch,
@@ -1279,6 +1328,7 @@ impl AddSettings {
                     .index
                     .clone()
                     .into_iter()
+                    .flat_map(|v| v.clone())
                     .flatten()
                     .filter_map(Maybe::into_option),
             )
@@ -1292,9 +1342,13 @@ impl AddSettings {
             .is_some_and(Maybe::is_some)
         {
             if script.is_some() {
-                warn_user_once!("Indexes specified via `--index-url` will not be persisted to the script; use `--default-index` instead.");
+                warn_user_once!(
+                    "Indexes specified via `--index-url` will not be persisted to the script; use `--default-index` instead."
+                );
             } else {
-                warn_user_once!("Indexes specified via `--index-url` will not be persisted to the `pyproject.toml` file; use `--default-index` instead.");
+                warn_user_once!(
+                    "Indexes specified via `--index-url` will not be persisted to the `pyproject.toml` file; use `--default-index` instead."
+                );
             }
         }
 
@@ -1305,9 +1359,13 @@ impl AddSettings {
             .is_some_and(|extra_index_url| extra_index_url.iter().any(Maybe::is_some))
         {
             if script.is_some() {
-                warn_user_once!("Indexes specified via `--extra-index-url` will not be persisted to the script; use `--index` instead.");
+                warn_user_once!(
+                    "Indexes specified via `--extra-index-url` will not be persisted to the script; use `--index` instead."
+                );
             } else {
-                warn_user_once!("Indexes specified via `--extra-index-url` will not be persisted to the `pyproject.toml` file; use `--index` instead.");
+                warn_user_once!(
+                    "Indexes specified via `--extra-index-url` will not be persisted to the `pyproject.toml` file; use `--index` instead."
+                );
             }
         }
 
@@ -1329,7 +1387,7 @@ impl AddSettings {
                 .collect(),
             marker,
             dependency_type,
-            raw_sources,
+            raw,
             rev,
             tag,
             branch,
@@ -1514,7 +1572,7 @@ impl TreeSettings {
 #[allow(clippy::struct_excessive_bools, dead_code)]
 #[derive(Debug, Clone)]
 pub(crate) struct ExportSettings {
-    pub(crate) format: ExportFormat,
+    pub(crate) format: Option<ExportFormat>,
     pub(crate) all_packages: bool,
     pub(crate) package: Option<PackageName>,
     pub(crate) prune: Vec<PackageName>,
@@ -1586,9 +1644,13 @@ impl ExportSettings {
             package,
             prune,
             extras: ExtrasSpecification::from_args(
-                flag(all_extras, no_all_extras).unwrap_or_default(),
-                no_extra,
                 extra.unwrap_or_default(),
+                no_extra,
+                // TODO(blueraft): support no_default_extras
+                false,
+                // TODO(blueraft): support only_extra
+                vec![],
+                flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
             dev: DependencyGroups::from_args(
                 dev,
@@ -1625,6 +1687,7 @@ impl ExportSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct PipCompileSettings {
+    pub(crate) format: Option<ExportFormat>,
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
@@ -1653,6 +1716,7 @@ impl PipCompileSettings {
             deps,
             group,
             output_file,
+            format,
             no_strip_extras,
             strip_extras,
             no_strip_markers,
@@ -1741,6 +1805,7 @@ impl PipCompileSettings {
         };
 
         Self {
+            format,
             src_file,
             constraints: constraints
                 .into_iter()
@@ -2841,10 +2906,15 @@ impl PipSettings {
                 args.no_index.combine(no_index).unwrap_or_default(),
             ),
             extras: ExtrasSpecification::from_args(
-                args.all_extras.combine(all_extras).unwrap_or_default(),
-                args.no_extra.combine(no_extra).unwrap_or_default(),
                 args.extra.combine(extra).unwrap_or_default(),
+                args.no_extra.combine(no_extra).unwrap_or_default(),
+                // TODO(blueraft): support no_default_extras
+                false,
+                // TODO(blueraft): support only_extra
+                vec![],
+                args.all_extras.combine(all_extras).unwrap_or_default(),
             ),
+
             groups: args.group.combine(group).unwrap_or_default(),
             dependency_mode: if args.no_deps.combine(no_deps).unwrap_or_default() {
                 DependencyMode::Direct

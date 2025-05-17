@@ -13,6 +13,7 @@ use url::Url;
 
 use uv_cache_key::{cache_digest, RepositoryUrl};
 use uv_git_types::GitUrl;
+use uv_redacted::redacted_url;
 
 use crate::git::GitRemote;
 use crate::GIT_STORE;
@@ -100,7 +101,10 @@ impl GitSource {
             // situation that we have a locked revision but the database
             // doesn't have it.
             (locked_rev, db) => {
-                debug!("Updating Git source `{}`", self.git.repository());
+                debug!(
+                    "Updating Git source `{}`",
+                    redacted_url(self.git.repository())
+                );
 
                 // Report the checkout operation to the reporter.
                 let task = self.reporter.as_ref().map(|reporter| {

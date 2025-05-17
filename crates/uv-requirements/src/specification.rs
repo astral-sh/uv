@@ -33,6 +33,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use rustc_hash::FxHashSet;
 use tracing::instrument;
+
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{DependencyGroups, NoBinary, NoBuild};
@@ -43,8 +44,6 @@ use uv_distribution_types::{
 };
 use uv_fs::{Simplified, CWD};
 use uv_normalize::{ExtraName, GroupName, PackageName};
-use uv_pep508::{MarkerTree, UnnamedRequirement, UnnamedRequirementUrl};
-use uv_pypi_types::VerbatimParsedUrl;
 use uv_requirements_txt::{RequirementsTxt, RequirementsTxtRequirement};
 use uv_warnings::warn_user;
 use uv_workspace::pyproject::PyProjectToml;
@@ -61,6 +60,8 @@ pub struct RequirementsSpecification {
     pub constraints: Vec<NameRequirementSpecification>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
+    /// The `pylock.toml` file from which to extract the resolution.
+    pub pylock: Option<PathBuf>,
     /// The source trees from which to extract requirements.
     pub source_trees: Vec<PathBuf>,
     /// The groups to use for `source_trees`
@@ -190,27 +191,21 @@ impl RequirementsSpecification {
                     ..Self::default()
                 }
             }
-            RequirementsSource::SourceTree(path) => {
-                if !path.is_dir() {
-                    return Err(anyhow::anyhow!(
-                        "Directory not found: `{}`",
-                        path.user_display()
-                    ));
+            RequirementsSource::PylockToml(path) => {
+                if !path.is_file() {
+                    return Err(anyhow::anyhow!("File not found: `{}`", path.user_display()));
                 }
 
                 Self {
-                    project: None,
-                    requirements: vec![UnresolvedRequirementSpecification {
-                        requirement: UnresolvedRequirement::Unnamed(UnnamedRequirement {
-                            url: VerbatimParsedUrl::parse_absolute_path(path)?,
-                            extras: Box::new([]),
-                            marker: MarkerTree::TRUE,
-                            origin: None,
-                        }),
-                        hashes: vec![],
-                    }],
+                    pylock: Some(path.clone()),
                     ..Self::default()
                 }
+            }
+            RequirementsSource::EnvironmentYml(path) => {
+                return Err(anyhow::anyhow!(
+                    "Conda environment files (i.e., `{}`) are not supported",
+                    path.user_display()
+                ));
             }
         })
     }
@@ -225,7 +220,66 @@ impl RequirementsSpecification {
     ) -> Result<Self> {
         let mut spec = Self::default();
 
-        // Resolve sources into specifications so we know their `source_tree`s∂
+        // Disallow `pylock.toml` files as constraints.
+        if let Some(pylock_toml) = constraints.iter().find_map(|source| {
+            if let RequirementsSource::PylockToml(path) = source {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
+            return Err(anyhow::anyhow!(
+                "Cannot use `{}` as a constraint file",
+                pylock_toml.user_display()
+            ));
+        }
+
+        // Disallow `pylock.toml` files as overrides.
+        if let Some(pylock_toml) = overrides.iter().find_map(|source| {
+            if let RequirementsSource::PylockToml(path) = source {
+                Some(path)
+            } else {
+                None
+            }
+        }) {
+            return Err(anyhow::anyhow!(
+                "Cannot use `{}` as an override file",
+                pylock_toml.user_display()
+            ));
+        }
+
+        // If we have a `pylock.toml`, don't allow additional requirements, constraints, or
+        // overrides.
+        if requirements
+            .iter()
+            .any(|source| matches!(source, RequirementsSource::PylockToml(..)))
+        {
+            if requirements
+                .iter()
+                .any(|source| !matches!(source, RequirementsSource::PylockToml(..)))
+            {
+                return Err(anyhow::anyhow!(
+                    "Cannot specify additional requirements alongside a `pylock.toml` file",
+                ));
+            }
+            if !constraints.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Cannot specify additional requirements with a `pylock.toml` file"
+                ));
+            }
+            if !overrides.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Cannot specify constraints with a `pylock.toml` file"
+                ));
+            }
+            if !groups.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Cannot specify groups with a `pylock.toml` file"
+                ));
+            }
+        }
+
+        // Resolve sources into specifications so we know their `source_tree`.
         let mut requirement_sources = Vec::new();
         for source in requirements {
             let source = Self::from_source(source, client_builder).await?;
@@ -294,6 +348,18 @@ impl RequirementsSpecification {
             spec.overrides.extend(source.overrides);
             spec.extras.extend(source.extras);
             spec.source_trees.extend(source.source_trees);
+
+            // Allow at most one `pylock.toml`.
+            if let Some(pylock) = source.pylock {
+                if let Some(existing) = spec.pylock {
+                    return Err(anyhow::anyhow!(
+                        "Multiple `pylock.toml` files specified: `{}` vs. `{}`",
+                        existing.user_display(),
+                        pylock.user_display()
+                    ));
+                }
+                spec.pylock = Some(pylock);
+            }
 
             // Use the first project name discovered.
             if spec.project.is_none() {

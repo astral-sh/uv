@@ -47,7 +47,9 @@ pub(crate) fn main(args: &Args) -> Result<()> {
                     println!("Up-to-date: {filename}");
                 } else {
                     let comparison = StrComparison::new(&current, &schema_string);
-                    bail!("{filename} changed, please run `cargo dev generate-json-schema`:\n{comparison}");
+                    bail!(
+                        "{filename} changed, please run `cargo dev generate-json-schema`:\n{comparison}"
+                    );
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
