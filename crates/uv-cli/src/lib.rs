@@ -4151,7 +4151,8 @@ pub struct ToolRunArgs {
     #[arg(long)]
     pub with_editable: Vec<comma::CommaSeparatedRequirements>,
 
-    /// Run with all packages listed in the given `requirements.txt` files.
+    /// Run with all packages listed in the given `requirements.txt` files or PEP 723 Python
+    /// scripts.
     #[arg(long, value_delimiter = ',', value_parser = parse_maybe_file_path)]
     pub with_requirements: Vec<Maybe<PathBuf>>,
 
