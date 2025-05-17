@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::Write;
 use std::io::ErrorKind;
+use std::ops::Bound;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Error, Result};
@@ -11,6 +12,12 @@ use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace};
 
+use crate::commands::project::find_requires_python;
+use crate::commands::python::{ChangeEvent, ChangeEventKind};
+use crate::commands::reporters::PythonDownloadReporter;
+use crate::commands::{elapsed, ExitStatus};
+use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
@@ -25,12 +32,7 @@ use uv_python::{
 use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
 use uv_warnings::warn_user;
-
-use crate::commands::python::{ChangeEvent, ChangeEventKind};
-use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{elapsed, ExitStatus};
-use crate::printer::Printer;
-use crate::settings::NetworkSettings;
+use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
 #[derive(Debug, Clone)]
 struct InstallRequest {
@@ -143,6 +145,19 @@ pub(crate) async fn install(
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
+    let workspace_cache = WorkspaceCache::default();
+    // from python pin
+    let virtual_project =
+        match VirtualProject::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+            .await
+        {
+            Ok(virtual_project) => Some(virtual_project),
+            Err(err) => {
+                debug!("Failed to discover virtual project: {err}");
+                None
+            }
+        };
+
     if default && !preview.is_enabled() {
         writeln!(
             printer.stderr(),
@@ -158,7 +173,7 @@ pub(crate) async fn install(
     // Resolve the requests
     let mut is_default_install = false;
     let requests: Vec<_> = if targets.is_empty() {
-        PythonVersionFile::discover(
+        let python_version_file_version = PythonVersionFile::discover(
             project_dir,
             &VersionFileDiscoveryOptions::default()
                 .with_no_config(no_config)
@@ -178,7 +193,51 @@ pub(crate) async fn install(
         })
         .into_iter()
         .map(|a| InstallRequest::new(a, python_downloads_json_url.as_deref()))
-        .collect::<Result<Vec<_>>>()?
+        .collect::<Result<Vec<_>>>()?;
+
+        if let Some(virtual_project) = virtual_project {
+            let requires_python = match &virtual_project {
+                VirtualProject::Project(project_workspace) => {
+                    debug!(
+                        "Discovered project `{}` at: {}",
+                        project_workspace.project_name(),
+                        project_workspace.workspace().install_path().display()
+                    );
+                    find_requires_python(project_workspace.workspace())?
+                }
+                VirtualProject::NonProject(workspace) => {
+                    debug!(
+                        "Discovered virtual workspace at: {}",
+                        workspace.install_path().display()
+                    );
+                    find_requires_python(workspace)?
+                }
+            };
+            let requires_python_version = requires_python
+                .map(|e| match &e.range().upper().0 {
+                    Bound::Unbounded => {
+                        vec![PythonRequest::Default]
+                    }
+                    Bound::Included(v) => {
+                        vec![PythonRequest::parse(v.to_string().as_str())]
+                    }
+                    Bound::Excluded(v) => {
+                        //TODO how to get the highest version?
+                        vec![PythonRequest::parse(v.to_string().as_str())]
+                    }
+                })
+                .unwrap_or(vec![])
+                .into_iter()
+                .map(|a| InstallRequest::new(a, python_downloads_json_url.as_deref()))
+                .collect::<Result<Vec<_>>>()?;
+            if requires_python_version.is_empty() || !is_default_install {
+                python_version_file_version
+            } else {
+                requires_python_version
+            }
+        } else {
+            python_version_file_version
+        }
     } else {
         targets
             .iter()

@@ -1,6 +1,7 @@
 use std::{env, path::Path, process::Command};
 
 use crate::common::{uv_snapshot, TestContext};
+use assert_fs::fixture::FileWriteStr;
 use assert_fs::{
     assert::PathAssert,
     prelude::{FileTouch, PathChild, PathCreateDir},
@@ -10,6 +11,64 @@ use tracing::debug;
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
+#[test]
+fn python_install_with_pyproject() -> anyhow::Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "==3.11.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+    uv_snapshot!(context.filters(), context.python_install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.11.12 in [TIME]
+     + cpython-3.11.12-[PLATFORM]
+    ");
+    Ok(())
+}
+#[test]
+fn python_install_with_pyproject2() -> anyhow::Result<()> {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "<=3.13.*"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child(".python-versions")
+        .write_str("3.12")?;
+    uv_snapshot!(context.filters(), context.python_install(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.12.[X] in [TIME]
+     + cpython-3.12.[X]-[PLATFORM]
+    ");
+    Ok(())
+}
 #[test]
 fn python_install() {
     let context: TestContext = TestContext::new_with_versions(&[])
