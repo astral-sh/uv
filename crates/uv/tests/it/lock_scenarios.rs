@@ -583,7 +583,7 @@ fn conflict_in_fork() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -597,7 +597,9 @@ fn conflict_in_fork() -> Result<()> {
               package-a{sys_platform == 'darwin'}==1.0.0
               package-a{sys_platform == 'darwin'}>2
           and your project depends on package-a{sys_platform == 'darwin'}<2, we can conclude that your project's requirements are unsatisfiable.
-    "###
+
+          hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    "
     );
 
     Ok(())

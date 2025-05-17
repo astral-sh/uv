@@ -517,6 +517,7 @@ pub(crate) async fn pip_compile(
         tags.as_deref(),
         resolver_env.clone(),
         python_requirement,
+        interpreter.markers(),
         Conflicts::empty(),
         &client,
         &flat_index,

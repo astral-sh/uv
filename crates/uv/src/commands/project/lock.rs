@@ -821,6 +821,7 @@ async fn do_lock(
                 None,
                 resolver_env,
                 python_requirement,
+                interpreter.markers(),
                 conflicts.clone(),
                 &client,
                 &flat_index,
