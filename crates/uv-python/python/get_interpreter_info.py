@@ -517,8 +517,7 @@ def get_operating_system_and_architecture():
                 json.dumps(
                     {
                         "result": "error",
-                        "kind": "unknown_operating_system",
-                        "operating_system": operating_system,
+                        "kind": "emscripten_not_pyodide",
                     }
                 )
             )
