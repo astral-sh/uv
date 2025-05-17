@@ -34,7 +34,6 @@ jobs:
           commit-message: "Sync latest Python releases"
           add-paths: |
             crates/uv-python/download-metadata.json
-            crates/uv-python/src/download-metadata-minified.json
           branch: "sync-python-releases"
           title: "Sync latest Python releases"
           body: "Automated update for Python releases."
