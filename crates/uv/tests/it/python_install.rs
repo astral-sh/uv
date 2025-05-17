@@ -1106,7 +1106,7 @@ fn launcher_path(path: &Path) -> PathBuf {
 
 fn read_link_path(path: &Path) -> String {
     #[cfg(windows)]
-    let path = launcher_path(path).as_path();
+    let path = launcher_path(path);
     #[cfg(windows)]
     let path = path.as_path();
 
