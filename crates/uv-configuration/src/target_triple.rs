@@ -583,6 +583,9 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => "",
             Self::Aarch64Manylinux239 => "",
             Self::Aarch64Manylinux240 => "",
+            // This is the value Emscripten gives for its version:
+            // https://github.com/emscripten-core/emscripten/blob/4.0.8/system/lib/libc/emscripten_syscall_stubs.c#L63
+            // It doesn't really seem to mean anything? But for completeness we include it here.
             Self::Wasm32Pyodide2024 => "#1",
         }
     }
