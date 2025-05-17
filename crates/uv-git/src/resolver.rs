@@ -15,7 +15,7 @@ use uv_fs::LockedFile;
 use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
 use uv_version::version;
 
-use crate::{Fetch, GitSource, Reporter};
+use crate::{rate_limit::GITHUB_RATE_LIMIT_STATUS, Fetch, GitSource, Reporter};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitResolverError {
@@ -73,6 +73,12 @@ impl GitResolver {
             return Ok(None);
         };
 
+        // Check if we're rate-limited by GitHub, before determining the Git reference
+        if GITHUB_RATE_LIMIT_STATUS.is_active() {
+            debug!("Rate-limited by GitHub. Skipping GitHub fast path attempt for: {url}");
+            return Ok(None);
+        }
+
         // Determine the Git reference.
         let rev = url.reference().as_rev();
 
@@ -93,12 +99,9 @@ impl GitResolver {
             // resolve the requested rev.
             debug!("GitHub API request failed for: {url} ({})", status);
 
-            // Return error for 429 as not only is there no fast path,
-            // subsequent git operations by the caller should be skipped.
+            // Mark that we are currently being rate-limited by GitHub.
             if status == StatusCode::TOO_MANY_REQUESTS {
-                // Unwrap won't panic on a 429.
-                let err = response.error_for_status().unwrap_err();
-                return Err(err.into());
+                GITHUB_RATE_LIMIT_STATUS.activate();
             }
 
             return Ok(None);
