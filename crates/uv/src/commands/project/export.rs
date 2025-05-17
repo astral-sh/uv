@@ -142,6 +142,7 @@ pub(crate) async fn export(
                 Some(false),
                 cache,
                 printer,
+                project_dir,
             )
             .await?
             .into_interpreter(),
