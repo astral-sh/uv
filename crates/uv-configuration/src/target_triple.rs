@@ -628,6 +628,7 @@ impl TargetTriple {
             Self::Aarch64Manylinux239 => "",
             Self::Aarch64Manylinux240 => "",
             // This is the Emscripten compiler version for Pyodide 2024.
+            // See https://pyodide.org/en/stable/development/abi.html#pyodide-2024-0
             Self::Wasm32Pyodide2024 => "3.1.58",
         }
     }
