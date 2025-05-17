@@ -16,7 +16,8 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{
-    create_bin_link, python_executable_dir, ManagedPythonInstallation, ManagedPythonInstallations,
+    create_bin_link, python_executable_dir, DirectorySymlink, ManagedPythonInstallation,
+    ManagedPythonInstallations,
 };
 use uv_python::platform::{Arch, Libc};
 use uv_python::{
@@ -80,6 +81,10 @@ impl InstallRequest {
 
     fn matches_installation(&self, installation: &ManagedPythonInstallation) -> bool {
         self.download_request.satisfied_by_key(installation.key())
+    }
+
+    fn python_request(&self) -> &PythonRequest {
+        &self.request
     }
 }
 
@@ -218,6 +223,19 @@ pub(crate) async fn install(
     let Some(first_request) = requests.first() else {
         return Ok(ExitStatus::Success);
     };
+
+    let requested_minor_versions = requests
+        .iter()
+        .filter_map(|request| {
+            if let PythonRequest::Version(VersionRequest::MajorMinor(major, minor, ..)) =
+                request.python_request()
+            {
+                uv_pep440::Version::from_str(&format!("{major}.{minor}")).ok()
+            } else {
+                None
+            }
+        })
+        .collect::<FxHashSet<_>>();
 
     if upgrade
         && requests
@@ -415,12 +433,16 @@ pub(crate) async fn install(
             .expect("We should have a bin directory with preview enabled")
             .as_path();
 
+        let upgradeable = is_default_install
+            || requested_minor_versions.contains(&installation.key().version().python_version());
+
         create_bin_links(
             installation,
             bin,
             reinstall,
             force,
             default,
+            upgradeable,
             is_default_install,
             first_request,
             &existing_installations,
@@ -461,26 +483,7 @@ pub(crate) async fn install(
     }
 
     for (_, installation) in minor_versions.values() {
-        let directory_symlink = installation.ensure_minor_version_link()?;
-        if preview.is_enabled() {
-            let bin = bin
-                .as_ref()
-                .expect("We should have a bin directory with preview enabled")
-                .as_path();
-            let bin = bin.join(format!(
-                "python{}.{}",
-                installation.version().major(),
-                installation.version().minor()
-            ));
-            // FIXME: Are we creating this file and then deleting it and recreating it?
-            if bin.exists() {
-                match fs_err::remove_file(&bin) {
-                    Ok(()) => trace!("Removed old symlink: {}", bin.display()),
-                    Err(err) => return Err(err.into()),
-                }
-            }
-            create_bin_link(bin.as_path(), directory_symlink.symlink_executable.clone())?;
-        }
+        installation.ensure_minor_version_link()?;
     }
 
     if changelog.installed.is_empty() && errors.is_empty() {
@@ -603,6 +606,7 @@ fn create_bin_links(
     reinstall: bool,
     force: bool,
     default: bool,
+    upgradeable: bool,
     is_default_install: bool,
     first_request: &InstallRequest,
     existing_installations: &[ManagedPythonInstallation],
@@ -623,7 +627,17 @@ fn create_bin_links(
 
     for target in targets {
         let target = bin.join(target);
-        match installation.create_bin_link(&target) {
+        let executable = if upgradeable {
+            if let Some(directory_symlink) = DirectorySymlink::try_from_installation(installation) {
+                directory_symlink.symlink_executable.clone()
+            } else {
+                installation.executable(false)
+            }
+        } else {
+            installation.executable(false)
+        };
+
+        match create_bin_link(&target, executable.clone()) {
             Ok(()) => {
                 debug!(
                     "Installed executable at `{}` for {}",
@@ -759,7 +773,7 @@ fn create_bin_links(
                         .remove(&target);
                 }
 
-                installation.create_bin_link(&target)?;
+                create_bin_link(&target, executable)?;
                 debug!(
                     "Updated executable at `{}` to {}",
                     target.simplified_display(),
@@ -831,16 +845,14 @@ fn warn_if_not_on_path(bin: &Path) {
 /// given path, if any.
 ///
 /// Like [`ManagedPythonInstallation::is_bin_link`], but this method will only resolve the
-/// given path one time.
+/// given path twice. A bin link points to a path containing a symlink directory (or junction on
+/// Windows) which points to the executable.
 fn find_matching_bin_link<'a>(
     mut installations: impl Iterator<Item = &'a ManagedPythonInstallation>,
     path: &Path,
 ) -> Option<&'a ManagedPythonInstallation> {
     let target = if cfg!(unix) {
-        if !path.is_symlink() {
-            return None;
-        }
-        path.read_link().ok()?
+        fs_err::canonicalize(path).ok()?
     } else if cfg!(windows) {
         let launcher = Launcher::try_from_path(path).ok()??;
         if !matches!(launcher.kind, LauncherKind::Python) {

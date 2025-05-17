@@ -1,3 +1,6 @@
+#[cfg(windows)]
+use std::path::PathBuf;
+
 use std::{env, path::Path, process::Command};
 
 use crate::common::{uv_snapshot, TestContext};
@@ -316,6 +319,32 @@ fn python_install_preview() {
     #[cfg(unix)]
     bin_python.assert(predicate::path::is_symlink());
 
+    // The link should be to a path containing a minor version symlink directory
+    #[cfg(unix)]
+    {
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                &bin_python
+                    .read_link()
+                    .unwrap_or_else(|_| panic!("{} should be readable", bin_python.path().display()))
+                    .as_os_str().to_string_lossy(),
+                @"[TEMP_DIR]/managed/python3.13/bin/python3.13"
+            );
+        });
+    }
+    #[cfg(windows)]
+    {
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                launcher_path(&bin_python).display(), @"[TEMP_DIR]/managed/python3.13/python"
+            );
+        });
+    }
+
     // The executable should "work"
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
         .arg("-c").arg("import subprocess; print('hello world')"), @r###"
@@ -424,8 +453,60 @@ fn python_install_preview() {
     // The executable should be removed
     bin_python.assert(predicate::path::missing());
 
+    // Install a minor version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.11").arg("--preview"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.11.12 in [TIME]
+     + cpython-3.11.12-[PLATFORM] (python3.11)
+    ");
+
+    let bin_python = context
+        .bin_dir
+        .child(format!("python3.11{}", std::env::consts::EXE_SUFFIX));
+
+    // The link should be to a path containing a minor version symlink directory
+    #[cfg(unix)]
+    {
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                &bin_python
+                    .read_link()
+                    .unwrap_or_else(|_| panic!("{} should be readable", bin_python.path().display()))
+                    .as_os_str().to_string_lossy(),
+                @"[TEMP_DIR]/managed/python3.11/bin/python3.11"
+            );
+        });
+    }
+    #[cfg(windows)]
+    {
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                launcher_path(&bin_python).display(), @"[TEMP_DIR]/managed/python3.11/python"
+            );
+        });
+    }
+
+    uv_snapshot!(context.filters(), context.python_uninstall().arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Searching for Python versions matching: Python 3.11
+    Uninstalled Python 3.11.12 in [TIME]
+     - cpython-3.11.12-[PLATFORM] (python3.11)
+    ");
+
     // Install multiple patch versions
-    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.8").arg("3.12.6"), @r###"
+    uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.8").arg("3.12.6"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -434,13 +515,13 @@ fn python_install_preview() {
     Installed 2 versions in [TIME]
      + cpython-3.12.6-[PLATFORM]
      + cpython-3.12.8-[PLATFORM] (python3.12)
-    "###);
+    ");
 
     let bin_python = context
         .bin_dir
         .child(format!("python3.12{}", std::env::consts::EXE_SUFFIX));
 
-    // The link should be for the newer patch version
+    // The link should resolve to the newer patch version
     if cfg!(unix) {
         insta::with_settings!({
             filters => context.filters(),
@@ -481,6 +562,32 @@ fn python_install_preview_upgrade() {
     Installed Python 3.12.5 in [TIME]
      + cpython-3.12.5-[PLATFORM] (python3.12)
     "###);
+
+    // Installing with a patch version should cause the link to be to the patch installation.
+    #[cfg(unix)]
+    {
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                &bin_python
+                    .read_link()
+                    .unwrap_or_else(|_| panic!("{} should be readable", bin_python.display()))
+                    .display(),
+                @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/bin/python3.12"
+            );
+        });
+    }
+    #[cfg(windows)]
+    {
+        insta::with_settings!({
+            filters => context.filters(),
+        }, {
+            insta::assert_snapshot!(
+                launcher_path(&bin_python).display(), @"[TEMP_DIR]/managed/cpython-3.12.5-[PLATFORM]/python"
+            );
+        });
+    }
 
     // Installing 3.12.4 should not replace the executable, but also shouldn't fail
     uv_snapshot!(context.filters(), context.python_install().arg("--preview").arg("3.12.4"), @r###"
@@ -988,22 +1095,25 @@ fn python_install_default() {
     }
 }
 
+#[cfg(windows)]
+fn launcher_path(path: &Path) -> PathBuf {
+    let launcher = uv_trampoline_builder::Launcher::try_from_path(path)
+        .ok()
+        .unwrap_or_else(|| panic!("{} should be readable", path.display()))
+        .unwrap_or_else(|| panic!("{} should be a valid launcher", path.display()));
+    launcher.python_path
+}
+
 fn read_link_path(path: &Path) -> String {
-    if cfg!(unix) {
-        path.read_link()
-            .unwrap_or_else(|_| panic!("{} should be readable", path.display()))
-            .simplified_display()
-            .to_string()
-    } else if cfg!(windows) {
-        let launcher = uv_trampoline_builder::Launcher::try_from_path(path)
-            .ok()
-            .unwrap_or_else(|| panic!("{} should be readable", path.display()))
-            .unwrap_or_else(|| panic!("{} should be a valid launcher", path.display()));
-        let path = launcher.python_path.simplified_display().to_string();
-        path
-    } else {
-        unreachable!()
-    }
+    #[cfg(windows)]
+    let path = launcher_path(path).as_path();
+    #[cfg(windows)]
+    let path = path.as_path();
+
+    fs_err::canonicalize(path)
+        .unwrap_or_else(|_| panic!("{} should be readable", path.display()))
+        .simplified_display()
+        .to_string()
 }
 
 #[test]

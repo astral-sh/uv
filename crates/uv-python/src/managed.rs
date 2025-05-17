@@ -518,21 +518,11 @@ impl ManagedPythonInstallation {
 
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
-    ///
-    /// If we can't create a symlink directory (for example, if this is a PyPy
-    /// impementation), then return [`None`].
-    pub fn ensure_minor_version_link(&self) -> Result<DirectorySymlink, Error> {
-        if let Some(directory_symlink) = DirectorySymlink::try_from(
-            self.key.major,
-            self.key.minor,
-            self.executable(false).as_path(),
-            self.key.implementation(),
-        ) {
+    pub fn ensure_minor_version_link(&self) -> Result<(), Error> {
+        if let Some(directory_symlink) = DirectorySymlink::try_from_installation(self) {
             directory_symlink.create_directory()?;
-            Ok(directory_symlink)
-        } else {
-            Err(Error::ExecutablePath(self.executable(false)))
         }
+        Ok(())
     }
 
     /// Ensure the environment is marked as externally managed with the
@@ -597,13 +587,6 @@ impl ManagedPythonInstallation {
             }
         }
         Ok(())
-    }
-
-    /// Create a link to the managed Python executable.
-    ///
-    /// If the file already exists at the target path, an error will be returned.
-    pub fn create_bin_link(&self, target: &Path) -> Result<(), Error> {
-        create_bin_link(target, self.executable(false))
     }
 
     /// Returns `true` if the path is a link to this installation's binary, e.g., as created by
@@ -740,6 +723,15 @@ impl DirectorySymlink {
                 target_directory,
             })
         }
+    }
+
+    pub fn try_from_installation(installation: &ManagedPythonInstallation) -> Option<Self> {
+        DirectorySymlink::try_from(
+            installation.key().version().major(),
+            installation.key().version().minor(),
+            installation.executable(false).as_path(),
+            installation.key().implementation(),
+        )
     }
 
     pub fn try_from_interpreter(interpreter: &Interpreter) -> Option<Self> {

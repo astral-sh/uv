@@ -92,7 +92,12 @@ fn make_child_cmdline() -> CString {
                 // correct directories are added to `sys.path` when running with a
                 // junction trampoline.
                 if !check_pyvenvcfg_home(python_exe.as_path()) {
-                    std::env::set_var("PYTHONHOME", python_exe.parent().expect("Python executable should have a parent directory"));
+                    std::env::set_var(
+                        "PYTHONHOME",
+                        python_exe
+                            .parent()
+                            .expect("Python executable should have a parent directory"),
+                    );
                 }
             }
         }

@@ -113,7 +113,7 @@ pub struct ManagedPythonDownload {
     sha256: Option<&'static str>,
 }
 
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
 pub struct PythonDownloadRequest {
     pub(crate) version: Option<VersionRequest>,
     pub(crate) implementation: Option<ImplementationName>,

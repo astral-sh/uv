@@ -5,7 +5,7 @@ use std::str::FromStr;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PythonVersion(StringVersion);
 
 impl From<StringVersion> for PythonVersion {
