@@ -109,7 +109,7 @@ timm = ["timm"]
 torch-vision = ["torchvision", "Pillow>=10.0.1,<=15.0"]
 # natten = ["natten>=0.14.6,<0.15.0"] # TODO(konsti)
 codecarbon = ["codecarbon==1.2.0"]
-video = ["decord==0.6.0", "av==9.2.0"]
+video = ["decord==0.6.0", "av"]
 sentencepiece = ["sentencepiece>=0.1.91,!=0.1.92", "protobuf"]
 
 deepspeed-testing = [
@@ -181,7 +181,7 @@ all = [
     "codecarbon==1.2.0",
     "accelerate>=0.21.0",
     "decord==0.6.0",
-    "av==9.2.0"
+    "av"
 ]
 docs_specific = ["hf-doc-builder"]
 docs = [
@@ -214,7 +214,7 @@ docs = [
     "codecarbon==1.2.0",
     "accelerate>=0.21.0",
     "decord==0.6.0",
-    "av==9.2.0",
+    "av",
     "hf-doc-builder"
 ]
 torchhub = [
@@ -246,7 +246,7 @@ dev = [
     "GitPython<3.1.19",
     "Pillow>=10.0.1,<=15.0",
     "accelerate>=0.21.0",
-    "av==9.2.0",
+    "av",
     "beautifulsoup4",
     "codecarbon==1.2.0",
     "codecarbon==1.2.0",
