@@ -14,8 +14,8 @@ use assert_cmd::prelude::*;
 use uv_static::EnvVars;
 
 use crate::common::{
-    build_vendor_links_url, get_bin, packse_index_url, uv_snapshot, venv_to_interpreter,
-    TestContext,
+    TestContext, build_vendor_links_url, get_bin, packse_index_url, uv_snapshot,
+    venv_to_interpreter,
 };
 
 fn assert_command(venv: &Path, command: &str, temp_dir: &Path) -> Assert {

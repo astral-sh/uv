@@ -3,7 +3,7 @@
 use std::fmt;
 
 use serde::Serialize;
-use uv_pep508::{uv_pep440::Version, PackageName};
+use uv_pep508::{PackageName, uv_pep440::Version};
 
 /// Information about the git repository where uv was built from.
 #[derive(Serialize)]

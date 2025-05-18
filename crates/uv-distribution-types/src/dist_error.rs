@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display, Formatter};
 
-use petgraph::prelude::EdgeRef;
 use petgraph::Direction;
+use petgraph::prelude::EdgeRef;
 use rustc_hash::FxHashSet;
 use version_ranges::Ranges;
 

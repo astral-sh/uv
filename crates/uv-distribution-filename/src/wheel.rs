@@ -3,7 +3,7 @@ use std::hash::Hash;
 use std::str::FromStr;
 
 use memchr::memchr;
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 use url::Url;
 

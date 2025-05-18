@@ -9,7 +9,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uv_small_str::SmallString;
 
 use crate::{
-    validate_and_normalize_ref, InvalidNameError, InvalidPipGroupError, InvalidPipGroupPathError,
+    InvalidNameError, InvalidPipGroupError, InvalidPipGroupPathError, validate_and_normalize_ref,
 };
 
 /// The normalized name of a dependency group.

@@ -226,11 +226,13 @@ mod tests {
 
     #[test]
     fn name_too_long() {
-        assert!(SourceDistFilename::parse(
-            "foo.zip",
-            SourceDistExtension::Zip,
-            &PackageName::from_str("foo-lib").unwrap()
-        )
-        .is_err());
+        assert!(
+            SourceDistFilename::parse(
+                "foo.zip",
+                SourceDistExtension::Zip,
+                &PackageName::from_str("foo-lib").unwrap()
+            )
+            .is_err()
+        );
     }
 }

@@ -1,4 +1,4 @@
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::collections::Bound;
@@ -9,9 +9,9 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledDist, Name};
+use uv_fs::Simplified;
 #[cfg(unix)]
 use uv_fs::replace_symlink;
-use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::PackageName;
@@ -21,12 +21,12 @@ use uv_python::{
 };
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
-use uv_tool::{entrypoint_paths, tool_executable_dir, InstalledTools, Tool, ToolEntrypoint};
+use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths, tool_executable_dir};
 use uv_warnings::warn_user;
 
 use crate::commands::project::ProjectError;
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{pip, ExitStatus};
+use crate::commands::{ExitStatus, pip};
 use crate::printer::Printer;
 
 /// Return all packages which contain an executable with the given name.

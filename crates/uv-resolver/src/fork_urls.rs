@@ -6,8 +6,8 @@ use uv_distribution_types::Verbatim;
 use uv_normalize::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
 
-use crate::resolver::ResolverEnvironment;
 use crate::ResolveError;
+use crate::resolver::ResolverEnvironment;
 
 /// See [`crate::resolver::ForkState`].
 #[derive(Default, Debug, Clone)]

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::{borrow::Cow, collections::BTreeMap};
 
 use anyhow::{Context, Result};
-use futures::stream::FuturesOrdered;
 use futures::TryStreamExt;
+use futures::stream::FuturesOrdered;
 use url::Url;
 
 use uv_configuration::{DependencyGroups, ExtrasSpecification};
@@ -79,7 +79,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         source_trees: impl Iterator<Item = &Path>,
     ) -> Result<Vec<SourceTreeResolution>> {
         let resolutions: Vec<_> = source_trees
-            .map(|source_tree| async { self.resolve_source_tree(source_tree).await })
+            .map(async |source_tree| self.resolve_source_tree(source_tree).await)
             .collect::<FuturesOrdered<_>>()
             .try_collect()
             .await?;

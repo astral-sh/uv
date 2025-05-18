@@ -8,17 +8,17 @@ use reqwest_retry::RetryPolicy;
 use rkyv::util::AlignedVec;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info_span, instrument, trace, warn, Instrument};
+use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 
 use uv_cache::{CacheEntry, Freshness};
 use uv_fs::write_atomic;
 
-use crate::base_client::is_extended_transient_error;
 use crate::BaseClient;
+use crate::base_client::is_extended_transient_error;
 use crate::{
+    Error, ErrorKind,
     httpcache::{AfterResponse, BeforeRequest, CachePolicy, CachePolicyBuilder},
     rkyvutil::OwnedArchive,
-    Error, ErrorKind,
 };
 
 /// A trait the generalizes (de)serialization at a high level.
@@ -230,7 +230,7 @@ impl CachedClient {
         CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
         let payload = self
-            .get_cacheable(req, cache_entry, cache_control, |resp| async {
+            .get_cacheable(req, cache_entry, cache_control, async |resp| {
                 let payload = response_callback(resp).await?;
                 Ok(SerdeCacheable { inner: payload })
             })
@@ -359,7 +359,7 @@ impl CachedClient {
         let (response, cache_policy) = self.fresh_request(req).await?;
 
         let payload = self
-            .run_response_callback(cache_entry, cache_policy, response, move |resp| async {
+            .run_response_callback(cache_entry, cache_policy, response, async |resp| {
                 let payload = response_callback(resp).await?;
                 Ok(SerdeCacheable { inner: payload })
             })
@@ -585,7 +585,7 @@ impl CachedClient {
         CallbackReturn: Future<Output = Result<Payload, CallBackError>>,
     {
         let payload = self
-            .get_cacheable_with_retry(req, cache_entry, cache_control, |resp| async {
+            .get_cacheable_with_retry(req, cache_entry, cache_control, async |resp| {
                 let payload = response_callback(resp).await?;
                 Ok(SerdeCacheable { inner: payload })
             })

@@ -7,7 +7,7 @@ use std::{env, fmt, io};
 
 use fs_err::tokio::File;
 use futures::TryStreamExt;
-use glob::{glob, GlobError, PatternError};
+use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
 use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
@@ -21,15 +21,15 @@ use thiserror::Error;
 use tokio::io::{AsyncReadExt, BufReader};
 use tokio::sync::Semaphore;
 use tokio_util::io::ReaderStream;
-use tracing::{debug, enabled, trace, warn, Level};
+use tracing::{Level, debug, enabled, trace, warn};
 use trusted_publishing::TrustedPublishingToken;
 use url::Url;
 
 use uv_auth::Credentials;
 use uv_cache::{Cache, Refresh};
 use uv_client::{
-    BaseClient, MetadataFormat, OwnedArchive, RegistryClientBuilder, UvRetryableStrategy,
-    DEFAULT_RETRIES,
+    BaseClient, DEFAULT_RETRIES, MetadataFormat, OwnedArchive, RegistryClientBuilder,
+    UvRetryableStrategy,
 };
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
@@ -243,6 +243,7 @@ impl PublishSendError {
 /// <https://github.com/astral-sh/uv/issues/8030> caused by
 /// <https://github.com/pypa/setuptools/issues/3777> in combination with
 /// <https://github.com/pypi/warehouse/blob/50a58f3081e693a3772c0283050a275e350004bf/warehouse/forklift/legacy.py#L1133-L1155>
+#[allow(clippy::result_large_err)]
 pub fn files_for_publishing(
     paths: Vec<String>,
 ) -> Result<Vec<(PathBuf, String, DistFilename)>, PublishError> {
@@ -585,7 +586,7 @@ async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareErro
     let mut pkg_infos: Vec<(PathBuf, Vec<u8>)> = archive
         .entries()?
         .map_err(PublishPrepareError::from)
-        .try_filter_map(|mut entry| async move {
+        .try_filter_map(async |mut entry| {
             let path = entry
                 .path()
                 .map_err(PublishPrepareError::from)?
@@ -883,7 +884,7 @@ async fn handle_response(registry: &Url, response: Response) -> Result<(), Publi
 
 #[cfg(test)]
 mod tests {
-    use crate::{build_request, form_metadata, Reporter};
+    use crate::{Reporter, build_request, form_metadata};
     use insta::{assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
     use std::path::PathBuf;

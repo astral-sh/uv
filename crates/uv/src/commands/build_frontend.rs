@@ -23,7 +23,7 @@ use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, SourceDist};
-use uv_fs::{relative_to, Simplified};
+use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
@@ -38,10 +38,10 @@ use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
-use crate::commands::pip::operations;
-use crate::commands::project::{find_requires_python, ProjectError};
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
+use crate::commands::pip::operations;
+use crate::commands::project::{ProjectError, find_requires_python};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverSettings};
 

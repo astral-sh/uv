@@ -5,7 +5,7 @@ use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use assert_fs::prelude::*;
 use flate2::write::GzEncoder;
 use fs_err::File;
@@ -17,7 +17,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
 
-use crate::common::{download_to_disk, packse_index_url, uv_snapshot, TestContext};
+use crate::common::{TestContext, download_to_disk, packse_index_url, uv_snapshot};
 
 #[test]
 fn compile_requirements_in() -> Result<()> {

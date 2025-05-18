@@ -1,8 +1,8 @@
 use std::str::FromStr;
 
 use indexmap::IndexMap;
-use serde::de::IntoDeserializer;
 use serde::Deserialize;
+use serde::de::IntoDeserializer;
 
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;

@@ -2,7 +2,7 @@ use anyhow::Result;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 // All of the tests in this file should use `tool.uv.conflicts` in some way.
 //

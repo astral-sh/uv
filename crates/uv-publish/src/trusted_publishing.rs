@@ -1,8 +1,8 @@
 //! Trusted publishing (via OIDC) with GitHub actions.
 
-use base64::prelude::BASE64_URL_SAFE_NO_PAD;
 use base64::Engine;
-use reqwest::{header, StatusCode};
+use base64::prelude::BASE64_URL_SAFE_NO_PAD;
+use reqwest::{StatusCode, header};
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use std::env;

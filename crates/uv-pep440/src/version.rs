@@ -1,4 +1,4 @@
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::fmt::Formatter;
 use std::num::NonZero;
 use std::ops::Deref;

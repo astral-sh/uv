@@ -8,7 +8,7 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 
 use crate::commands::reporters::{CleaningDirectoryReporter, CleaningPackageReporter};
-use crate::commands::{human_readable_bytes, ExitStatus};
+use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
 
 /// Clear the cache, removing all entries or those linked to specific packages.

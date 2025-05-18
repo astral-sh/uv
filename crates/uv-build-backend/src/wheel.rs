@@ -17,8 +17,8 @@ use uv_warnings::warn_user_once;
 
 use crate::metadata::DEFAULT_EXCLUDES;
 use crate::{
-    find_module_root, find_roots, BuildBackendSettings, DirectoryWriter, Error, FileList,
-    ListWriter, PyProjectToml,
+    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+    find_module_root, find_roots,
 };
 
 /// Build a wheel from the source tree and place it in the output directory.

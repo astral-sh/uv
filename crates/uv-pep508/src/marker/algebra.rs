@@ -55,12 +55,12 @@ use itertools::{Either, Itertools};
 use rustc_hash::FxHashMap;
 use version_ranges::Ranges;
 
-use uv_pep440::{release_specifier_to_range, Operator, Version, VersionSpecifier};
+use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range};
 
+use crate::marker::MarkerValueExtra;
 use crate::marker::lowering::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
-use crate::marker::MarkerValueExtra;
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion,
 };
@@ -153,11 +153,7 @@ impl InternerGuard<'_> {
             .entry(node.clone())
             .or_insert_with(|| NodeId::new(self.shared.nodes.push(node), false));
 
-        if flipped {
-            id.not()
-        } else {
-            *id
-        }
+        if flipped { id.not() } else { *id }
     }
 
     /// Returns a decision node for a single marker expression.
@@ -1708,7 +1704,7 @@ impl fmt::Debug for NodeId {
 
 #[cfg(test)]
 mod tests {
-    use super::{NodeId, INTERNER};
+    use super::{INTERNER, NodeId};
     use crate::MarkerExpression;
 
     fn expr(s: &str) -> NodeId {

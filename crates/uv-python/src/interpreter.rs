@@ -17,7 +17,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
-use uv_fs::{write_atomic_sync, PythonExt, Simplified};
+use uv_fs::{PythonExt, Simplified, write_atomic_sync};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
@@ -1066,10 +1066,7 @@ fn find_base_python(
             if let Some(parent) = executable.parent() {
                 parent.join(resolved)
             } else {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "Symlink has no parent directory",
-                ));
+                return Err(io::Error::other("Symlink has no parent directory"));
             }
         } else {
             resolved

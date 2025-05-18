@@ -20,7 +20,11 @@ impl OfflineError {
 
 impl std::fmt::Display for OfflineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Network connectivity is disabled, but the requested data wasn't found in the cache for: `{}`", self.url)
+        write!(
+            f,
+            "Network connectivity is disabled, but the requested data wasn't found in the cache for: `{}`",
+            self.url
+        )
     }
 }
 

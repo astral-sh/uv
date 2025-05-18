@@ -5,8 +5,8 @@ use std::fmt::Write;
 use std::str;
 use std::str::FromStr;
 
-use crate::metadata::Headers;
 use crate::MetadataError;
+use crate::metadata::Headers;
 
 /// Code Metadata 2.3 as specified in
 /// <https://packaging.python.org/specifications/core-metadata/>.

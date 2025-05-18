@@ -1,5 +1,5 @@
-use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
 use rustc_hash::FxHashMap;
 use tracing::instrument;

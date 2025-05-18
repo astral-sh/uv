@@ -3,7 +3,7 @@ use anyhow::Context;
 use owo_colors::OwoColorize;
 
 use uv_fs::Simplified;
-use uv_python::managed::{python_executable_dir, ManagedPythonInstallations};
+use uv_python::managed::{ManagedPythonInstallations, python_executable_dir};
 
 /// Show the Python installation directory.
 pub(crate) fn dir(bin: bool) -> anyhow::Result<()> {

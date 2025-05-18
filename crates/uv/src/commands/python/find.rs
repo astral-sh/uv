@@ -13,8 +13,8 @@ use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
 use crate::commands::{
-    project::{validate_project_requires_python, ScriptInterpreter, WorkspacePython},
     ExitStatus,
+    project::{ScriptInterpreter, WorkspacePython, validate_project_requires_python},
 };
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;

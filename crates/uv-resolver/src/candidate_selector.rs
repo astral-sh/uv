@@ -125,8 +125,7 @@ impl CandidateSelector {
             if let Some(installed) = installed {
                 trace!(
                     "Using installed {} {} that satisfies {range}",
-                    installed.name,
-                    installed.version
+                    installed.name, installed.version
                 );
                 return Some(installed);
             }
@@ -150,8 +149,7 @@ impl CandidateSelector {
             }) {
                 trace!(
                     "Using installed {} {} that satisfies {range}",
-                    installed.name,
-                    installed.version
+                    installed.name, installed.version
                 );
                 return Some(installed);
             }

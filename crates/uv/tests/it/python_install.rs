@@ -1,6 +1,6 @@
 use std::{env, path::Path, process::Command};
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 use assert_fs::{
     assert::PathAssert,
     prelude::{FileTouch, PathChild, PathCreateDir},
@@ -998,8 +998,8 @@ fn read_link_path(path: &Path) -> String {
             .ok()
             .unwrap_or_else(|| panic!("{} should be readable", path.display()))
             .unwrap_or_else(|| panic!("{} should be a valid launcher", path.display()));
-        let path = launcher.python_path.simplified_display().to_string();
-        path
+
+        launcher.python_path.simplified_display().to_string()
     } else {
         unreachable!()
     }

@@ -9,7 +9,7 @@ use uv_python::{Interpreter, PythonEnvironment};
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
-    resolve_environment, sync_environment, EnvironmentSpecification, PlatformState, ProjectError,
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, sync_environment,
 };
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};

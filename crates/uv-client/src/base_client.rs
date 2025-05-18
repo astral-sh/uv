@@ -25,10 +25,10 @@ use uv_static::EnvVars;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
+use crate::Connectivity;
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
-use crate::Connectivity;
 
 pub const DEFAULT_RETRIES: u32 = 3;
 

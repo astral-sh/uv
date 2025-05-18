@@ -42,9 +42,9 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
 
         use anyhow::Context;
         use nix::sys::signal;
-        use nix::unistd::{getpgid, Pid};
+        use nix::unistd::{Pid, getpgid};
         use tokio::select;
-        use tokio::signal::unix::{signal as handle_signal, Signal, SignalKind};
+        use tokio::signal::unix::{Signal, SignalKind, signal as handle_signal};
 
         /// A wrapper for a signal handler that is not available on all platforms, `recv` never
         /// returns on unsupported platforms.

@@ -10,7 +10,7 @@ use indoc::indoc;
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde::{Deserialize, Serialize};
 
-use crate::common::{copy_dir_ignore, make_project, uv_snapshot, TestContext};
+use crate::common::{TestContext, copy_dir_ignore, make_project, uv_snapshot};
 
 fn workspaces_dir() -> PathBuf {
     env::current_dir()
