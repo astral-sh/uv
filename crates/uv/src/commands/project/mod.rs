@@ -20,10 +20,10 @@ use uv_distribution::{DistributionDatabase, LoweredRequirement};
 use uv_distribution_types::{
     Index, Requirement, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
-use uv_fs::{LockedFile, Simplified, CWD};
+use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts};
@@ -32,7 +32,7 @@ use uv_python::{
     PythonInstallation, PythonPreference, PythonRequest, PythonVariant, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionRequest,
 };
-use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
+use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
     FlatIndex, Lock, OptionsBuilder, Preference, PythonRequirement, RequiresPython,

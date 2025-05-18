@@ -52,7 +52,7 @@ use uv_distribution_types::{
     Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
-use uv_pep508::{expand_env_vars, Pep508Error, RequirementOrigin, VerbatimUrl};
+use uv_pep508::{Pep508Error, RequirementOrigin, VerbatimUrl, expand_env_vars};
 use uv_pypi_types::VerbatimParsedUrl;
 
 use crate::requirement::EditableError;
@@ -1366,7 +1366,7 @@ mod test {
     use uv_client::BaseClientBuilder;
     use uv_fs::Simplified;
 
-    use crate::{calculate_row_column, RequirementsTxt};
+    use crate::{RequirementsTxt, calculate_row_column};
 
     fn workspace_test_data_dir() -> PathBuf {
         Path::new("./test-data").simple_canonicalize().unwrap()

@@ -13,7 +13,7 @@ use reqwest::{Proxy, Response};
 use reqwest_middleware::ClientWithMiddleware;
 use rustc_hash::FxHashMap;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{debug, info_span, instrument, trace, warn, Instrument};
+use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
 use uv_auth::Indexes;
@@ -352,7 +352,9 @@ impl RegistryClient {
                                 // The search failed because of an HTTP status code that we don't ignore for
                                 // this index. We end our search here.
                                 SimpleMetadataSearchOutcome::StatusCodeFailure(status_code) => {
-                                    debug!("Indexes search failed because of status code failure: {status_code}");
+                                    debug!(
+                                        "Indexes search failed because of status code failure: {status_code}"
+                                    );
                                     break;
                                 }
                             }
@@ -371,7 +373,7 @@ impl RegistryClient {
             // Otherwise, fetch concurrently.
             IndexStrategy::UnsafeBestMatch | IndexStrategy::UnsafeFirstMatch => {
                 results = futures::stream::iter(indexes)
-                    .map(|index| async move {
+                    .map(async |index| {
                         let _permit = download_concurrency.acquire().await;
                         match index.format {
                             IndexFormat::Simple => {
@@ -400,12 +402,10 @@ impl RegistryClient {
                         }
                     })
                     .buffered(8)
-                    .filter_map(|result: Result<_, Error>| async move {
-                        match result {
-                            Ok((index, Some(metadata))) => Some(Ok((index, metadata))),
-                            Ok((_, None)) => None,
-                            Err(err) => Some(Err(err)),
-                        }
+                    .filter_map(async |result: Result<_, Error>| match result {
+                        Ok((index, Some(metadata))) => Some(Ok((index, metadata))),
+                        Ok((_, None)) => None,
+                        Err(err) => Some(Err(err)),
                     })
                     .try_collect::<Vec<_>>()
                     .await?;
@@ -800,7 +800,7 @@ impl RegistryClient {
                 lock_entry.lock().await.map_err(ErrorKind::CacheWrite)?
             };
 
-            let response_callback = |response: Response| async {
+            let response_callback = async |response: Response| {
                 let bytes = response
                     .bytes()
                     .await
@@ -987,11 +987,12 @@ impl RegistryClient {
             std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", self.timeout().as_secs()
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
+                    self.timeout().as_secs()
                 ),
             )
         } else {
-            std::io::Error::new(std::io::ErrorKind::Other, err)
+            std::io::Error::other(err)
         }
     }
 }
@@ -1224,7 +1225,7 @@ mod tests {
     use uv_normalize::PackageName;
     use uv_pypi_types::{JoinRelativeError, SimpleJson};
 
-    use crate::{html::SimpleHtml, SimpleMetadata, SimpleMetadatum};
+    use crate::{SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
 
     #[test]
     fn ignore_failing_files() {

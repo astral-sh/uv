@@ -241,7 +241,7 @@ pub(crate) fn no_solution_context(err: &uv_resolver::NoSolutionError, context: &
 }
 
 /// Render a [`uv_resolver::NoSolutionError`] with a help message.
-pub(crate) fn no_solution_hint(err: uv_resolver::NoSolutionError, help: String) {
+pub(crate) fn no_solution_hint(err: Box<uv_resolver::NoSolutionError>, help: String) {
     #[derive(Debug, miette::Diagnostic, thiserror::Error)]
     #[error("{header}")]
     #[diagnostic()]
@@ -251,7 +251,7 @@ pub(crate) fn no_solution_hint(err: uv_resolver::NoSolutionError, help: String) 
 
         /// The underlying error.
         #[source]
-        err: uv_resolver::NoSolutionError,
+        err: Box<uv_resolver::NoSolutionError>,
 
         /// The help message to display.
         #[help]

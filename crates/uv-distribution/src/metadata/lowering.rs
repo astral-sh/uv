@@ -13,10 +13,10 @@ use uv_distribution_types::{
 use uv_git_types::{GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
-use uv_pep508::{looks_like_git_repository, MarkerTree, VerbatimUrl, VersionOrUrl};
+use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository};
 use uv_pypi_types::{ConflictItem, ParsedUrlError, VerbatimParsedUrl};
-use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 use uv_workspace::Workspace;
+use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 
 use crate::metadata::GitWorkspaceMember;
 
@@ -285,8 +285,7 @@ impl LoweredRequirement {
                             // relative to main workspace: `../current_workspace/packages/current_project`
                             let url = VerbatimUrl::from_absolute_path(member.root())?;
                             let install_path = url.to_file_path().map_err(|()| {
-                                LoweringError::RelativeTo(io::Error::new(
-                                    io::ErrorKind::Other,
+                                LoweringError::RelativeTo(io::Error::other(
                                     "Invalid path in file URL",
                                 ))
                             })?;
@@ -689,12 +688,9 @@ fn path_source(
         RequirementOrigin::Workspace => workspace_root,
     };
     let url = VerbatimUrl::from_path(path, base)?.with_given(path.to_string_lossy());
-    let install_path = url.to_file_path().map_err(|()| {
-        LoweringError::RelativeTo(io::Error::new(
-            io::ErrorKind::Other,
-            "Invalid path in file URL",
-        ))
-    })?;
+    let install_path = url
+        .to_file_path()
+        .map_err(|()| LoweringError::RelativeTo(io::Error::other("Invalid path in file URL")))?;
 
     let is_dir = if let Ok(metadata) = install_path.metadata() {
         metadata.is_dir()

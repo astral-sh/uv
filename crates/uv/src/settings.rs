@@ -9,16 +9,16 @@ use url::Url;
 use uv_cache::{CacheArgs, Refresh};
 use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
-    options::{flag, resolver_installer_options, resolver_options},
-    AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
-    ToolUpgradeArgs,
-};
-use uv_cli::{
     AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
     PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
     PythonListFormat, PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs,
     ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
+};
+use uv_cli::{
+    AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
+    ToolUpgradeArgs,
+    options::{flag, resolver_installer_options, resolver_options},
 };
 use uv_client::Connectivity;
 use uv_configuration::{
@@ -47,7 +47,7 @@ use uv_warnings::warn_user_once;
 use uv_workspace::pyproject::DependencyType;
 
 use crate::commands::ToolRunCommand;
-use crate::commands::{pip::operations::Modifications, InitKind, InitProjectKind};
+use crate::commands::{InitKind, InitProjectKind, pip::operations::Modifications};
 
 /// The default publish URL.
 const PYPI_PUBLISH_URL: &str = "https://upload.pypi.org/legacy/";

@@ -12,8 +12,8 @@ use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::{
-    find_python_installations, DiscoveryError, EnvironmentPreference, PythonDownloads,
-    PythonInstallation, PythonNotFound, PythonPreference, PythonRequest, PythonSource,
+    DiscoveryError, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonNotFound,
+    PythonPreference, PythonRequest, PythonSource, find_python_installations,
 };
 
 use crate::commands::ExitStatus;

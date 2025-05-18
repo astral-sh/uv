@@ -12,9 +12,9 @@ use predicates::Predicate;
 use url::Url;
 
 use crate::common::{
-    download_to_disk, site_packages_path, uv_snapshot, venv_to_interpreter, TestContext,
+    TestContext, download_to_disk, site_packages_path, uv_snapshot, venv_to_interpreter,
 };
-use uv_fs::{copy_dir_all, Simplified};
+use uv_fs::{Simplified, copy_dir_all};
 use uv_static::EnvVars;
 
 fn check_command(venv: &Path, command: &str, temp_dir: &Path) {
@@ -129,12 +129,14 @@ fn install() -> Result<()> {
     );
 
     // Counterpart for the `compile()` test.
-    assert!(!context
-        .site_packages()
-        .join("markupsafe")
-        .join("__pycache__")
-        .join("__init__.cpython-312.pyc")
-        .exists());
+    assert!(
+        !context
+            .site_packages()
+            .join("markupsafe")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
 
     context
         .assert_command("from markupsafe import Markup")
@@ -3293,12 +3295,14 @@ fn compile() -> Result<()> {
     "###
     );
 
-    assert!(context
-        .site_packages()
-        .join("markupsafe")
-        .join("__pycache__")
-        .join("__init__.cpython-312.pyc")
-        .exists());
+    assert!(
+        context
+            .site_packages()
+            .join("markupsafe")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
 
     context.assert_command("import markupsafe").success();
 
@@ -3342,12 +3346,14 @@ fn recompile() -> Result<()> {
     "###
     );
 
-    assert!(context
-        .site_packages()
-        .join("markupsafe")
-        .join("__pycache__")
-        .join("__init__.cpython-312.pyc")
-        .exists());
+    assert!(
+        context
+            .site_packages()
+            .join("markupsafe")
+            .join("__pycache__")
+            .join("__init__.cpython-312.pyc")
+            .exists()
+    );
 
     context.assert_command("import markupsafe").success();
 
@@ -5267,12 +5273,14 @@ fn target_built_distribution() -> Result<()> {
      - iniconfig==1.1.1
     "###);
     // Ensure that the binary is present in the target directory.
-    assert!(context
-        .temp_dir
-        .child("target")
-        .child("bin")
-        .child(format!("flask{EXE_SUFFIX}"))
-        .is_file());
+    assert!(
+        context
+            .temp_dir
+            .child("target")
+            .child("bin")
+            .child(format!("flask{EXE_SUFFIX}"))
+            .is_file()
+    );
 
     Ok(())
 }

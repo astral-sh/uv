@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anstream::eprint;
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use console::Term;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -38,23 +38,23 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_shell::runnable::WindowsRunnable;
 use uv_static::EnvVars;
-use uv_tool::{entrypoint_paths, InstalledTools};
+use uv_tool::{InstalledTools, entrypoint_paths};
 use uv_warnings::warn_user;
 use uv_warnings::warn_user_once;
 use uv_workspace::WorkspaceCache;
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{
     DefaultInstallLogger, DefaultResolveLogger, SummaryInstallLogger, SummaryResolveLogger,
 };
 use crate::commands::pip::operations;
 use crate::commands::project::{
-    resolve_names, EnvironmentSpecification, PlatformState, ProjectError,
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_names,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::run::run_to_completion;
 use crate::commands::tool::common::{matching_packages, refine_interpreter};
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::ExitStatus;
 use crate::commands::{diagnostics, project::environment::CachedEnvironment};
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;

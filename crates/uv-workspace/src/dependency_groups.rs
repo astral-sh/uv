@@ -1,11 +1,11 @@
-use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 use std::str::FromStr;
 
 use thiserror::Error;
 use tracing::error;
 
-use uv_normalize::{GroupName, DEV_DEPENDENCIES};
+use uv_normalize::{DEV_DEPENDENCIES, GroupName};
 use uv_pep508::Pep508Error;
 use uv_pypi_types::{DependencyGroupSpecifier, VerbatimParsedUrl};
 

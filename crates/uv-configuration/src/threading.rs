@@ -1,7 +1,7 @@
 //! Configure rayon and determine thread stack sizes.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::LazyLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use uv_static::EnvVars;
 
 /// The default minimum stack size for uv threads.

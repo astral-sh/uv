@@ -16,8 +16,8 @@ use predicates::prelude::predicate;
 use uv_static::EnvVars;
 
 use crate::common::{
-    build_vendor_links_url, get_bin, packse_index_url, python_path_with_versions, uv_snapshot,
-    TestContext,
+    TestContext, build_vendor_links_url, get_bin, packse_index_url, python_path_with_versions,
+    uv_snapshot,
 };
 
 /// Provision python binaries and return a `pip compile` command with options shared across all scenarios.

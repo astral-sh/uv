@@ -5,7 +5,7 @@ use indoc::indoc;
 use uv_python::platform::{Arch, Os};
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, venv_bin_path, TestContext};
+use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 
 #[test]
 fn python_find() {

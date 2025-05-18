@@ -11,8 +11,8 @@ use uv_normalize::PackageName;
 use uv_pypi_types::{DependencyGroupSpecifier, LenientRequirement, VerbatimParsedUrl};
 use uv_resolver::{Installable, Lock, Package};
 use uv_scripts::Pep723Script;
-use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
 use uv_workspace::Workspace;
+use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
 
 use crate::commands::project::ProjectError;
 

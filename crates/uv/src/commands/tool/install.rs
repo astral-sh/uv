@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
@@ -26,15 +26,15 @@ use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::project::{
-    resolve_environment, resolve_names, sync_environment, update_environment,
-    EnvironmentSpecification, PlatformState, ProjectError,
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
+    sync_environment, update_environment,
 };
 use crate::commands::tool::common::{install_executables, refine_interpreter, remove_entrypoints};
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::ExitStatus;
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings, ResolverSettings};

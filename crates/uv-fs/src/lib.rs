@@ -255,7 +255,7 @@ pub async fn rename_with_retry(
         let from = from.as_ref();
         let to = to.as_ref();
 
-        let rename = || async { fs_err::rename(from, to) };
+        let rename = async || fs_err::rename(from, to);
 
         rename
             .retry(backoff_file_move())
@@ -617,14 +617,11 @@ impl LockedFile {
                 );
                 file.file().lock_exclusive().map_err(|err| {
                     // Not an fs_err method, we need to build our own path context
-                    std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
-                            "Could not acquire lock for `{resource}` at `{}`: {}",
-                            file.path().user_display(),
-                            err
-                        ),
-                    )
+                    std::io::Error::other(format!(
+                        "Could not acquire lock for `{resource}` at `{}`: {}",
+                        file.path().user_display(),
+                        err
+                    ))
                 })?;
 
                 debug!("Acquired lock for `{resource}`");

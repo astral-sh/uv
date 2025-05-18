@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::sync::Arc;
 use tracing::{debug, warn};
 
@@ -18,8 +18,8 @@ use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
 
-use crate::satisfies::RequirementSatisfaction;
 use crate::SitePackages;
+use crate::satisfies::RequirementSatisfaction;
 
 /// A planner to generate an [`Plan`] based on a set of requirements.
 #[derive(Debug)]

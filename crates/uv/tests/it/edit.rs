@@ -2,7 +2,7 @@
 
 #[cfg(feature = "git")]
 mod conditional_imports {
-    pub(crate) use crate::common::{decode_token, READ_ONLY_GITHUB_TOKEN};
+    pub(crate) use crate::common::{READ_ONLY_GITHUB_TOKEN, decode_token};
 }
 
 #[cfg(feature = "git")]
@@ -15,11 +15,11 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use std::path::Path;
 use uv_fs::Simplified;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
 use uv_static::EnvVars;
 
-use crate::common::{packse_index_url, uv_snapshot, venv_bin_path, TestContext};
+use crate::common::{TestContext, packse_index_url, uv_snapshot, venv_bin_path};
 
 /// Add a PyPI requirement.
 #[test]

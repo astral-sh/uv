@@ -23,10 +23,10 @@ use crate::commands::pip::resolution_markers;
 use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
 };
 use crate::commands::reporters::LatestVersionReporter;
-use crate::commands::{diagnostics, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverSettings};
 
@@ -233,7 +233,7 @@ pub(crate) async fn tree(
             // Fetch the latest version for each package.
             let download_concurrency = &download_concurrency;
             let mut fetches = futures::stream::iter(packages)
-                .map(|(package, index)| async move {
+                .map(async |(package, index)| {
                     // This probably already doesn't work for `--find-links`?
                     let Some(filename) = client
                         .find_latest(package.name(), Some(&index), download_concurrency)

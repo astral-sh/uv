@@ -5,7 +5,7 @@ use std::fmt::Write;
 use std::path::PathBuf;
 
 use anstream::println;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use itertools::Itertools;
 use pretty_assertions::StrComparison;
 use schemars::JsonSchema;
@@ -16,8 +16,8 @@ use uv_options_metadata::{OptionField, OptionSet, OptionsMetadata, Visit};
 use uv_settings::Options as SettingsOptions;
 use uv_workspace::pyproject::ToolUv as WorkspaceOptions;
 
-use crate::generate_all::Mode;
 use crate::ROOT_DIR;
+use crate::generate_all::Mode;
 
 #[derive(Deserialize, JsonSchema, OptionsMetadata)]
 #[serde(deny_unknown_fields)]
@@ -398,7 +398,7 @@ mod tests {
 
     use crate::generate_all::Mode;
 
-    use super::{main, Args};
+    use super::{Args, main};
 
     #[test]
     fn test_generate_options_reference() -> Result<()> {

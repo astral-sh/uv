@@ -13,7 +13,7 @@ use uv_configuration::{
     PreviewMode,
 };
 use uv_fs::Simplified;
-use uv_normalize::{DefaultExtras, DEV_DEPENDENCIES};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras};
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
@@ -30,10 +30,10 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, ProjectEnvironment, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState,
+    ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    default_dependency_groups,
 };
-use crate::commands::{diagnostics, project, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 

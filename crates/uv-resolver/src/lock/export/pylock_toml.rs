@@ -4,11 +4,11 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use jiff::Timestamp;
 use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::{Offset, TimeZone};
-use jiff::Timestamp;
 use serde::Deserialize;
-use toml_edit::{value, Array, ArrayOfTables, Item, Table};
+use toml_edit::{Array, ArrayOfTables, Item, Table, value};
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
@@ -25,7 +25,7 @@ use uv_distribution_types::{
     RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution,
     ResolvedDist, SourceDist, ToUrlError, UrlString,
 };
-use uv_fs::{relative_to, PortablePathBuf};
+use uv_fs::{PortablePathBuf, relative_to};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -36,7 +36,7 @@ use uv_pypi_types::{HashDigests, Hashes, ParsedGitUrl, VcsKind};
 use uv_small_str::SmallString;
 
 use crate::lock::export::ExportableRequirements;
-use crate::lock::{each_element_on_its_line_array, Source, WheelTagHint};
+use crate::lock::{Source, WheelTagHint, each_element_on_its_line_array};
 use crate::resolution::ResolutionGraphNode;
 use crate::{Installable, LockError, RequiresPython, ResolverOutput};
 
@@ -1102,11 +1102,10 @@ impl<'lock> PylockToml {
                     hashes,
                     install: true,
                 }
-            } else if let Some(dist) =
-                package
-                    .archive
-                    .as_ref()
-                    .filter(|_| if is_wheel { !no_binary } else { !no_build })
+            } else if let Some(dist) = package
+                .archive
+                .as_ref()
+                .filter(|_| if is_wheel { !no_binary } else { !no_build })
             {
                 let hashes = HashDigests::from(dist.hashes.clone());
                 let dist = dist.to_dist(install_path, &package.name, package.version.as_ref())?;

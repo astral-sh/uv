@@ -1,5 +1,5 @@
-use std::collections::hash_map::Entry;
 use std::collections::VecDeque;
+use std::collections::hash_map::Entry;
 
 use either::Either;
 use petgraph::graph::NodeIndex;
@@ -15,7 +15,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictItem;
 
-use crate::graph_ops::{marker_reachability, Reachable};
+use crate::graph_ops::{Reachable, marker_reachability};
 pub(crate) use crate::lock::export::pylock_toml::PylockTomlPackage;
 pub use crate::lock::export::pylock_toml::{PylockToml, PylockTomlErrorKind};
 pub use crate::lock::export::requirements_txt::RequirementsTxtExport;

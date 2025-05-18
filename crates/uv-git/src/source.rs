@@ -11,12 +11,12 @@ use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, instrument};
 use url::Url;
 
-use uv_cache_key::{cache_digest, RepositoryUrl};
+use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_git_types::GitUrl;
 use uv_redacted::redacted_url;
 
-use crate::git::GitRemote;
 use crate::GIT_STORE;
+use crate::git::GitRemote;
 
 /// A remote Git source that can be checked out locally.
 pub struct GitSource {

@@ -3,8 +3,8 @@
 //!
 //! Effectively a port of <https://github.com/python/cpython/blob/58ce131037ecb34d506a613f21993cde2056f628/PC/launcher2.c#L1744>
 
-use crate::windows_registry::WindowsPython;
 use crate::PythonVersion;
+use crate::windows_registry::WindowsPython;
 use itertools::Either;
 use std::env;
 use std::path::PathBuf;

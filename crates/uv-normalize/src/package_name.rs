@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use uv_small_str::SmallString;
 
-use crate::{validate_and_normalize_ref, InvalidNameError};
+use crate::{InvalidNameError, validate_and_normalize_ref};
 
 /// The normalized name of a package.
 ///
@@ -51,13 +51,11 @@ impl PackageName {
             owned_string.push('_');
 
             // Iterate over the rest of the string.
-            owned_string.extend(self.0[dash_position + 1..].chars().map(|character| {
-                if character == '-' {
-                    '_'
-                } else {
-                    character
-                }
-            }));
+            owned_string.extend(
+                self.0[dash_position + 1..]
+                    .chars()
+                    .map(|character| if character == '-' { '_' } else { character }),
+            );
 
             Cow::Owned(owned_string)
         } else {

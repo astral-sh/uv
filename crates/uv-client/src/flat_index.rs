@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use futures::{FutureExt, StreamExt};
 use reqwest::Response;
-use tracing::{debug, info_span, warn, Instrument};
+use tracing::{Instrument, debug, info_span, warn};
 use url::Url;
 
 use uv_cache::{Cache, CacheBucket};
@@ -113,7 +113,7 @@ impl<'a> FlatIndexClient<'a> {
         indexes: impl Iterator<Item = &IndexUrl>,
     ) -> Result<FlatIndexEntries, FlatIndexError> {
         let mut fetches = futures::stream::iter(indexes)
-            .map(|index| async move {
+            .map(async |index| {
                 let entries = self.fetch_index(index).await?;
                 if entries.is_empty() {
                     warn!("No packages found in `--find-links` entry: {}", index);

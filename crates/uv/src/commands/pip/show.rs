@@ -14,8 +14,8 @@ use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 
-use crate::commands::pip::operations::report_target_environment;
 use crate::commands::ExitStatus;
+use crate::commands::pip::operations::report_target_environment;
 use crate::printer::Printer;
 
 /// Show information about one or more installed packages.

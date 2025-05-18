@@ -21,13 +21,14 @@ use tokio_util::either::Either;
 use tracing::{debug, instrument};
 use url::Url;
 
-use uv_client::{is_extended_transient_error, BaseClient, WrappedReqwestError};
+use uv_client::{BaseClient, WrappedReqwestError, is_extended_transient_error};
 use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
-use uv_fs::{rename_with_retry, Simplified};
+use uv_fs::{Simplified, rename_with_retry};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 use uv_static::EnvVars;
 
+use crate::PythonVariant;
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
@@ -35,7 +36,6 @@ use crate::installation::PythonInstallationKey;
 use crate::libc::LibcDetectionError;
 use crate::managed::ManagedPythonInstallation;
 use crate::platform::{self, Arch, Libc, Os};
-use crate::PythonVariant;
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
 #[derive(Error, Debug)]
@@ -88,9 +88,7 @@ pub enum Error {
     InvalidRequestPlatform(#[from] platform::Error),
     #[error("No download found for request: {}", _0.green())]
     NoDownloadFound(PythonDownloadRequest),
-    #[error(
-        "A mirror was provided via `{0}`, but the URL does not match the expected format: {0}"
-    )]
+    #[error("A mirror was provided via `{0}`, but the URL does not match the expected format: {0}")]
     Mirror(&'static str, &'static str),
     #[error(transparent)]
     LibcDetection(#[from] LibcDetectionError),
@@ -1183,7 +1181,7 @@ async fn read_url(
         let size = response.content_length();
         let stream = response
             .bytes_stream()
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+            .map_err(io::Error::other)
             .into_async_read();
 
         Ok((Either::Right(stream.compat()), size))

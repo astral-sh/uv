@@ -7,12 +7,12 @@ use thiserror::Error;
 use url::Url;
 
 use uv_distribution_filename::DistExtension;
-use uv_fs::{relative_to, PortablePath, PortablePathBuf, CWD};
+use uv_fs::{CWD, PortablePath, PortablePathBuf, relative_to};
 use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError, OidParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
-    marker, MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl,
+    MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl, marker,
 };
 
 use crate::{IndexMetadata, IndexUrl};

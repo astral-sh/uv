@@ -3,7 +3,7 @@ use std::iter;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use console::Term;
 use owo_colors::OwoColorize;
 use tokio::sync::Semaphore;
@@ -15,12 +15,12 @@ use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBu
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
 use uv_publish::{
-    check_trusted_publishing, files_for_publishing, upload, CheckUrlClient, TrustedPublishResult,
+    CheckUrlClient, TrustedPublishResult, check_trusted_publishing, files_for_publishing, upload,
 };
 use uv_warnings::warn_user_once;
 
 use crate::commands::reporters::PublishReporter;
-use crate::commands::{human_readable_bytes, ExitStatus};
+use crate::commands::{ExitStatus, human_readable_bytes};
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 

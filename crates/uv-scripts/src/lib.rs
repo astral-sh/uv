@@ -370,7 +370,9 @@ pub struct ToolUv {
 
 #[derive(Debug, Error)]
 pub enum Pep723Error {
-    #[error("An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`.")]
+    #[error(
+        "An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`."
+    )]
     UnclosedBlock,
     #[error("The PEP 723 metadata block is missing from the script.")]
     MissingTag,
@@ -585,7 +587,7 @@ fn serialize_metadata(metadata: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{serialize_metadata, Pep723Error, Pep723Script, ScriptTag};
+    use crate::{Pep723Error, Pep723Script, ScriptTag, serialize_metadata};
     use std::str::FromStr;
 
     #[test]

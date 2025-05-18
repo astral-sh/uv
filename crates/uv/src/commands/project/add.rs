@@ -1,12 +1,12 @@
-use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
+use std::collections::hash_map::Entry;
 use std::fmt::Write;
 use std::io;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashMap};
@@ -23,13 +23,13 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
-    redact_credentials, Index, IndexName, IndexUrls, NameRequirementSpecification, Requirement,
-    RequirementSource, UnresolvedRequirement, VersionId,
+    Index, IndexName, IndexUrls, NameRequirementSpecification, Requirement, RequirementSource,
+    UnresolvedRequirement, VersionId, redact_credentials,
 };
 use uv_fs::Simplified;
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
-use uv_normalize::{DefaultExtras, PackageName, DEV_DEPENDENCIES};
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_pep508::{ExtraName, MarkerTree, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
@@ -51,11 +51,11 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, init_script_python_requirement, PlatformState, ProjectEnvironment,
-    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    PlatformState, ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter,
+    UniversalState, default_dependency_groups, init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{diagnostics, project, ExitStatus, ScriptPath};
+use crate::commands::{ExitStatus, ScriptPath, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 

@@ -5,8 +5,8 @@ use std::borrow::Cow;
 use std::fmt;
 
 use netrc::Netrc;
-use reqwest::header::HeaderValue;
 use reqwest::Request;
+use reqwest::header::HeaderValue;
 use std::io::Read;
 use std::io::Write;
 use url::Url;

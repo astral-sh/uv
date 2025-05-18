@@ -18,7 +18,7 @@ use fs_err::tokio as fs;
 use futures::{FutureExt, TryStreamExt};
 use reqwest::{Response, StatusCode};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{debug, info_span, instrument, warn, Instrument};
+use tracing::{Instrument, debug, info_span, instrument, warn};
 use url::Url;
 use zip::ZipArchive;
 
@@ -39,7 +39,7 @@ use uv_fs::{rename_with_retry, write_atomic};
 use uv_git_types::{GitHubRepository, GitOid};
 use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
-use uv_pep440::{release_specifiers_to_ranges, Version};
+use uv_pep440::{Version, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_types::{BuildContext, BuildStack, SourceBuildTrait};
@@ -736,7 +736,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             Ok(revision)
         } else {
             client
-                .managed(|client| async move {
+                .managed(async |client| {
                     client
                         .cached_client()
                         .skip_cache_with_retry(
@@ -1925,7 +1925,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         debug!("Attempting to fetch `pyproject.toml` from: {url}");
 
         let content = client
-            .managed(|client| async {
+            .managed(async |client| {
                 let response = client
                     .uncached_client(git.repository())
                     .get(&url)
@@ -2073,7 +2073,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .instrument(info_span!("download", source_dist = %source))
         };
         client
-            .managed(|client| async move {
+            .managed(async |client| {
                 client
                     .cached_client()
                     .skip_cache_with_retry(
@@ -2107,7 +2107,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         .map_err(Error::CacheWrite)?;
         let reader = response
             .bytes_stream()
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+            .map_err(std::io::Error::other)
             .into_async_read();
 
         // Create a hasher for each hash algorithm.

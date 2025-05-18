@@ -21,7 +21,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
 
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 use url::Url;
 
@@ -42,8 +42,8 @@ pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 pub use uv_pep440;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 pub use verbatim_url::{
-    expand_env_vars, looks_like_git_repository, split_scheme, strip_host, Scheme, VerbatimUrl,
-    VerbatimUrlError,
+    Scheme, VerbatimUrl, VerbatimUrlError, expand_env_vars, looks_like_git_repository,
+    split_scheme, strip_host,
 };
 
 mod cursor;
@@ -980,7 +980,7 @@ mod tests {
     use uv_pep440::{Operator, Version, VersionPattern, VersionSpecifier};
 
     use crate::cursor::Cursor;
-    use crate::marker::{parse, MarkerExpression, MarkerTree, MarkerValueVersion};
+    use crate::marker::{MarkerExpression, MarkerTree, MarkerValueVersion, parse};
     use crate::{
         MarkerOperator, MarkerValueString, Requirement, TracingReporter, VerbatimUrl, VersionOrUrl,
     };

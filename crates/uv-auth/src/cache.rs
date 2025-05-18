@@ -10,8 +10,8 @@ use url::Url;
 
 use uv_once_map::OnceMap;
 
-use crate::credentials::{Credentials, Username};
 use crate::Realm;
+use crate::credentials::{Credentials, Username};
 
 type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 
