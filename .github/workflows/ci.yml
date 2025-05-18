@@ -346,6 +346,10 @@ jobs:
         with:
           tool: cargo-bloat
 
+      - name: "rustfmt"
+        working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
+        run: cargo fmt --all --check
+
       - name: "Clippy"
         working-directory: ${{ env.UV_WORKSPACE }}/crates/uv-trampoline
         run: cargo clippy --all-features --locked --target x86_64-pc-windows-msvc --tests -- -D warnings
