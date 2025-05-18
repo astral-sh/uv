@@ -312,15 +312,13 @@ pub fn with_retry_sync(
             })
             .call()
             .map_err(|err| {
-                std::io::Error::other(
-                    format!(
-                        "Failed {} {} to {}: {}",
-                        operation_name,
-                        from.display(),
-                        to.display(),
-                        err
-                    ),
-                )
+                std::io::Error::other(format!(
+                    "Failed {} {} to {}: {}",
+                    operation_name,
+                    from.display(),
+                    to.display(),
+                    err
+                ))
             })
     }
     #[cfg(not(windows))]
@@ -416,19 +414,15 @@ pub async fn persist_with_retry(
 
         match persisted {
             Ok(_) => Ok(()),
-            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(
-                format!(
-                    "Failed to persist temporary file to {}: {}",
-                    to.display(),
-                    error_message,
-                ),
-            )),
-            Err(PersistRetryError::LostState) => Err(std::io::Error::other(
-                format!(
-                    "Failed to retrieve temporary file while trying to persist to {}",
-                    to.display()
-                ),
-            )),
+            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(format!(
+                "Failed to persist temporary file to {}: {}",
+                to.display(),
+                error_message,
+            ))),
+            Err(PersistRetryError::LostState) => Err(std::io::Error::other(format!(
+                "Failed to retrieve temporary file while trying to persist to {}",
+                to.display()
+            ))),
         }
     }
     #[cfg(not(windows))]
@@ -488,19 +482,15 @@ pub fn persist_with_retry_sync(
 
         match persisted {
             Ok(_) => Ok(()),
-            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(
-                format!(
-                    "Failed to persist temporary file to {}: {}",
-                    to.display(),
-                    error_message,
-                ),
-            )),
-            Err(PersistRetryError::LostState) => Err(std::io::Error::other(
-                format!(
-                    "Failed to retrieve temporary file while trying to persist to {}",
-                    to.display()
-                ),
-            )),
+            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(format!(
+                "Failed to persist temporary file to {}: {}",
+                to.display(),
+                error_message,
+            ))),
+            Err(PersistRetryError::LostState) => Err(std::io::Error::other(format!(
+                "Failed to retrieve temporary file while trying to persist to {}",
+                to.display()
+            ))),
         }
     }
     #[cfg(not(windows))]
