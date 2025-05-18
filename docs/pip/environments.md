@@ -53,8 +53,8 @@ The virtual environment can be "activated" to make its packages available:
 
 === "Windows"
 
-    ```console
-    $ .venv\Scripts\activate
+    ```pwsh-session
+    PS> .venv\Scripts\activate
     ```
 
 !!! note
