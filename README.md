@@ -54,6 +54,11 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ```bash
+# On macOS, using [brew](https://brew.sh/).
+brew install uv
+```
+
+```bash
 # On Windows.
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
