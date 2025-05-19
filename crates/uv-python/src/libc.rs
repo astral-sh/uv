@@ -37,6 +37,8 @@ pub enum LibcDetectionError {
     InvalidLdSoOutputMusl(PathBuf),
     #[error("Could not read ELF interpreter from any of the following paths: {0}")]
     CoreBinaryParsing(String),
+    #[error("Failed to find any common binaries ({0})")]
+    NoCommonBinariesFound(String),
     #[error("Failed to determine libc")]
     Io(#[from] io::Error),
 }
@@ -207,12 +209,24 @@ fn find_ld_path() -> Result<PathBuf, LibcDetectionError> {
     // See: https://github.com/astral-sh/uv/issues/1810
     // See: https://github.com/astral-sh/uv/issues/4242#issuecomment-2306164449
     let attempts = ["/bin/sh", "/usr/bin/env", "/bin/dash", "/bin/ls"];
+    let mut found_anything = false;
     for path in attempts {
-        if let Some(ld_path) = find_ld_path_at(path) {
-            return Ok(ld_path);
+        if std::fs::exists(path).ok() == Some(true) {
+            found_anything = true;
+            if let Some(ld_path) = find_ld_path_at(path) {
+                return Ok(ld_path);
+            }
         }
     }
-    Err(LibcDetectionError::CoreBinaryParsing(attempts.join(", ")))
+    let attempts_string = attempts.join(", ");
+    if !found_anything {
+        // Known failure cases here include running the distroless Docker images directly
+        // (depending on what subcommand you use) and certain Nix setups. See:
+        // https://github.com/astral-sh/uv/issues/8635
+        Err(LibcDetectionError::NoCommonBinariesFound(attempts_string))
+    } else {
+        Err(LibcDetectionError::CoreBinaryParsing(attempts_string))
+    }
 }
 
 /// Attempt to find the path to the `ld` executable by
