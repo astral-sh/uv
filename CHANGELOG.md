@@ -2,6 +2,33 @@
 
 <!-- prettier-ignore-start -->
 
+
+## 0.7.6
+
+### Python
+
+- Add Python 3.14 on musl
+- Add free-threaded Python on musl
+- Add Python 3.14.0a7
+- Statically link `libpython` into the interpreter on Linux for a significant performance boost
+
+See the
+[`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250517)
+for more details.
+
+### Enhancements
+
+- Improve compatibility of `VIRTUAL_ENV_PROMPT` value ([#13501](https://github.com/astral-sh/uv/pull/13501))
+- Bump MSRV to 1.85 and Edition 2024 ([#13516](https://github.com/astral-sh/uv/pull/13516))
+
+### Bug fixes
+
+- Respect default extras in uv remove ([#13380](https://github.com/astral-sh/uv/pull/13380))
+
+### Documentation
+
+- Fix PowerShell code blocks ([#13511](https://github.com/astral-sh/uv/pull/13511))
+
 ## 0.7.5
 
 ### Bug fixes
