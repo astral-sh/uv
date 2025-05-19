@@ -5,8 +5,8 @@ use std::os::windows::io::AsRawHandle;
 use std::string::String;
 
 use ufmt_write::uWrite;
+use windows::Win32::UI::WindowsAndMessaging::{MESSAGEBOX_STYLE, MessageBoxA};
 use windows::core::PCSTR;
-use windows::Win32::UI::WindowsAndMessaging::{MessageBoxA, MESSAGEBOX_STYLE};
 
 #[macro_export]
 macro_rules! error {
