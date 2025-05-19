@@ -45,7 +45,9 @@ Hello from hello-world!
 
 ## Working on an existing project
 
-If you start working on a project that is already managed by uv, simply run `uv sync`. A virtual environment will be created (if one does not already exist) and all dependencies from the `uv.lock` file will be installed.
+If you start working on a project that is already managed by uv, simply run `uv sync`. A virtual
+environment will be created (if one does not already exist) and all dependencies from the `uv.lock`
+file will be installed.
 
 ## Project structure
 
