@@ -3689,7 +3689,7 @@ fn lock_requires_python() -> Result<()> {
 
           hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
 
-          hint: The resolution failed for a Python version range different than the current Python version, consider limiting the Python version range using `requires-python`.
+          hint: The resolution failed for a Python version range outside the current Python version, consider limiting the Python version range using `requires-python`.
     ");
 
     // Require >=3.7, and allow locking to a version of `pygls` that is compatible (==1.0.1).
@@ -27427,7 +27427,7 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
 
           hint: Pre-releases are available for `numpy` in the requested range (e.g., 2.2.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
-          hint: The resolution failed for a Python version range different than the current Python version, consider limiting the Python version range using `requires-python`.
+          hint: The resolution failed for a Python version range outside the current Python version, consider limiting the Python version range using `requires-python`.
     ");
 
     // Check that the resolution passes on the restricted Python environment.
