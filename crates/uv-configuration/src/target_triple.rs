@@ -227,7 +227,7 @@ pub enum TargetTriple {
     #[serde(alias = "aarch64-manylinux240")]
     Aarch64Manylinux240,
 
-    /// A wasm32 target using the the Pyodide 2024 platform. Meant for use with Python 3.12
+    /// A wasm32 target using the the Pyodide 2024 platform. Meant for use with Python 3.12.
     #[cfg_attr(feature = "clap", value(name = "wasm32-pyodide2024"))]
     Wasm32Pyodide2024,
 }
