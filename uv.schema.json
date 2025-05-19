@@ -2296,7 +2296,7 @@
           ]
         },
         {
-          "description": "A wasm32 target using the the Pyodide 2024 platform. Meant for use with Python 3.12",
+          "description": "A wasm32 target using the the Pyodide 2024 platform. Meant for use with Python 3.12.",
           "type": "string",
           "enum": [
             "wasm32-pyodide2024"
