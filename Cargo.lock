@@ -5562,7 +5562,7 @@ dependencies = [
  "uv-warnings",
  "which",
  "windows-registry 0.5.1",
- "windows-result 0.3.2",
+ "windows-result 0.3.3",
  "windows-sys 0.59.0",
 ]
 
@@ -5755,7 +5755,7 @@ dependencies = [
  "uv-fs",
  "uv-static",
  "windows-registry 0.5.1",
- "windows-result 0.3.2",
+ "windows-result 0.3.3",
  "windows-sys 0.59.0",
 ]
 
@@ -6235,7 +6235,7 @@ dependencies = [
  "windows-implement 0.60.0",
  "windows-interface 0.59.1",
  "windows-link",
- "windows-result 0.3.2",
+ "windows-result 0.3.3",
  "windows-strings 0.4.0",
 ]
 
@@ -6315,7 +6315,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4286ad90ddb45071efd1a66dfa43eb02dd0dfbae1545ad6cc3c51cf34d7e8ba3"
 dependencies = [
- "windows-result 0.3.2",
+ "windows-result 0.3.3",
  "windows-strings 0.3.1",
  "windows-targets 0.53.0",
 ]
@@ -6327,7 +6327,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad1da3e436dc7653dfdf3da67332e22bff09bb0e28b0239e1624499c7830842e"
 dependencies = [
  "windows-link",
- "windows-result 0.3.2",
+ "windows-result 0.3.3",
  "windows-strings 0.4.0",
 ]
 
@@ -6342,9 +6342,9 @@ dependencies = [
 
 [[package]]
 name = "windows-result"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c64fd11a4fd95df68efcfee5f44a294fe71b8bc6a91993e2791938abcc712252"
+checksum = "4b895b5356fc36103d0f64dd1e94dfa7ac5633f1c9dd6e80fe9ec4adef69e09d"
 dependencies = [
  "windows-link",
 ]
