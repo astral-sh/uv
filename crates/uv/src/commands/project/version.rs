@@ -104,6 +104,32 @@ pub(crate) async fn project_version(
         .project
         .as_ref()
         .map(|project| project.name.clone());
+
+    // Short-circuit early for a frozen read
+    let is_read_only = value.is_none() && bump.is_none();
+    if frozen && is_read_only {
+        return Box::pin(print_frozen_version(
+            project,
+            name,
+            project_dir,
+            active,
+            python,
+            install_mirrors,
+            &settings,
+            network_settings,
+            python_preference,
+            python_downloads,
+            concurrency,
+            no_config,
+            cache,
+            short,
+            output_format,
+            printer,
+            preview,
+        ))
+        .await;
+    }
+
     let old_version = toml.version().map_err(|err| match err {
         Error::MalformedWorkspace => {
             if toml.has_dynamic_version() {
@@ -147,12 +173,10 @@ pub(crate) async fn project_version(
     // Update the toml and lock
     let status = if dry_run {
         ExitStatus::Success
-    } else {
+    } else if let Some(new_version) = &new_version {
+        let project = update_project(project, new_version, &mut toml, &pyproject_path)?;
         Box::pin(lock_and_sync(
-            new_version.as_ref(),
             project,
-            &mut toml,
-            &pyproject_path,
             project_dir,
             locked,
             frozen,
@@ -172,6 +196,9 @@ pub(crate) async fn project_version(
             preview,
         ))
         .await?
+    } else {
+        debug!("No changes to version; skipping update");
+        ExitStatus::Success
     };
 
     // Report the results
@@ -210,13 +237,123 @@ async fn find_target(project_dir: &Path, package: Option<&PackageName>) -> Resul
     Ok(project)
 }
 
+/// Update the pyproject.toml on-disk and in-memory with a new version
+fn update_project(
+    project: VirtualProject,
+    new_version: &Version,
+    toml: &mut PyProjectTomlMut,
+    pyproject_path: &Path,
+) -> Result<VirtualProject> {
+    // Save to disk
+    toml.set_version(new_version)?;
+    let content = toml.to_string();
+    fs_err::write(pyproject_path, &content)?;
+
+    // Update the `pyproject.toml` in-memory.
+    let project = project
+        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?)
+        .ok_or(ProjectError::PyprojectTomlUpdate)?;
+
+    Ok(project)
+}
+
+/// Do the minimal work to try to find the package in the lockfile and print its version
+async fn print_frozen_version(
+    project: VirtualProject,
+    name: Option<PackageName>,
+    project_dir: &Path,
+    active: Option<bool>,
+    python: Option<String>,
+    install_mirrors: PythonInstallMirrors,
+    settings: &ResolverInstallerSettings,
+    network_settings: NetworkSettings,
+    python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
+    concurrency: Concurrency,
+    no_config: bool,
+    cache: &Cache,
+    short: bool,
+    output_format: VersionFormat,
+    printer: Printer,
+    preview: PreviewMode,
+) -> Result<ExitStatus> {
+    // Discover the interpreter (this is the same interpreter --no-sync uses).
+    let interpreter = ProjectInterpreter::discover(
+        project.workspace(),
+        project_dir,
+        python.as_deref().map(PythonRequest::parse),
+        &network_settings,
+        python_preference,
+        python_downloads,
+        &install_mirrors,
+        false,
+        no_config,
+        active,
+        cache,
+        printer,
+    )
+    .await?
+    .into_interpreter();
+
+    let target = AddTarget::Project(project, Box::new(PythonTarget::Interpreter(interpreter)));
+
+    // Initialize any shared state.
+    let state = UniversalState::default();
+
+    // Lock and sync the environment, if necessary.
+    let lock = match project::lock::LockOperation::new(
+        LockMode::Frozen,
+        &settings.resolver,
+        &network_settings,
+        &state,
+        Box::new(DefaultResolveLogger),
+        concurrency,
+        cache,
+        printer,
+        preview,
+    )
+    .execute((&target).into())
+    .await
+    {
+        Ok(result) => result.into_lock(),
+        Err(ProjectError::Operation(err)) => {
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+                .report(err)
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    // Try to find the package of interest in the lock, falling back to the root if unsure
+    let package = if let Some(name) = &name {
+        lock.packages()
+            .iter()
+            .find(|package| package.name() == name)
+    } else {
+        lock.root()
+    };
+    let Some(package) = package else {
+        return Err(anyhow!(
+            "Failed to find the package's version in the frozen lockfile"
+        ));
+    };
+    let Some(version) = package.version() else {
+        return Err(anyhow!(
+            "Failed to find the package's version in the frozen lockfile"
+        ));
+    };
+
+    // Finally, print!
+    let old_version = VersionInfo::new(name.as_ref(), version);
+    print_version(old_version, None, short, output_format, printer)?;
+
+    Ok(ExitStatus::Success)
+}
+
 /// Re-lock and re-sync the project after a series of edits.
 #[allow(clippy::fn_params_excessive_bools)]
 async fn lock_and_sync(
-    new_version: Option<&Version>,
     project: VirtualProject,
-    toml: &mut PyProjectTomlMut,
-    pyproject_path: &Path,
     project_dir: &Path,
     locked: bool,
     frozen: bool,
@@ -235,27 +372,10 @@ async fn lock_and_sync(
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
-    // Apply the new metadata
-    let Some(new_version) = &new_version else {
-        debug!("No changes to version; skipping update");
-        return Ok(ExitStatus::Success);
-    };
-
-    // Save to disk
-    toml.set_version(new_version)?;
-    let content = toml.to_string();
-    fs_err::write(pyproject_path, &content)?;
-
-    // If `--frozen`, exit early. There's no reason to lock and sync, since we don't need a `uv.lock`
-    // to exist at all.
+    // If frozen, don't touch the lock or sync at all
     if frozen {
         return Ok(ExitStatus::Success);
     }
-
-    // Update the `pyproject.toml` in-memory.
-    let project = project
-        .with_pyproject_toml(toml::from_str(&content).map_err(ProjectError::PyprojectTomlParse)?)
-        .ok_or(ProjectError::PyprojectTomlUpdate)?;
 
     // Convert to an `AddTarget` by attaching the appropriate interpreter or environment.
     let target = if no_sync {
@@ -344,7 +464,7 @@ async fn lock_and_sync(
         return Ok(ExitStatus::Success);
     };
 
-    // Perform a full sync, because we don't know what exactly is affected by the removal.
+    // Perform a full sync, because we don't know what exactly is affected by the version.
     // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
     let extras = ExtrasSpecification::from_all_extras();
     let install_options = InstallOptions::default();

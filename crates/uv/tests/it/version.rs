@@ -1510,7 +1510,7 @@ fn version_set_workspace() -> Result<()> {
     ----- stderr -----
     ");
 
-    // Confirm --frozen set does no lock or sync
+    // Confirm --frozen set works
     uv_snapshot!(context.filters(), context.version()
         .arg("--package").arg("child2")
         .arg("--frozen")
@@ -1519,6 +1519,31 @@ fn version_set_workspace() -> Result<()> {
     exit_code: 0
     ----- stdout -----
     child2 1.1.1 => 2.0.0
+
+    ----- stderr -----
+    ");
+
+    // Confirm --frozen --bump works, sees the previous set
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--package").arg("child2")
+        .arg("--frozen")
+        .arg("--bump").arg("patch"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child2 2.0.0 => 2.0.1
+
+    ----- stderr -----
+    ");
+
+    // Confirm --frozen get doesn't see the --frozen set or bump
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--package").arg("child2")
+        .arg("--frozen"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    child2 1.1.1
 
     ----- stderr -----
     ");
@@ -1570,7 +1595,7 @@ fn version_set_workspace() -> Result<()> {
 
         [[package]]
         name = "child2"
-        version = "2.0.0"
+        version = "2.0.1"
         source = { editable = "child2" }
         "#
         );
@@ -1594,9 +1619,8 @@ fn version_set_workspace() -> Result<()> {
      - child1==1.2.3 (from file://[TEMP_DIR]/child1)
      + child1==3.0.0 (from file://[TEMP_DIR]/child1)
      - child2==1.1.1 (from file://[TEMP_DIR]/child2)
-     + child2==2.0.0 (from file://[TEMP_DIR]/child2)
+     + child2==2.0.1 (from file://[TEMP_DIR]/child2)
     ");
-
     Ok(())
 }
 
