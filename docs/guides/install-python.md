@@ -122,23 +122,20 @@ documentation for more details.
 
 ## Upgrading Python patch versions
 
-Managed Python minor versions can be upgraded to the latest patch. This is not currently supported
-for PyPy and GraalPy implementations.
-
-To upgrade a Python minor version to the latest patch:
+To upgrade a uv-managed Python minor version to the latest patch:
 
 ```console
 $ uv python upgrade 3.12
 ```
 
-To upgrade all installed Python minor versions to their latest patch versions:
+To upgrade all uv-managed Python minor versions to their latest patch versions:
 
 ```console
 $ uv python upgrade
 ```
 
-All virtual environments created by uv on a minor version will transparently upgrade when that minor
-version is upgraded.
+All virtual environments created by uv on a managed minor version will transparently upgrade when
+that minor version is upgraded.
 
 ## Next steps
 

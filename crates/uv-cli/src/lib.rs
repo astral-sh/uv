@@ -4735,14 +4735,21 @@ pub enum PythonCommand {
     /// See `uv help python` to view supported request formats.
     Install(PythonInstallArgs),
 
-    /// Upgrade Python to the latest patch version.
+    /// Upgrade installed Python versions to the latest supported patch release.
     ///
-    /// Multiple Python minor versions may be requested. If none are provided, upgrades will be
-    /// attempted for all managed, installed CPython minor versions.
+    /// A target Python minor version to upgrade may be provided, e.g., `3.13`. Multiple versions
+    /// may be provided to perform more than one upgrade.
     ///
-    /// Virtual environments created by uv will transparently upgrade their patch version in the
-    /// case of an upgrade. But if they were created before the upgrade feature was added to uv,
-    /// they would need to be recreated to reflect upgrades.
+    /// If no target version is provided, then uv will upgrade all managed CPython versions.
+    ///
+    /// During an upgrade, uv will not uninstall outdated patch versions.
+    ///
+    /// When an upgrade is performed, virtual environments created by uv will automatically
+    /// use the new version. However, if the virtual environment was created before the
+    /// upgrade functionality was added, it will continue to use the old Python version; to enable
+    /// upgrades, the environment must be recreated.
+    ///
+    /// Upgrades are not yet supported for alternative implementations, like PyPy.
     Upgrade(PythonUpgradeArgs),
 
     /// Search for a Python installation.
@@ -4935,7 +4942,7 @@ pub struct PythonInstallArgs {
 #[derive(Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct PythonUpgradeArgs {
-    /// The directory to store the Python installation in.
+    /// The directory Python installations are stored in.
     ///
     /// If provided, `UV_PYTHON_INSTALL_DIR` will need to be set for subsequent operations for uv to
     /// discover the Python installation.
@@ -4947,8 +4954,7 @@ pub struct PythonUpgradeArgs {
 
     /// The Python minor version(s) to upgrade.
     ///
-    /// If not provided, uv will attempt to upgrade every minor version that has
-    /// been installed.
+    /// If no target version is provided, then uv will upgrade all managed CPython versions.
     #[arg(env = EnvVars::UV_PYTHON)]
     pub targets: Vec<String>,
 
@@ -4976,28 +4982,6 @@ pub struct PythonUpgradeArgs {
     /// Note that currently, only local paths are supported.
     #[arg(long, env = EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL)]
     pub python_downloads_json_url: Option<String>,
-
-    /// Replace existing Python executables during installation.
-    ///
-    /// By default, uv will refuse to replace executables that it does not manage.
-    ///
-    /// Implies `--reinstall`.
-    #[arg(long, short)]
-    pub force: bool,
-
-    /// Use as the default Python version.
-    ///
-    /// By default, only a `python{major}.{minor}` executable is installed, e.g., `python3.10`. When
-    /// the `--default` flag is used, `python{major}`, e.g., `python3`, and `python` executables are
-    /// also installed.
-    ///
-    /// Alternative Python variants will still include their tag. For example, installing
-    /// 3.13+freethreaded with `--default` will include in `python3t` and `pythont`, not `python3`
-    /// and `python`.
-    ///
-    /// If multiple Python versions are requested, uv will exit with an error.
-    #[arg(long)]
-    pub default: bool,
 }
 
 #[derive(Args)]

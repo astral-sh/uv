@@ -2559,7 +2559,7 @@ uv python [OPTIONS] <COMMAND>
 
 <dl class="cli-reference"><dt><a href="#uv-python-list"><code>uv python list</code></a></dt><dd><p>List the available Python installations</p></dd>
 <dt><a href="#uv-python-install"><code>uv python install</code></a></dt><dd><p>Download and install Python versions</p></dd>
-<dt><a href="#uv-python-upgrade"><code>uv python upgrade</code></a></dt><dd><p>Upgrade Python to the latest patch version</p></dd>
+<dt><a href="#uv-python-upgrade"><code>uv python upgrade</code></a></dt><dd><p>Upgrade installed Python versions to the latest supported patch release</p></dd>
 <dt><a href="#uv-python-find"><code>uv python find</code></a></dt><dd><p>Search for a Python installation</p></dd>
 <dt><a href="#uv-python-pin"><code>uv python pin</code></a></dt><dd><p>Pin to a specific Python version</p></dd>
 <dt><a href="#uv-python-dir"><code>uv python dir</code></a></dt><dd><p>Show the uv Python installation directory</p></dd>
@@ -2756,11 +2756,17 @@ uv python install [OPTIONS] [TARGETS]...
 
 ### uv python upgrade
 
-Upgrade Python to the latest patch version.
+Upgrade installed Python versions to the latest supported patch release.
 
-Multiple Python minor versions may be requested. If none are provided, upgrades will be attempted for all managed, installed CPython minor versions.
+A target Python minor version to upgrade may be provided, e.g., `3.13`. Multiple versions may be provided to perform more than one upgrade.
 
-Virtual environments created by uv will transparently upgrade their patch version in the case of an upgrade. But if they were created before the upgrade feature was added to uv, they would need to be recreated to reflect upgrades.
+If no target version is provided, then uv will upgrade all managed CPython versions.
+
+During an upgrade, uv will not uninstall outdated patch versions.
+
+When an upgrade is performed, virtual environments created by uv will automatically use the new version. However, if the virtual environment was created before the upgrade functionality was added, it will continue to use the old Python version; to enable upgrades, the environment must be recreated.
+
+Upgrades are not yet supported for alternative implementations, like PyPy.
 
 <h3 class="cli-reference">Usage</h3>
 
@@ -2771,7 +2777,7 @@ uv python upgrade [OPTIONS] [TARGETS]...
 <h3 class="cli-reference">Arguments</h3>
 
 <dl class="cli-reference"><dt id="uv-python-upgrade--targets"><a href="#uv-python-upgrade--targets"<code>TARGETS</code></a></dt><dd><p>The Python minor version(s) to upgrade.</p>
-<p>If not provided, uv will attempt to upgrade every minor version that has been installed.</p>
+<p>If no target version is provided, then uv will upgrade all managed CPython versions.</p>
 </dd></dl>
 
 <h3 class="cli-reference">Options</h3>
@@ -2792,18 +2798,11 @@ uv python upgrade [OPTIONS] [TARGETS]...
 <li><code>never</code>:  Disables colored output</li>
 </ul></dd><dt id="uv-python-upgrade--config-file"><a href="#uv-python-upgrade--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
 <p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
-<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-python-upgrade--default"><a href="#uv-python-upgrade--default"><code>--default</code></a></dt><dd><p>Use as the default Python version.</p>
-<p>By default, only a <code>python{major}.{minor}</code> executable is installed, e.g., <code>python3.10</code>. When the <code>--default</code> flag is used, <code>python{major}</code>, e.g., <code>python3</code>, and <code>python</code> executables are also installed.</p>
-<p>Alternative Python variants will still include their tag. For example, installing 3.13+freethreaded with <code>--default</code> will include in <code>python3t</code> and <code>pythont</code>, not <code>python3</code> and <code>python</code>.</p>
-<p>If multiple Python versions are requested, uv will exit with an error.</p>
-</dd><dt id="uv-python-upgrade--directory"><a href="#uv-python-upgrade--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-python-upgrade--directory"><a href="#uv-python-upgrade--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-python-upgrade--force"><a href="#uv-python-upgrade--force"><code>--force</code></a>, <code>-f</code></dt><dd><p>Replace existing Python executables during installation.</p>
-<p>By default, uv will refuse to replace executables that it does not manage.</p>
-<p>Implies <code>--reinstall</code>.</p>
 </dd><dt id="uv-python-upgrade--help"><a href="#uv-python-upgrade--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-</dd><dt id="uv-python-upgrade--install-dir"><a href="#uv-python-upgrade--install-dir"><code>--install-dir</code></a>, <code>-i</code> <i>install-dir</i></dt><dd><p>The directory to store the Python installation in.</p>
+</dd><dt id="uv-python-upgrade--install-dir"><a href="#uv-python-upgrade--install-dir"><code>--install-dir</code></a>, <code>-i</code> <i>install-dir</i></dt><dd><p>The directory Python installations are stored in.</p>
 <p>If provided, <code>UV_PYTHON_INSTALL_DIR</code> will need to be set for subsequent operations for uv to discover the Python installation.</p>
 <p>See <code>uv python dir</code> to view the current Python installation directory. Defaults to <code>~/.local/share/uv/python</code>.</p>
 <p>May also be set with the <code>UV_PYTHON_INSTALL_DIR</code> environment variable.</p></dd><dt id="uv-python-upgrade--managed-python"><a href="#uv-python-upgrade--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>

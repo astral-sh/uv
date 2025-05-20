@@ -69,6 +69,7 @@ fn python_upgrade_without_version() {
     ----- stdout -----
 
     ----- stderr -----
+    There are no installed versions to upgrade
     ");
 
     // Install earlier patch versions for different minor versions
@@ -84,15 +85,18 @@ fn python_upgrade_without_version() {
      + cpython-3.13.1-[PLATFORM]
     ");
 
+    let mut filters = context.filters().clone();
+    filters.push((r"3.13.\d+", "3.13.[X]"));
+
     // Upgrade one patch version
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("3.13"), @r"
+    uv_snapshot!(filters, context.python_upgrade().arg("3.13"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.13.3 in [TIME]
-     + cpython-3.13.3-[PLATFORM]
+    Installed Python 3.13.[X] in [TIME]
+     + cpython-3.13.[X]-[PLATFORM]
     ");
 
     // Providing no minor version to `uv python upgrade` should upgrade the rest
@@ -115,7 +119,7 @@ fn python_upgrade_without_version() {
     ----- stdout -----
 
     ----- stderr -----
-    All requested versions already on latest patch
+    All versions already on latest supported patch release
     ");
 }
 
@@ -159,60 +163,22 @@ fn python_upgrade_transparent_from_venv() {
     "
     );
 
-    // Upgrade patch version
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
+    let second_venv = ".venv2";
 
-    ----- stderr -----
-    Installed Python 3.10.17 in [TIME]
-     + cpython-3.10.17-[PLATFORM]
-    ");
-
-    // Virtual environment should reflect upgraded patch
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Python 3.10.17
-
-    ----- stderr -----
-    "
-    );
-}
-
-#[test]
-fn python_upgrade_transparent_from_venv_with_minor_request() {
-    let context: TestContext = TestContext::new_with_versions(&["3.13"])
-        .with_filtered_python_keys()
-        .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
-
-    // Install an earlier patch version
-    uv_snapshot!(context.filters(), context.python_install().arg("3.10.8"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Installed Python 3.10.8 in [TIME]
-     + cpython-3.10.8-[PLATFORM]
-    ");
-
-    // Create a virtual environment
-    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.10"), @r"
+    // Create a second virtual environment with minor version request
+    uv_snapshot!(context.filters(), context.venv().arg(second_venv).arg("-p").arg("3.10"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.10.8
-    Creating virtual environment at: .venv
-    Activate with: source .venv/[BIN]/activate
+    Creating virtual environment at: .venv2
+    Activate with: source .venv2/[BIN]/activate
     ");
 
-    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version")
+        .env(EnvVars::VIRTUAL_ENV, second_venv), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -233,8 +199,20 @@ fn python_upgrade_transparent_from_venv_with_minor_request() {
      + cpython-3.10.17-[PLATFORM]
     ");
 
-    // Virtual environment should reflect upgraded patch
+    // First virtual environment should reflect upgraded patch
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.10.17
+
+    ----- stderr -----
+    "
+    );
+
+    // Second virtual environment should reflect upgraded patch
+    uv_snapshot!(context.filters(), context.run().arg("python").arg("--version")
+        .env(EnvVars::VIRTUAL_ENV, second_venv), @r"
     success: true
     exit_code: 0
     ----- stdout -----

@@ -396,7 +396,7 @@ impl ManagedPythonInstallation {
             exe = std::env::consts::EXE_SUFFIX
         );
 
-        let executable = executable_path_from_home(
+        let executable = executable_path_from_base(
             self.python_dir().as_path(),
             &name,
             &LenientImplementationName::from(*self.implementation()),
@@ -517,7 +517,7 @@ impl ManagedPythonInstallation {
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
     pub fn ensure_minor_version_link(&self) -> Result<(), Error> {
-        if let Some(directory_symlink) = DirectorySymlink::try_from(
+        if let Some(directory_symlink) = DirectorySymlink::from_executable(
             self.key.major,
             self.key.minor,
             self.executable(false).as_path(),
@@ -655,10 +655,17 @@ impl ManagedPythonInstallation {
     }
 }
 
+/// A representation of a symlink directory (or junction on Windows) linking to
+/// the home directory of a Python installation.
 #[derive(Clone, Debug)]
 pub struct DirectorySymlink {
+    /// The symlink directory (or junction on Windows)
     pub symlink_directory: PathBuf,
+    /// The full path to the executable including the symlink directory
+    /// (or junction on Windows).
     pub symlink_executable: PathBuf,
+    /// The target directory for the symlink. This is the home directory for
+    /// a Python installation.
     pub target_directory: PathBuf,
 }
 
@@ -670,7 +677,19 @@ impl DirectorySymlink {
     /// The implementation is expected to be CPython and, on Unix, the base Python is
     /// expected to be in `<home>/bin/` on Unix. If either condition isn't true,
     /// return [`None`].
-    pub fn try_from(
+    ///
+    /// # Examples
+    ///
+    /// ## Unix
+    /// For a Python 3.10.8 installation in `/path/to/uv/python/cpython-3.10.8-macos-aarch64-none/bin/python3.10`,
+    /// the symlink directory would be `/path/to/uv/python/python3.10` and the executable path including the
+    /// symlink directory would be `/path/to/uv/python/python3.10/bin/python3.10`.
+    ///
+    /// ## Windows
+    /// For a Python 3.10.8 installation in `C:\path\to\uv\python\cpython-3.10.8-windows-x86_64-none\python.exe`,
+    /// the junction would be `C:\path\to\uv\python\python3.10` and the executable path including the
+    /// junction would be `C:\path\to\uv\python\python3.10\python.exe`.
+    pub fn from_executable(
         major: u8,
         minor: u8,
         executable: &Path,
@@ -690,53 +709,52 @@ impl DirectorySymlink {
         let parent = executable
             .parent()
             .expect("Executable should have parent directory");
-        #[cfg(unix)]
-        if parent
-            .components()
-            .next_back()
-            .is_some_and(|c| c.as_os_str() == "bin")
-        {
-            let target_directory = parent.parent()?.to_path_buf();
-            let symlink_directory = target_directory.with_file_name(symlink_directory_name);
-            if target_directory == symlink_directory {
-                return None;
-            }
-            let symlink_executable = executable_path_from_home(
-                symlink_directory.as_path(),
-                &executable_name.to_string_lossy(),
-                implementation,
-            );
 
-            Some(Self {
-                symlink_directory,
-                symlink_executable,
-                target_directory,
-            })
-        } else {
-            None
-        }
-        #[cfg(windows)]
-        {
-            let target_directory = parent.to_path_buf();
-            let symlink_directory = target_directory.with_file_name(symlink_directory_name);
-            if target_directory == symlink_directory {
+        // The home directory of the Python installation
+        let target_directory = if cfg!(unix) {
+            if parent
+                .components()
+                .next_back()
+                .is_some_and(|c| c.as_os_str() == "bin")
+            {
+                parent.parent()?.to_path_buf()
+            } else {
                 return None;
             }
-            let symlink_executable = executable_path_from_home(
-                symlink_directory.as_path(),
-                &executable_name.to_string_lossy(),
-                implementation,
-            );
-            Some(Self {
-                symlink_directory,
-                symlink_executable,
-                target_directory,
-            })
+        } else if cfg!(windows) {
+            parent.to_path_buf()
+        } else {
+            unimplemented!("Only Windows and Unix systems are supported.")
+        };
+        let symlink_directory = target_directory.with_file_name(symlink_directory_name);
+        // If this would create a circular link, return `None`.
+        if target_directory == symlink_directory {
+            return None;
         }
+        // The full executable path including the symlink directory (or junction).
+        let symlink_executable = executable_path_from_base(
+            symlink_directory.as_path(),
+            &executable_name.to_string_lossy(),
+            implementation,
+        );
+        Some(Self {
+            symlink_directory,
+            symlink_executable,
+            target_directory,
+        })
     }
 
-    pub fn try_from_interpreter(interpreter: &Interpreter) -> Option<Self> {
-        DirectorySymlink::try_from(
+    pub fn from_installation(installation: &ManagedPythonInstallation) -> Option<Self> {
+        DirectorySymlink::from_executable(
+            installation.key().version().major(),
+            installation.key().version().minor(),
+            installation.executable(false).as_path(),
+            installation.key().implementation(),
+        )
+    }
+
+    pub fn from_interpreter(interpreter: &Interpreter) -> Option<Self> {
+        DirectorySymlink::from_executable(
             interpreter.python_major(),
             interpreter.python_minor(),
             interpreter.sys_executable(),
@@ -774,29 +792,30 @@ impl DirectorySymlink {
     }
 
     pub fn symlink_exists(&self) -> bool {
-        symlink_exists(self.symlink_directory.as_path())
+        #[cfg(unix)]
+        {
+            self.symlink_directory
+                .symlink_metadata()
+                .map(|metadata| metadata.file_type().is_symlink())
+                .unwrap_or(false)
+        }
+        #[cfg(windows)]
+        {
+            self.symlink_directory
+                .symlink_metadata()
+                .is_ok_and(|metadata| {
+                    // Check that this is a reparse point, which indicates this
+                    // is a symlink or junction.
+                    (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0
+                })
+        }
     }
 }
 
-pub fn symlink_exists(symlink: &Path) -> bool {
-    #[cfg(unix)]
-    {
-        symlink
-            .symlink_metadata()
-            .map(|metadata| metadata.file_type().is_symlink())
-            .unwrap_or(false)
-    }
-    #[cfg(windows)]
-    {
-        symlink.symlink_metadata().is_ok_and(|metadata| {
-            // Check that this is a reparse point, which indicates this
-            // is a symlink or junction.
-            (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0
-        })
-    }
-}
-
-pub fn executable_path_from_home(
+/// Takes the base directory of a Python installation and an executable name and
+/// derives the full path to the executable. On Unix, this is, e.g., `<base>/bin/python3.10`.
+/// On Windows, this is, e.g., `<base>\python.exe`.
+pub fn executable_path_from_base(
     home: &Path,
     executable_name: &str,
     implementation: &LenientImplementationName,

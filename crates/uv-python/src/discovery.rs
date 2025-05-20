@@ -35,12 +35,12 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{WindowsPython, registry_pythons};
-use crate::{BrokenSymlink, Interpreter, PythonVersion};
+use crate::{BrokenSymlink, Interpreter, PythonInstallationKey, PythonVersion};
 
 /// A request to find a Python installation.
 ///
 /// See [`PythonRequest::from_str`].
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub enum PythonRequest {
     /// An appropriate default Python installation
     ///
@@ -2054,6 +2054,11 @@ impl fmt::Display for ExecutableName {
 }
 
 impl VersionRequest {
+    /// Derive a [`VersionRequest::MajorMinor`] from a [`PythonInstallationKey`]
+    pub fn major_minor_request_from_key(key: &PythonInstallationKey) -> Self {
+        Self::MajorMinor(key.major, key.minor, key.variant)
+    }
+
     /// Return possible executable names for the given version request.
     pub(crate) fn executable_names(
         &self,

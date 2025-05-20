@@ -105,14 +105,14 @@ pub enum Error {
     },
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct ManagedPythonDownload {
     key: PythonInstallationKey,
     url: &'static str,
     sha256: Option<&'static str>,
 }
 
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
 pub struct PythonDownloadRequest {
     pub(crate) version: Option<VersionRequest>,
     pub(crate) implementation: Option<ImplementationName>,
