@@ -296,7 +296,13 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         .map(Pep723Item::metadata)
         .and_then(|metadata| metadata.tool.as_ref())
         .and_then(|tool| tool.uv.as_ref())
-        .map(|uv| Options::simple(uv.globals.clone(), uv.top_level.clone()))
+        .map(|uv| {
+            Options::simple(
+                uv.globals.clone(),
+                uv.top_level.clone(),
+                uv.install_mirrors.clone(),
+            )
+        })
         .map(FilesystemOptions::from)
         .combine(filesystem);
 

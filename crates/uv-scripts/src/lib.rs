@@ -12,7 +12,7 @@ use url::Url;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_settings::{GlobalOptions, ResolverInstallerOptions};
+use uv_settings::{GlobalOptions, PythonInstallMirrors, ResolverInstallerOptions};
 use uv_workspace::pyproject::Sources;
 
 static FINDER: LazyLock<Finder> = LazyLock::new(|| Finder::new(b"# /// script"));
@@ -362,6 +362,8 @@ pub struct ToolUv {
     pub globals: GlobalOptions,
     #[serde(flatten)]
     pub top_level: ResolverInstallerOptions,
+    #[serde(flatten)]
+    pub install_mirrors: PythonInstallMirrors,
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
