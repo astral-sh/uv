@@ -667,6 +667,10 @@ impl EnvVars {
     #[attr_hidden]
     pub const UV_TEST_INDEX_URL: &'static str = "UV_TEST_INDEX_URL";
 
+    /// Used to set the GitHub fast-path url for tests.
+    #[attr_hidden]
+    pub const UV_GITHUB_FAST_PATH_URL: &'static str = "UV_GITHUB_FAST_PATH_URL";
+
     /// Hide progress messages with non-deterministic order in tests.
     #[attr_hidden]
     pub const UV_TEST_NO_CLI_PROGRESS: &'static str = "UV_TEST_NO_CLI_PROGRESS";
