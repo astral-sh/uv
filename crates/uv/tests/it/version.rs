@@ -1273,6 +1273,25 @@ fn version_get_workspace() -> Result<()> {
     ----- stderr -----
     ");
 
+    // Check that --directory also works
+    uv_snapshot!(context.filters(), context.version().arg("--directory").arg(context.temp_dir.as_ref()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    myproject 1.10.31
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.version().arg("--directory").arg(context.temp_dir.join("workspace-member")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    workspace-member 0.1.0
+
+    ----- stderr -----
+    ");
+
     pyproject_toml.write_str(
         r#"
         [tool.uv.workspace]

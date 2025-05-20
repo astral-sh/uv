@@ -102,11 +102,7 @@ pub(crate) async fn project_version(
     )?;
 
     let pyproject_path = project.root().join("pyproject.toml");
-    let name = project
-        .pyproject_toml()
-        .project
-        .as_ref()
-        .map(|project| project.name.clone());
+    let name = project.project_name().cloned();
 
     // Short-circuit early for a frozen read
     let is_read_only = value.is_none() && bump.is_none();
