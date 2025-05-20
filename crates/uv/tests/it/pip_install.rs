@@ -11,15 +11,15 @@ use indoc::indoc;
 use predicates::prelude::predicate;
 use url::Url;
 use wiremock::{
-    matchers::{basic_auth, method, path},
     Mock, MockServer, ResponseTemplate,
+    matchers::{basic_auth, method, path},
 };
 
 #[cfg(feature = "git")]
 use crate::common::{self, decode_token};
 use crate::common::{
-    build_vendor_links_url, download_to_disk, get_bin, uv_snapshot, venv_bin_path,
-    venv_to_interpreter, TestContext,
+    TestContext, build_vendor_links_url, download_to_disk, get_bin, uv_snapshot, venv_bin_path,
+    venv_to_interpreter,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -5228,8 +5228,8 @@ fn dry_run_install_already_installed() -> std::result::Result<(), Box<dyn std::e
 }
 
 #[test]
-fn dry_run_install_transitive_dependency_already_installed(
-) -> std::result::Result<(), Box<dyn std::error::Error>> {
+fn dry_run_install_transitive_dependency_already_installed()
+-> std::result::Result<(), Box<dyn std::error::Error>> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");

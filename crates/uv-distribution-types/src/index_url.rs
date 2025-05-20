@@ -10,7 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use url::{ParseError, Url};
 
-use uv_pep508::{split_scheme, Scheme, VerbatimUrl, VerbatimUrlError};
+use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
 
 use crate::{Index, IndexStatusCodeStrategy, Verbatim};
 

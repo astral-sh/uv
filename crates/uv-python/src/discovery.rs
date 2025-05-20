@@ -11,11 +11,11 @@ use tracing::{debug, instrument, trace};
 use which::{which, which_all};
 
 use uv_cache::Cache;
-use uv_fs::which::is_executable;
 use uv_fs::Simplified;
+use uv_fs::which::is_executable;
 use uv_pep440::{
-    release_specifiers_to_ranges, LowerBound, Prerelease, UpperBound, Version, VersionSpecifier,
-    VersionSpecifiers,
+    LowerBound, Prerelease, UpperBound, Version, VersionSpecifier, VersionSpecifiers,
+    release_specifiers_to_ranges,
 };
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
@@ -30,11 +30,11 @@ use crate::managed::ManagedPythonInstallations;
 use crate::microsoft_store::find_microsoft_store_pythons;
 use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
-    conda_environment_from_env, virtualenv_from_env, virtualenv_from_working_dir,
-    virtualenv_python_executable, CondaEnvironmentKind,
+    CondaEnvironmentKind, conda_environment_from_env, virtualenv_from_env,
+    virtualenv_from_working_dir, virtualenv_python_executable,
 };
 #[cfg(windows)]
-use crate::windows_registry::{registry_pythons, WindowsPython};
+use crate::windows_registry::{WindowsPython, registry_pythons};
 use crate::{BrokenSymlink, Interpreter, PythonVersion};
 
 /// A request to find a Python installation.
@@ -251,8 +251,8 @@ pub enum Error {
 /// - Discovered virtual environment (e.g. `.venv` in a parent directory)
 ///
 /// Notably, "system" environments are excluded. See [`python_executables_from_installed`].
-fn python_executables_from_virtual_environments<'a>(
-) -> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
+fn python_executables_from_virtual_environments<'a>()
+-> impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a {
     let from_active_environment = iter::once_with(|| {
         virtualenv_from_env()
             .into_iter()
@@ -1252,8 +1252,8 @@ pub(crate) fn is_windows_store_shim(path: &Path) -> bool {
         CreateFileW, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS,
         FILE_FLAG_OPEN_REPARSE_POINT, MAXIMUM_REPARSE_DATA_BUFFER_SIZE, OPEN_EXISTING,
     };
-    use windows_sys::Win32::System::Ioctl::FSCTL_GET_REPARSE_POINT;
     use windows_sys::Win32::System::IO::DeviceIoControl;
+    use windows_sys::Win32::System::Ioctl::FSCTL_GET_REPARSE_POINT;
 
     // The path must be absolute.
     if !path.is_absolute() {
@@ -2715,7 +2715,7 @@ fn split_wheel_tag_release_version(version: Version) -> Version {
 mod tests {
     use std::{path::PathBuf, str::FromStr};
 
-    use assert_fs::{prelude::*, TempDir};
+    use assert_fs::{TempDir, prelude::*};
     use target_lexicon::{Aarch64Architecture, Architecture};
     use test_log::test;
     use uv_pep440::{Prerelease, PrereleaseKind, VersionSpecifiers};

@@ -19,7 +19,7 @@ use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 use crate::commands::pip::operations::report_target_environment;
-use crate::commands::{elapsed, ExitStatus};
+use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 

@@ -18,9 +18,9 @@ use uv_pep508::Pep508Error;
 use crate::VerbatimParsedUrl;
 
 pub use build_requires::BuildRequires;
+pub use metadata_resolver::ResolutionMetadata;
 pub use metadata10::Metadata10;
 pub use metadata23::Metadata23;
-pub use metadata_resolver::ResolutionMetadata;
 pub use pyproject_toml::PyProjectToml;
 pub use requires_dist::RequiresDist;
 pub use requires_txt::RequiresTxt;

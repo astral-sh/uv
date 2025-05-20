@@ -7,7 +7,7 @@ use url::{ParseError, Url};
 use uv_distribution_filename::{DistExtension, ExtensionError};
 use uv_git_types::{GitUrl, GitUrlParseError};
 use uv_pep508::{
-    looks_like_git_repository, Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError,
+    Pep508Url, UnnamedRequirementUrl, VerbatimUrl, VerbatimUrlError, looks_like_git_repository,
 };
 
 use crate::{ArchiveInfo, DirInfo, DirectUrl, VcsInfo, VcsKind};

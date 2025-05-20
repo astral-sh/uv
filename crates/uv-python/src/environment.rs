@@ -14,7 +14,7 @@ use uv_pep440::Version;
 
 use crate::discovery::find_python_installation;
 use crate::installation::PythonInstallation;
-use crate::virtualenv::{virtualenv_python_executable, PyVenvConfiguration};
+use crate::virtualenv::{PyVenvConfiguration, virtualenv_python_executable};
 use crate::{
     EnvironmentPreference, Error, Interpreter, Prefix, PythonNotFound, PythonPreference,
     PythonRequest, Target,

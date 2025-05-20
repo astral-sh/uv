@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use jiff::{tz::TimeZone, Timestamp, ToSpan};
+use jiff::{Timestamp, ToSpan, tz::TimeZone};
 
 /// A timestamp that excludes files newer than it.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]

@@ -4,7 +4,7 @@ use std::process::Command;
 use assert_fs::prelude::*;
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 /// Add shared arguments to a command.
 ///

@@ -303,7 +303,6 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     }
 
     /// Set the [`Reporter`] to use for this installer.
-    #[must_use]
     fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             fetcher: self.fetcher.with_reporter(reporter),

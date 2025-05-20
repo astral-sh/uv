@@ -26,10 +26,10 @@ use uv_python::PythonRequest;
 use uv_python::{EnvironmentPreference, PythonEnvironment};
 use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::operations::report_target_environment;
 use crate::commands::reporters::LatestVersionReporter;
-use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
@@ -118,7 +118,7 @@ pub(crate) async fn pip_list(
 
         // Fetch the latest version for each package.
         let mut fetches = futures::stream::iter(&results)
-            .map(|dist| async {
+            .map(async |dist| {
                 let latest = client
                     .find_latest(dist.name(), None, &download_concurrency)
                     .await?;

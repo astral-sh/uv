@@ -6,13 +6,13 @@ use std::str::FromStr;
 
 use arcstr::ArcStr;
 use itertools::Itertools;
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use version_ranges::Ranges;
 
 use uv_normalize::ExtraName;
 use uv_pep440::{Version, VersionParseError, VersionSpecifier};
 
-use super::algebra::{Edges, NodeId, Variable, INTERNER};
+use super::algebra::{Edges, INTERNER, NodeId, Variable};
 use super::simplify;
 use crate::cursor::Cursor;
 use crate::marker::lowering::{
@@ -2967,9 +2967,11 @@ mod test {
     #[test]
     fn test_is_false() {
         assert!(m("python_version < '3.10' and python_version >= '3.10'").is_false());
-        assert!(m("(python_version < '3.10' and python_version >= '3.10') \
+        assert!(
+            m("(python_version < '3.10' and python_version >= '3.10') \
               or (python_version < '3.9' and python_version >= '3.9')")
-        .is_false());
+            .is_false()
+        );
 
         assert!(!m("python_version < '3.10'").is_false());
         assert!(!m("python_version < '0'").is_false());
@@ -3226,11 +3228,13 @@ mod test {
             m("os_name == 'Linux'"),
         );
 
-        assert!(m("
+        assert!(
+            m("
                 (os_name == 'Linux' and extra == 'foo')
                 or (os_name != 'Linux' and extra == 'bar')")
-        .without_extras()
-        .is_true());
+            .without_extras()
+            .is_true()
+        );
 
         assert_eq!(
             m("os_name == 'Linux' and extra != 'foo'").without_extras(),
@@ -3259,11 +3263,13 @@ mod test {
             m("os_name == 'Linux' and extra == 'foo'").only_extras(),
             m("extra == 'foo'"),
         );
-        assert!(m("
+        assert!(
+            m("
                 (os_name == 'foo' and extra == 'foo')
                 or (os_name == 'bar' and extra != 'foo')")
-        .only_extras()
-        .is_true());
+            .only_extras()
+            .is_true()
+        );
         assert_eq!(
             m("
                 (os_name == 'Linux' and extra == 'foo')

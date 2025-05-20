@@ -11,10 +11,10 @@ use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
 
-use uv_fs::{symlink_or_copy_file, LockedFile, Simplified};
+use uv_fs::{LockedFile, Simplified, symlink_or_copy_file};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_trampoline_builder::{windows_python_launcher, Launcher};
+use uv_trampoline_builder::{Launcher, windows_python_launcher};
 
 use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
 use crate::implementation::{
@@ -25,7 +25,7 @@ use crate::libc::LibcDetectionError;
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
-use crate::{macos_dylib, sysconfig, PythonRequest, PythonVariant};
+use crate::{PythonRequest, PythonVariant, macos_dylib, sysconfig};
 
 #[derive(Error, Debug)]
 pub enum Error {

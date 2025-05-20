@@ -7,8 +7,8 @@ use std::io::BufReader;
 use url::Url;
 
 use crate::common::{
-    self, build_vendor_links_url, decode_token, download_to_disk, packse_index_url, uv_snapshot,
-    venv_bin_path, TestContext,
+    self, TestContext, build_vendor_links_url, decode_token, download_to_disk, packse_index_url,
+    uv_snapshot, venv_bin_path,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -3664,7 +3664,7 @@ fn lock_requires_python() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3684,10 +3684,10 @@ fn lock_requires_python() -> Result<()> {
            cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
           And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: Pre-releases are available for `pygls` in the requested range (e.g., 2.0.0a2), but pre-releases weren't enabled (try: `--prerelease=allow`)
+          hint: Pre-releases are available for `pygls` in the requested range (e.g., 2.0.0a3), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
           hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
-    "###);
+    ");
 
     // Require >=3.7, and allow locking to a version of `pygls` that is compatible (==1.0.1).
     pyproject_toml.write_str(

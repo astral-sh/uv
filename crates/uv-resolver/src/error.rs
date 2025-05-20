@@ -100,7 +100,7 @@ pub enum ResolveError {
     ),
 
     #[error(transparent)]
-    NoSolution(#[from] NoSolutionError),
+    NoSolution(#[from] Box<NoSolutionError>),
 
     #[error("Attempted to construct an invalid version specifier")]
     InvalidVersion(#[from] uv_pep440::VersionSpecifierBuildError),

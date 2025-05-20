@@ -5,7 +5,7 @@ use assert_cmd::prelude::*;
 use assert_fs::fixture::ChildPath;
 use assert_fs::prelude::*;
 
-use crate::common::{get_bin, uv_snapshot, venv_to_interpreter, TestContext};
+use crate::common::{TestContext, get_bin, uv_snapshot, venv_to_interpreter};
 
 #[test]
 fn no_arguments() {
@@ -547,9 +547,11 @@ fn dry_run_uninstall_egg_info() -> Result<()> {
     "###);
 
     // The `.egg-info` directory should still exist.
-    assert!(site_packages
-        .child("zstandard-0.22.0-py3.12.egg-info")
-        .exists());
+    assert!(
+        site_packages
+            .child("zstandard-0.22.0-py3.12.egg-info")
+            .exists()
+    );
     // The package directory should still exist.
     assert!(site_packages.child("zstd").child("__init__.py").exists());
 

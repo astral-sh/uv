@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use uv_bench::criterion::{
-    criterion_group, criterion_main, measurement::WallTime, BenchmarkId, Criterion, Throughput,
+    BenchmarkId, Criterion, Throughput, criterion_group, criterion_main, measurement::WallTime,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag, Tags};

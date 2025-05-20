@@ -117,11 +117,11 @@ so by adding Jupyter to the environment directly. For example:
 
 === "Windows"
 
-    ```powershell
-    uv venv --seed
-    uv pip install pydantic
-    uv pip install jupyterlab
-    .venv\Scripts\jupyter lab
+    ```pwsh-session
+    PS> uv venv --seed
+    PS> uv pip install pydantic
+    PS> uv pip install jupyterlab
+    PS> .venv\Scripts\jupyter lab
     ```
 
 From here, `import pydantic` will work within the notebook, and you can install additional packages

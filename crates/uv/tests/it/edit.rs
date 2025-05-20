@@ -2,7 +2,7 @@
 
 #[cfg(feature = "git")]
 mod conditional_imports {
-    pub(crate) use crate::common::{decode_token, READ_ONLY_GITHUB_TOKEN};
+    pub(crate) use crate::common::{READ_ONLY_GITHUB_TOKEN, decode_token};
 }
 
 #[cfg(feature = "git")]
@@ -15,11 +15,11 @@ use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use std::path::Path;
 use uv_fs::Simplified;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
 use uv_static::EnvVars;
 
-use crate::common::{packse_index_url, uv_snapshot, venv_bin_path, TestContext};
+use crate::common::{TestContext, packse_index_url, uv_snapshot, venv_bin_path};
 
 /// Add a PyPI requirement.
 #[test]
@@ -1457,12 +1457,7 @@ fn add_remove_inline_optional() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==3.7.0
-     + idna==3.6
-     + sniffio==1.3.1
      - typing-extensions==4.10.0
     ");
 
@@ -11795,8 +11790,12 @@ fn add_optional_normalize() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Uninstalled 1 package in [TIME]
+    Uninstalled 5 packages in [TIME]
+     - anyio==3.7.0
+     - idna==3.6
      - iniconfig==2.0.0
+     - sniffio==1.3.1
+     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -11824,8 +11823,7 @@ fn add_optional_normalize() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Uninstalled 1 package in [TIME]
-     - typing-extensions==4.10.0
+    Audited in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");

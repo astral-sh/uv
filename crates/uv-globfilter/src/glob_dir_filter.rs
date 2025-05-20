@@ -1,7 +1,7 @@
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use regex_automata::dfa;
 use regex_automata::dfa::Automaton;
-use std::path::{Path, MAIN_SEPARATOR, MAIN_SEPARATOR_STR};
+use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR, Path};
 use tracing::warn;
 
 /// Chosen at a whim -Konsti
@@ -32,14 +32,13 @@ impl GlobDirFilter {
             .iter()
             .map(|glob| {
                 let main_separator = regex::escape(MAIN_SEPARATOR_STR);
-                let regex = glob
-                    .regex()
+
+                glob.regex()
                     // We are using a custom DFA builder
                     .strip_prefix("(?-u)")
                     .expect("a glob is a non-unicode byte regex")
                     // Match windows paths if applicable
-                    .replace('/', &main_separator);
-                regex
+                    .replace('/', &main_separator)
             })
             .collect();
 
@@ -123,9 +122,9 @@ impl GlobDirFilter {
 
 #[cfg(test)]
 mod tests {
-    use crate::glob_dir_filter::GlobDirFilter;
     use crate::PortableGlobParser;
-    use std::path::{Path, MAIN_SEPARATOR};
+    use crate::glob_dir_filter::GlobDirFilter;
+    use std::path::{MAIN_SEPARATOR, Path};
     use tempfile::tempdir;
     use walkdir::WalkDir;
 

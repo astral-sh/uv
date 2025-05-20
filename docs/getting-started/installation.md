@@ -25,23 +25,23 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.7.5/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.7.6/install.sh | sh
     ```
 
 === "Windows"
 
     Use `irm` to download the script and execute it with `iex`:
 
-    ```console
-    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    ```pwsh-session
+    PS> powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
 
     Changing the [execution policy](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-7.4#powershell-execution-policies) allows running a script from the internet.
 
     Request a specific version by including it in the URL:
 
-    ```console
-    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.7.5/install.ps1 | iex"
+    ```pwsh-session
+    PS> powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.7.6/install.ps1 | iex"
     ```
 
 !!! tip
@@ -56,8 +56,8 @@ uv provides a standalone installer to download and install uv:
 
     === "Windows"
 
-        ```console
-        $ powershell -c "irm https://astral.sh/uv/install.ps1 | more"
+        ```pwsh-session
+        PS> powershell -c "irm https://astral.sh/uv/install.ps1 | more"
         ```
 
     Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
@@ -260,9 +260,9 @@ If you need to remove uv from your system, follow these steps:
 
     === "Windows"
 
-        ```powershell
-        $ rm $HOME\.local\bin\uv.exe
-        $ rm $HOME\.local\bin\uvx.exe
+        ```pwsh-session
+        PS> rm $HOME\.local\bin\uv.exe
+        PS> rm $HOME\.local\bin\uvx.exe
         ```
 
     !!! note

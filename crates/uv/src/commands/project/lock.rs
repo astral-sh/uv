@@ -25,8 +25,8 @@ use uv_normalize::{GroupName, PackageName};
 use uv_pep440::Version;
 use uv_pypi_types::{Conflicts, SupportedEnvironments};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
-use uv_requirements::upgrade::{read_lock_requirements, LockedRequirements};
 use uv_requirements::ExtrasResolver;
+use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_resolver::{
     FlatIndex, InMemoryIndex, Lock, Options, OptionsBuilder, PythonRequirement, RequiresPython,
     ResolverEnvironment, ResolverManifest, SatisfiesResult, UniversalMarker,
@@ -40,16 +40,17 @@ use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceMember}
 use crate::commands::pip::loggers::{DefaultResolveLogger, ResolveLogger, SummaryResolveLogger};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    init_script_python_requirement, ProjectError, ProjectInterpreter, ScriptInterpreter,
-    UniversalState,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    init_script_python_requirement,
 };
 use crate::commands::reporters::{PythonDownloadReporter, ResolverReporter};
-use crate::commands::{diagnostics, pip, ExitStatus, ScriptPath};
+use crate::commands::{ExitStatus, ScriptPath, diagnostics, pip};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverSettings};
 
 /// The result of running a lock operation.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum LockResult {
     /// The lock was unchanged.
     Unchanged(Lock),

@@ -1,6 +1,6 @@
 use std::{env, path::Path, process::Command};
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 use assert_fs::{
     assert::PathAssert,
     prelude::{FileTouch, PathChild, PathCreateDir},
@@ -998,8 +998,8 @@ fn read_link_path(path: &Path) -> String {
             .ok()
             .unwrap_or_else(|| panic!("{} should be readable", path.display()))
             .unwrap_or_else(|| panic!("{} should be a valid launcher", path.display()));
-        let path = launcher.python_path.simplified_display().to_string();
-        path
+
+        launcher.python_path.simplified_display().to_string()
     } else {
         unreachable!()
     }
@@ -1220,8 +1220,8 @@ fn python_install_314() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.0a6 in [TIME]
-     + cpython-3.14.0a6-[PLATFORM]
+    Installed Python 3.14.0a7 in [TIME]
+     + cpython-3.14.0a7-[PLATFORM]
     ");
 
     // Install a specific pre-release
@@ -1241,7 +1241,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0a6-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0a7-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");
@@ -1251,7 +1251,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0a6-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0a7-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");
@@ -1260,7 +1260,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0a6-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0a7-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");

@@ -1,7 +1,7 @@
 [package]
 name = "uv-normalize"
 version = "0.0.1"
-edition = "2021"
+edition = { workspace = true }
 description = "Normalization for distribution, package and extra names."
 
 [lib]

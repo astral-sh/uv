@@ -10,7 +10,7 @@ use tempfile::TempDir;
 use tokio::io::{AsyncRead, AsyncSeekExt, ReadBuf};
 use tokio::sync::Semaphore;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{info_span, instrument, warn, Instrument};
+use tracing::{Instrument, info_span, instrument, warn};
 use url::Url;
 
 use uv_cache::{ArchiveId, CacheBucket, CacheEntry, WheelCache};
@@ -97,7 +97,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 ),
             )
         } else {
-            io::Error::new(io::ErrorKind::Other, err)
+            io::Error::other(err)
         }
     }
 
@@ -647,7 +647,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             archive
         } else {
             self.client
-                .managed(|client| async {
+                .managed(async |client| {
                     client
                         .cached_client()
                         .skip_cache_with_retry(self.request(url)?, &http_entry, download)
@@ -814,7 +814,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             archive
         } else {
             self.client
-                .managed(|client| async {
+                .managed(async |client| {
                     client
                         .cached_client()
                         .skip_cache_with_retry(self.request(url)?, &http_entry, download)

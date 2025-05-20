@@ -374,11 +374,7 @@ fn patch_pkgconfig(contents: &str) -> Option<String> {
             Cow::Owned(format!("{prefix}=${{pcfiledir}}/../.."))
         })
         .join("\n");
-    if changed {
-        Some(new_contents)
-    } else {
-        None
-    }
+    if changed { Some(new_contents) } else { None }
 }
 
 #[derive(thiserror::Error, Debug)]

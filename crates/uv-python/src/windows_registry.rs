@@ -2,7 +2,7 @@
 
 use crate::managed::ManagedPythonInstallation;
 use crate::platform::Arch;
-use crate::{PythonInstallationKey, PythonVersion, COMPANY_DISPLAY_NAME, COMPANY_KEY};
+use crate::{COMPANY_DISPLAY_NAME, COMPANY_KEY, PythonInstallationKey, PythonVersion};
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -11,7 +11,7 @@ use target_lexicon::PointerWidth;
 use thiserror::Error;
 use tracing::debug;
 use uv_warnings::{warn_user, warn_user_once};
-use windows_registry::{Key, Value, CURRENT_USER, HSTRING, LOCAL_MACHINE};
+use windows_registry::{CURRENT_USER, HSTRING, Key, LOCAL_MACHINE, Value};
 use windows_result::HRESULT;
 use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 use windows_sys::Win32::System::Registry::{KEY_WOW64_32KEY, KEY_WOW64_64KEY};

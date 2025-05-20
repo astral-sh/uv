@@ -11,7 +11,7 @@ use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
 use anstream::eprintln;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use futures::FutureExt;
@@ -25,12 +25,12 @@ use uv_cache_info::Timestamp;
 #[cfg(feature = "self-update")]
 use uv_cli::SelfUpdateArgs;
 use uv_cli::{
-    compat::CompatArgs, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
-    PipCommand, PipNamespace, ProjectCommand, PythonCommand, PythonNamespace, SelfCommand,
-    SelfNamespace, ToolCommand, ToolNamespace, TopLevelArgs, VersionArgs,
+    BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
+    ProjectCommand, PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand,
+    ToolNamespace, TopLevelArgs, VersionArgs, compat::CompatArgs,
 };
 use uv_configuration::min_stack_size;
-use uv_fs::{Simplified, CWD};
+use uv_fs::{CWD, Simplified};
 #[cfg(feature = "self-update")]
 use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
@@ -423,7 +423,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // Configure the cache.
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
 
-    let result = match *cli.command {
+    match *cli.command {
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),
             printer,
@@ -1609,8 +1609,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         })
         .await
         .expect("tokio threadpool exited unexpectedly"),
-    };
-    result
+    }
 }
 
 /// Run a [`ProjectCommand`].

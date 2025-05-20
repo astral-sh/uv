@@ -3,8 +3,8 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use insta::assert_snapshot;
 
-use crate::common::uv_snapshot;
 use crate::common::TestContext;
+use crate::common::uv_snapshot;
 
 // Print the version
 #[test]
