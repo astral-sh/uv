@@ -31,10 +31,10 @@ pub enum LibcDetectionError {
         #[source]
         err: io::Error,
     },
-    #[error("Could not find glibc version in output of: `ldd --version`")]
-    InvalidLddOutputGnu,
+    #[error("Could not find glibc version in output of: `{0} --version`")]
+    InvalidLdSoOutputGnu(PathBuf),
     #[error("Could not find musl version in output of: `{0}`")]
-    InvalidLddOutputMusl(PathBuf),
+    InvalidLdSoOutputMusl(PathBuf),
     #[error("Could not read ELF interpreter from any of the following paths: {0}")]
     CoreBinaryParsing(String),
     #[error("Failed to determine libc")]
@@ -73,49 +73,55 @@ pub(crate) fn detect_linux_libc() -> Result<LibcVersion, LibcDetectionError> {
             );
         }
     }
-    match detect_glibc_version_from_ldd(&ld_path) {
+    match detect_glibc_version_from_ld(&ld_path) {
         Ok(os_version) => return Ok(os_version),
         Err(err) => {
-            trace!("Tried to find glibc version from `ldd --version`, but failed: {err}");
+            trace!(
+                "Tried to find glibc version from `{} --version`, but failed: {}",
+                ld_path.simplified_display(),
+                err
+            );
         }
     }
     Err(LibcDetectionError::NoLibcFound)
 }
 
 // glibc version is taken from `std/sys/unix/os.rs`.
-fn detect_glibc_version_from_ldd(ldd: &Path) -> Result<LibcVersion, LibcDetectionError> {
-    let output = Command::new(ldd)
+fn detect_glibc_version_from_ld(ld_so: &Path) -> Result<LibcVersion, LibcDetectionError> {
+    let output = Command::new(ld_so)
         .args(["--version"])
         .output()
         .map_err(|err| LibcDetectionError::FailedToRun {
             libc: "glibc",
-            program: format!("{} --version", ldd.user_display()),
+            program: format!("{} --version", ld_so.user_display()),
             err,
         })?;
-    if let Some(os) = glibc_ldd_output_to_version("stdout", &output.stdout) {
+    if let Some(os) = glibc_ld_output_to_version("stdout", &output.stdout) {
         return Ok(os);
     }
-    if let Some(os) = glibc_ldd_output_to_version("stderr", &output.stderr) {
+    if let Some(os) = glibc_ld_output_to_version("stderr", &output.stderr) {
         return Ok(os);
     }
-    Err(LibcDetectionError::InvalidLddOutputGnu)
+    Err(LibcDetectionError::InvalidLdSoOutputGnu(
+        ld_so.to_path_buf(),
+    ))
 }
 
-/// Parse `ldd --version` output.
+/// Parse output `/lib64/ld-linux-x86-64.so.2 --version` and equivalent ld.so files.
 ///
 /// Example: `ld.so (Ubuntu GLIBC 2.39-0ubuntu8.3) stable release version 2.39.`.
-fn glibc_ldd_output_to_version(kind: &str, output: &[u8]) -> Option<LibcVersion> {
+fn glibc_ld_output_to_version(kind: &str, output: &[u8]) -> Option<LibcVersion> {
     static RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"ld.so \(.+\) .* ([0-9]+\.[0-9]+)").unwrap());
 
     let output = String::from_utf8_lossy(output);
-    trace!("{kind} output from `ldd --version`: {output:?}");
+    trace!("{kind} output from `ld.so --version`: {output:?}");
     let (_, [version]) = RE.captures(output.as_ref()).map(|c| c.extract())?;
     // Parse the input as "x.y" glibc version.
     let mut parsed_ints = version.split('.').map(str::parse).fuse();
     let major = parsed_ints.next()?.ok()?;
     let minor = parsed_ints.next()?.ok()?;
-    trace!("Found manylinux {major}.{minor} in {kind} of `ldd --version`");
+    trace!("Found manylinux {major}.{minor} in {kind} of ld.so version");
     Some(LibcVersion::Manylinux { major, minor })
 }
 
@@ -166,7 +172,7 @@ fn detect_musl_version(ld_path: impl AsRef<Path>) -> Result<LibcVersion, LibcDet
     if let Some(os) = musl_ld_output_to_version("stderr", &output.stderr) {
         return Ok(os);
     }
-    Err(LibcDetectionError::InvalidLddOutputMusl(
+    Err(LibcDetectionError::InvalidLdSoOutputMusl(
         ld_path.to_path_buf(),
     ))
 }
@@ -244,8 +250,8 @@ mod tests {
     use indoc::indoc;
 
     #[test]
-    fn parse_ldd_output() {
-        let ver_str = glibc_ldd_output_to_version(
+    fn parse_ld_so_output() {
+        let ver_str = glibc_ld_output_to_version(
             "stdout",
             indoc! {br"ld.so (Ubuntu GLIBC 2.39-0ubuntu8.3) stable release version 2.39.
             Copyright (C) 2024 Free Software Foundation, Inc.
