@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::str::FromStr;
 use std::{cmp::Ordering, path::Path};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use owo_colors::OwoColorize;
 
 use tracing::debug;
@@ -22,8 +22,8 @@ use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user;
 use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
-    pyproject_mut::{DependencyTarget, PyProjectTomlMut},
     DiscoveryOptions, WorkspaceCache,
+    pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
 use uv_workspace::{VirtualProject, Workspace};
 
@@ -33,9 +33,9 @@ use crate::commands::project::add::{AddTarget, PythonTarget};
 use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::{
-    default_dependency_groups, ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState,
+    ProjectEnvironment, ProjectError, ProjectInterpreter, UniversalState, default_dependency_groups,
 };
-use crate::commands::{diagnostics, project, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
@@ -88,7 +88,10 @@ pub(crate) async fn project_version(
                 return Err(err)?;
             }
             // Otherwise, warn and provide fallback to the old `uv version` from before 0.7.0
-            warn_user!("Failed to read project metadata ({err}). Running `{}` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.", "uv self version".green());
+            warn_user!(
+                "Failed to read project metadata ({err}). Running `{}` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.",
+                "uv self version".green()
+            );
             return self_version(short, output_format, printer);
         }
     };
@@ -319,7 +322,7 @@ async fn print_frozen_version(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -449,7 +452,7 @@ async fn lock_and_sync(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -515,7 +518,7 @@ async fn lock_and_sync(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     }
