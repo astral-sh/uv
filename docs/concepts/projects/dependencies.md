@@ -272,15 +272,13 @@ explicit = true
 
 To add a Git dependency source, prefix a Git-compatible URL with `git+`.
 
-For example for a dependency available over HTTP(S):
+For example:
 
 ```console
+$ # Install over HTTP(S).
 $ uv add git+https://github.com/encode/httpx
-```
 
-For a dependency available over SSH:
-
-```console
+$ # Install over SSH.
 $ uv add git+ssh://git@github.com/encode/httpx
 ```
 
