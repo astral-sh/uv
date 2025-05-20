@@ -1274,7 +1274,7 @@ impl RunCommand {
                     // minor version symlink directory (or junction on Windows) exists,
                     // run Python using an executable path containing that directory. This ensures that
                     // virtual environments created with `uv run python -m venv` will be upgradeable.
-                    let executable = DirectorySymlink::try_from_interpreter(interpreter)
+                    let executable = DirectorySymlink::from_interpreter(interpreter)
                         .filter(DirectorySymlink::symlink_exists)
                         .map(|directory_symlink| directory_symlink.symlink_executable.clone())
                         .unwrap_or_else(|| PathBuf::from(interpreter.sys_executable()));

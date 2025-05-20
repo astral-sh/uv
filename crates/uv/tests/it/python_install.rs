@@ -1556,57 +1556,20 @@ fn install_transparent_patch_upgrade_uv_venv() {
     ----- stderr -----
     "
     );
-}
-
-// Installing a lower patch shouldn't downgrade virtual environments.
-#[test]
-fn install_lower_patch() {
-    let context = TestContext::new_with_versions(&[])
-        .with_filtered_python_keys()
-        .with_filtered_exe_suffix()
-        .with_managed_python_dirs()
-        .with_filtered_python_names()
-        .with_filtered_python_install_bin();
 
     // Install a lower patch version.
-    uv_snapshot!(context.filters(), context.python_install().arg("3.12.10"), @r"
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.8"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.10 in [TIME]
-     + cpython-3.12.10-[PLATFORM]
+    Installed Python 3.12.8 in [TIME]
+     + cpython-3.12.8-[PLATFORM]
     "
     );
 
-    // Create a virtual environment.
-    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.12")
-        .arg(context.venv.as_os_str()), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Using CPython 3.12.10
-    Creating virtual environment at: .venv
-    Activate with: source .venv/[BIN]/activate
-    "
-    );
-
-    // Install a lower patch version.
-    uv_snapshot!(context.filters(), context.python_install().arg("3.12.9"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Installed Python 3.12.9 in [TIME]
-     + cpython-3.12.9-[PLATFORM]
-    "
-    );
-
-    // Virtual environment should reflect higher version.
+    // Virtual environment should reflect highest version.
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @r"
     success: true
     exit_code: 0

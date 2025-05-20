@@ -292,7 +292,7 @@ fn help_subcommand() {
     Commands:
       list       List the available Python installations
       install    Download and install Python versions
-      upgrade    Upgrade Python to the latest patch version
+      upgrade    Upgrade installed Python versions to the latest supported patch release
       find       Search for a Python installation
       pin        Pin to a specific Python version
       dir        Show the uv Python installation directory
@@ -719,7 +719,7 @@ fn help_flag_subcommand() {
     Commands:
       list       List the available Python installations
       install    Download and install Python versions
-      upgrade    Upgrade Python to the latest patch version
+      upgrade    Upgrade installed Python versions to the latest supported patch release
       find       Search for a Python installation
       pin        Pin to a specific Python version
       dir        Show the uv Python installation directory

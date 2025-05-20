@@ -251,7 +251,7 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
     };
 
     let path = if !path.is_absolute() || matches!(kind, TrampolineKind::Script) {
-        // // NOTICE: dunce adds 5kb~
+        // NOTICE: dunce adds 5kb~
         // TODO(john): In order to avoid resolving junctions and symlinks for relative paths and
         // scripts, we can consider reverting https://github.com/astral-sh/uv/pull/5750/files#diff-969979506be03e89476feade2edebb4689a9c261f325988d3c7efc5e51de26d1L273-L277.
         dunce::canonicalize(path.as_path()).unwrap_or_else(|_| {

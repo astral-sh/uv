@@ -146,7 +146,7 @@ pub(crate) fn create(
     fs::write(location.join(".gitignore"), "*")?;
 
     let executable_target = if upgradeable && interpreter.is_standalone() {
-        if let Some(directory_symlink) = DirectorySymlink::try_from(
+        if let Some(directory_symlink) = DirectorySymlink::from_executable(
             interpreter.python_major(),
             interpreter.python_minor(),
             base_python.as_path(),
