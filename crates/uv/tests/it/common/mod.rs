@@ -892,8 +892,7 @@ impl TestContext {
             .arg("python")
             .arg("find")
             .env(EnvVars::UV_PREVIEW, "1")
-            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
-            .current_dir(&self.temp_dir);
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "");
         self.add_shared_options(&mut command, false);
         command
     }
@@ -904,8 +903,7 @@ impl TestContext {
         command
             .arg("python")
             .arg("list")
-            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "")
-            .current_dir(&self.temp_dir);
+            .env(EnvVars::UV_PYTHON_INSTALL_DIR, "");
         self.add_shared_options(&mut command, false);
         command
     }
@@ -914,10 +912,7 @@ impl TestContext {
     pub fn python_install(&self) -> Command {
         let mut command = self.new_command();
         self.add_shared_options(&mut command, true);
-        command
-            .arg("python")
-            .arg("install")
-            .current_dir(&self.temp_dir);
+        command.arg("python").arg("install");
         command
     }
 
@@ -925,10 +920,7 @@ impl TestContext {
     pub fn python_uninstall(&self) -> Command {
         let mut command = self.new_command();
         self.add_shared_options(&mut command, true);
-        command
-            .arg("python")
-            .arg("uninstall")
-            .current_dir(&self.temp_dir);
+        command.arg("python").arg("uninstall");
         command
     }
 
