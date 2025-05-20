@@ -794,7 +794,9 @@ fn github_fast_path(
         return Ok(FastPathRev::Indeterminate);
     }
 
-    let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{github_branch_name}");
+    let base_url = std::env::var(EnvVars::UV_GITHUB_FAST_PATH_URL)
+        .unwrap_or("https://api.github.com/repos".to_owned());
+    let url = format!("{base_url}/{owner}/{repo}/commits/{github_branch_name}");
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
