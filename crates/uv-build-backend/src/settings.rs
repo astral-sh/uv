@@ -1,5 +1,7 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt::Display;
 use std::path::PathBuf;
+use std::str::FromStr;
 use uv_macros::OptionsMetadata;
 use uv_pypi_types::Identifier;
 
@@ -40,7 +42,7 @@ pub struct BuildBackendSettings {
         value_type = "str",
         example = r#"module-name = "sklearn""#
     )]
-    pub module_name: Option<Identifier>,
+    pub module_name: Option<ModuleName>,
 
     /// Glob expressions which files and directories to additionally include in the source
     /// distribution.
@@ -125,6 +127,83 @@ impl Default for BuildBackendSettings {
             wheel_exclude: Vec::new(),
             data: WheelDataIncludes::default(),
         }
+    }
+}
+
+/// Packages come in two kinds: Regular packages, where the name must be a valid Python identifier,
+/// and stubs packages.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModuleName {
+    /// A Python module name, which needs to be a valid Python identifier to be used with `import`.
+    Identifier(Identifier),
+    /// A type stubs package, whose name ends with `-stubs` with the stem being the module name.
+    Stubs(String),
+}
+
+impl Display for ModuleName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ModuleName::Identifier(module_name) => Display::fmt(module_name, f),
+            ModuleName::Stubs(module_name) => Display::fmt(module_name, f),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ModuleName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let module_name = String::deserialize(deserializer)?;
+        if let Some(stem) = module_name.strip_suffix("-stubs") {
+            // Check that the stubs belong to a valid module.
+            Identifier::from_str(stem)
+                .map(ModuleName::Identifier)
+                .map_err(serde::de::Error::custom)?;
+            Ok(ModuleName::Stubs(module_name))
+        } else {
+            Identifier::from_str(&module_name)
+                .map(ModuleName::Identifier)
+                .map_err(serde::de::Error::custom)
+        }
+    }
+}
+
+impl Serialize for ModuleName {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            ModuleName::Identifier(module_name) => module_name.serialize(serializer),
+            ModuleName::Stubs(module_name) => module_name.serialize(serializer),
+        }
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for ModuleName {
+    fn schema_name() -> String {
+        "ModuleName".to_string()
+    }
+
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            string: Some(Box::new(schemars::schema::StringValidation {
+                // Best-effort Unicode support (https://stackoverflow.com/a/68844380/3549270)
+                pattern: Some(r"^[_\p{Alphabetic}][_0-9\p{Alphabetic}]*(-stubs)?$".to_string()),
+                ..schemars::schema::StringValidation::default()
+            })),
+            metadata: Some(Box::new(schemars::schema::Metadata {
+                description: Some(
+                    "The name of the module, or the name of a stubs package".to_string(),
+                ),
+                ..schemars::schema::Metadata::default()
+            })),
+            ..schemars::schema::SchemaObject::default()
+        }
+        .into()
     }
 }
 
