@@ -15,7 +15,7 @@ use uv_fs::LockedFile;
 use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
 use uv_version::version;
 
-use crate::{rate_limit::GITHUB_RATE_LIMIT_STATUS, Fetch, GitSource, Reporter};
+use crate::{Fetch, GitSource, Reporter, rate_limit::GITHUB_RATE_LIMIT_STATUS};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitResolverError {

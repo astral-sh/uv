@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// A global state on whether we are being rate-limited by GitHub's REST API.
 /// If we are, avoid "fast-path" attempts.
