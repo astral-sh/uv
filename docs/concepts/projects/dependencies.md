@@ -270,13 +270,16 @@ explicit = true
 
 ### Git
 
-To add a Git dependency source, prefix a Git-compatible URL (i.e., that you would use with
-`git clone`) with `git+`.
+To add a Git dependency source, prefix a Git-compatible URL with `git+`.
 
 For example:
 
 ```console
+$ # Install over HTTP(S).
 $ uv add git+https://github.com/encode/httpx
+
+$ # Install over SSH.
+$ uv add git+ssh://git@github.com/encode/httpx
 ```
 
 ```toml title="pyproject.toml" hl_lines="5"
