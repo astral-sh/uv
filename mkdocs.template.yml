@@ -99,7 +99,7 @@ nav:
       - Features: getting-started/features.md
       - Getting help: getting-started/help.md
   - Guides:
-      - Integration Guides: guides/index.md
+      - guides/index.md
       - Installing Python: guides/install-python.md
       - Running scripts: guides/scripts.md
       - Using tools: guides/tools.md
