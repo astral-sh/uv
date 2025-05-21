@@ -981,7 +981,7 @@ fn version_get_fallback_unmanaged_json() -> Result<()> {
       ----- stderr -----
       warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
       "#);
-    };
+    }
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
     assert_snapshot!(
