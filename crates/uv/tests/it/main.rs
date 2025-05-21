@@ -39,7 +39,7 @@ mod lock_conflict;
 
 mod lock_scenarios;
 
-mod version;
+mod network;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod pip_check;
@@ -119,6 +119,8 @@ mod tree;
 
 #[cfg(feature = "python")]
 mod venv;
+
+mod version;
 
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod workflow;
