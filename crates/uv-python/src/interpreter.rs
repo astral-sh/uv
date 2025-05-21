@@ -757,6 +757,8 @@ pub enum InterpreterInfoError {
         python_major: usize,
         python_minor: usize,
     },
+    #[error("Only Pyodide is support for Emscripten Python")]
+    EmscriptenNotPyodide,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
