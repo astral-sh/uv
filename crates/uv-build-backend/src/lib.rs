@@ -241,7 +241,7 @@ fn find_module_root(
         }
     } else {
         // Infer stubs packages from package name alone. There are potential false positives if
-        // someone had a regular package with `-stub`.
+        // someone had a regular package with `-stubs`.
         if let Some(stem) = package_name.to_string().strip_suffix("-stubs") {
             debug!("Building stubs package instead of a regular package");
             let module_name = PackageName::from_str(stem)
