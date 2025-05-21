@@ -47,7 +47,10 @@ Hello from hello-world!
 
 If you start working on a project that is already managed by uv, simply run `uv sync`. A virtual
 environment will be created (if one does not already exist) and all dependencies from the `uv.lock`
-file will be installed.
+file will be installed. Due to the automatic locking and synchronisation in uv, this also applies to
+other commands such as `uv run` or `uv lock`.
+
+See the [locking and syncing documentation](../concepts/projects/sync.md) for details.
 
 ## Project structure
 
