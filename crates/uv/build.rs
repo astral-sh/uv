@@ -18,6 +18,6 @@ fn main() {
 fn has_git(workspace_root: &Path) {
     let git_dir = workspace_root.join(".git");
     if git_dir.exists() {
-        println!("cargo:rustc-env={}={}", "UV_TEST_HAS_COMMIT_HASH", "1");
+        println!("cargo:rustc-env=UV_TEST_HAS_COMMIT_HASH=1");
     }
 }
