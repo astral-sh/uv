@@ -910,6 +910,16 @@ fn version_get_fallback_unmanaged_short() -> Result<()> {
     Ok(())
 }
 
+/// In tarball builds of uv, git version info is missing (distros do this)
+fn git_version_info_expected() -> bool {
+    let manifest_dir = std::env::var(uv_static::EnvVars::CARGO_MANIFEST_DIR).expect("CARGO_MANIFEST_DIR not defined");
+    let git_dir = std::path::Path::new(&manifest_dir)
+        .parent().expect("parent of manifest dir missing")
+        .parent().expect("grandparent of manifest dir missing")
+        .join(".git");
+    git_dir.exists()
+}
+
 // version_get_fallback with `--json`
 #[test]
 fn version_get_fallback_unmanaged_json() -> Result<()> {
@@ -945,7 +955,7 @@ fn version_get_fallback_unmanaged_json() -> Result<()> {
             ),
         ])
         .collect::<Vec<_>>();
-    if option_env!("UV_TEST_HAS_COMMIT_HASH").is_some() {
+    if git_version_info_expected() {
         uv_snapshot!(filters, context.version()
           .arg("--output-format").arg("json"), @r#"
       success: true
@@ -1193,7 +1203,8 @@ fn self_version_json() -> Result<()> {
             ),
         ])
         .collect::<Vec<_>>();
-    if option_env!("UV_TEST_HAS_COMMIT_HASH").is_some() {
+
+    if git_version_info_expected() {
         uv_snapshot!(filters, context.self_version()
           .arg("--output-format").arg("json"), @r#"
       success: true
