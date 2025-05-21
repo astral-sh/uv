@@ -912,10 +912,16 @@ fn version_get_fallback_unmanaged_short() -> Result<()> {
 
 /// In tarball builds of uv, git version info is missing (distros do this)
 fn git_version_info_expected() -> bool {
-    let manifest_dir = std::env::var(uv_static::EnvVars::CARGO_MANIFEST_DIR).expect("CARGO_MANIFEST_DIR not defined");
+    // This is setup to aggresively panic to make sure this is working at all
+    // If you're a packager of uv and this does indeed blow up for you, we will
+    // gladly change these expects into "just return false" or something.
+    let manifest_dir = std::env::var(uv_static::EnvVars::CARGO_MANIFEST_DIR)
+        .expect("CARGO_MANIFEST_DIR not defined");
     let git_dir = std::path::Path::new(&manifest_dir)
-        .parent().expect("parent of manifest dir missing")
-        .parent().expect("grandparent of manifest dir missing")
+        .parent()
+        .expect("parent of manifest dir missing")
+        .parent()
+        .expect("grandparent of manifest dir missing")
         .join(".git");
     git_dir.exists()
 }
