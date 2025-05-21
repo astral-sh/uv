@@ -11,9 +11,10 @@ use uv_cli::comma::CommaSeparatedRequirements;
 use uv_cli::{
     AddArgs, ColorChoice, ExternalCommand, GlobalArgs, InitArgs, ListFormat, LockArgs, Maybe,
     PipCheckArgs, PipCompileArgs, PipFreezeArgs, PipInstallArgs, PipListArgs, PipShowArgs,
-    PipSyncArgs, PipTreeArgs, PipUninstallArgs, PythonFindArgs, PythonInstallArgs, PythonListArgs,
-    PythonListFormat, PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs, SyncArgs,
-    ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs, VenvArgs,
+    PipSyncArgs, PipTreeArgs, PipUninstallArgs, PipWheelArgs, PythonFindArgs, PythonInstallArgs,
+    PythonListArgs, PythonListFormat, PythonPinArgs, PythonUninstallArgs, RemoveArgs, RunArgs,
+    SyncArgs, ToolDirArgs, ToolInstallArgs, ToolListArgs, ToolRunArgs, ToolUninstallArgs, TreeArgs,
+    VenvArgs,
 };
 use uv_cli::{
     AuthorFrom, BuildArgs, ExportArgs, PublishArgs, PythonDirArgs, ResolverInstallerArgs,
@@ -2353,6 +2354,148 @@ impl PipCheckSettings {
                     python: python.and_then(Maybe::into_option),
                     system: flag(system, no_system),
                     ..PipOptions::default()
+                },
+                filesystem,
+            ),
+        }
+    }
+}
+
+/// The resolved settings to use for a `pip wheel` invocation.
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone)]
+pub(crate) struct PipWheelSettings {
+    pub(crate) package: Vec<String>,
+    pub(crate) requirements: Vec<PathBuf>,
+    pub(crate) editables: Vec<String>,
+    pub(crate) constraints: Vec<PathBuf>,
+    pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) build_constraints: Vec<PathBuf>,
+    pub(crate) dry_run: DryRun,
+    pub(crate) constraints_from_workspace: Vec<Requirement>,
+    pub(crate) overrides_from_workspace: Vec<Requirement>,
+    pub(crate) build_constraints_from_workspace: Vec<Requirement>,
+    pub(crate) refresh: Refresh,
+    pub(crate) settings: PipSettings,
+}
+
+impl PipWheelSettings {
+    /// Resolve the [`PipWheelSettings`] from the CLI and filesystem configuration.
+    pub(crate) fn resolve(args: PipWheelArgs, filesystem: Option<FilesystemOptions>) -> Self {
+        let PipWheelArgs {
+            wheel_dir,
+            package,
+            requirements,
+            editable,
+            constraints,
+            overrides,
+            build_constraints,
+            extra,
+            all_extras,
+            no_all_extras,
+            resolver,
+            refresh,
+            no_deps,
+            deps,
+            group,
+            require_hashes,
+            no_require_hashes,
+            verify_hashes,
+            no_verify_hashes,
+            python,
+            system,
+            no_system,
+            no_build,
+            build,
+            no_binary,
+            only_binary,
+            python_version,
+            python_platform,
+            dry_run,
+            torch_backend,
+        } = args;
+
+        let constraints_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .constraint_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        let overrides_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .override_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .build_constraint_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        Self {
+            package,
+            requirements,
+            editables: editable,
+            constraints: constraints
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            overrides: overrides
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            build_constraints: build_constraints
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            dry_run: DryRun::from_args(dry_run),
+            constraints_from_workspace,
+            overrides_from_workspace,
+            build_constraints_from_workspace,
+            refresh: Refresh::from(refresh),
+            settings: PipSettings::combine(
+                PipOptions {
+                    python: python.and_then(Maybe::into_option),
+                    system: flag(system, no_system),
+                    target: wheel_dir.into_option(),
+                    no_build: flag(no_build, build),
+                    no_binary,
+                    only_binary,
+                    extra,
+                    all_extras: flag(all_extras, no_all_extras),
+                    group: Some(group),
+                    no_deps: flag(no_deps, deps),
+                    python_version,
+                    python_platform,
+                    require_hashes: flag(require_hashes, no_require_hashes),
+                    verify_hashes: flag(verify_hashes, no_verify_hashes),
+                    torch_backend,
+                    ..PipOptions::from(resolver)
                 },
                 filesystem,
             ),
