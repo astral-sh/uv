@@ -1388,55 +1388,38 @@ impl PythonVariant {
 impl PythonRequest {
     /// Create a request from a string.
     ///
-    /// This cannot fail, which means weird inputs will be parsed as [`PythonRequest::File`] or [`PythonRequest::ExecutableName`].
+    /// This cannot fail, which means weird inputs will be parsed as [`PythonRequest::File`] or
+    /// [`PythonRequest::ExecutableName`].
+    ///
+    /// This is intended for parsing the argument to the `--python` flag. See also
+    /// `parse_tool_executable` below.
     pub fn parse(value: &str) -> Self {
+        let lowercase_value = &value.to_ascii_lowercase();
+
         // Literals, e.g. `any` or `default`
-        if value.eq_ignore_ascii_case("any") {
+        if lowercase_value == "any" {
             return Self::Any;
         }
-        if value.eq_ignore_ascii_case("default") {
+        if lowercase_value == "default" {
             return Self::Default;
         }
 
-        // e.g. `3.12.1`, `312`, or `>=3.12`
-        if let Ok(version) = VersionRequest::from_str(value) {
-            return Self::Version(version);
+        let abstract_version_prefixes = [
+            "python", // the prefix of e.g. `python312`
+            "",       // the empty prefix of bare versions, e.g. `312`
+        ];
+        let all_implementation_names =
+            ImplementationName::long_names().chain(ImplementationName::short_names());
+        // Abstract versions like `python@312`, `python312`, or `312`, plus implementations and
+        // implementation versions like `pypy`, `pypy@312` or `pypy312`.
+        if let Ok(Some(request)) = Self::parse_versions_and_implementations(
+            abstract_version_prefixes,
+            all_implementation_names,
+            lowercase_value,
+        ) {
+            return request;
         }
-        // e.g. `python3.12.1`
-        if let Some(remainder) = value.strip_prefix("python") {
-            if let Ok(version) = VersionRequest::from_str(remainder) {
-                return Self::Version(version);
-            }
-        }
-        // e.g. `pypy@3.12`
-        if let Some((first, second)) = value.split_once('@') {
-            if let Ok(implementation) = ImplementationName::from_str(first) {
-                if let Ok(version) = VersionRequest::from_str(second) {
-                    return Self::ImplementationVersion(implementation, version);
-                }
-            }
-        }
-        for implementation in
-            ImplementationName::long_names().chain(ImplementationName::short_names())
-        {
-            if let Some(remainder) = value.to_ascii_lowercase().strip_prefix(implementation) {
-                // e.g. `pypy`
-                if remainder.is_empty() {
-                    return Self::Implementation(
-                        // Safety: The name matched the possible names above
-                        ImplementationName::from_str(implementation).unwrap(),
-                    );
-                }
-                // e.g. `pypy3.12` or `pp312`
-                if let Ok(version) = VersionRequest::from_str(remainder) {
-                    return Self::ImplementationVersion(
-                        // Safety: The name matched the possible names above
-                        ImplementationName::from_str(implementation).unwrap(),
-                        version,
-                    );
-                }
-            }
-        }
+
         let value_as_path = PathBuf::from(value);
         // e.g. /path/to/.venv
         if value_as_path.is_dir() {
@@ -1447,7 +1430,7 @@ impl PythonRequest {
             return Self::File(value_as_path);
         }
 
-        // e.g. path/to/python on Windows, where path/to/python is the true path
+        // e.g. path/to/python on Windows, where path/to/python.exe is the true path
         #[cfg(windows)]
         if value_as_path.extension().is_none() {
             let value_as_path = value_as_path.with_extension(EXE_SUFFIX);
@@ -1488,6 +1471,101 @@ impl PythonRequest {
         // Finally, we'll treat it as the name of an executable (i.e. in the search PATH)
         // e.g. foo.exe
         Self::ExecutableName(value.to_string())
+    }
+
+    /// Try to parse a tool executable as a Python version, e.g. `uvx [executable]`.
+    ///
+    /// The `PythonRequest::parse` constructor above is intended for the `--python` flag, where the
+    /// value is unambiguously a Python version. This alternate constructor is intended for `uvx`,
+    /// where the executable might be a Python version or a package name. There are several
+    /// differences in behavior:
+    /// - This only supports long names, including e.g. `pypy39` but **not** `pp39` or `39`.
+    /// - On Windows only, this allows `pythonw` as an alias for `python`.
+    /// - This allows `python` by itself (and on Windows, `pythonw`) as an alias for `default`.
+    ///
+    /// This only returns `Err` if `@` is used, and the prefix is a match, but the version is
+    /// invalid. Otherwise, if no match is found, it returns `Ok(None)`.
+    pub fn try_parse_tool_executable(value: &str) -> Result<Option<PythonRequest>, Error> {
+        let lowercase_value = &value.to_ascii_lowercase();
+        // Omitting the empty string from these lists excludes bare versions like "39".
+        let abstract_version_prefixes = if cfg!(windows) {
+            &["python", "pythonw"][..]
+        } else {
+            &["python"][..]
+        };
+        // e.g. just `python`
+        if abstract_version_prefixes.contains(&lowercase_value.as_str()) {
+            return Ok(Some(Self::Default));
+        }
+        Self::parse_versions_and_implementations(
+            abstract_version_prefixes.iter().copied(),
+            ImplementationName::long_names(),
+            lowercase_value,
+        )
+    }
+
+    // This only returns Err() if @ is used, and the prefix is a match, but the version is invalid.
+    // Otherwise, if no match is found, it returns Ok(None).
+    fn parse_versions_and_implementations<'a>(
+        // typically "python", possibly also "pythonw" or "" (for bare versions)
+        abstract_version_prefixes: impl IntoIterator<Item = &'a str>,
+        // expected to be either long_names() or all names
+        implementation_names: impl IntoIterator<Item = &'a str>,
+        // the string to parse, case-insensitive
+        lowercase_value: &str,
+    ) -> Result<Option<PythonRequest>, Error> {
+        for prefix in abstract_version_prefixes {
+            if let Some(version_request) =
+                Self::try_split_prefix_and_version(prefix, lowercase_value)?
+            {
+                // e.g. `python39` or `python@39`
+                // Note that e.g. `python` gets handled elsewhere, if at all. (It's currently
+                // allowed in tool executables but not in --python flags.)
+                return Ok(Some(Self::Version(version_request)));
+            }
+        }
+        for implementation in implementation_names {
+            if lowercase_value == implementation {
+                return Ok(Some(Self::Implementation(
+                    // e.g. `pypy`
+                    // Safety: The name matched the possible names above
+                    ImplementationName::from_str(implementation).unwrap(),
+                )));
+            }
+            if let Some(version_request) =
+                Self::try_split_prefix_and_version(implementation, lowercase_value)?
+            {
+                // e.g. `pypy39`
+                return Ok(Some(Self::ImplementationVersion(
+                    // Safety: The name matched the possible names above
+                    ImplementationName::from_str(implementation).unwrap(),
+                    version_request,
+                )));
+            }
+        }
+        Ok(None)
+    }
+
+    // This only returns Err() if @ is used, and the prefix is a match, but the version is invalid.
+    fn try_split_prefix_and_version(
+        prefix: &str,
+        lowercase_value: &str,
+    ) -> Result<Option<VersionRequest>, Error> {
+        let Some(rest) = lowercase_value.strip_prefix(prefix) else {
+            return Ok(None);
+        };
+        // Just the prefix by itself (e.g. "python") is handled elsewhere.
+        if rest.is_empty() {
+            return Ok(None);
+        }
+        // The @ separator is optional. If it's present, the right half must be a version, and
+        // parsing errors are raised to the caller.
+        if let Some(after_at) = rest.strip_prefix('@') {
+            return after_at.parse().map(Some);
+        }
+        // The @ was not present, so if the version fails to parse just return Ok(None). For
+        // example, python3stuff.
+        Ok(rest.parse().ok())
     }
 
     /// Check if a given interpreter satisfies the interpreter request.
@@ -2360,6 +2438,12 @@ impl FromStr for VersionRequest {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Stripping the 't' suffix produces awkward error messages if the user tries a version
+        // like "latest". HACK: If the version is all letters, don't even try to parse it further.
+        if s.as_bytes().iter().all(u8::is_ascii_alphabetic) {
+            return Err(Error::InvalidVersionRequest(s.to_string()));
+        }
+
         // Check if the version request is for a free-threaded Python version
         let (s, variant) = s
             .strip_suffix('t')
@@ -3319,6 +3403,30 @@ mod tests {
         case(
             "3.13rc2",
             &["python3.13rc2", "python3.13", "python3", "python"],
+        );
+    }
+
+    #[test]
+    fn test_try_split_prefix_and_version() {
+        assert!(matches!(
+            PythonRequest::try_split_prefix_and_version("prefix", "prefix"),
+            Ok(None),
+        ));
+        assert!(matches!(
+            PythonRequest::try_split_prefix_and_version("prefix", "prefix3"),
+            Ok(Some(_)),
+        ));
+        assert!(matches!(
+            PythonRequest::try_split_prefix_and_version("prefix", "prefix@3"),
+            Ok(Some(_)),
+        ));
+        assert!(matches!(
+            PythonRequest::try_split_prefix_and_version("prefix", "prefix3notaversion"),
+            Ok(None),
+        ));
+        // Version parsing errors are only raised if @ is present.
+        assert!(
+            PythonRequest::try_split_prefix_and_version("prefix", "prefix@3notaversion").is_err()
         );
     }
 }
