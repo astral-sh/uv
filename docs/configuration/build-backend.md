@@ -54,6 +54,8 @@ module-name = "PIL"
 module-root = ""
 ```
 
+The build backend supports building stubs packages with a `-stubs` package or module name.
+
 ## Include and exclude configuration
 
 To select which files to include in the source distribution, uv first adds the included files and
