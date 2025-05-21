@@ -12,21 +12,26 @@ use url::Url;
 /// # Examples
 ///
 /// ```
-/// use log_safe_url::LogSafeUrl;
+/// use uv_redacted::LogSafeUrl;
 /// use std::str::FromStr;
 ///
-/// // Create from a string
-/// let url = LogSafeUrl::parse("https://user:password@example.com").unwrap();
+/// // Create a `LogSafeUrl` from a `&str`
+/// let mut url = LogSafeUrl::parse("https://user:password@example.com").unwrap();
 ///
 /// // Display will mask secrets
-/// assert_eq!(url.to_string(), "https://user:****@example.com");
+/// assert_eq!(url.to_string(), "https://user:****@example.com/");
 ///
-/// // Since `LogSafeUrl` provides full access to the underlying `Url` through a
-/// // `Deref` implementation, you can still access the username and password
+/// // You can still access the username and password
 /// assert_eq!(url.username(), "user");
 /// assert_eq!(url.password(), Some("password"));
 ///
-/// // It is also possible to remove credentials entirely
+/// // And you can still update the username and password
+/// let _ = url.set_username("new_user");
+/// let _ = url.set_password(Some("new_password"));
+/// assert_eq!(url.username(), "new_user");
+/// assert_eq!(url.password(), Some("new_password"));
+///
+/// // It is also possible to remove the credentials entirely
 /// url.remove_credentials();
 /// assert_eq!(url.username(), "");
 /// assert_eq!(url.password(), None);
