@@ -499,13 +499,15 @@ fn add_git_private_raw() -> Result<()> {
 #[tokio::test]
 #[cfg(feature = "git")]
 async fn add_git_private_rate_limited_by_github_rest_api() -> Result<()> {
+    use uv_client::DEFAULT_RETRIES;
+
     let context = TestContext::new("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
 
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .respond_with(ResponseTemplate::new(429))
-        .expect(1)
+        .expect(1 + u64::from(DEFAULT_RETRIES))
         .mount(&server)
         .await;
 
