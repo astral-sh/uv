@@ -2247,7 +2247,7 @@ jobs:
         run: python ./scripts/check_embedded_python.py --uv ./uv.exe
 
   benchmarks:
-    runs-on: ubuntu-latest
+    runs-on: codspeed-macro
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     timeout-minutes: 20
