@@ -34,6 +34,10 @@ pub struct BuildBackendSettings {
     ///
     /// The default module name is the package name with dots and dashes replaced by underscores.
     ///
+    /// Package names need to be valid Python identifiers, and the directory needs to contain a
+    /// `__init__.py`. An exception are stubs packages, whose name ends with `-stubs`, with the stem
+    /// being the module name, and which contain a `__init__.pyi` file.
+    ///
     /// Note that using this option runs the risk of creating two packages with different names but
     /// the same module names. Installing such packages together leads to unspecified behavior,
     /// often with corrupted files or directory trees.
