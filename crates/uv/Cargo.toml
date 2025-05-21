@@ -127,6 +127,9 @@ tempfile = { workspace = true }
 wiremock = { workspace = true }
 zip = { workspace = true }
 
+[build-dependencies]
+uv-static = { workspace = true }
+
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true }
 

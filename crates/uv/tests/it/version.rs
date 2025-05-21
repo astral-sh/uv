@@ -945,26 +945,43 @@ fn version_get_fallback_unmanaged_json() -> Result<()> {
             ),
         ])
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.version()
-        .arg("--output-format").arg("json"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    {
-      "package_name": "uv",
-      "version": "[VERSION]",
-      "commit_info": {
-        "short_commit_hash": "[LONGHASH]",
-        "commit_hash": "[LONGHASH]",
-        "commit_date": "[DATE]",
-        "last_tag": "[TAG]",
-        "commits_since_last_tag": [COUNT]
+    if option_env!("UV_TEST_HAS_COMMIT_HASH").is_some() {
+        uv_snapshot!(filters, context.version()
+          .arg("--output-format").arg("json"), @r#"
+      success: true
+      exit_code: 0
+      ----- stdout -----
+      {
+        "package_name": "uv",
+        "version": "[VERSION]",
+        "commit_info": {
+          "short_commit_hash": "[LONGHASH]",
+          "commit_hash": "[LONGHASH]",
+          "commit_date": "[DATE]",
+          "last_tag": "[TAG]",
+          "commits_since_last_tag": [COUNT]
+        }
       }
-    }
 
-    ----- stderr -----
-    warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
-    "#);
+      ----- stderr -----
+      warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
+      "#);
+    } else {
+        uv_snapshot!(filters, context.version()
+          .arg("--output-format").arg("json"), @r#"
+      success: true
+      exit_code: 0
+      ----- stdout -----
+      {
+        "package_name": "uv",
+        "version": "[VERSION]",
+        "commit_info": null
+      }
+
+      ----- stderr -----
+      warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
+      "#);
+    };
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
     assert_snapshot!(
@@ -1176,25 +1193,41 @@ fn self_version_json() -> Result<()> {
             ),
         ])
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.self_version()
-        .arg("--output-format").arg("json"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    {
-      "package_name": "uv",
-      "version": "[VERSION]",
-      "commit_info": {
-        "short_commit_hash": "[LONGHASH]",
-        "commit_hash": "[LONGHASH]",
-        "commit_date": "[DATE]",
-        "last_tag": "[TAG]",
-        "commits_since_last_tag": [COUNT]
+    if option_env!("UV_TEST_HAS_COMMIT_HASH").is_some() {
+        uv_snapshot!(filters, context.self_version()
+          .arg("--output-format").arg("json"), @r#"
+      success: true
+      exit_code: 0
+      ----- stdout -----
+      {
+        "package_name": "uv",
+        "version": "[VERSION]",
+        "commit_info": {
+          "short_commit_hash": "[LONGHASH]",
+          "commit_hash": "[LONGHASH]",
+          "commit_date": "[DATE]",
+          "last_tag": "[TAG]",
+          "commits_since_last_tag": [COUNT]
+        }
       }
-    }
 
-    ----- stderr -----
-    "#);
+      ----- stderr -----
+      "#);
+    } else {
+        uv_snapshot!(filters, context.self_version()
+          .arg("--output-format").arg("json"), @r#"
+      success: true
+      exit_code: 0
+      ----- stdout -----
+      {
+        "package_name": "uv",
+        "version": "[VERSION]",
+        "commit_info": null
+      }
+
+      ----- stderr -----
+      "#);
+    }
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
     assert_snapshot!(
