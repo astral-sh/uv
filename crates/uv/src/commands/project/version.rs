@@ -96,20 +96,20 @@ pub(crate) async fn project_version(
         }
     };
 
-    let mut toml = PyProjectTomlMut::from_toml(
-        project.pyproject_toml().raw.as_ref(),
-        DependencyTarget::PyProjectToml,
-    )?;
-
     let pyproject_path = project.root().join("pyproject.toml");
-    let name = project.project_name().cloned();
+    let Some(name) = project.project_name().cloned() else {
+        return Err(anyhow!(
+            "There is no 'project.name' field in: {}",
+            pyproject_path.user_display()
+        ));
+    };
 
     // Short-circuit early for a frozen read
     let is_read_only = value.is_none() && bump.is_none();
     if frozen && is_read_only {
         return Box::pin(print_frozen_version(
             project,
-            name,
+            &name,
             project_dir,
             active,
             python,
@@ -128,6 +128,11 @@ pub(crate) async fn project_version(
         ))
         .await;
     }
+
+    let mut toml = PyProjectTomlMut::from_toml(
+        project.pyproject_toml().raw.as_ref(),
+        DependencyTarget::PyProjectToml,
+    )?;
 
     let old_version = toml.version().map_err(|err| match err {
         Error::MalformedWorkspace => {
@@ -201,8 +206,8 @@ pub(crate) async fn project_version(
     };
 
     // Report the results
-    let old_version = VersionInfo::new(name.as_ref(), &old_version);
-    let new_version = new_version.map(|version| VersionInfo::new(name.as_ref(), &version));
+    let old_version = VersionInfo::new(Some(&name), &old_version);
+    let new_version = new_version.map(|version| VersionInfo::new(Some(&name), &version));
     print_version(old_version, new_version, short, output_format, printer)?;
 
     Ok(status)
@@ -259,7 +264,7 @@ fn update_project(
 /// Do the minimal work to try to find the package in the lockfile and print its version
 async fn print_frozen_version(
     project: VirtualProject,
-    name: Option<PackageName>,
+    name: &PackageName,
     project_dir: &Path,
     active: Option<bool>,
     python: Option<String>,
@@ -323,27 +328,24 @@ async fn print_frozen_version(
         Err(err) => return Err(err.into()),
     };
 
-    // Try to find the package of interest in the lock, falling back to the root if unsure
-    let package = if let Some(name) = &name {
-        lock.packages()
-            .iter()
-            .find(|package| package.name() == name)
-    } else {
-        lock.root()
-    };
-    let Some(package) = package else {
+    // Try to find the package of interest in the lock
+    let Some(package) = lock
+        .packages()
+        .iter()
+        .find(|package| package.name() == name)
+    else {
         return Err(anyhow!(
-            "Failed to find the package's version in the frozen lockfile"
+            "Failed to find the {name}'s version in the frozen lockfile"
         ));
     };
     let Some(version) = package.version() else {
         return Err(anyhow!(
-            "Failed to find the package's version in the frozen lockfile"
+            "Failed to find the {name}'s version in the frozen lockfile"
         ));
     };
 
     // Finally, print!
-    let old_version = VersionInfo::new(name.as_ref(), version);
+    let old_version = VersionInfo::new(Some(name), version);
     print_version(old_version, None, short, output_format, printer)?;
 
     Ok(ExitStatus::Success)
