@@ -2074,14 +2074,12 @@ fn install_git_public_https_missing_branch_or_tag() {
 #[tokio::test]
 #[cfg(feature = "git")]
 async fn install_git_public_rate_limited_by_github_rest_api() {
-    use uv_client::DEFAULT_RETRIES;
-
     let context = TestContext::new("3.12");
 
     let server = MockServer::start().await;
     Mock::given(method("GET"))
-        .respond_with(ResponseTemplate::new(429))
-        .expect(1 + u64::from(DEFAULT_RETRIES))
+        .respond_with(ResponseTemplate::new(408))
+        .expect(1)
         .mount(&server)
         .await;
 

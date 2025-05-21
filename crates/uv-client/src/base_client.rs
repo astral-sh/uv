@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{env, io, iter};
 
+use http::StatusCode;
 use itertools::Itertools;
 use reqwest::{Client, ClientBuilder, Proxy, Response};
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
@@ -452,6 +453,9 @@ impl RetryableStrategy for UvRetryableStrategy {
             {
                 Some(Retryable::Transient)
             }
+            Some(Retryable::Transient) if res.as_ref().is_ok_and(is_extended_fatal_response) => {
+                Some(Retryable::Fatal)
+            }
             default => default,
         };
 
@@ -503,6 +507,24 @@ pub fn is_extended_transient_error(err: &dyn Error) -> bool {
 
     trace!("Cannot retry error: not an IO error");
     false
+}
+
+/// Check for additional fatal response kinds not supported by the default retry strategy in `reqwest_retry`.
+///
+/// These cases should be considered [`Retryable::Fatal`].
+fn is_extended_fatal_response(response: &Response) -> bool {
+    // First, try to show a nice trace log
+    let status = response.status();
+    trace!(
+        "Considering skipping retry of response HTTP {status} for {}",
+        response.url()
+    );
+    if status == StatusCode::TOO_MANY_REQUESTS {
+        trace!("Skipping retry for error: `TooManyRequests");
+        true
+    } else {
+        false
+    }
 }
 
 /// Find the first source error of a specific type.
