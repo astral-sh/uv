@@ -99,7 +99,7 @@ pub(crate) async fn project_version(
     let pyproject_path = project.root().join("pyproject.toml");
     let Some(name) = project.project_name().cloned() else {
         return Err(anyhow!(
-            "There is no 'project.name' field in: {}",
+            "Missing `project.name` field in: {}",
             pyproject_path.user_display()
         ));
     };
@@ -215,7 +215,7 @@ pub(crate) async fn project_version(
 
 /// Find the pyproject.toml we're modifying
 ///
-/// Note that `uv version` never needs to support PEP723 scripts, as those are unversioned.
+/// Note that `uv version` never needs to support PEP 723 scripts, as those are unversioned.
 async fn find_target(project_dir: &Path, package: Option<&PackageName>) -> Result<VirtualProject> {
     // Find the project in the workspace.
     // No workspace caching since `uv version` changes the workspace definition.

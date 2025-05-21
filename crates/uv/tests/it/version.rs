@@ -1308,7 +1308,7 @@ fn version_get_workspace() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: There is no 'project.name' field in: pyproject.toml
+    error: Missing `project.name` field in: pyproject.toml
     ");
 
     Ok(())
