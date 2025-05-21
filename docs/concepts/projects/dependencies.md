@@ -226,6 +226,11 @@ The following dependency sources are supported by uv:
     project tables will be used. If another tool is being used for development, any metadata
     provided in the source table will need to be re-specified in the other tool's format.
 
+!!! important
+
+    Like other development-only features, sources defined by your dependencies won't ever be
+    enabled, even when building your project in development mode.
+
 ### Index
 
 To add Python package from a specific index, use the `--index` option:
