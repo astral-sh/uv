@@ -65,17 +65,20 @@ impl IndexStatusCodeStrategy {
         index_url: &IndexUrl,
         capabilities: &IndexCapabilities,
     ) -> IndexStatusCodeDecision {
+        match status_code {
+            StatusCode::UNAUTHORIZED => {
+                capabilities.set_unauthorized(index_url.clone());
+            }
+            StatusCode::FORBIDDEN => {
+                capabilities.set_forbidden(index_url.clone());
+            }
+            _ => {}
+        }
         match self {
             IndexStatusCodeStrategy::Default => match status_code {
                 StatusCode::NOT_FOUND => IndexStatusCodeDecision::Ignore,
-                StatusCode::UNAUTHORIZED => {
-                    capabilities.set_unauthorized(index_url.clone());
-                    IndexStatusCodeDecision::Fail(status_code)
-                }
-                StatusCode::FORBIDDEN => {
-                    capabilities.set_forbidden(index_url.clone());
-                    IndexStatusCodeDecision::Fail(status_code)
-                }
+                StatusCode::UNAUTHORIZED => IndexStatusCodeDecision::Fail(status_code),
+                StatusCode::FORBIDDEN => IndexStatusCodeDecision::Fail(status_code),
                 _ => IndexStatusCodeDecision::Fail(status_code),
             },
             IndexStatusCodeStrategy::IgnoreErrorCodes { status_codes } => {
