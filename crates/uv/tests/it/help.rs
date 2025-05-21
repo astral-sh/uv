@@ -20,6 +20,7 @@ fn help() {
       init                       Create a new project
       add                        Add dependencies to the project
       remove                     Remove dependencies from the project
+      version                    Read or update the project's version
       sync                       Update the project's environment
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
@@ -32,7 +33,6 @@ fn help() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Read or update the project's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
@@ -100,6 +100,7 @@ fn help_flag() {
       init     Create a new project
       add      Add dependencies to the project
       remove   Remove dependencies from the project
+      version  Read or update the project's version
       sync     Update the project's environment
       lock     Update the project's lockfile
       export   Export the project's lockfile to an alternate format
@@ -112,7 +113,6 @@ fn help_flag() {
       publish  Upload distributions to an index
       cache    Manage uv's cache
       self     Manage the uv executable
-      version  Read or update the project's version
       help     Display documentation for a command
 
     Cache options:
@@ -178,6 +178,7 @@ fn help_short_flag() {
       init     Create a new project
       add      Add dependencies to the project
       remove   Remove dependencies from the project
+      version  Read or update the project's version
       sync     Update the project's environment
       lock     Update the project's lockfile
       export   Export the project's lockfile to an alternate format
@@ -190,7 +191,6 @@ fn help_short_flag() {
       publish  Upload distributions to an index
       cache    Manage uv's cache
       self     Manage the uv executable
-      version  Read or update the project's version
       help     Display documentation for a command
 
     Cache options:
@@ -857,6 +857,7 @@ fn help_unknown_subcommand() {
         init
         add
         remove
+        version
         sync
         lock
         export
@@ -869,7 +870,6 @@ fn help_unknown_subcommand() {
         publish
         cache
         self
-        version
         generate-shell-completion
     ");
 
@@ -884,6 +884,7 @@ fn help_unknown_subcommand() {
         init
         add
         remove
+        version
         sync
         lock
         export
@@ -896,7 +897,6 @@ fn help_unknown_subcommand() {
         publish
         cache
         self
-        version
         generate-shell-completion
     ");
 }
@@ -938,6 +938,7 @@ fn help_with_global_option() {
       init                       Create a new project
       add                        Add dependencies to the project
       remove                     Remove dependencies from the project
+      version                    Read or update the project's version
       sync                       Update the project's environment
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
@@ -950,7 +951,6 @@ fn help_with_global_option() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Read or update the project's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 
@@ -1059,6 +1059,7 @@ fn help_with_no_pager() {
       init                       Create a new project
       add                        Add dependencies to the project
       remove                     Remove dependencies from the project
+      version                    Read or update the project's version
       sync                       Update the project's environment
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
@@ -1071,7 +1072,6 @@ fn help_with_no_pager() {
       publish                    Upload distributions to an index
       cache                      Manage uv's cache
       self                       Manage the uv executable
-      version                    Read or update the project's version
       generate-shell-completion  Generate shell completion
       help                       Display documentation for a command
 

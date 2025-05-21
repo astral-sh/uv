@@ -20,6 +20,8 @@ uv [OPTIONS] <COMMAND>
 </dd>
 <dt><a href="#uv-remove"><code>uv remove</code></a></dt><dd><p>Remove dependencies from the project</p>
 </dd>
+<dt><a href="#uv-version"><code>uv version</code></a></dt><dd><p>Read or update the project&#8217;s version</p>
+</dd>
 <dt><a href="#uv-sync"><code>uv sync</code></a></dt><dd><p>Update the project&#8217;s environment</p>
 </dd>
 <dt><a href="#uv-lock"><code>uv lock</code></a></dt><dd><p>Update the project&#8217;s lockfile</p>
@@ -43,8 +45,6 @@ uv [OPTIONS] <COMMAND>
 <dt><a href="#uv-cache"><code>uv cache</code></a></dt><dd><p>Manage uv&#8217;s cache</p>
 </dd>
 <dt><a href="#uv-self"><code>uv self</code></a></dt><dd><p>Manage the uv executable</p>
-</dd>
-<dt><a href="#uv-version"><code>uv version</code></a></dt><dd><p>Read or update the project&#8217;s version</p>
 </dd>
 <dt><a href="#uv-help"><code>uv help</code></a></dt><dd><p>Display documentation for a command</p>
 </dd>
@@ -1457,6 +1457,359 @@ uv remove [OPTIONS] <PACKAGES>...
 </dd><dt id="uv-remove--upgrade-package"><a href="#uv-remove--upgrade-package"><code>--upgrade-package</code></a>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 
 </dd><dt id="uv-remove--verbose"><a href="#uv-remove--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+
+<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
+
+</dd></dl>
+
+## uv version
+
+Read or update the project's version
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+uv version [OPTIONS] [VALUE]
+```
+
+<h3 class="cli-reference">Arguments</h3>
+
+<dl class="cli-reference"><dt id="uv-version--value"><a href="#uv-version--value"<code>VALUE</code></a></dt><dd><p>Set the project version to this value</p>
+
+<p>To update the project using semantic versioning components instead, use <code>--bump</code>.</p>
+
+</dd></dl>
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="uv-version--active"><a href="#uv-version--active"><code>--active</code></a></dt><dd><p>Prefer the active virtual environment over the project&#8217;s virtual environment.</p>
+
+<p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
+
+</dd><dt id="uv-version--allow-insecure-host"><a href="#uv-version--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+
+<p>Can be provided multiple times.</p>
+
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+
+<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
+</dd><dt id="uv-version--bump"><a href="#uv-version--bump"><code>--bump</code></a> <i>bump</i></dt><dd><p>Update the project version using the given semantics</p>
+
+<p>Possible values:</p>
+
+<ul>
+<li><code>major</code>:  Increase the major version (1.2.3 =&gt; 2.0.0)</li>
+
+<li><code>minor</code>:  Increase the minor version (1.2.3 =&gt; 1.3.0)</li>
+
+<li><code>patch</code>:  Increase the patch version (1.2.3 =&gt; 1.2.4)</li>
+</ul>
+</dd><dt id="uv-version--cache-dir"><a href="#uv-version--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+
+<p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
+
+<p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
+
+<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
+</dd><dt id="uv-version--color"><a href="#uv-version--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+
+<p>Possible values:</p>
+
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+
+<li><code>never</code>:  Disables colored output</li>
+</ul>
+</dd><dt id="uv-version--compile-bytecode"><a href="#uv-version--compile-bytecode"><code>--compile-bytecode</code></a>, <code>--compile</code></dt><dd><p>Compile Python files to bytecode after installation.</p>
+
+<p>By default, uv does not compile Python (<code>.py</code>) files to bytecode (<code>__pycache__/*.pyc</code>); instead, compilation is performed lazily the first time a module is imported. For use-cases in which start time is critical, such as CLI applications and Docker containers, this option can be enabled to trade longer installation times for faster start times.</p>
+
+<p>When enabled, uv will process the entire site-packages directory (including packages that are not being modified by the current operation) for consistency. Like pip, it will also ignore errors.</p>
+
+<p>May also be set with the <code>UV_COMPILE_BYTECODE</code> environment variable.</p>
+</dd><dt id="uv-version--config-file"><a href="#uv-version--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+
+<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
+
+<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
+</dd><dt id="uv-version--config-setting"><a href="#uv-version--config-setting"><code>--config-setting</code></a>, <code>--config-settings</code>, <code>-C</code> <i>config-setting</i></dt><dd><p>Settings to pass to the PEP 517 build backend, specified as <code>KEY=VALUE</code> pairs</p>
+
+</dd><dt id="uv-version--default-index"><a href="#uv-version--default-index"><code>--default-index</code></a> <i>default-index</i></dt><dd><p>The URL of the default package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--index</code> flag.</p>
+
+<p>May also be set with the <code>UV_DEFAULT_INDEX</code> environment variable.</p>
+</dd><dt id="uv-version--directory"><a href="#uv-version--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+
+<p>Relative paths are resolved with the given directory as the base.</p>
+
+<p>See <code>--project</code> to only change the project root directory.</p>
+
+</dd><dt id="uv-version--dry-run"><a href="#uv-version--dry-run"><code>--dry-run</code></a></dt><dd><p>Don&#8217;t write a new version to the <code>pyproject.toml</code></p>
+
+<p>Instead, the version will be displayed.</p>
+
+</dd><dt id="uv-version--exclude-newer"><a href="#uv-version--exclude-newer"><code>--exclude-newer</code></a> <i>exclude-newer</i></dt><dd><p>Limit candidate packages to those that were uploaded prior to the given date.</p>
+
+<p>Accepts both RFC 3339 timestamps (e.g., <code>2006-12-02T02:07:43Z</code>) and local dates in the same format (e.g., <code>2006-12-02</code>) in your system&#8217;s configured time zone.</p>
+
+<p>May also be set with the <code>UV_EXCLUDE_NEWER</code> environment variable.</p>
+</dd><dt id="uv-version--extra-index-url"><a href="#uv-version--extra-index-url"><code>--extra-index-url</code></a> <i>extra-index-url</i></dt><dd><p>(Deprecated: use <code>--index</code> instead) Extra URLs of package indexes to use, in addition to <code>--index-url</code>.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--index-url</code> (which defaults to PyPI). When multiple <code>--extra-index-url</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_EXTRA_INDEX_URL</code> environment variable.</p>
+</dd><dt id="uv-version--find-links"><a href="#uv-version--find-links"><code>--find-links</code></a>, <code>-f</code> <i>find-links</i></dt><dd><p>Locations to search for candidate distributions, in addition to those found in the registry indexes.</p>
+
+<p>If a path, the target must be a directory that contains packages as wheel files (<code>.whl</code>) or source distributions (e.g., <code>.tar.gz</code> or <code>.zip</code>) at the top level.</p>
+
+<p>If a URL, the page must contain a flat list of links to package files adhering to the formats described above.</p>
+
+<p>May also be set with the <code>UV_FIND_LINKS</code> environment variable.</p>
+</dd><dt id="uv-version--fork-strategy"><a href="#uv-version--fork-strategy"><code>--fork-strategy</code></a> <i>fork-strategy</i></dt><dd><p>The strategy to use when selecting multiple versions of a given package across Python versions and platforms.</p>
+
+<p>By default, uv will optimize for selecting the latest version of each package for each supported Python version (<code>requires-python</code>), while minimizing the number of selected versions across platforms.</p>
+
+<p>Under <code>fewest</code>, uv will minimize the number of selected versions for each package, preferring older versions that are compatible with a wider range of supported Python versions or platforms.</p>
+
+<p>May also be set with the <code>UV_FORK_STRATEGY</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>fewest</code>:  Optimize for selecting the fewest number of versions for each package. Older versions may be preferred if they are compatible with a wider range of supported Python versions or platforms</li>
+
+<li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
+</ul>
+</dd><dt id="uv-version--frozen"><a href="#uv-version--frozen"><code>--frozen</code></a></dt><dd><p>Update the version without re-locking the project.</p>
+
+<p>The project environment will not be synced.</p>
+
+<p>May also be set with the <code>UV_FROZEN</code> environment variable.</p>
+</dd><dt id="uv-version--help"><a href="#uv-version--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+
+</dd><dt id="uv-version--index"><a href="#uv-version--index"><code>--index</code></a> <i>index</i></dt><dd><p>The URLs to use when resolving dependencies, in addition to the default index.</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>All indexes provided via this flag take priority over the index specified by <code>--default-index</code> (which defaults to PyPI). When multiple <code>--index</code> flags are provided, earlier values take priority.</p>
+
+<p>May also be set with the <code>UV_INDEX</code> environment variable.</p>
+</dd><dt id="uv-version--index-strategy"><a href="#uv-version--index-strategy"><code>--index-strategy</code></a> <i>index-strategy</i></dt><dd><p>The strategy to use when resolving against multiple index URLs.</p>
+
+<p>By default, uv will stop at the first index on which a given package is available, and limit resolutions to those present on that first index (<code>first-index</code>). This prevents &quot;dependency confusion&quot; attacks, whereby an attacker can upload a malicious package under the same name to an alternate index.</p>
+
+<p>May also be set with the <code>UV_INDEX_STRATEGY</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>first-index</code>:  Only use results from the first index that returns a match for a given package name</li>
+
+<li><code>unsafe-first-match</code>:  Search for every package name across all indexes, exhausting the versions from the first index before moving on to the next</li>
+
+<li><code>unsafe-best-match</code>:  Search for every package name across all indexes, preferring the &quot;best&quot; version found. If a package version is in multiple indexes, only look at the entry for the first index</li>
+</ul>
+</dd><dt id="uv-version--index-url"><a href="#uv-version--index-url"><code>--index-url</code></a>, <code>-i</code> <i>index-url</i></dt><dd><p>(Deprecated: use <code>--default-index</code> instead) The URL of the Python package index (by default: &lt;https://pypi.org/simple&gt;).</p>
+
+<p>Accepts either a repository compliant with PEP 503 (the simple repository API), or a local directory laid out in the same format.</p>
+
+<p>The index given by this flag is given lower priority than all other indexes specified via the <code>--extra-index-url</code> flag.</p>
+
+<p>May also be set with the <code>UV_INDEX_URL</code> environment variable.</p>
+</dd><dt id="uv-version--keyring-provider"><a href="#uv-version--keyring-provider"><code>--keyring-provider</code></a> <i>keyring-provider</i></dt><dd><p>Attempt to use <code>keyring</code> for authentication for index URLs.</p>
+
+<p>At present, only <code>--keyring-provider subprocess</code> is supported, which configures uv to use the <code>keyring</code> CLI to handle authentication.</p>
+
+<p>Defaults to <code>disabled</code>.</p>
+
+<p>May also be set with the <code>UV_KEYRING_PROVIDER</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>disabled</code>:  Do not use keyring for credential lookup</li>
+
+<li><code>subprocess</code>:  Use the <code>keyring</code> command for credential lookup</li>
+</ul>
+</dd><dt id="uv-version--link-mode"><a href="#uv-version--link-mode"><code>--link-mode</code></a> <i>link-mode</i></dt><dd><p>The method to use when installing packages from the global cache.</p>
+
+<p>Defaults to <code>clone</code> (also known as Copy-on-Write) on macOS, and <code>hardlink</code> on Linux and Windows.</p>
+
+<p>May also be set with the <code>UV_LINK_MODE</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>clone</code>:  Clone (i.e., copy-on-write) packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>copy</code>:  Copy packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>hardlink</code>:  Hard link packages from the wheel into the <code>site-packages</code> directory</li>
+
+<li><code>symlink</code>:  Symbolically link packages from the wheel into the <code>site-packages</code> directory</li>
+</ul>
+</dd><dt id="uv-version--locked"><a href="#uv-version--locked"><code>--locked</code></a></dt><dd><p>Assert that the <code>uv.lock</code> will remain unchanged.</p>
+
+<p>Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.</p>
+
+<p>May also be set with the <code>UV_LOCKED</code> environment variable.</p>
+</dd><dt id="uv-version--managed-python"><a href="#uv-version--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
+
+<p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
+
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
+</dd><dt id="uv-version--native-tls"><a href="#uv-version--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
+
+<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
+
+<p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
+
+<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
+</dd><dt id="uv-version--no-binary"><a href="#uv-version--no-binary"><code>--no-binary</code></a></dt><dd><p>Don&#8217;t install pre-built wheels.</p>
+
+<p>The given packages will be built and installed from source. The resolver will still use pre-built wheels to extract package metadata, if available.</p>
+
+<p>May also be set with the <code>UV_NO_BINARY</code> environment variable.</p>
+</dd><dt id="uv-version--no-binary-package"><a href="#uv-version--no-binary-package"><code>--no-binary-package</code></a> <i>no-binary-package</i></dt><dd><p>Don&#8217;t install pre-built wheels for a specific package</p>
+
+<p>May also be set with the <code>UV_NO_BINARY_PACKAGE</code> environment variable.</p>
+</dd><dt id="uv-version--no-build"><a href="#uv-version--no-build"><code>--no-build</code></a></dt><dd><p>Don&#8217;t build source distributions.</p>
+
+<p>When enabled, resolving will not run arbitrary Python code. The cached wheels of already-built source distributions will be reused, but operations that require building distributions will exit with an error.</p>
+
+<p>May also be set with the <code>UV_NO_BUILD</code> environment variable.</p>
+</dd><dt id="uv-version--no-build-isolation"><a href="#uv-version--no-build-isolation"><code>--no-build-isolation</code></a></dt><dd><p>Disable isolation when building source distributions.</p>
+
+<p>Assumes that build dependencies specified by PEP 518 are already installed.</p>
+
+<p>May also be set with the <code>UV_NO_BUILD_ISOLATION</code> environment variable.</p>
+</dd><dt id="uv-version--no-build-isolation-package"><a href="#uv-version--no-build-isolation-package"><code>--no-build-isolation-package</code></a> <i>no-build-isolation-package</i></dt><dd><p>Disable isolation when building source distributions for a specific package.</p>
+
+<p>Assumes that the packages&#8217; build dependencies specified by PEP 518 are already installed.</p>
+
+</dd><dt id="uv-version--no-build-package"><a href="#uv-version--no-build-package"><code>--no-build-package</code></a> <i>no-build-package</i></dt><dd><p>Don&#8217;t build source distributions for a specific package</p>
+
+<p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p>
+</dd><dt id="uv-version--no-cache"><a href="#uv-version--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+
+<p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
+</dd><dt id="uv-version--no-config"><a href="#uv-version--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+
+<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
+
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
+</dd><dt id="uv-version--no-index"><a href="#uv-version--no-index"><code>--no-index</code></a></dt><dd><p>Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via <code>--find-links</code></p>
+
+</dd><dt id="uv-version--no-managed-python"><a href="#uv-version--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
+
+<p>Instead, uv will search for a suitable Python version on the system.</p>
+
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
+</dd><dt id="uv-version--no-progress"><a href="#uv-version--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+
+<p>For example, spinners or progress bars.</p>
+
+<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
+</dd><dt id="uv-version--no-python-downloads"><a href="#uv-version--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
+
+</dd><dt id="uv-version--no-sources"><a href="#uv-version--no-sources"><code>--no-sources</code></a></dt><dd><p>Ignore the <code>tool.uv.sources</code> table when resolving dependencies. Used to lock against the standards-compliant, publishable package metadata, as opposed to using any workspace, Git, URL, or local path sources</p>
+
+</dd><dt id="uv-version--no-sync"><a href="#uv-version--no-sync"><code>--no-sync</code></a></dt><dd><p>Avoid syncing the virtual environment after re-locking the project</p>
+
+<p>May also be set with the <code>UV_NO_SYNC</code> environment variable.</p>
+</dd><dt id="uv-version--offline"><a href="#uv-version--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+
+<p>When disabled, uv will only use locally cached data and locally available files.</p>
+
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
+</dd><dt id="uv-version--output-format"><a href="#uv-version--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dd><p>The format of the output</p>
+
+<p>[default: text]</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>text</code>:  Display the version as plain text</li>
+
+<li><code>json</code>:  Display the version as JSON</li>
+</ul>
+</dd><dt id="uv-version--package"><a href="#uv-version--package"><code>--package</code></a> <i>package</i></dt><dd><p>Update the version of a specific package in the workspace</p>
+
+</dd><dt id="uv-version--prerelease"><a href="#uv-version--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
+
+<p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
+
+<p>May also be set with the <code>UV_PRERELEASE</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>disallow</code>:  Disallow all pre-release versions</li>
+
+<li><code>allow</code>:  Allow all pre-release versions</li>
+
+<li><code>if-necessary</code>:  Allow pre-release versions if all versions of a package are pre-release</li>
+
+<li><code>explicit</code>:  Allow pre-release versions for first-party packages with explicit pre-release markers in their version requirements</li>
+
+<li><code>if-necessary-or-explicit</code>:  Allow pre-release versions if all versions of a package are pre-release, or if the package has an explicit pre-release marker in its version requirements</li>
+</ul>
+</dd><dt id="uv-version--project"><a href="#uv-version--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
+
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+
+<p>See <code>--directory</code> to change the working directory entirely.</p>
+
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
+</dd><dt id="uv-version--python"><a href="#uv-version--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use for resolving and syncing.</p>
+
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
+
+<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p>
+</dd><dt id="uv-version--quiet"><a href="#uv-version--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
+
+</dd><dt id="uv-version--refresh"><a href="#uv-version--refresh"><code>--refresh</code></a></dt><dd><p>Refresh all cached data</p>
+
+</dd><dt id="uv-version--refresh-package"><a href="#uv-version--refresh-package"><code>--refresh-package</code></a> <i>refresh-package</i></dt><dd><p>Refresh cached data for a specific package</p>
+
+</dd><dt id="uv-version--reinstall"><a href="#uv-version--reinstall"><code>--reinstall</code></a>, <code>--force-reinstall</code></dt><dd><p>Reinstall all packages, regardless of whether they&#8217;re already installed. Implies <code>--refresh</code></p>
+
+</dd><dt id="uv-version--reinstall-package"><a href="#uv-version--reinstall-package"><code>--reinstall-package</code></a> <i>reinstall-package</i></dt><dd><p>Reinstall a specific package, regardless of whether it&#8217;s already installed. Implies <code>--refresh-package</code></p>
+
+</dd><dt id="uv-version--resolution"><a href="#uv-version--resolution"><code>--resolution</code></a> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
+
+<p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
+
+<p>May also be set with the <code>UV_RESOLUTION</code> environment variable.</p>
+<p>Possible values:</p>
+
+<ul>
+<li><code>highest</code>:  Resolve the highest compatible version of each package</li>
+
+<li><code>lowest</code>:  Resolve the lowest compatible version of each package</li>
+
+<li><code>lowest-direct</code>:  Resolve the lowest compatible version of any direct dependencies, and the highest compatible version of any transitive dependencies</li>
+</ul>
+</dd><dt id="uv-version--short"><a href="#uv-version--short"><code>--short</code></a></dt><dd><p>Only show the version</p>
+
+<p>By default, uv will show the project name before the version.</p>
+
+</dd><dt id="uv-version--upgrade"><a href="#uv-version--upgrade"><code>--upgrade</code></a>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
+
+</dd><dt id="uv-version--upgrade-package"><a href="#uv-version--upgrade-package"><code>--upgrade-package</code></a>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
+
+</dd><dt id="uv-version--verbose"><a href="#uv-version--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 
@@ -9549,145 +9902,6 @@ uv self version [OPTIONS]
 </dd><dt id="uv-self-version--short"><a href="#uv-self-version--short"><code>--short</code></a></dt><dd><p>Only print the version</p>
 
 </dd><dt id="uv-self-version--verbose"><a href="#uv-self-version--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
-
-<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
-
-</dd></dl>
-
-## uv version
-
-Read or update the project's version
-
-<h3 class="cli-reference">Usage</h3>
-
-```
-uv version [OPTIONS] [VALUE]
-```
-
-<h3 class="cli-reference">Arguments</h3>
-
-<dl class="cli-reference"><dt id="uv-version--value"><a href="#uv-version--value"<code>VALUE</code></a></dt><dd><p>Set the project version to this value</p>
-
-<p>To update the project using semantic versioning components instead, use <code>--bump</code>.</p>
-
-</dd></dl>
-
-<h3 class="cli-reference">Options</h3>
-
-<dl class="cli-reference"><dt id="uv-version--allow-insecure-host"><a href="#uv-version--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
-
-<p>Can be provided multiple times.</p>
-
-<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
-
-<p>WARNING: Hosts included in this list will not be verified against the system&#8217;s certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
-
-<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p>
-</dd><dt id="uv-version--bump"><a href="#uv-version--bump"><code>--bump</code></a> <i>bump</i></dt><dd><p>Update the project version using the given semantics</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>major</code>:  Increase the major version (1.2.3 =&gt; 2.0.0)</li>
-
-<li><code>minor</code>:  Increase the minor version (1.2.3 =&gt; 1.3.0)</li>
-
-<li><code>patch</code>:  Increase the patch version (1.2.3 =&gt; 1.2.4)</li>
-</ul>
-</dd><dt id="uv-version--cache-dir"><a href="#uv-version--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
-
-<p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
-
-<p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
-
-<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p>
-</dd><dt id="uv-version--color"><a href="#uv-version--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
-
-<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
-
-<p>Possible values:</p>
-
-<ul>
-<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
-
-<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
-
-<li><code>never</code>:  Disables colored output</li>
-</ul>
-</dd><dt id="uv-version--config-file"><a href="#uv-version--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
-
-<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
-
-<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p>
-</dd><dt id="uv-version--directory"><a href="#uv-version--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
-
-<p>Relative paths are resolved with the given directory as the base.</p>
-
-<p>See <code>--project</code> to only change the project root directory.</p>
-
-</dd><dt id="uv-version--dry-run"><a href="#uv-version--dry-run"><code>--dry-run</code></a></dt><dd><p>Don&#8217;t write a new version to the <code>pyproject.toml</code></p>
-
-<p>Instead, the version will be displayed.</p>
-
-</dd><dt id="uv-version--help"><a href="#uv-version--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
-
-</dd><dt id="uv-version--managed-python"><a href="#uv-version--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
-
-<p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
-
-<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-version--native-tls"><a href="#uv-version--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform&#8217;s native certificate store.</p>
-
-<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
-
-<p>However, in some cases, you may want to use the platform&#8217;s native certificate store, especially if you&#8217;re relying on a corporate trust root (e.g., for a mandatory proxy) that&#8217;s included in your system&#8217;s certificate store.</p>
-
-<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p>
-</dd><dt id="uv-version--no-cache"><a href="#uv-version--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
-
-<p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p>
-</dd><dt id="uv-version--no-config"><a href="#uv-version--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
-
-<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
-
-<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p>
-</dd><dt id="uv-version--no-managed-python"><a href="#uv-version--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
-
-<p>Instead, uv will search for a suitable Python version on the system.</p>
-
-<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p>
-</dd><dt id="uv-version--no-progress"><a href="#uv-version--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
-
-<p>For example, spinners or progress bars.</p>
-
-<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p>
-</dd><dt id="uv-version--no-python-downloads"><a href="#uv-version--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
-
-</dd><dt id="uv-version--offline"><a href="#uv-version--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
-
-<p>When disabled, uv will only use locally cached data and locally available files.</p>
-
-<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p>
-</dd><dt id="uv-version--output-format"><a href="#uv-version--output-format"><code>--output-format</code></a> <i>output-format</i></dt><dt id="uv-version--project"><a href="#uv-version--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
-
-<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project&#8217;s virtual environment (<code>.venv</code>).</p>
-
-<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
-
-<p>See <code>--directory</code> to change the working directory entirely.</p>
-
-<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
-
-<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p>
-</dd><dt id="uv-version--quiet"><a href="#uv-version--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
-
-<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
-
-</dd><dt id="uv-version--short"><a href="#uv-version--short"><code>--short</code></a></dt><dd><p>Only show the version</p>
-
-<p>By default, uv will show the project name before the version.</p>
-
-</dd><dt id="uv-version--verbose"><a href="#uv-version--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (&lt;https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives&gt;)</p>
 

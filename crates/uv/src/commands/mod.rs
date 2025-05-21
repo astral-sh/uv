@@ -29,6 +29,7 @@ pub(crate) use project::remove::remove;
 pub(crate) use project::run::{RunCommand, run};
 pub(crate) use project::sync::sync;
 pub(crate) use project::tree::tree;
+pub(crate) use project::version::{project_version, self_version};
 pub(crate) use publish::publish;
 pub(crate) use python::dir::dir as python_dir;
 pub(crate) use python::find::find as python_find;
@@ -56,7 +57,6 @@ use uv_normalize::PackageName;
 use uv_python::PythonEnvironment;
 use uv_scripts::Pep723Script;
 pub(crate) use venv::venv;
-pub(crate) use version::{project_version, self_version};
 
 use crate::printer::Printer;
 
@@ -77,7 +77,6 @@ mod run;
 mod self_update;
 mod tool;
 mod venv;
-mod version;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ExitStatus {

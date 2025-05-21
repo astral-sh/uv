@@ -493,8 +493,6 @@ pub enum Commands {
     /// Clear the cache, removing all entries or those linked to specific packages.
     #[command(hide = true)]
     Clean(CleanArgs),
-    /// Read or update the project's version.
-    Version(VersionArgs),
     /// Generate shell completion
     #[command(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion(GenerateShellCompletionArgs),
@@ -525,29 +523,91 @@ pub struct HelpArgs {
     pub command: Option<Vec<String>>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args)]
 #[command(group = clap::ArgGroup::new("operation"))]
+#[allow(clippy::struct_excessive_bools)]
 pub struct VersionArgs {
     /// Set the project version to this value
     ///
     /// To update the project using semantic versioning components instead, use `--bump`.
     #[arg(group = "operation")]
     pub value: Option<String>,
+
     /// Update the project version using the given semantics
     #[arg(group = "operation", long)]
     pub bump: Option<VersionBump>,
+
     /// Don't write a new version to the `pyproject.toml`
     ///
     /// Instead, the version will be displayed.
     #[arg(long)]
     pub dry_run: bool,
+
     /// Only show the version
     ///
     /// By default, uv will show the project name before the version.
     #[arg(long)]
     pub short: bool,
+
+    /// The format of the output
     #[arg(long, value_enum, default_value = "text")]
     pub output_format: VersionFormat,
+
+    /// Avoid syncing the virtual environment after re-locking the project.
+    #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
+    pub no_sync: bool,
+
+    /// Prefer the active virtual environment over the project's virtual environment.
+    ///
+    /// If the project virtual environment is active or no virtual environment is active, this has
+    /// no effect.
+    #[arg(long, overrides_with = "no_active")]
+    pub active: bool,
+
+    /// Prefer project's virtual environment over an active environment.
+    ///
+    /// This is the default behavior.
+    #[arg(long, overrides_with = "active", hide = true)]
+    pub no_active: bool,
+
+    /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
+    /// uv will exit with an error.
+    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    pub locked: bool,
+
+    /// Update the version without re-locking the project.
+    ///
+    /// The project environment will not be synced.
+    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    pub frozen: bool,
+
+    #[command(flatten)]
+    pub installer: ResolverInstallerArgs,
+
+    #[command(flatten)]
+    pub build: BuildOptionsArgs,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
+
+    /// Update the version of a specific package in the workspace.
+    #[arg(long, conflicts_with = "isolated")]
+    pub package: Option<PackageName>,
+
+    /// The Python interpreter to use for resolving and syncing.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_PYTHON,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
+    )]
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, clap::ValueEnum)]
@@ -819,6 +879,8 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Remove(RemoveArgs),
+    /// Read or update the project's version.
+    Version(VersionArgs),
     /// Update the project's environment.
     ///
     /// Syncing ensures that all project dependencies are installed and up-to-date with the
