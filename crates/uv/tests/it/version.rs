@@ -935,6 +935,22 @@ fn version_get_fallback_unmanaged_short() -> Result<()> {
     Ok(())
 }
 
+/// In tarball builds of uv, git version info is missing (distros do this)
+fn git_version_info_expected() -> bool {
+    // This is setup to aggressively panic to make sure this is working at all
+    // If you're a packager of uv and this does indeed blow up for you, we will
+    // gladly change these expects into "just return false" or something.
+    let manifest_dir = std::env::var(uv_static::EnvVars::CARGO_MANIFEST_DIR)
+        .expect("CARGO_MANIFEST_DIR not defined");
+    let git_dir = std::path::Path::new(&manifest_dir)
+        .parent()
+        .expect("parent of manifest dir missing")
+        .parent()
+        .expect("grandparent of manifest dir missing")
+        .join(".git");
+    git_dir.exists()
+}
+
 // version_get_fallback with `--json`
 #[test]
 fn version_get_fallback_unmanaged_json() -> Result<()> {
@@ -970,26 +986,43 @@ fn version_get_fallback_unmanaged_json() -> Result<()> {
             ),
         ])
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.version()
-        .arg("--output-format").arg("json"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    {
-      "package_name": "uv",
-      "version": "[VERSION]",
-      "commit_info": {
-        "short_commit_hash": "[LONGHASH]",
-        "commit_hash": "[LONGHASH]",
-        "commit_date": "[DATE]",
-        "last_tag": "[TAG]",
-        "commits_since_last_tag": [COUNT]
+    if git_version_info_expected() {
+        uv_snapshot!(filters, context.version()
+          .arg("--output-format").arg("json"), @r#"
+      success: true
+      exit_code: 0
+      ----- stdout -----
+      {
+        "package_name": "uv",
+        "version": "[VERSION]",
+        "commit_info": {
+          "short_commit_hash": "[LONGHASH]",
+          "commit_hash": "[LONGHASH]",
+          "commit_date": "[DATE]",
+          "last_tag": "[TAG]",
+          "commits_since_last_tag": [COUNT]
+        }
       }
-    }
 
-    ----- stderr -----
-    warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
-    "#);
+      ----- stderr -----
+      warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
+      "#);
+    } else {
+        uv_snapshot!(filters, context.version()
+          .arg("--output-format").arg("json"), @r#"
+      success: true
+      exit_code: 0
+      ----- stdout -----
+      {
+        "package_name": "uv",
+        "version": "[VERSION]",
+        "commit_info": null
+      }
+
+      ----- stderr -----
+      warning: Failed to read project metadata (The project is marked as unmanaged: `[TEMP_DIR]/`). Running `uv self version` for compatibility. This fallback will be removed in the future; pass `--preview` to force an error.
+      "#);
+    }
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
     assert_snapshot!(
@@ -1201,25 +1234,42 @@ fn self_version_json() -> Result<()> {
             ),
         ])
         .collect::<Vec<_>>();
-    uv_snapshot!(filters, context.self_version()
-        .arg("--output-format").arg("json"), @r#"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    {
-      "package_name": "uv",
-      "version": "[VERSION]",
-      "commit_info": {
-        "short_commit_hash": "[LONGHASH]",
-        "commit_hash": "[LONGHASH]",
-        "commit_date": "[DATE]",
-        "last_tag": "[TAG]",
-        "commits_since_last_tag": [COUNT]
-      }
-    }
 
-    ----- stderr -----
-    "#);
+    if git_version_info_expected() {
+        uv_snapshot!(filters, context.self_version()
+          .arg("--output-format").arg("json"), @r#"
+      success: true
+      exit_code: 0
+      ----- stdout -----
+      {
+        "package_name": "uv",
+        "version": "[VERSION]",
+        "commit_info": {
+          "short_commit_hash": "[LONGHASH]",
+          "commit_hash": "[LONGHASH]",
+          "commit_date": "[DATE]",
+          "last_tag": "[TAG]",
+          "commits_since_last_tag": [COUNT]
+        }
+      }
+
+      ----- stderr -----
+      "#);
+    } else {
+        uv_snapshot!(filters, context.self_version()
+          .arg("--output-format").arg("json"), @r#"
+      success: true
+      exit_code: 0
+      ----- stdout -----
+      {
+        "package_name": "uv",
+        "version": "[VERSION]",
+        "commit_info": null
+      }
+
+      ----- stderr -----
+      "#);
+    }
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
     assert_snapshot!(
