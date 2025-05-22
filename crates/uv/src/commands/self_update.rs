@@ -10,6 +10,7 @@ use uv_fs::Simplified;
 
 use crate::commands::ExitStatus;
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Attempt to update the uv binary.
 pub(crate) async fn self_update(
@@ -17,7 +18,26 @@ pub(crate) async fn self_update(
     token: Option<String>,
     dry_run: bool,
     printer: Printer,
+    network_settings: NetworkSettings,
 ) -> Result<ExitStatus> {
+    if network_settings.connectivity.is_offline() {
+        writeln!(
+            printer.stderr(),
+            "{}",
+            format_args!(
+                concat!(
+                "{}{} Self-update exited because network is disabled.",
+                "\n",
+                "\n",
+                "Hint: Remove --offline to continue self update."
+                ),
+                "error".red().bold(),
+                ":".bold()
+            )
+        )?;
+        return Ok(ExitStatus::Failure);
+    }
+
     let mut updater = AxoUpdater::new_for("uv");
     updater.disable_installer_output();
 
