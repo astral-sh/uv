@@ -11844,3 +11844,40 @@ fn add_optional_normalize() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+// #[cfg(feature = "registries")]
+fn add_private_pkg_azure() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.13"
+        dependencies = []
+    "#})?;
+
+    let token = std::env::var("UV_TEST_AZURE_TOKEN").unwrap();
+    let index_url = format!(
+        "https://{token}@pkgs.dev.azure.com/jtfmumm/uv-test/_packaging/uv-test-pkgs/pypi/simple/"
+    );
+
+    uv_snapshot!(context.filters(), context.add().arg("a01").arg("--index")
+        .arg(index_url), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
