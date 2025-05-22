@@ -234,7 +234,7 @@ jobs:
         uses: PyO3/maturin-action@44479ae1b6b1a57f561e03add8832e62c185eb17 # v1.48.1
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --locked --out dist --features self-update
+          args: --release --locked --out dist --features self-update,windows-gui-bin
       - name: "Test wheel"
         if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: bash
@@ -243,6 +243,7 @@ jobs:
           ${{ env.MODULE_NAME }} --help
           python -m ${{ env.MODULE_NAME }} --help
           uvx --help
+          uvw --help
       - name: "Upload wheels"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -254,6 +255,7 @@ jobs:
           ARCHIVE_FILE=uv-${{ matrix.platform.target }}.zip
           7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/uv.exe
           7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/uvx.exe
+          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/uvw.exe
           sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
       - name: "Upload binary"
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -175,6 +175,12 @@ python-managed = []
 slow-tests = []
 # Includes test cases that require ecosystem packages
 test-ecosystem = []
+# Build uvw binary on Windows
+windows-gui-bin = []
 
 [package.metadata.dist]
 dist = true
+
+[[bin]]
+name = "uvw"
+required-features = ["windows-gui-bin"]
