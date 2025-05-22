@@ -571,7 +571,8 @@ requires-python = ">=3.12"
 
 // Pass a ton of bump flags to a complex version
 // The flags are in a messy order and some are duplicated,
-// they should get sorted and the duplicates respected (i.e. 2 minor bumps)
+// Under extremely permissive semantics this could be allowed, but right
+// now it fails for a dozen reasons!
 #[test]
 fn many_bump_complex() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -595,14 +596,12 @@ requires-python = ">=3.12"
         .arg("--bump").arg("minor")
         .arg("--bump").arg("post")
         .arg("--bump").arg("post"), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 2
     ----- stdout -----
-    myproject 9!2.3.4a5.post6.dev7+deadbeef6 => 9!3.2.1a1.post2.dev1+deadbeef6
 
     ----- stderr -----
-    Resolved 1 package in [TIME]
-    Audited in [TIME]
+    error: `--bump post` cannot be combined with any other `--bump`
     ");
 
     let pyproject = fs_err::read_to_string(&pyproject_toml)?;
@@ -611,7 +610,7 @@ requires-python = ">=3.12"
     @r#"
     [project]
     name = "myproject"
-    version = "9!3.2.1a1.post2.dev1+deadbeef6"
+    version = "9!2.3.4a5.post6.dev7+deadbeef6"
     requires-python = ">=3.12"
     "#
     );
@@ -920,7 +919,7 @@ requires-python = ">=3.12"
     ----- stdout -----
 
     ----- stderr -----
-    error: 2.3.4.post6 => 2.3.4 was a version decrease, use `--allow-decreases` if this is desired
+    error: 2.3.4.post6 => 2.3.4 didn't increase the version
     ");
     Ok(())
 }
@@ -947,7 +946,7 @@ requires-python = ">=3.12"
     ----- stdout -----
 
     ----- stderr -----
-    error: 2.3.4b5 => 2.3.4a1 was a version decrease, use `--allow-decreases` if this is desired
+    error: 2.3.4b5 => 2.3.4a1 didn't increase the version
     ");
     Ok(())
 }
@@ -974,15 +973,42 @@ requires-python = ">=3.12"
     ----- stdout -----
 
     ----- stderr -----
-    error: 2.3.4 => 2.3.4a1 was a version decrease, use `--allow-decreases` if this is desired
+    error: 2.3.4 => 2.3.4a1 didn't increase the version; when moving to a prerelease you also need to increase the release `--bump patch`?
     ");
     Ok(())
 }
 
-// --bump alpha but it decreases the version from a stable
-// and --allow-decreases is passed
+// --bump major twice
 #[test]
-fn bump_decrease_allow() -> Result<()> {
+fn bump_double_major() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "2.3.4"
+requires-python = ">=3.12"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("major")
+        .arg("--bump").arg("major"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--bump` can only take one of `major`, `minor`, `patch`
+    ");
+    Ok(())
+}
+
+// --bump alpha twice
+#[test]
+fn bump_double_alpha() -> Result<()> {
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -997,15 +1023,187 @@ requires-python = ">=3.12"
 
     uv_snapshot!(context.filters(), context.version()
         .arg("--bump").arg("alpha")
-        .arg("--allow-decreases"), @r"
+        .arg("--bump").arg("alpha"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--bump` can only take one of `alpha`, `beta`, `rc`, `dev`
+    ");
+    Ok(())
+}
+
+// --bump stable --bump major
+#[test]
+fn bump_stable_major() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "2.3.4"
+requires-python = ">=3.12"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("stable")
+        .arg("--bump").arg("major"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--bump stable` isn't needed if you're already passing `--bump major`
+    ");
+    Ok(())
+}
+
+// --bump major --bump alpha
+#[test]
+fn bump_alpha_major() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "2.3.4"
+requires-python = ">=3.12"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("major")
+        .arg("--bump").arg("alpha"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    myproject 2.3.4 => 2.3.4a1
+    myproject 2.3.4 => 3.0.0a1
 
     ----- stderr -----
     Resolved 1 package in [TIME]
     Audited in [TIME]
+    ");
+    Ok(())
+}
+
+// --bump major --bump minor
+#[test]
+fn bump_minor_major() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "2.3.4"
+requires-python = ">=3.12"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("major")
+        .arg("--bump").arg("alpha"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    myproject 2.3.4 => 3.0.0a1
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+    Ok(())
+}
+
+// --bump alpha --bump dev
+#[test]
+fn bump_alpha_dev() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "2.3.4"
+requires-python = ">=3.12"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("alpha")
+        .arg("--bump").arg("dev"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--bump` can only take one of `alpha`, `beta`, `rc`, `dev`
+    ");
+    Ok(())
+}
+
+// --bump major --bump dev
+#[test]
+fn bump_dev_major() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "2.3.4"
+requires-python = ">=3.12"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("major")
+        .arg("--bump").arg("dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    myproject 2.3.4 => 3.0.0.dev1
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited in [TIME]
+    ");
+    Ok(())
+}
+
+// --bump major --bump post
+#[test]
+fn bump_post_major() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+[project]
+name = "myproject"
+version = "2.3.4"
+requires-python = ">=3.12"
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.version()
+        .arg("--bump").arg("major")
+        .arg("--bump").arg("post"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `--bump post` cannot be combined with any other `--bump`
     ");
     Ok(())
 }
