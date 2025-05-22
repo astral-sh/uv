@@ -629,7 +629,6 @@ jobs:
       #   with:
       #     arch: ${{ matrix.platform.arch }}
       #     distro: ubuntu20.04
-      #     githubToken: ${{ github.token }}
       #     install: |
       #       apt-get update
       #       apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
