@@ -535,10 +535,8 @@ pub struct VersionArgs {
 
     /// Update the project version using the given semantics
     ///
-    /// This flag can be passed multiple times, and the bumps will be applied in the
-    /// following order that prevents bumps from being undone by other bumps:
-    ///
-    ///     major > minor > patch > stable > alpha > beta > rc > post > dev
+    /// This flag can be passed multiple times to allow going to a new release and entering
+    /// a prerelease: `--bump patch --bump beta`
     #[arg(group = "operation", long)]
     pub bump: Vec<VersionBump>,
 
@@ -553,10 +551,6 @@ pub struct VersionArgs {
     /// By default, uv will show the project name before the version.
     #[arg(long)]
     pub short: bool,
-
-    /// Permit the result of `--bump` to be a version decrease
-    #[arg(long)]
-    pub allow_decreases: bool,
 
     /// The format of the output
     #[arg(long, value_enum, default_value = "text")]
@@ -643,6 +637,23 @@ pub enum VersionBump {
     Post,
     /// Increase the dev version (1.2.3a4.dev6 => 1.2.3.dev7)
     Dev,
+}
+
+impl std::fmt::Display for VersionBump {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let string = match self {
+            VersionBump::Major => "major",
+            VersionBump::Minor => "minor",
+            VersionBump::Patch => "patch",
+            VersionBump::Stable => "stable",
+            VersionBump::Alpha => "alpha",
+            VersionBump::Beta => "beta",
+            VersionBump::Rc => "rc",
+            VersionBump::Post => "post",
+            VersionBump::Dev => "dev",
+        };
+        string.fmt(f)
+    }
 }
 
 #[derive(Args)]

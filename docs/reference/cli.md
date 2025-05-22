@@ -769,14 +769,12 @@ uv version [OPTIONS] [VALUE]
 
 <dl class="cli-reference"><dt id="uv-version--active"><a href="#uv-version--active"><code>--active</code></a></dt><dd><p>Prefer the active virtual environment over the project's virtual environment.</p>
 <p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
-</dd><dt id="uv-version--allow-decreases"><a href="#uv-version--allow-decreases"><code>--allow-decreases</code></a></dt><dd><p>Permit the result of <code>--bump</code> to be a version decrease</p>
 </dd><dt id="uv-version--allow-insecure-host"><a href="#uv-version--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 <p>Can be provided multiple times.</p>
 <p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
 <p>WARNING: Hosts included in this list will not be verified against the system's certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
 <p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-version--bump"><a href="#uv-version--bump"><code>--bump</code></a> <i>bump</i></dt><dd><p>Update the project version using the given semantics</p>
-<p>This flag can be passed multiple times, and the bumps will be applied in the following order that prevents bumps from being undone by other bumps:</p>
-<p>major &gt; minor &gt; patch &gt; stable &gt; alpha &gt; beta &gt; rc &gt; post &gt; dev</p>
+<p>This flag can be passed multiple times to allow going to a new release and entering a prerelease: <code>--bump patch --bump beta</code></p>
 <p>Possible values:</p>
 <ul>
 <li><code>major</code>:  Increase the major version (1.2.3 =&gt; 2.0.0)</li>

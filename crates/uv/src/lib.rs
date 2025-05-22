@@ -1989,7 +1989,6 @@ async fn run_project(
                 args.short,
                 args.output_format,
                 strict,
-                args.allow_decreases,
                 project_dir,
                 args.package,
                 args.dry_run,

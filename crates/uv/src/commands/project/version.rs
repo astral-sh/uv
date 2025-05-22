@@ -59,7 +59,6 @@ pub(crate) async fn project_version(
     short: bool,
     output_format: VersionFormat,
     strict: bool,
-    allow_decreases: bool,
     project_dir: &Path,
     package: Option<PackageName>,
     dry_run: bool,
@@ -171,8 +170,82 @@ pub(crate) async fn project_version(
             },
         }
     } else if !bump.is_empty() {
+        // While we can rationalize many of these combinations of operations together,
+        // we want to conservatively refuse to support any of them until users demand it.
+        //
+        // The most complex thing we *do* allow is `--bump major --bump beta --bump dev`
+        // because that makes perfect sense and is reasonable to do.
+        let release_components: Vec<_> = bump
+            .iter()
+            .filter(|bump| {
+                matches!(
+                    bump,
+                    VersionBump::Major | VersionBump::Minor | VersionBump::Patch
+                )
+            })
+            .collect();
+        let prerelease_components: Vec<_> = bump
+            .iter()
+            .filter(|bump| {
+                matches!(
+                    bump,
+                    VersionBump::Alpha | VersionBump::Beta | VersionBump::Rc | VersionBump::Dev
+                )
+            })
+            .collect();
+        let post_count = bump
+            .iter()
+            .filter(|bump| *bump == &VersionBump::Post)
+            .count();
+        let stable_count = bump
+            .iter()
+            .filter(|bump| *bump == &VersionBump::Stable)
+            .count();
+
+        // Very little reason to do "bump to stable" and then do other things,
+        // even if we can make sense of it.
+        if stable_count > 0 && bump.len() > 1 {
+            if let Some(component) = release_components.first() {
+                return Err(anyhow!(
+                    "`--bump stable` isn't needed if you're already passing `--bump {component}`"
+                ));
+            }
+            return Err(anyhow!(
+                "`--bump stable` cannot be combined with any other `--bump`"
+            ));
+        }
+
+        // Very little reason to "bump to post" and then do other things,
+        // how is it a post-release otherwise?
+        if post_count > 0 && bump.len() > 1 {
+            return Err(anyhow!(
+                "`--bump post` cannot be combined with any other `--bump`"
+            ));
+        }
+
+        // `--bump major --bump minor` makes perfect sense (1.2.3 => 2.1.0)
+        // ...but it's weird and probably a mistake?
+        // `--bump major --bump major` perfect sense (1.2.3 => 3.0.0)
+        // ...but it's weird and probably a mistake?
+        if release_components.len() > 1 {
+            return Err(anyhow!(
+                "`--bump` can only take one of `major`, `minor`, `patch`"
+            ));
+        }
+
+        // `--bump alpha --bump beta` is basically completely incoherent
+        // `--bump beta --bump beta` makes perfect sense (1.2.3b4 => 1.2.3b6)
+        // ...but it's weird and probably a mistake?
+        // `--bump beta --bump dev` makes perfect sense (1.2.3 => 1.2.3b1.dev1)
+        // ...but we want to discourage mixing `dev` with prereleases
+        if prerelease_components.len() > 1 {
+            return Err(anyhow!(
+                "`--bump` can only take one of `alpha`, `beta`, `rc`, `dev`"
+            ));
+        }
+
         // Sort the given commands so the user doesn't have to care about
-        // the ordering of `--bump minor --bump major` (only one ordering is ever useful)
+        // the ordering of `--bump minor --bump beta` (only one ordering is ever useful)
         bump.sort();
 
         // Apply all the bumps
@@ -198,9 +271,14 @@ pub(crate) async fn project_version(
             new_version.bump(command);
         }
 
-        if !allow_decreases && new_version < old_version {
+        if new_version <= old_version {
+            if old_version.is_stable() && new_version.is_pre() {
+                return Err(anyhow!(
+                    "{old_version} => {new_version} didn't increase the version; when moving to a prerelease you also need to increase the release `--bump patch`?"
+                ));
+            }
             return Err(anyhow!(
-                "{old_version} => {new_version} was a version decrease, use `--allow-decreases` if this is desired"
+                "{old_version} => {new_version} didn't increase the version"
             ));
         }
 
