@@ -422,8 +422,8 @@ impl From<&IndexLocations> for uv_auth::Indexes {
             root_url.set_username("").ok();
             root_url.set_password(None).ok();
             uv_auth::Index {
-                url: Url::from(url),
-                root_url: Url::from(root_url),
+                url,
+                root_url,
                 auth_policy: index.authenticate,
             }
         }))
