@@ -3,6 +3,26 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.7
+
+### Python
+
+- Work around third-party packages that (incorrectly) assume the interpreter is dynamically linking libpython
+- Allow the experimental JIT to be enabled at runtime on Python 3.13 and 3.14 on macOS on aarch64 aka Apple Silicon
+
+See the
+[`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250521)
+for more details.
+
+### Bug fixes
+
+- Make `uv version` lock and sync ([#13317](https://github.com/astral-sh/uv/pull/13317))
+- Fix references to `ldd` in diagnostics to correctly refer to `ld.so` ([#13552](https://github.com/astral-sh/uv/pull/13552))
+
+### Documentation
+
+- Clarify adding SSH Git dependencies ([#13534](https://github.com/astral-sh/uv/pull/13534))
+
 ## 0.7.6
 
 ### Python
