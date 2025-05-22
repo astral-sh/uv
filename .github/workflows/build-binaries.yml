@@ -417,7 +417,7 @@ jobs:
           manylinux: ${{ matrix.platform.arch == 'aarch64' && '2_28' || 'auto' }}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update
-      - uses: uraimo/run-on-arch-action@ac33288c3728ca72563c97b8b88dda5a65a84448 # v2
+      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch == 'arm' && 'armv6' || matrix.platform.arch }}
@@ -466,7 +466,7 @@ jobs:
           manylinux: ${{ matrix.platform.arch == 'aarch64' && '2_28' || 'auto' }}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
-      - uses: uraimo/run-on-arch-action@ac33288c3728ca72563c97b8b88dda5a65a84448 # v2
+      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel uv-build"
         with:
           arch: ${{ matrix.platform.arch == 'arm' && 'armv6' || matrix.platform.arch }}
@@ -513,7 +513,7 @@ jobs:
           manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update
-      - uses: uraimo/run-on-arch-action@ac33288c3728ca72563c97b8b88dda5a65a84448 # v2
+      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         if: matrix.platform.arch != 'ppc64'
         name: "Test wheel"
         with:
@@ -562,7 +562,7 @@ jobs:
           manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --profile minimal-size --locked --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
-      - uses: uraimo/run-on-arch-action@ac33288c3728ca72563c97b8b88dda5a65a84448 # v2
+      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         if: matrix.platform.arch != 'ppc64'
         name: "Test wheel uv-build"
         with:
@@ -623,13 +623,12 @@ jobs:
                 yum install -y gcc-powerpc64-linux-gnu
             fi
       # TODO(charlie): Re-enable testing for PPC wheels.
-      # - uses: uraimo/run-on-arch-action@v2
+      # - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
       #   if: matrix.platform.arch != 'ppc64'
       #   name: "Test wheel"
       #   with:
       #     arch: ${{ matrix.platform.arch }}
       #     distro: ubuntu20.04
-      #     githubToken: ${{ github.token }}
       #     install: |
       #       apt-get update
       #       apt-get install -y --no-install-recommends python3 python3-pip python-is-python3
@@ -807,7 +806,7 @@ jobs:
           args: --release --locked --out dist --features self-update ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}}
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
-      - uses: uraimo/run-on-arch-action@ac33288c3728ca72563c97b8b88dda5a65a84448 # v2
+      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch }}
@@ -821,7 +820,7 @@ jobs:
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # .venv/bin/python -m ${{ env.MODULE_NAME }} --help
             .venv/bin/uvx --help
-      - uses: uraimo/run-on-arch-action@ac33288c3728ca72563c97b8b88dda5a65a84448 # v2
+      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel (manylinux)"
         if: matrix.platform.arch == 'aarch64'
         with:
@@ -872,7 +871,7 @@ jobs:
           args: --profile minimal-size --locked ${{ matrix.platform.arch == 'aarch64' && '--compatibility 2_17' || ''}} --out crates/uv-build/dist -m crates/uv-build/Cargo.toml
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           rust-toolchain: ${{ matrix.platform.toolchain || null }}
-      - uses: uraimo/run-on-arch-action@ac33288c3728ca72563c97b8b88dda5a65a84448 # v2
+      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel"
         with:
           arch: ${{ matrix.platform.arch }}
@@ -885,7 +884,7 @@ jobs:
             .venv/bin/${{ env.MODULE_NAME }}-build --help
             # TODO(konsti): Enable this test on all platforms, currently `find_uv_bin` is failing to discover uv here.
             # .venv/bin/python -m ${{ env.MODULE_NAME }}_build --help
-      - uses: uraimo/run-on-arch-action@ac33288c3728ca72563c97b8b88dda5a65a84448 # v2
+      - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         name: "Test wheel (manylinux)"
         if: matrix.platform.arch == 'aarch64'
         with:
