@@ -67,7 +67,7 @@ To run marimo in a virtual environment that isn't associated with a
 === "macOS and Linux"
 
     ```console
-    $ uv venv --seed
+    $ uv venv
     $ uv pip install numpy
     $ uv pip install marimo
     $ .venv/bin/marimo edit
@@ -76,7 +76,7 @@ To run marimo in a virtual environment that isn't associated with a
 === "Windows"
 
     ```pwsh-session
-    PS> uv venv --seed
+    PS> uv venv
     PS> uv pip install numpy
     PS> uv pip install marimo
     PS> .venv\Scripts\marimo edit
