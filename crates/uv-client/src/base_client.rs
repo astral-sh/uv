@@ -520,7 +520,7 @@ impl RedirectClientWithMiddleware {
         }
     }
 
-    /// Executes a request. If the response is a redirect (one of HTTP 301, 302, 307, or 308), the
+    /// Executes a request. If the response is a redirect (one of HTTP 301, 302, 303, 307, or 308), the
     /// request is executed again with the redirect location URL (up to a maximum number of
     /// redirects).
     ///
@@ -551,12 +551,13 @@ impl RedirectClientWithMiddleware {
                 return result;
             };
 
-            // Handle redirect if we receive a 301, 302, 307, or 308.
+            // Handle redirect if we receive a 301, 302, 303, 307, or 308.
             let status = response.status();
             if matches!(
                 status,
                 StatusCode::MOVED_PERMANENTLY
                     | StatusCode::FOUND
+                    | StatusCode::SEE_OTHER
                     | StatusCode::TEMPORARY_REDIRECT
                     | StatusCode::PERMANENT_REDIRECT
             ) {
