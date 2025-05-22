@@ -1269,9 +1269,7 @@ fn run_with() -> Result<()> {
 /// search paths are available in these ephemeral environments.
 #[test]
 fn run_with_pyvenv_cfg_file() -> Result<()> {
-    let context = TestContext::new("3.12")
-        .with_filtered_python_home_key()
-        .with_filtered_uv_version();
+    let context = TestContext::new("3.12").with_pyvenv_cfg_filters();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -1279,7 +1277,6 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
         name = "foo"
         version = "1.0.0"
         requires-python = ">=3.8"
-        dependencies = ["sniffio==1.3.0"]
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -1306,15 +1303,14 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
     version_info = 3.12.[X]
     include-system-site-packages = false
     relocatable = true
-    extends-environment = [VENV]/
+    extends-environment = [PARENT_VENV]
 
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + foo==1.0.0 (from file://[TEMP_DIR]/)
-     + sniffio==1.3.0
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]

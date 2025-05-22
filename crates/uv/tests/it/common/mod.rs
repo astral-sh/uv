@@ -243,23 +243,27 @@ impl TestContext {
         self
     }
 
-    /// Filtering for the `home = foo/bar/baz/python3.X.X/bin` key in a `pyvenv.cfg` file
+    /// Filtering for various keys in a `pyvenv.cfg` file that will vary
+    /// depending on the specific machine used:
+    /// - `home = foo/bar/baz/python3.X.X/bin`
+    /// - `uv = X.Y.Z`
+    /// - `extends-environment = <path/to/parent/venv>`
     #[must_use]
-    pub fn with_filtered_python_home_key(mut self) -> Self {
-        self.filters.push((
-            r"\nhome = .+\n".to_string(),
-            "\nhome = [PYTHON_HOME]\n".to_string(),
-        ));
-        self
-    }
-
-    /// Filtering for the `uv = X.Y.Z` key in a `pyvenv.cfg` file
-    #[must_use]
-    pub fn with_filtered_uv_version(mut self) -> Self {
-        self.filters.push((
-            r"\nuv = \d.\d.\d\n".to_string(),
-            "\nuv = [UV_VERSION]\n".to_string(),
-        ));
+    pub fn with_pyvenv_cfg_filters(mut self) -> Self {
+        let added_filters = [
+            (r"home = .+".to_string(), "home = [PYTHON_HOME]".to_string()),
+            (
+                r"uv = \d+\.\d+\.\d+".to_string(),
+                "uv = [UV_VERSION]".to_string(),
+            ),
+            (
+                r"extends-environment = .+".to_string(),
+                "extends-environment = [PARENT_VENV]".to_string(),
+            ),
+        ];
+        for filter in added_filters {
+            self.filters.insert(0, filter);
+        }
         self
     }
 
