@@ -534,8 +534,13 @@ pub struct VersionArgs {
     pub value: Option<String>,
 
     /// Update the project version using the given semantics
+    ///
+    /// This flag can be passed multiple times, and the bumps will be applied in the
+    /// following order that prevents bumps from being undone by other bumps:
+    ///
+    ///     major > minor > patch > stable > alpha > beta > rc > post > dev
     #[arg(group = "operation", long)]
-    pub bump: Option<VersionBump>,
+    pub bump: Vec<VersionBump>,
 
     /// Don't write a new version to the `pyproject.toml`
     ///
@@ -548,6 +553,10 @@ pub struct VersionArgs {
     /// By default, uv will show the project name before the version.
     #[arg(long)]
     pub short: bool,
+
+    /// Permit the result of `--bump` to be a version decrease
+    #[arg(long)]
+    pub allow_decreases: bool,
 
     /// The format of the output
     #[arg(long, value_enum, default_value = "text")]
@@ -610,7 +619,9 @@ pub struct VersionArgs {
     pub python: Option<Maybe<String>>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, clap::ValueEnum)]
+// Note that the ordering of the variants is significant, as when given a list of operations
+// to perform, we sort them and apply them in order, so users don't have to think too hard about it.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
 pub enum VersionBump {
     /// Increase the major version (1.2.3 => 2.0.0)
     Major,
@@ -618,6 +629,20 @@ pub enum VersionBump {
     Minor,
     /// Increase the patch version (1.2.3 => 1.2.4)
     Patch,
+    /// Make the version stable (1.2.3b4.post5.dev6 => 1.2.3)
+    ///
+    /// This intentionally clears `.postN` and preserves `+local`
+    Stable,
+    /// Increase the alpha version (1.2.3a4 => 1.2.3a5)
+    Alpha,
+    /// Increase the beta version (1.2.3b4 => 1.2.3b5)
+    Beta,
+    /// Increase the rc version (1.2.3rc4 => 1.2.3rc5)
+    Rc,
+    /// Increase the post version (1.2.3.post5 => 1.2.3.post6)
+    Post,
+    /// Increase the dev version (1.2.3a4.dev6 => 1.2.3.dev7)
+    Dev,
 }
 
 #[derive(Args)]

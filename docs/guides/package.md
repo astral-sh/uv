@@ -55,6 +55,83 @@ Alternatively, `uv build <SRC>` will build the package in the specified director
     running `uv build --no-sources` to ensure that the package builds correctly when `tool.uv.sources`
     is disabled, as is the case when using other build tools, like [`pypa/build`](https://github.com/pypa/build).
 
+## Updating your version
+
+The `uv version` command provides conveniences for updating the version of your package before you
+publish it.
+[See the project docs for reading your package's version](./projects.md#managing-version).
+
+To set the the exact version of your package, just pass that version:
+
+```console
+$ uv version 1.0.0
+hello-world 0.7.0 => 1.0.0
+```
+
+If you want to preview the change without actually applying it, use the `--dry-run` flag:
+
+```console
+$ uv version 2.0.0 --dry-run
+hello-world 1.0.0 => 2.0.0
+$ uv version
+hello-world 1.0.0
+```
+
+If you want to change the version of a particular package, use the `--package` flag:
+
+```console
+$ uv version --package hello-world 1.2.3
+hello-world 1.0.0 => 1.2.3
+```
+
+To increase the version of your package, use the `--bump` flag:
+
+```console
+$ uv version --bump minor
+hello-world 1.2.3 => 1.3.0
+```
+
+The `--bump` flag can be passed multiple times, and uv will run them in the following order that
+prevents bumps from clobbering eachother:
+
+```text
+    major > minor > patch > stable > alpha > beta > rc > post > dev
+```
+
+When you're on a stable version and want to start shipping prereleases, you'll want to bump the
+release and the prerelease:
+
+```console
+$ uv version --bump patch --bump beta
+hello-world 1.3.0 => 1.3.1b1
+```
+
+!!! Note
+
+    If you only bump the prerelease here it will actually decrease the current version.
+    `uv version` will error if that ever happens. If you intended to do that, you can pass
+    `--allow-decreases` to disable the check.
+
+When you're on a prerelease and want to ship another, you can just bump the prerelease:
+
+```console
+uv version --bump beta
+hello-world 1.3.0b1 => 1.3.1b2
+```
+
+When you're on a prerelease and want to ship a stable version, you can bump to stable:
+
+```console
+uv version --bump stable
+hello-world 1.3.1b2 => 1.3.1
+```
+
+!!! info
+
+    By default, when `uv version` modifies your package it will lock and sync your project to
+    ensure everything sees the change. To prevent locking and syncing, pass `--frozen`. To just
+    prevent syncing, pass `--no-sync`.
+
 ## Publishing your package
 
 Publish your package with `uv publish`:
