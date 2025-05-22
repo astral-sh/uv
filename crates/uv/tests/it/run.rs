@@ -1264,6 +1264,66 @@ fn run_with() -> Result<()> {
     Ok(())
 }
 
+// Tests that an ephemeral environment writes the path of its parent environment to the `extends-environment` key
+// of its `pyvenv.cfg` file. This feature makes it easier for static-analysis tools like ty to resolve which import
+// search paths are available in these ephemeral environments.
+#[test]
+fn run_with_pyvenv_cfg_file() -> Result<()> {
+    let context = TestContext::new("3.12")
+        .with_filtered_python_home_key()
+        .with_filtered_uv_version();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.8"
+        dependencies = ["sniffio==1.3.0"]
+
+        [build-system]
+        requires = ["setuptools>=42"]
+        build-backend = "setuptools.build_meta"
+        "#
+    })?;
+
+    let test_script = context.temp_dir.child("main.py");
+    test_script.write_str(indoc! { r#"
+        import os
+
+        with open(f'{os.getenv("VIRTUAL_ENV")}/pyvenv.cfg') as f:
+            print(f.read())
+       "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main.py"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    home = [PYTHON_HOME]
+    implementation = CPython
+    uv = [UV_VERSION]
+    version_info = 3.12.[X]
+    include-system-site-packages = false
+    relocatable = true
+    extends-environment = [VENV]/
+
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + foo==1.0.0 (from file://[TEMP_DIR]/)
+     + sniffio==1.3.0
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn run_with_build_constraints() -> Result<()> {
     let context = TestContext::new("3.8");

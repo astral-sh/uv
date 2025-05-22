@@ -243,6 +243,26 @@ impl TestContext {
         self
     }
 
+    /// Filtering for the `home = foo/bar/baz/python3.X.X/bin` key in a `pyvenv.cfg` file
+    #[must_use]
+    pub fn with_filtered_python_home_key(mut self) -> Self {
+        self.filters.push((
+            r"\nhome = .+\n".to_string(),
+            "\nhome = [PYTHON_HOME]\n".to_string(),
+        ));
+        self
+    }
+
+    /// Filtering for the `uv = X.Y.Z` key in a `pyvenv.cfg` file
+    #[must_use]
+    pub fn with_filtered_uv_version(mut self) -> Self {
+        self.filters.push((
+            r"\nuv = \d.\d.\d\n".to_string(),
+            "\nuv = [UV_VERSION]\n".to_string(),
+        ));
+        self
+    }
+
     /// Add extra filtering for ` -> <PATH>` symlink display for Python versions in the test
     /// context, e.g., for use in `uv python list`.
     #[must_use]
