@@ -1264,9 +1264,9 @@ fn run_with() -> Result<()> {
     Ok(())
 }
 
-// Tests that an ephemeral environment writes the path of its parent environment to the `extends-environment` key
-// of its `pyvenv.cfg` file. This feature makes it easier for static-analysis tools like ty to resolve which import
-// search paths are available in these ephemeral environments.
+/// Test that an ephemeral environment writes the path of its parent environment to the `extends-environment` key
+/// of its `pyvenv.cfg` file. This feature makes it easier for static-analysis tools like ty to resolve which import
+/// search paths are available in these ephemeral environments.
 #[test]
 fn run_with_pyvenv_cfg_file() -> Result<()> {
     let context = TestContext::new("3.12")
