@@ -3,8 +3,9 @@ use std::{env, path::Path, process::Command};
 use crate::common::{TestContext, uv_snapshot};
 use assert_fs::{
     assert::PathAssert,
-    prelude::{FileTouch, PathChild, PathCreateDir},
+    prelude::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
 };
+use indoc::indoc;
 use predicates::prelude::predicate;
 use tracing::debug;
 use uv_fs::Simplified;
@@ -284,6 +285,41 @@ fn python_install_automatic() {
         ----- stderr -----
         "###);
     }
+}
+
+/// Regression test for a bad cpython runtime
+/// <https://github.com/astral-sh/uv/issues/13610>
+#[test]
+fn regression_cpython() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_python_sources()
+        .with_managed_python_dirs();
+
+    let init = context.temp_dir.child("mre.py");
+    init.write_str(indoc! { r#"
+        class Foo(str): ...
+
+        a = []
+        new_value = Foo("1")
+        a += new_value
+        "#
+    })
+    .unwrap();
+
+    // We should respect the Python request
+    uv_snapshot!(context.filters(), context.run()
+        .env_remove("VIRTUAL_ENV")
+        .arg("-p").arg("3.12")
+        .arg("mre.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+
+    "###);
 }
 
 #[test]
