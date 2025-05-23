@@ -40,7 +40,7 @@ anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 fs-err = { workspace = true, features = ["tokio"] }
 itertools = { workspace = true }
-markdown = { version = "0.3.0" }
+markdown = { version = "1.0.0" }
 owo-colors = { workspace = true }
 poloto = { version = "19.1.2", optional = true }
 pretty_assertions = { version = "1.4.1" }
