@@ -22,6 +22,7 @@ uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true }
 uv-metadata = { workspace = true }
+uv-pep440 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-static = { workspace = true }
 uv-warnings = { workspace = true }

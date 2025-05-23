@@ -1,6 +1,7 @@
 mod trusted_publishing;
 
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use std::{env, fmt, io};
@@ -37,6 +38,7 @@ use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
+use uv_pep440::Version;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
@@ -732,7 +734,6 @@ async fn form_metadata(
 
     add_vec("classifiers", classifiers);
     add_vec("dynamic", dynamic);
-    add_vec("license_file", license_files);
     add_vec("obsoletes_dist", obsoletes_dist);
     add_vec("platform", platforms);
     add_vec("project_urls", project_urls);
@@ -740,6 +741,17 @@ async fn form_metadata(
     add_vec("provides_extra", provides_extras);
     add_vec("requires_dist", requires_dist);
     add_vec("requires_external", requires_external);
+
+    // See: https://github.com/pypa/setuptools/issues/4759
+    if Version::from_str(&metadata_version).is_ok_and(|version| version == Version::new([2, 1])) {
+        if !license_files.is_empty() {
+            warn!(
+                "`license_file` was introduced in Metadata 2.4, but the metadata version is {metadata_version}; omitting..."
+            );
+        }
+    } else {
+        add_vec("license_file", license_files);
+    }
 
     Ok(form_metadata)
 }
