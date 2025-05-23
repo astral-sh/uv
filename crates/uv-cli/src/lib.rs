@@ -5016,9 +5016,6 @@ pub struct PythonPinArgs {
     ///
     /// When a local Python version pin is not found in the working directory or an ancestor
     /// directory, this version will be used instead.
-    ///
-    /// Unlike local version pins, this version is used as the default for commands that mutate
-    /// global state, like `uv tool install`.
     #[arg(long)]
     pub global: bool,
 }
