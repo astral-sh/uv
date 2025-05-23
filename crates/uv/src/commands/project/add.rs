@@ -97,7 +97,7 @@ pub(crate) async fn add(
 ) -> Result<ExitStatus> {
     if bounds.is_some() && preview.is_disabled() {
         warn_user_once!(
-            "The bounds option is in preview and its configuration may change in any future release."
+            "The bounds option is in preview and may change in any future release."
         );
     }
 
