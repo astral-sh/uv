@@ -70,6 +70,7 @@ CPYTHON_BAD_LINUX_RUNTIME_START = 20250517
 # only on some platforms, so hide it everywhere.
 CPYTHON_HIDDEN_ALPHA = "3.14.0a7"
 
+
 def batched(iterable: Iterable, n: int) -> Generator[tuple, None, None]:
     """Batch data into tuples of length n. The last batch may be shorter."""
     # batched('ABCDEFG', 3) --> ABC DEF G
