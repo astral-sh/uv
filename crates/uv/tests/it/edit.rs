@@ -496,6 +496,48 @@ fn add_git_private_raw() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+#[cfg(feature = "git")]
+async fn add_git_private_rate_limited_by_github_rest_api() -> Result<()> {
+    use uv_client::DEFAULT_RETRIES;
+
+    let context = TestContext::new("3.12");
+    let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(429))
+        .expect(1 + u64::from(DEFAULT_RETRIES))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"))
+        .env("UV_GITHUB_FAST_PATH_URL", server.uri()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-private-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+    ");
+
+    Ok(())
+}
+
 #[test]
 #[cfg(feature = "git")]
 fn add_git_error() -> Result<()> {
