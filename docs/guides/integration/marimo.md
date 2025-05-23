@@ -85,6 +85,14 @@ To run marimo in a virtual environment that isn't associated with a
 From here, `import numpy` will work within the notebook, and marimo's UI installer will add
 packages to the environment with `uv pip install` on your behalf.
 
+## Running marimo notebooks as scripts
+
+Run your notebooks as scripts with
+
+```console
+$ uv run my_notebook.py
+```
+
 ## Using marimo as a standalone tool
 
 For adhoc access to marimo notebooks, start a marimo server at any time, in an isolated environment, with
