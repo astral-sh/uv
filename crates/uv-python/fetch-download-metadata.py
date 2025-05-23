@@ -66,7 +66,9 @@ VERSIONS_FILE = SELF_DIR / "download-metadata.json"
 CPYTHON_MUSL_STATIC_RELEASE_END = 20250311
 # The date at which the linux CPython builds started to have seemingly buggy runtimes
 CPYTHON_BAD_LINUX_RUNTIME_START = 20250517
-
+# This alpha was introduced in the bad linux runtime, and we don't want to show it
+# only on some platforms, so hide it everywhere.
+CPYTHON_HIDDEN_ALPHA = "3.14.0a7"
 
 def batched(iterable: Iterable, n: int) -> Generator[tuple, None, None]:
     """Batch data into tuples of length n. The last batch may be shorter."""
@@ -271,6 +273,8 @@ class CPythonFinder(Finder):
                         and download.triple.platform == "linux"
                         and download.triple.arch.family != "aarch64"
                     ):
+                        continue
+                    if (str(download.version) == CPYTHON_HIDDEN_ALPHA):
                         continue
                     logging.debug("Found %s (%s)", download.key(), download.filename)
                     downloads_by_version.setdefault(download.version, []).append(
