@@ -187,7 +187,7 @@ windows-registry = { version = "0.5.0" }
 windows-result = { version = "0.3.0" }
 windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO", "Win32_System_Registry"] }
 winsafe = { version = "0.0.23", features = ["kernel"] }
-wiremock = { version = "0.6.2" }
+wiremock = { git = "https://github.com/konstin/wiremock-rs", rev = "131ad0a3e7a247c867fc290319047fc086995271" }
 xz2 = { version = "0.1.7" }
 zip = { version = "2.2.3", default-features = false, features = ["deflate"] }
 
