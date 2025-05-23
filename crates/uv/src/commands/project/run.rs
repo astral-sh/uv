@@ -443,6 +443,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     uv_virtualenv::Prompt::None,
                     false,
                     false,
+                    uv_virtualenv::VenvForceMode::ReplaceAny,
                     false,
                     false,
                 )?;
@@ -638,6 +639,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     uv_virtualenv::Prompt::None,
                     false,
                     false,
+                    uv_virtualenv::VenvForceMode::ReplaceAny,
                     false,
                     false,
                 )?
@@ -869,6 +871,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     uv_virtualenv::Prompt::None,
                     false,
                     false,
+                    uv_virtualenv::VenvForceMode::ReplaceAny,
                     false,
                     false,
                 )?;
