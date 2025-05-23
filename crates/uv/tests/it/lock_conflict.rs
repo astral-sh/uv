@@ -7705,11 +7705,11 @@ fn incorrect_extra_simplification_leads_to_multiple_torch_packages() -> Result<(
 
         [[package]]
         name = "configargparse"
-        version = "1.7"
+        version = "1.5.3"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/70/8a/73f1008adfad01cb923255b924b1528727b8270e67cb4ef41eabdc7d783e/ConfigArgParse-1.7.tar.gz", hash = "sha256:e7067471884de5478c58a511e529f0f9bd1c66bfef1dea90935438d6c23306d1", size = 43817, upload-time = "2023-07-23T16:20:04.95Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/05/385451bc8d20a3aa1d8934b32bd65847c100849ebba397dbf6c74566b237/ConfigArgParse-1.5.3.tar.gz", hash = "sha256:1b0b3cbf664ab59dada57123c81eff3d9737e0d11d8cf79e3d6eb10823f1739f", size = 39175, upload-time = "2021-10-03T00:17:24.663Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/6f/b3/b4ac838711fd74a2b4e6f746703cf9dd2cf5462d17dac07e349234e21b97/ConfigArgParse-1.7-py3-none-any.whl", hash = "sha256:d249da6591465c6c26df64a9f73d2536e743be2f244eb3ebe61114af2f94f86b", size = 25489, upload-time = "2023-07-23T16:20:03.27Z" },
+            { url = "https://files.pythonhosted.org/packages/af/cb/2a6620656f029b7b49c302853b433fac2c8eda9cbb5a3bc70b186b1b5b90/ConfigArgParse-1.5.3-py3-none-any.whl", hash = "sha256:18f6535a2db9f6e02bd5626cc7455eac3e96b9ab3d969d366f9aafd5c5c00fe7", size = 20505, upload-time = "2021-10-03T00:17:22.974Z" },
         ]
 
         [[package]]
@@ -10549,11 +10549,11 @@ fn duplicate_torch_and_sympy_because_of_wrong_inferences() -> Result<()> {
 
         [[package]]
         name = "configargparse"
-        version = "1.7"
+        version = "1.5.3"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/70/8a/73f1008adfad01cb923255b924b1528727b8270e67cb4ef41eabdc7d783e/ConfigArgParse-1.7.tar.gz", hash = "sha256:e7067471884de5478c58a511e529f0f9bd1c66bfef1dea90935438d6c23306d1", size = 43817, upload-time = "2023-07-23T16:20:04.95Z" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/05/385451bc8d20a3aa1d8934b32bd65847c100849ebba397dbf6c74566b237/ConfigArgParse-1.5.3.tar.gz", hash = "sha256:1b0b3cbf664ab59dada57123c81eff3d9737e0d11d8cf79e3d6eb10823f1739f", size = 39175, upload-time = "2021-10-03T00:17:24.663Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/6f/b3/b4ac838711fd74a2b4e6f746703cf9dd2cf5462d17dac07e349234e21b97/ConfigArgParse-1.7-py3-none-any.whl", hash = "sha256:d249da6591465c6c26df64a9f73d2536e743be2f244eb3ebe61114af2f94f86b", size = 25489, upload-time = "2023-07-23T16:20:03.27Z" },
+            { url = "https://files.pythonhosted.org/packages/af/cb/2a6620656f029b7b49c302853b433fac2c8eda9cbb5a3bc70b186b1b5b90/ConfigArgParse-1.5.3-py3-none-any.whl", hash = "sha256:18f6535a2db9f6e02bd5626cc7455eac3e96b9ab3d969d366f9aafd5c5c00fe7", size = 20505, upload-time = "2021-10-03T00:17:22.974Z" },
         ]
 
         [[package]]
