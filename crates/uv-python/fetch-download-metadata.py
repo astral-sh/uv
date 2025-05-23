@@ -64,7 +64,8 @@ VERSIONS_FILE = SELF_DIR / "download-metadata.json"
 # The date at which the default CPython musl builds became dynamically linked
 # instead of statically.
 CPYTHON_MUSL_STATIC_RELEASE_END = 20250311
-CPYTHON_BAD_LINUX_RUNTIME = 20250521
+# The date at which the linux CPython builds started to have seemingly buggy runtimes
+CPYTHON_BAD_LINUX_RUNTIME_START = 20250517
 
 
 def batched(iterable: Iterable, n: int) -> Generator[tuple, None, None]:
@@ -266,7 +267,7 @@ class CPythonFinder(Finder):
                     ):
                         continue
                     if (
-                        download.release == CPYTHON_BAD_LINUX_RUNTIME
+                        download.release == CPYTHON_BAD_LINUX_RUNTIME_START
                         and download.triple.platform == "linux"
                     ):
                         continue
