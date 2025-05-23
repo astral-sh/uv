@@ -3,6 +3,29 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.8
+
+### Python
+
+We are reverting most of our Python changes from `uv 0.7.6` and `uv 0.7.7` due to
+a miscompilation that makes the Python interpretter behave incorrectly, resulting
+in spurious type-errors involving str. This issue seems to be isolated to
+x86_64 Linux, and affected at least Python 3.12, 3.13, and 3.14.
+
+The following changes that were introduced in those versions of uv are temporarily
+being reverted while we test and deploy a proper fix for the miscompilation:
+
+- Add Python 3.14 on musl
+- free-threaded Python on musl
+- Add Python 3.14.0a7
+- Statically link `libpython` into the interpreter on Linux for a significant performance boost
+
+See [the issue for details](https://github.com/astral-sh/uv/issues/13610).
+
+### Documentation
+
+- Remove misleading line in pin documentation ([#13611](https://github.com/astral-sh/uv/pull/13611))
+
 ## 0.7.7
 
 ### Python
