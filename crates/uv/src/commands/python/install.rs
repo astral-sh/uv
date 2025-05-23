@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::fmt::Write;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{Error, Result};
 use futures::StreamExt;
@@ -15,11 +16,12 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{
-    ManagedPythonInstallation, ManagedPythonInstallations, python_executable_dir,
+    DirectorySymlink, ManagedPythonInstallation, ManagedPythonInstallations, create_bin_link,
+    python_executable_dir,
 };
 use uv_python::platform::{Arch, Libc};
 use uv_python::{
-    PythonDownloads, PythonInstallationKey, PythonRequest, PythonVersionFile,
+    ImplementationName, PythonDownloads, PythonInstallationKey, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
 };
 use uv_shell::Shell;
@@ -79,6 +81,10 @@ impl InstallRequest {
 
     fn matches_installation(&self, installation: &ManagedPythonInstallation) -> bool {
         self.download_request.satisfied_by_key(installation.key())
+    }
+
+    fn python_request(&self) -> &PythonRequest {
+        &self.request
     }
 }
 
@@ -215,6 +221,19 @@ pub(crate) async fn install(
     let Some(first_request) = requests.first() else {
         return Ok(ExitStatus::Success);
     };
+
+    let requested_minor_versions = requests
+        .iter()
+        .filter_map(|request| {
+            if let PythonRequest::Version(VersionRequest::MajorMinor(major, minor, ..)) =
+                request.python_request()
+            {
+                uv_pep440::Version::from_str(&format!("{major}.{minor}")).ok()
+            } else {
+                None
+            }
+        })
+        .collect::<FxHashSet<_>>();
 
     if upgrade
         && requests
@@ -415,12 +434,16 @@ pub(crate) async fn install(
             .expect("We should have a bin directory with preview enabled")
             .as_path();
 
+        let upgradeable = is_default_install
+            || requested_minor_versions.contains(&installation.key().version().python_version());
+
         create_bin_links(
             installation,
             bin,
             reinstall,
             force,
             default,
+            upgradeable,
             is_default_install,
             first_request,
             &existing_installations,
@@ -437,17 +460,21 @@ pub(crate) async fn install(
         }
     }
 
-    // Read all existing installations and find the highest installed patch
+    // Read all existing managed installations and find the highest installed CPython patch
     // for each installed minor version.
     let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
     let existing_installations: Vec<_> = installations.find_all()?.collect();
     let mut minor_versions = FxHashMap::default();
     for installation in existing_installations {
+        if *installation.implementation() != ImplementationName::CPython {
+            continue;
+        }
+        let variant = *installation.key().variant();
         // Add to minor versions map if this installation has the highest
         // patch seen for a minor version so far.
         let minor_version = installation.version().python_version();
         minor_versions
-            .entry(minor_version)
+            .entry((minor_version, variant))
             .and_modify(|high_installation: &mut ManagedPythonInstallation| {
                 if installation.key() >= high_installation.key() {
                     *high_installation = installation.clone();
@@ -580,6 +607,7 @@ fn create_bin_links(
     reinstall: bool,
     force: bool,
     default: bool,
+    upgradeable: bool,
     is_default_install: bool,
     first_request: &InstallRequest,
     existing_installations: &[ManagedPythonInstallation],
@@ -600,7 +628,18 @@ fn create_bin_links(
 
     for target in targets {
         let target = bin.join(target);
-        match installation.create_bin_link(&target) {
+        let executable = if upgradeable {
+            if let Some(directory_symlink) = DirectorySymlink::maybe_from_installation(installation)
+            {
+                directory_symlink.symlink_executable.clone()
+            } else {
+                installation.executable(false)
+            }
+        } else {
+            installation.executable(false)
+        };
+
+        match create_bin_link(&target, executable.clone()) {
             Ok(()) => {
                 debug!(
                     "Installed executable at `{}` for {}",
@@ -736,7 +775,7 @@ fn create_bin_links(
                         .remove(&target);
                 }
 
-                installation.create_bin_link(&target)?;
+                create_bin_link(&target, executable)?;
                 debug!(
                     "Updated executable at `{}` to {}",
                     target.simplified_display(),
@@ -807,8 +846,7 @@ fn warn_if_not_on_path(bin: &Path) {
 /// Find the [`ManagedPythonInstallation`] corresponding to an executable link installed at the
 /// given path, if any.
 ///
-/// Like [`ManagedPythonInstallation::is_bin_link`], but this method will only resolve the
-/// given path one time.
+/// Will resolve symlinks on Unix. On Windows, will resolve the target link for a trampoline.
 fn find_matching_bin_link<'a>(
     mut installations: impl Iterator<Item = &'a ManagedPythonInstallation>,
     path: &Path,
@@ -817,13 +855,13 @@ fn find_matching_bin_link<'a>(
         if !path.is_symlink() {
             return None;
         }
-        path.read_link().ok()?
+        fs_err::canonicalize(path).ok()?
     } else if cfg!(windows) {
         let launcher = Launcher::try_from_path(path).ok()??;
         if !matches!(launcher.kind, LauncherKind::Python) {
             return None;
         }
-        launcher.python_path
+        dunce::canonicalize(launcher.python_path).ok()?
     } else {
         unreachable!("Only Windows and Unix are supported")
     };

@@ -151,6 +151,7 @@ pub(crate) fn create(
             interpreter.python_minor(),
             base_python.as_path(),
             &LenientImplementationName::from(interpreter.implementation_name()),
+            &interpreter.variant(),
         ) {
             if tracing::enabled!(tracing::Level::DEBUG) {
                 let debug_symlink_term = if cfg!(windows) {

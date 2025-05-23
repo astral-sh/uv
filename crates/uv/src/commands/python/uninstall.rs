@@ -13,8 +13,11 @@ use tracing::{debug, warn};
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
-use uv_python::managed::{ManagedPythonInstallations, python_executable_dir, symlink_exists};
-use uv_python::{PythonInstallationKey, PythonRequest};
+use uv_python::managed::{
+    DirectorySymlink, ManagedPythonInstallation, ManagedPythonInstallations, python_executable_dir,
+    symlink_exists,
+};
+use uv_python::{ImplementationName, PythonInstallationKey, PythonRequest};
 
 use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
@@ -217,62 +220,65 @@ async fn do_uninstall(
         uv_python::windows_registry::remove_orphan_registry_entries(&installed_installations);
     }
 
-    // Read all existing installations and find the highest installed patch
+    // Read all existing managed installations and find the highest installed CPython patch
     // for each installed minor version. Ensure the minor version link directory
     // is still valid.
     let uninstalled_minor_versions =
         &uninstalled
             .iter()
             .fold(FxHashSet::default(), |mut minor_versions, key| {
-                minor_versions.insert(key.version().python_version());
+                let variant = *key.variant();
+                minor_versions.insert((key.version().python_version(), variant));
                 minor_versions
             });
     let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
     let remaining_installations: Vec<_> = installations.find_all()?.collect();
     let mut remaining_minor_versions = FxHashMap::default();
     for installation in remaining_installations {
+        if *installation.implementation() != ImplementationName::CPython {
+            continue;
+        }
+        let variant = *installation.key().variant();
         // Add to minor versions map if this installation has the highest
         // patch seen for a minor version so far.
         let minor_version = installation.version().python_version();
-        if !uninstalled_minor_versions.contains(&minor_version) {
+        if !uninstalled_minor_versions.contains(&(minor_version.clone(), variant)) {
             continue;
         }
-        if let Some(patch) = installation.version().patch() {
-            if let Some((current_patch, _)) = remaining_minor_versions.get(&minor_version) {
-                if patch >= *current_patch {
-                    remaining_minor_versions.insert(minor_version, (patch, installation));
+        remaining_minor_versions
+            .entry((minor_version, variant))
+            .and_modify(|high_installation: &mut ManagedPythonInstallation| {
+                if installation.key() >= high_installation.key() {
+                    *high_installation = installation.clone();
                 }
-            } else {
-                remaining_minor_versions.insert(minor_version, (patch, installation));
-            }
-        }
+            })
+            .or_insert(installation);
     }
-    for (_, installation) in remaining_minor_versions.values() {
+    for installation in remaining_minor_versions.values() {
         installation.ensure_minor_version_link()?;
     }
     // For each uninstalled installation, check if there are no remaining installations
     // for its minor version. If there are none remaining, remove the symlink directory
     // (or junction on Windows) if it exists.
     for installation in &matching_installations {
-        if !remaining_minor_versions.contains_key(&installation.key().version().python_version()) {
-            let symlink_directory_name = format!(
-                "python{}.{}",
-                installation.key().version().major(),
-                installation.key().version().minor()
-            );
-            // Derive a symbolic directory path from the installation home path by replacing the
-            // home directory name with the symlink directory name.
-            let symlink_directory = installation.path().with_file_name(&symlink_directory_name);
-            if symlink_exists(symlink_directory.as_path()) {
+        let variant = *installation.key().variant();
+        if !remaining_minor_versions
+            .contains_key(&(installation.key().version().python_version(), variant))
+        {
+            let Some(directory_symlink) = DirectorySymlink::maybe_from_installation(installation)
+            else {
+                continue;
+            };
+            if symlink_exists(directory_symlink.symlink_directory.as_path()) {
                 let result = if cfg!(windows) {
-                    fs_err::remove_dir(symlink_directory.as_path())
+                    fs_err::remove_dir(directory_symlink.symlink_directory.as_path())
                 } else {
-                    fs_err::remove_file(symlink_directory.as_path())
+                    fs_err::remove_file(directory_symlink.symlink_directory.as_path())
                 };
                 if result.is_err() {
                     return Err(anyhow::anyhow!(
                         "Failed to remove symlink directory {}",
-                        symlink_directory.display()
+                        directory_symlink.symlink_directory.display()
                     ));
                 }
                 let symlink_term = if cfg!(windows) {
@@ -283,7 +289,7 @@ async fn do_uninstall(
                 debug!(
                     "Removed {}: {}",
                     symlink_term,
-                    symlink_directory.to_string_lossy()
+                    directory_symlink.symlink_directory.to_string_lossy()
                 );
             }
         }

@@ -1,5 +1,3 @@
-use std::process::Command;
-
 use crate::common::{TestContext, uv_snapshot};
 use assert_fs::prelude::PathChild;
 
@@ -216,66 +214,6 @@ fn python_upgrade_transparent_from_venv() {
     exit_code: 0
     ----- stdout -----
     Python 3.10.17
-
-    ----- stderr -----
-    "
-    );
-}
-
-// TODO(john): Add upgrade support for preview bin Python. After upgrade,
-// the bin Python version should be the latest patch.
-#[test]
-fn python_transparent_upgrade_with_preview_installation() {
-    let context: TestContext = TestContext::new_with_versions(&["3.13"])
-        .with_filtered_python_keys()
-        .with_filtered_exe_suffix()
-        .with_managed_python_dirs();
-
-    // Install an earlier patch version using `--preview`
-    uv_snapshot!(context.filters(), context.python_install().arg("3.10.8").arg("--preview"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Installed Python 3.10.8 in [TIME]
-     + cpython-3.10.8-[PLATFORM] (python3.10)
-    ");
-
-    let bin_python = context
-        .bin_dir
-        .child(format!("python3.10{}", std::env::consts::EXE_SUFFIX));
-
-    uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
-        .arg("--version"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Python 3.10.8
-
-    ----- stderr -----
-    "
-    );
-
-    // Upgrade patch version
-    uv_snapshot!(context.filters(), context.python_upgrade().arg("3.10"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Installed Python 3.10.17 in [TIME]
-     + cpython-3.10.17-[PLATFORM]
-    ");
-
-    // TODO(john): Upgrades are not currently reflected for `--preview` bin Python,
-    // so we see the outdated patch version.
-    uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
-        .arg("--version"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-    Python 3.10.8
 
     ----- stderr -----
     "
