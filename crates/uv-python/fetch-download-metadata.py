@@ -269,6 +269,7 @@ class CPythonFinder(Finder):
                     if (
                         download.release == CPYTHON_BAD_LINUX_RUNTIME_START
                         and download.triple.platform == "linux"
+                        and download.triple.arch != "aarch64"
                     ):
                         continue
                     logging.debug("Found %s (%s)", download.key(), download.filename)
