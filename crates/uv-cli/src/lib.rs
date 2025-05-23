@@ -3567,6 +3567,8 @@ pub struct AddArgs {
     ///
     /// When `--frozen` is provided, no resolution is performed, and dependencies are always added
     /// without constraints.
+    ///
+    /// This option is in preview and may change in any future release.
     #[arg(long, value_enum)]
     pub bounds: Option<AddBoundsKind>,
 
