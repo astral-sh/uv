@@ -256,7 +256,7 @@ For details, see the
 ### Workspace support
 
 If a project includes local dependencies (e.g., via
-[Workspaces](../../concepts/projects/workspaces.md), those too must be included in the deployment
+[Workspaces](../../concepts/projects/workspaces.md)), those too must be included in the deployment
 package.
 
 We'll start by extending the above example to include a dependency on a locally-developed library

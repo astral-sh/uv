@@ -105,7 +105,7 @@ wheel exists in the index, uv tries to build the source distribution.
 You can check which wheels exist for a PyPI project under “Download Files”, e.g.
 https://pypi.org/project/numpy/2.1.1.md#files. Wheels with `...-py3-none-any.whl` filenames work
 everywhere, others have the operating system and platform in the filename. In the linked `numpy`
-example, you can see that there are pre-built distributions for Python 3.10 to 3.13 on MacOS, Linux
+example, you can see that there are pre-built distributions for Python 3.10 to 3.13 on macOS, Linux
 and Windows.
 
 ## Common build failures

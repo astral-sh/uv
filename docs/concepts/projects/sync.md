@@ -202,7 +202,7 @@ while building a Docker image. `uv sync` has several flags for this purpose.
 - `--no-install-workspace`: Do not install any workspace members, including the root project
 - `--no-install-package <NO_INSTALL_PACKAGE>`: Do not install the given package(s)
 
-When these options are used, all of the dependencies of the target are still installed. For example,
+When these options are used, all the dependencies of the target are still installed. For example,
 `--no-install-project` will omit the _project_ but not any of its dependencies.
 
 If used improperly, these flags can result in a broken environment since a package can be missing
