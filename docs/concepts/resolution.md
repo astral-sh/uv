@@ -218,7 +218,7 @@ required-environments = [
 
 ## Dependency preferences
 
-If resolution output file exists, i.e., a uv lockfile (`uv.lock`) or a requirements output file
+If resolution output file exists, i.e., an uv lockfile (`uv.lock`) or a requirements output file
 (`requirements.txt`), uv will _prefer_ the dependency versions listed there. Similarly, if
 installing a package into a virtual environment, uv will prefer the already installed version if
 present. This means that locked or installed versions will not change unless an incompatible version
@@ -300,7 +300,7 @@ If dependency resolution fails due to a transitive pre-release, uv will prompt u
 
 Alternatively, the transitive dependency can be added as a [constraint](#dependency-constraints) or
 direct dependency (i.e. in `requirements.in` or `pyproject.toml`) with a pre-release version
-specifier (e.g., `flask>=2.0.0rc1`) to opt-in to pre-release support for that specific dependency.
+specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that specific dependency.
 
 Pre-releases are
 [notoriously difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions) to

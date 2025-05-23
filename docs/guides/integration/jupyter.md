@@ -129,7 +129,7 @@ via `!uv pip install`, or even `!pip install`.
 
 ## Using Jupyter from VS Code
 
-You can also engage with Jupyter notebooks from within an editor like VS Code. To connect a
+You can also engage with Jupyter notebooks from within an editor like VS Code. To connect an
 uv-managed project to a Jupyter notebook within VS Code, we recommend creating a kernel for the
 project, as in the following:
 
