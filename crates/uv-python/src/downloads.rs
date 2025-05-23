@@ -93,12 +93,10 @@ pub enum Error {
     Mirror(&'static str, &'static str),
     #[error(transparent)]
     LibcDetection(#[from] LibcDetectionError),
-    #[error(
-        "Remote python downloads JSON is not yet supported, please use a local path (without `file://` prefix)"
-    )]
-    RemoteJSONNotSupported(),
-    #[error("The json of the python downloads is invalid: {0}")]
-    InvalidPythonDownloadsJSON(String, #[source] serde_json::Error),
+    #[error("Remote python downloads JSON is not yet supported, please use a local path")]
+    RemoteJSONNotSupported,
+    #[error("The JSON of the python downloads is invalid: {0}")]
+    InvalidPythonDownloadsJSON(PathBuf, #[source] serde_json::Error),
     #[error("An offline Python installation was requested, but {file} (from {url}) is missing in {}", python_builds_dir.user_display())]
     OfflinePythonMissing {
         file: Box<PythonInstallationKey>,
@@ -559,20 +557,26 @@ impl ManagedPythonDownload {
             let json_downloads: HashMap<String, JsonPythonDownload> = if let Some(json_source) =
                 python_downloads_json_url
             {
-                if Url::parse(json_source).is_ok() {
-                    return Err(Error::RemoteJSONNotSupported());
-                }
-
-                let file = match fs_err::File::open(json_source) {
-                    Ok(file) => file,
-                    Err(e) => { Err(Error::Io(e)) }?,
+                // Windows paths are also valid URLs
+                let json_source = if let Ok(url) = Url::parse(json_source) {
+                    if let Ok(path) = url.to_file_path() {
+                        Cow::Owned(path)
+                    } else if matches!(url.scheme(), "http" | "https") {
+                        return Err(Error::RemoteJSONNotSupported);
+                    } else {
+                        Cow::Borrowed(Path::new(json_source))
+                    }
+                } else {
+                    Cow::Borrowed(Path::new(json_source))
                 };
 
+                let file = fs_err::File::open(json_source.as_ref())?;
+
                 serde_json::from_reader(file)
-                    .map_err(|e| Error::InvalidPythonDownloadsJSON(json_source.to_string(), e))?
+                    .map_err(|e| Error::InvalidPythonDownloadsJSON(json_source.to_path_buf(), e))?
             } else {
                 serde_json::from_str(BUILTIN_PYTHON_DOWNLOADS_JSON).map_err(|e| {
-                    Error::InvalidPythonDownloadsJSON("EMBEDDED IN THE BINARY".to_string(), e)
+                    Error::InvalidPythonDownloadsJSON(PathBuf::from("EMBEDDED IN THE BINARY"), e)
                 })?
             };
 
