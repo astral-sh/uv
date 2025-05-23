@@ -33,16 +33,6 @@ unavailable, uv will download Python for you. See the
 
 ## Using a virtual environment
 
-When using the default virtual environment name, uv will automatically find and use the virtual
-environment during subsequent invocations.
-
-```console
-$ uv venv
-
-$ # Install a package in the new virtual environment
-$ uv pip install ruff
-```
-
 The virtual environment can be "activated" to make its packages available:
 
 === "macOS and Linux"
