@@ -274,7 +274,7 @@ class CPythonFinder(Finder):
                         and download.triple.arch.family != "aarch64"
                     ):
                         continue
-                    if (str(download.version) == CPYTHON_HIDDEN_ALPHA):
+                    if str(download.version) == CPYTHON_HIDDEN_ALPHA:
                         continue
                     logging.debug("Found %s (%s)", download.key(), download.filename)
                     downloads_by_version.setdefault(download.version, []).append(
