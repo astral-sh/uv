@@ -31,6 +31,22 @@
     "sha256": "d159905565ab14058391c6b8b93340839874cf92986050a863e2ebcec520ed29",
     "variant": null
   },
+  "cpython-3.14.0a7-linux-aarch64-gnu": {
+    "name": "cpython",
+    "arch": {
+      "family": "aarch64",
+      "variant": null
+    },
+    "os": "linux",
+    "libc": "gnu",
+    "major": 3,
+    "minor": 14,
+    "patch": 0,
+    "prerelease": "a7",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.14.0a7%2B20250521-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "2d61c25acb85f71385e358ca7f658b9d2ae5971161985c32b182edd2d75da4a6",
+    "variant": null
+  },
   "cpython-3.14.0a7-windows-i686-none": {
     "name": "cpython",
     "arch": {
@@ -95,6 +111,22 @@
     "sha256": "c60e225b478b8c14220fa738a0d3374c9a5e75411776a61478e1487db51db522",
     "variant": "freethreaded"
   },
+  "cpython-3.14.0a7+freethreaded-linux-aarch64-gnu": {
+    "name": "cpython",
+    "arch": {
+      "family": "aarch64",
+      "variant": null
+    },
+    "os": "linux",
+    "libc": "gnu",
+    "major": 3,
+    "minor": 14,
+    "patch": 0,
+    "prerelease": "a7",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.14.0a7%2B20250521-aarch64-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
+    "sha256": "81842ba21e190e21092fccb8daa1f526c42cae17fb166362a5346431cebea877",
+    "variant": "freethreaded"
+  },
   "cpython-3.14.0a7+freethreaded-windows-i686-none": {
     "name": "cpython",
     "arch": {
@@ -126,6 +158,22 @@
     "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.14.0a7%2B20250521-x86_64-pc-windows-msvc-freethreaded%2Bpgo-full.tar.zst",
     "sha256": "dfacb1ca233d5b98c11ef76251f77564c35c9f81b3f0e63dcd8e5bf9034d9675",
     "variant": "freethreaded"
+  },
+  "cpython-3.14.0a7+debug-linux-aarch64-gnu": {
+    "name": "cpython",
+    "arch": {
+      "family": "aarch64",
+      "variant": null
+    },
+    "os": "linux",
+    "libc": "gnu",
+    "major": 3,
+    "minor": 14,
+    "patch": 0,
+    "prerelease": "a7",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.14.0a7%2B20250521-aarch64-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "91fdb497d7351e533dda41a1519b59a5b479d0c6fd96acb19aedb76494b0bd80",
+    "variant": "debug"
   },
   "cpython-3.14.0a6-darwin-aarch64-none": {
     "name": "cpython",
@@ -2491,8 +2539,8 @@
     "minor": 13,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.13.3%2B20250409-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "640a37de9d0cf00a9b7173977f0752455a3a4dad8c938486c511370360f551bd",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.13.3%2B20250521-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "4bdd841f73011ab6811bcca521edea65d85232f36a32c04f1fc0606710b2e47e",
     "variant": null
   },
   "cpython-3.13.3-linux-armv7-gnueabi": {
@@ -2779,8 +2827,8 @@
     "minor": 13,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.13.3%2B20250409-aarch64-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
-    "sha256": "0878d9e9908da2124c12370e620d22f68fd4b50f427455afca132cecb20245c6",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.13.3%2B20250521-aarch64-unknown-linux-gnu-freethreaded%2Blto-full.tar.zst",
+    "sha256": "a2b0ad91867bd939315804bce6868c0d27cfb0f79efc2c9425ee9d63462e6317",
     "variant": "freethreaded"
   },
   "cpython-3.13.3+freethreaded-linux-armv7-gnueabi": {
@@ -2971,8 +3019,8 @@
     "minor": 13,
     "patch": 3,
     "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.13.3%2B20250409-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "8cc36506c9a92f0294017dc0b45f977e8c49a352ee99bd603240b8e46faa54df",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.13.3%2B20250521-aarch64-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "28d55881e97b05486689b627229009bd2ce13f4e308118f02338462529e97a07",
     "variant": "debug"
   },
   "cpython-3.13.3+debug-linux-armv7-gnueabi": {
@@ -5835,8 +5883,8 @@
     "minor": 12,
     "patch": 10,
     "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.12.10%2B20250409-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "e1f450b77b81a250411855bb5e5cbd0f0acbc9ad46b5ea97f224452831bb3276",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.12.10%2B20250521-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "5f4e70fa61f85e4f9393a435d898e3772090441e31e49c5a01527e225dc747dd",
     "variant": null
   },
   "cpython-3.12.10-linux-armv7-gnueabi": {
@@ -6091,8 +6139,8 @@
     "minor": 12,
     "patch": 10,
     "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.12.10%2B20250409-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "d745332f730d844a9c3e95c8d7aca876c13c0fd054a83a8ddaaf75595a74d959",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.12.10%2B20250521-aarch64-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "c57a243f18b260412e9d05b68b8560ee2b8dbdf0c5450ac17a303fed42b34564",
     "variant": "debug"
   },
   "cpython-3.12.10+debug-linux-armv7-gnueabi": {
@@ -9867,8 +9915,8 @@
     "minor": 11,
     "patch": 12,
     "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.11.12%2B20250409-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "cfb2a8e4b79e0fb1709e6f34af0dc7b8ade468b4599c956e198ec3c04b03b11d",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.11.12%2B20250521-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "98bad7259adb06245ef50dba26fca383e0a7fc4b9b3266e5d339b48eac6a0720",
     "variant": null
   },
   "cpython-3.11.12-linux-armv7-gnueabi": {
@@ -10123,8 +10171,8 @@
     "minor": 11,
     "patch": 12,
     "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.11.12%2B20250409-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "dd036c38c7c9102c0a92d904d823b962fbc9ef2aab51ad9cea17965bafc060e1",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.11.12%2B20250521-aarch64-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "c8659acef36b2555e92e186aac04895e60aa7a726a4403ec255b9a61d8fe9dce",
     "variant": "debug"
   },
   "cpython-3.11.12+debug-linux-armv7-gnueabi": {
@@ -13643,8 +13691,8 @@
     "minor": 10,
     "patch": 17,
     "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.10.17%2B20250409-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "9d2f655cf4a8afc55c892842589ab698a2e49235bf2cb8f54b969677ee34c0e8",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.10.17%2B20250521-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "e5943bd95eeb105dfeaf6652a3f096c6bb33d341a89ebfab46cc9d8af439e2ea",
     "variant": null
   },
   "cpython-3.10.17-linux-armv7-gnueabi": {
@@ -13899,8 +13947,8 @@
     "minor": 10,
     "patch": 17,
     "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.10.17%2B20250409-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "60bb80434beff1782847467959acdb81f8146c3b70b7ab6475437a1d0674603a",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.10.17%2B20250521-aarch64-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "efaf55dba95a7f0379318cb38a017985570053d01e007c316b313a56d0dc351d",
     "variant": "debug"
   },
   "cpython-3.10.17+debug-linux-armv7-gnueabi": {
@@ -18571,8 +18619,8 @@
     "minor": 9,
     "patch": 22,
     "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.9.22%2B20250409-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
-    "sha256": "6793f648b64f143b4358d9269e80bb60976e05028eb7edacb034e53bd58435bf",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.9.22%2B20250521-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "20ff6e25b3a793a7cbd795afc2d4214880f781a23907750266ea96d59d1feaf8",
     "variant": null
   },
   "cpython-3.9.22-linux-armv7-gnueabi": {
@@ -18827,8 +18875,8 @@
     "minor": 9,
     "patch": 22,
     "prerelease": "",
-    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250409/cpython-3.9.22%2B20250409-aarch64-unknown-linux-gnu-debug-full.tar.zst",
-    "sha256": "c06d09b3181e3dc48af6b79b939dae1e9325a2ca743f1eb9274f058920c74c48",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250521/cpython-3.9.22%2B20250521-aarch64-unknown-linux-gnu-debug-full.tar.zst",
+    "sha256": "872d18737b898f661fe95b8cd2aa0cdbff3c4b1db4e37c81b1cd5f6e06261f3a",
     "variant": "debug"
   },
   "cpython-3.9.22+debug-linux-armv7-gnueabi": {
