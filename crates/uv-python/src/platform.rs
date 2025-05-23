@@ -115,8 +115,10 @@ impl Arch {
 
         // TODO: Implement `variant` support checks
 
-        // Windows ARM64 runs emulated x86_64 binaries transparently
-        if cfg!(windows) && matches!(self.family, target_lexicon::Architecture::Aarch64(_)) {
+        // macOS aarch64 and Windows ARM64 runs emulated x86_64 binaries transparently
+        if (cfg!(windows) || cfg!(target_os = "macos"))
+            && matches!(self.family, target_lexicon::Architecture::Aarch64(_))
+        {
             return other.family == target_lexicon::Architecture::X86_64;
         }
 
