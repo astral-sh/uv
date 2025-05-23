@@ -1777,6 +1777,7 @@ impl PipCompileSettings {
             src_file,
             constraints,
             overrides,
+            excludes,
             extra,
             all_extras,
             no_all_extras,
@@ -1843,6 +1844,20 @@ impl PipCompileSettings {
         let overrides_from_workspace = if let Some(configuration) = &filesystem {
             configuration
                 .override_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        let exclude_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .exclude_dependencies
                 .clone()
                 .unwrap_or_default()
                 .into_iter()

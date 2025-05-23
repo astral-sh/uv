@@ -60,6 +60,8 @@ pub struct RequirementsSpecification {
     pub constraints: Vec<NameRequirementSpecification>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
+    /// The exclues
+    pub excludes: Vec<UnresolvedRequirementSpecification>,
     /// The `pylock.toml` file from which to extract the resolution.
     pub pylock: Option<PathBuf>,
     /// The source trees from which to extract requirements.
@@ -215,6 +217,7 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         constraints: &[RequirementsSource],
         overrides: &[RequirementsSource],
+        excludes: &[RequirementsSource],
         groups: BTreeMap<PathBuf, Vec<GroupName>>,
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
@@ -273,6 +276,11 @@ impl RequirementsSpecification {
                 ));
             }
             if !groups.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Cannot specify groups with a `pylock.toml` file"
+                ));
+            }
+            if !excludes.is_empty() {
                 return Err(anyhow::anyhow!(
                     "Cannot specify groups with a `pylock.toml` file"
                 ));
@@ -460,7 +468,15 @@ impl RequirementsSpecification {
         requirements: &[RequirementsSource],
         client_builder: &BaseClientBuilder<'_>,
     ) -> Result<Self> {
-        Self::from_sources(requirements, &[], &[], BTreeMap::default(), client_builder).await
+        Self::from_sources(
+            requirements,
+            &[],
+            &[],
+            &[],
+            BTreeMap::default(),
+            client_builder,
+        )
+        .await
     }
 
     /// Initialize a [`RequirementsSpecification`] from a list of [`Requirement`].

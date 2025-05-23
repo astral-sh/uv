@@ -102,6 +102,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
+        excludes,
         pylock,
         source_trees,
         groups,

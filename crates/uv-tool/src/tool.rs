@@ -19,6 +19,8 @@ pub struct Tool {
     constraints: Vec<Requirement>,
     /// The overrides requested by the user during installation.
     overrides: Vec<Requirement>,
+    /// The excludes
+    excludes: Vec<Requirement>,
     /// The build constraints requested by the user during installation.
     build_constraints: Vec<Requirement>,
     /// The Python requested by the user during installation.
@@ -38,6 +40,8 @@ struct ToolWire {
     constraints: Vec<Requirement>,
     #[serde(default)]
     overrides: Vec<Requirement>,
+    #[serde(default)]
+    excludes: Vec<Requirement>,
     #[serde(default)]
     build_constraint_dependencies: Vec<Requirement>,
     python: Option<String>,
@@ -66,6 +70,7 @@ impl From<Tool> for ToolWire {
                 .collect(),
             constraints: tool.constraints,
             overrides: tool.overrides,
+            excludes: tool.excludes,
             build_constraint_dependencies: tool.build_constraints,
             python: tool.python,
             entrypoints: tool.entrypoints,
@@ -89,6 +94,7 @@ impl TryFrom<ToolWire> for Tool {
                 .collect(),
             constraints: tool.constraints,
             overrides: tool.overrides,
+            excludes: tool.excludes,
             build_constraints: tool.build_constraint_dependencies,
             python: tool.python,
             entrypoints: tool.entrypoints,
@@ -163,6 +169,7 @@ impl Tool {
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
+        excludes: Vec<Requirement>,
         build_constraints: Vec<Requirement>,
         python: Option<String>,
         entrypoints: impl Iterator<Item = ToolEntrypoint>,
@@ -174,6 +181,7 @@ impl Tool {
             requirements,
             constraints,
             overrides,
+            excludes,
             build_constraints,
             python,
             entrypoints,
@@ -254,6 +262,28 @@ impl Tool {
                     overrides => each_element_on_its_line_array(overrides.iter()),
                 };
                 value(overrides)
+            });
+        }
+
+        if !self.excludes.is_empty() {
+            table.insert("excludes", {
+                let excludes = self
+                    .excludes
+                    .iter()
+                    .map(|r#excludes| {
+                        serde::Serialize::serialize(
+                            &r#excludes,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let excludes = match excludes.as_slice() {
+                    [] => Array::new(),
+                    [r#excludes] => Array::from_iter([r#excludes]),
+                    excludes => each_element_on_its_line_array(excludes.iter()),
+                };
+                value(excludes)
             });
         }
 
