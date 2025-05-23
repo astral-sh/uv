@@ -1642,7 +1642,7 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
-    use super::{split_specifiers, AddBoundsKind};
+    use super::{AddBoundsKind, split_specifiers};
     use std::str::FromStr;
     use uv_pep440::Version;
 
