@@ -170,6 +170,9 @@ pub(crate) fn create(
                 interpreter.python_minor(),
             )),
         )?;
+        if interpreter.python_major() == 3 && interpreter.python_minor() == 14 {
+            uv_fs::replace_symlink("python", scripts.join("𝜋thon"))?;
+        }
 
         if interpreter.markers().implementation_name() == "pypy" {
             uv_fs::replace_symlink(
