@@ -8,7 +8,7 @@
 ### Python
 
 We are reverting most of our Python changes from `uv 0.7.6` and `uv 0.7.7` due to
-a miscompilation that makes the Python interpretter behave incorrectly, resulting
+a miscompilation that makes the Python interpreter behave incorrectly, resulting
 in spurious type-errors involving str. This issue seems to be isolated to
 x86_64 Linux, and affected at least Python 3.12, 3.13, and 3.14.
 
