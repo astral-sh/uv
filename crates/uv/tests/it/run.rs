@@ -3390,7 +3390,7 @@ fn run_script_module_conflict() -> Result<()> {
 }
 
 /// Regression test for a bad cpython runtime
-/// https://github.com/astral-sh/uv/issues/13610
+/// <https://github.com/astral-sh/uv/issues/13610>
 #[test]
 fn regression_cpython_runtime() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -3405,7 +3405,9 @@ fn regression_cpython_runtime() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.run().arg("mre.py"), @r"
+    uv_snapshot!(context.filters(), context.run()
+        .arg("-p").arg("3.12")
+        .arg("mre.py"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
