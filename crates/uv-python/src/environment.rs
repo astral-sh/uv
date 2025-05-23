@@ -154,6 +154,7 @@ impl PythonEnvironment {
         request: &PythonRequest,
         preference: EnvironmentPreference,
         cache: &Cache,
+        discovery_root: &Path,
     ) -> Result<Self, Error> {
         let installation = match find_python_installation(
             request,
@@ -161,6 +162,7 @@ impl PythonEnvironment {
             // Ignore managed installations when looking for environments
             PythonPreference::OnlySystem,
             cache,
+            discovery_root,
         )? {
             Ok(installation) => installation,
             Err(err) => return Err(EnvironmentNotFound::from(err).into()),

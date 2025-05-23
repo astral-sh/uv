@@ -1,5 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::fmt::Write;
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -80,6 +82,7 @@ pub(crate) async fn pip_sync(
     dry_run: DryRun,
     printer: Printer,
     preview: PreviewMode,
+    project_dir: &Path,
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
         .connectivity(network_settings.connectivity)
@@ -157,6 +160,7 @@ pub(crate) async fn pip_sync(
             EnvironmentPreference::from_system_flag(system, false),
             python_preference,
             &cache,
+            project_dir,
         )?;
         report_interpreter(&installation, true, printer)?;
         PythonEnvironment::from_installation(installation)
@@ -168,6 +172,7 @@ pub(crate) async fn pip_sync(
                 .unwrap_or_default(),
             EnvironmentPreference::from_system_flag(system, true),
             &cache,
+            project_dir,
         )?;
         report_target_environment(&environment, &cache, printer)?;
         environment

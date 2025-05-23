@@ -535,6 +535,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 cache,
                 printer,
                 globals.preview,
+                project_dir.as_path(),
             )
             .await
         }
@@ -606,6 +607,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.dry_run,
                 printer,
                 globals.preview,
+                project_dir.as_path(),
             )
             .await
         }
@@ -758,6 +760,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.dry_run,
                 printer,
                 globals.preview,
+                project_dir.as_path(),
             )
             .await
         }
@@ -793,6 +796,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &globals.network_settings,
                 args.dry_run,
                 printer,
+                project_dir.as_path(),
             )
             .await
         }
@@ -814,6 +818,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.paths,
                 &cache,
                 printer,
+                project_dir.as_path(),
             )
         }
         Commands::Pip(PipNamespace {
@@ -845,6 +850,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
+                project_dir.as_path(),
             )
             .await
         }
@@ -866,6 +872,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.files,
                 &cache,
                 printer,
+                project_dir.as_path(),
             )
         }
         Commands::Pip(PipNamespace {
@@ -897,6 +904,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
+                project_dir.as_path(),
             )
             .await
         }
@@ -915,6 +923,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
+                project_dir.as_path(),
             )
         }
         Commands::Cache(CacheNamespace {
@@ -1193,6 +1202,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.env_file,
                 args.no_env_file,
                 globals.preview,
+                project_dir.as_path(),
             ))
             .await
         }
@@ -1263,6 +1273,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 cache,
                 printer,
                 globals.preview,
+                project_dir.as_path(),
             ))
             .await
         }
@@ -1309,6 +1320,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &cache,
                 printer,
                 globals.preview,
+                project_dir.as_path(),
             ))
             .await
         }
@@ -1423,6 +1435,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     cli.top_level.no_config,
                     &cache,
                     printer,
+                    project_dir.as_path(),
                 )
                 .await
             } else {
