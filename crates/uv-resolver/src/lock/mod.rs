@@ -2855,7 +2855,7 @@ impl PackageMetadata {
             };
 
         Ok(PackageMetadata {
-            requires_dist: unwire_requirements(self.requires_dist)?,
+            requires_dist: self.requires_dist,
             provides_extras: self.provides_extras,
             dependency_groups: self
                 .dependency_groups
