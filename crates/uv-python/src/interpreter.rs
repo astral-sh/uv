@@ -26,6 +26,7 @@ use uv_platform_tags::{Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 
 use crate::implementation::LenientImplementationName;
+use crate::managed::ManagedPythonInstallations;
 use crate::platform::{Arch, Libc, Os};
 use crate::pointer_size::PointerSize;
 use crate::{
@@ -263,6 +264,21 @@ impl Interpreter {
         self.prefix.is_some()
     }
 
+    /// Returns `true` if this interpreter is managed by uv.
+    ///
+    /// Returns `false` if we cannot determine the path of the uv managed Python interpreters.
+    pub fn is_managed(&self) -> bool {
+        let Ok(installations) = ManagedPythonInstallations::from_settings(None) else {
+            return false;
+        };
+
+        installations
+            .find_all()
+            .into_iter()
+            .flatten()
+            .any(|install| install.path() == self.sys_base_prefix)
+    }
+
     /// Returns `Some` if the environment is externally managed, optionally including an error
     /// message from the `EXTERNALLY-MANAGED` file.
     ///
@@ -483,8 +499,17 @@ impl Interpreter {
     /// `python-build-standalone`.
     ///
     /// See: <https://github.com/astral-sh/python-build-standalone/issues/382>
+    #[cfg(unix)]
     pub fn is_standalone(&self) -> bool {
         self.standalone
+    }
+
+    /// Returns `true` if an [`Interpreter`] may be a `python-build-standalone` interpreter.
+    // TODO(john): Replace this approach with patching sysconfig on Windows to
+    // set `PYTHON_BUILD_STANDALONE=1`.`
+    #[cfg(windows)]
+    pub fn is_standalone(&self) -> bool {
+        self.standalone || (self.is_managed() && self.markers().implementation_name() == "cpython")
     }
 
     /// Return the [`Layout`] environment used to install wheels into this interpreter.

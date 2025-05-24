@@ -35,12 +35,12 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{WindowsPython, registry_pythons};
-use crate::{BrokenSymlink, Interpreter, PythonVersion};
+use crate::{BrokenSymlink, Interpreter, PythonInstallationKey, PythonVersion};
 
 /// A request to find a Python installation.
 ///
 /// See [`PythonRequest::from_str`].
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub enum PythonRequest {
     /// An appropriate default Python installation
     ///
@@ -153,7 +153,7 @@ pub enum PythonVariant {
 }
 
 /// A Python discovery version request.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum VersionRequest {
     /// Allow an appropriate default Python version.
     #[default]
@@ -1490,6 +1490,24 @@ impl PythonRequest {
         Self::ExecutableName(value.to_string())
     }
 
+    /// Check if this request includes a specific patch version.
+    pub fn includes_patch(&self) -> bool {
+        match self {
+            PythonRequest::Default => false,
+            PythonRequest::Any => false,
+            PythonRequest::Version(version_request) => version_request.patch().is_some(),
+            PythonRequest::Directory(..) => false,
+            PythonRequest::File(..) => false,
+            PythonRequest::ExecutableName(..) => false,
+            PythonRequest::Implementation(..) => false,
+            PythonRequest::ImplementationVersion(_, version) => version.patch().is_some(),
+            PythonRequest::Key(request) => request
+                .version
+                .as_ref()
+                .is_some_and(|request| request.patch().is_some()),
+        }
+    }
+
     /// Check if a given interpreter satisfies the interpreter request.
     pub fn satisfied(&self, interpreter: &Interpreter, cache: &Cache) -> bool {
         /// Returns `true` if the two paths refer to the same interpreter executable.
@@ -1931,6 +1949,11 @@ impl fmt::Display for ExecutableName {
 }
 
 impl VersionRequest {
+    /// Derive a [`VersionRequest::MajorMinor`] from a [`PythonInstallationKey`]
+    pub fn major_minor_request_from_key(key: &PythonInstallationKey) -> Self {
+        Self::MajorMinor(key.major, key.minor, key.variant)
+    }
+
     /// Return possible executable names for the given version request.
     pub(crate) fn executable_names(
         &self,

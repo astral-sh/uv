@@ -158,6 +158,33 @@ $ uv python install 3.12.6 --preview  # Does not update `python3.12`
 $ uv python install 3.12.8 --preview  # Updates `python3.12` to point to 3.12.8
 ```
 
+## Upgrading Python patch versions
+
+uv-managed Python minor versions can be upgraded to the latest patch. This is not currently
+supported for PyPy and GraalPy implementations.
+
+To upgrade a Python minor version to the latest patch:
+
+```console
+$ uv python upgrade 3.12
+```
+
+To upgrade all installed Python minor versions to their latest patch versions:
+
+```console
+$ uv python upgrade
+```
+
+All virtual environments created by uv on a managed minor version will transparently upgrade when
+that minor version is upgraded.
+
+Transparent upgrades are supported for virtual environments created
+
+- with `uv venv`,
+- with `uv run python -m venv` (as long as the Python being run is a uv-managed CPython
+  implementation),
+- within virtual environments created in any of these ways.
+
 ## Project Python versions
 
 uv will respect Python requirements defined in `requires-python` in the `pyproject.toml` file during
