@@ -243,6 +243,30 @@ impl TestContext {
         self
     }
 
+    /// Filtering for various keys in a `pyvenv.cfg` file that will vary
+    /// depending on the specific machine used:
+    /// - `home = foo/bar/baz/python3.X.X/bin`
+    /// - `uv = X.Y.Z`
+    /// - `extends-environment = <path/to/parent/venv>`
+    #[must_use]
+    pub fn with_pyvenv_cfg_filters(mut self) -> Self {
+        let added_filters = [
+            (r"home = .+".to_string(), "home = [PYTHON_HOME]".to_string()),
+            (
+                r"uv = \d+\.\d+\.\d+".to_string(),
+                "uv = [UV_VERSION]".to_string(),
+            ),
+            (
+                r"extends-environment = .+".to_string(),
+                "extends-environment = [PARENT_VENV]".to_string(),
+            ),
+        ];
+        for filter in added_filters {
+            self.filters.insert(0, filter);
+        }
+        self
+    }
+
     /// Add extra filtering for ` -> <PATH>` symlink display for Python versions in the test
     /// context, e.g., for use in `uv python list`.
     #[must_use]

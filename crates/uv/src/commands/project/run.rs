@@ -991,6 +991,16 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
             site_packages.escape_for_python()
         ))?;
 
+        // Write the `sys.prefix` of the parent environment to the `extends-environment` key of the `pyvenv.cfg`
+        // file. This helps out static-analysis tools such as ty (see docs on
+        // `CachedEnvironment::set_parent_environment`).
+        //
+        // Note that we do this even if the parent environment is not a virtual environment.
+        // For ephemeral environments created by `uv run --with`, the parent environment's
+        // `site-packages` directory is added to `sys.path` even if the parent environment is not
+        // a virtual environment and even if `--system-site-packages` was not explicitly selected.
+        ephemeral_env.set_parent_environment(base_interpreter.sys_prefix())?;
+
         // If `--system-site-packages` is enabled, add the system site packages to the ephemeral
         // environment.
         if base_interpreter.is_virtualenv()
