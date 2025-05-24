@@ -1986,6 +1986,20 @@ fn tool_run_python_at_version() {
     Resolved in [TIME]
     "###);
 
+    // But @ with nothing in front of it is not.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("-p")
+        .arg("@311")
+        .arg("python")
+        .arg("--version"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for executable name `@311` in [PYTHON SOURCES]
+    ");
+
     // Request a version in the tool and `-p`
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")

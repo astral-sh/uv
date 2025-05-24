@@ -1483,8 +1483,8 @@ impl PythonRequest {
     /// - On Windows only, this allows `pythonw` as an alias for `python`.
     /// - This allows `python` by itself (and on Windows, `pythonw`) as an alias for `default`.
     ///
-    /// This only returns `Err` if `@` is used, and the prefix is a match, but the version is
-    /// invalid. Otherwise, if no match is found, it returns `Ok(None)`.
+    /// This can only return `Err` if `@` is used, see try_parse_tool_executable. Otherwise, if no
+    /// match is found, it returns `Ok(None)`.
     pub fn try_parse_tool_executable(value: &str) -> Result<Option<PythonRequest>, Error> {
         let lowercase_value = &value.to_ascii_lowercase();
         // Omitting the empty string from these lists excludes bare versions like "39".
@@ -1504,14 +1504,14 @@ impl PythonRequest {
         )
     }
 
-    // This only returns Err() if @ is used, and the prefix is a match, but the version is invalid.
-    // Otherwise, if no match is found, it returns Ok(None).
+    // This can only return Err() if @ is used, see try_split_prefix_and_version below. Otherwise,
+    // if no match is found, it returns Ok(None).
     fn parse_versions_and_implementations<'a>(
         // typically "python", possibly also "pythonw" or "" (for bare versions)
         abstract_version_prefixes: impl IntoIterator<Item = &'a str>,
         // expected to be either long_names() or all names
         implementation_names: impl IntoIterator<Item = &'a str>,
-        // the string to parse, case-insensitive
+        // the string to parse
         lowercase_value: &str,
     ) -> Result<Option<PythonRequest>, Error> {
         for prefix in abstract_version_prefixes {
@@ -1546,11 +1546,16 @@ impl PythonRequest {
         Ok(None)
     }
 
-    // This only returns Err() if @ is used, and the prefix is a match, but the version is invalid.
+    // This can only returns Err() if @ is used. There are two error cases:
+    // - The value starts with @ (e.g. `@3.11`).
+    // - The prefix is a match, but the version is invalid (e.g. `python@3.not.a.version`).
     fn try_split_prefix_and_version(
         prefix: &str,
         lowercase_value: &str,
     ) -> Result<Option<VersionRequest>, Error> {
+        if lowercase_value.starts_with('@') {
+            return Err(Error::InvalidVersionRequest(lowercase_value.to_string()));
+        }
         let Some(rest) = lowercase_value.strip_prefix(prefix) else {
             return Ok(None);
         };
@@ -3428,5 +3433,7 @@ mod tests {
         assert!(
             PythonRequest::try_split_prefix_and_version("prefix", "prefix@3notaversion").is_err()
         );
+        // @ is not allowed if the prefix is empty.
+        assert!(PythonRequest::try_split_prefix_and_version("", "@3").is_err());
     }
 }
