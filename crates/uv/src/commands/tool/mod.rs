@@ -4,6 +4,7 @@ use tracing::debug;
 
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
+use uv_python::PythonRequest;
 
 mod common;
 pub(crate) mod dir;
@@ -16,44 +17,58 @@ pub(crate) mod upgrade;
 
 /// A request to run or install a tool (e.g., `uvx ruff@latest`).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ToolRequest<'a> {
-    /// The executable name (e.g., `ruff`), if specified explicitly.
-    pub(crate) executable: Option<&'a str>,
-    /// The target to install or run (e.g., `ruff@latest` or `ruff==0.6.0`).
-    pub(crate) target: Target<'a>,
+pub(crate) enum ToolRequest<'a> {
+    // Running the interpreter directly e.g. `uvx python` or `uvx pypy@3.8`
+    Python(PythonRequest),
+    // Running a Python package
+    Package {
+        /// The executable name (e.g., `ruff`), if the target was given via --from.
+        executable: Option<&'a str>,
+        /// The target to install or run (e.g., `ruff@latest` or `ruff==0.6.0`).
+        target: Target<'a>,
+    },
 }
 
 impl<'a> ToolRequest<'a> {
     /// Parse a tool request into an executable name and a target.
-    pub(crate) fn parse(command: &'a str, from: Option<&'a str>) -> Self {
-        if let Some(from) = from {
-            let target = Target::parse(from);
-            Self {
-                executable: Some(command),
-                target,
-            }
-        } else {
-            let target = Target::parse(command);
-            Self {
-                executable: None,
-                target,
+    pub(crate) fn parse(command: &'a str, from: Option<&'a str>) -> anyhow::Result<Self> {
+        // If --from is not used, then first try parsing the command as a PythonRequest and see
+        // what we get.
+        if from.is_none() {
+            // A Python interpreter, like `python`, `python39`, or `pypy@39`. `pythonw` is also
+            // allowed on Windows. This overlaps with how `--python` flag values are parsed, but
+            // see `PythonRequest::parse` vs `PythonRequest::parse_tool_executable` for the
+            // differences.
+            if let Some(python_request) = PythonRequest::try_parse_tool_executable(command)? {
+                return Ok(Self::Python(python_request));
             }
         }
-    }
 
-    /// Returns whether the target package is Python.
-    pub(crate) fn is_python(&self) -> bool {
-        let name = match self.target {
-            Target::Unspecified(name) => name,
-            Target::Version(name, ..) => name,
-            Target::Latest(name, ..) => name,
-        };
-        name.eq_ignore_ascii_case("python") || cfg!(windows) && name.eq_ignore_ascii_case("pythonw")
+        // A regular tool, like `ruff` or `ruff@0.6.0`.
+        if let Some(from) = from {
+            let target = Target::parse(from);
+            Ok(Self::Package {
+                executable: Some(command),
+                target,
+            })
+        } else {
+            let target = Target::parse(command);
+            Ok(Self::Package {
+                executable: None,
+                target,
+            })
+        }
     }
 
     /// Returns `true` if the target is `latest`.
     pub(crate) fn is_latest(&self) -> bool {
-        matches!(self.target, Target::Latest(..))
+        matches!(
+            self,
+            Self::Package {
+                target: Target::Latest(..),
+                ..
+            }
+        )
     }
 }
 
