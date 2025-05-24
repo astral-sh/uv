@@ -625,6 +625,90 @@ impl Version {
         self.with_release(release)
     }
 
+    /// Various "increment the version" operations
+    pub fn bump(&mut self, bump: BumpCommand) {
+        // This code operates on the understanding that the components of a version form
+        // the following hierarchy:
+        //
+        //   major > minor > patch > stable > pre > post > dev
+        //
+        // Any updates to something earlier in the hierarchy should clear all values lower
+        // in the hierarchy. So for instance:
+        //
+        // if you bump `minor`, then clear: patch, pre, post, dev
+        // if you bump `pre`, then clear: post, dev
+        //
+        // ...and so on.
+        //
+        // If you bump a value that doesn't exist, it will be set to "1".
+        //
+        // The special "stable" mode has no value, bumping it clears: pre, post, dev.
+        let full = self.make_full();
+
+        match bump {
+            BumpCommand::BumpRelease { index } => {
+                // Clear all sub-release items
+                full.pre = None;
+                full.post = None;
+                full.dev = None;
+
+                // Use `max` here to try to do 0.2 => 0.3 instead of 0.2 => 0.3.0
+                let old_parts = &full.release;
+                let len = old_parts.len().max(index + 1);
+                let new_release_vec = (0..len)
+                    .map(|i| match i.cmp(&index) {
+                        // Everything before the bumped value is preserved (or is an implicit 0)
+                        Ordering::Less => old_parts.get(i).copied().unwrap_or(0),
+                        // This is the value to bump (could be implicit 0)
+                        Ordering::Equal => old_parts.get(i).copied().unwrap_or(0) + 1,
+                        // Everything after the bumped value becomes 0
+                        Ordering::Greater => 0,
+                    })
+                    .collect::<Vec<u64>>();
+                full.release = new_release_vec;
+            }
+            BumpCommand::MakeStable => {
+                // Clear all sub-release items
+                full.pre = None;
+                full.post = None;
+                full.dev = None;
+            }
+            BumpCommand::BumpPrerelease { kind } => {
+                // Clear all sub-prerelease items
+                full.post = None;
+                full.dev = None;
+
+                // Either bump the matching kind or set to 1
+                if let Some(prerelease) = &mut full.pre {
+                    if prerelease.kind == kind {
+                        prerelease.number += 1;
+                        return;
+                    }
+                }
+                full.pre = Some(Prerelease { kind, number: 1 });
+            }
+            BumpCommand::BumpPost => {
+                // Clear sub-post items
+                full.dev = None;
+
+                // Either bump or set to 1
+                if let Some(post) = &mut full.post {
+                    *post += 1;
+                } else {
+                    full.post = Some(1);
+                }
+            }
+            BumpCommand::BumpDev => {
+                // Either bump or set to 1
+                if let Some(dev) = &mut full.dev {
+                    *dev += 1;
+                } else {
+                    full.dev = Some(1);
+                }
+            }
+        }
+    }
+
     /// Set the min-release component and return the updated version.
     ///
     /// The "min" component is internal-only, and does not exist in PEP 440.
@@ -862,6 +946,27 @@ impl FromStr for Version {
     fn from_str(version: &str) -> Result<Self, Self::Err> {
         Parser::new(version.as_bytes()).parse()
     }
+}
+
+/// Various ways to "bump" a version
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BumpCommand {
+    /// Bump the release component
+    BumpRelease {
+        /// The release component to bump (0 is major, 1 is minor, 2 is patch)
+        index: usize,
+    },
+    /// Bump the prerelease component
+    BumpPrerelease {
+        /// prerelease component to bump
+        kind: PrereleaseKind,
+    },
+    /// Bump to the associated stable release
+    MakeStable,
+    /// Bump the post component
+    BumpPost,
+    /// Bump the dev component
+    BumpDev,
 }
 
 /// A small representation of a version.
@@ -4027,5 +4132,352 @@ mod tests {
     fn type_size() {
         assert_eq!(size_of::<VersionSmall>(), size_of::<usize>() * 2);
         assert_eq!(size_of::<Version>(), size_of::<usize>() * 2);
+    }
+
+    /// Test major bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_major() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 0 });
+        assert_eq!(version.to_string().as_str(), "1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 0 });
+        assert_eq!(version.to_string().as_str(), "2.0");
+
+        // three digit (zero major)
+        let mut version = "0.1.2".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 0 });
+        assert_eq!(version.to_string().as_str(), "1.0.0");
+
+        // three digit (non-zero major)
+        let mut version = "1.2.3".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 0 });
+        assert_eq!(version.to_string().as_str(), "2.0.0");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 0 });
+        assert_eq!(version.to_string().as_str(), "2.0.0.0");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.post345.dev456+local"
+            .parse::<Version>()
+            .unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 0 });
+        assert_eq!(version.to_string().as_str(), "5!2.0.0.0+local");
+        version.bump(BumpCommand::BumpRelease { index: 0 });
+        assert_eq!(version.to_string().as_str(), "5!3.0.0.0+local");
+    }
+
+    /// Test minor bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_minor() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 1 });
+        assert_eq!(version.to_string().as_str(), "0.1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 1 });
+        assert_eq!(version.to_string().as_str(), "1.6");
+
+        // three digit (non-zero major)
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 1 });
+        assert_eq!(version.to_string().as_str(), "5.4.0");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 1 });
+        assert_eq!(version.to_string().as_str(), "1.3.0.0");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.post345.dev456+local"
+            .parse::<Version>()
+            .unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 1 });
+        assert_eq!(version.to_string().as_str(), "5!1.8.0.0+local");
+        version.bump(BumpCommand::BumpRelease { index: 1 });
+        assert_eq!(version.to_string().as_str(), "5!1.9.0.0+local");
+    }
+
+    /// Test patch bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_patch() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 2 });
+        assert_eq!(version.to_string().as_str(), "0.0.1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 2 });
+        assert_eq!(version.to_string().as_str(), "1.5.1");
+
+        // three digit
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 2 });
+        assert_eq!(version.to_string().as_str(), "5.3.7");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 2 });
+        assert_eq!(version.to_string().as_str(), "1.2.4.0");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.post345.dev456+local"
+            .parse::<Version>()
+            .unwrap();
+        version.bump(BumpCommand::BumpRelease { index: 2 });
+        assert_eq!(version.to_string().as_str(), "5!1.7.4.0+local");
+        version.bump(BumpCommand::BumpRelease { index: 2 });
+        assert_eq!(version.to_string().as_str(), "5!1.7.5.0+local");
+    }
+
+    /// Test alpha bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_alpha() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Alpha,
+        });
+        assert_eq!(version.to_string().as_str(), "0a1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Alpha,
+        });
+        assert_eq!(version.to_string().as_str(), "1.5a1");
+
+        // three digit
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Alpha,
+        });
+        assert_eq!(version.to_string().as_str(), "5.3.6a1");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Alpha,
+        });
+        assert_eq!(version.to_string().as_str(), "1.2.3.4a1");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.post345.dev456+local"
+            .parse::<Version>()
+            .unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Alpha,
+        });
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5a1+local");
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Alpha,
+        });
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5a2+local");
+    }
+
+    /// Test beta bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_beta() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Beta,
+        });
+        assert_eq!(version.to_string().as_str(), "0b1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Beta,
+        });
+        assert_eq!(version.to_string().as_str(), "1.5b1");
+
+        // three digit
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Beta,
+        });
+        assert_eq!(version.to_string().as_str(), "5.3.6b1");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Beta,
+        });
+        assert_eq!(version.to_string().as_str(), "1.2.3.4b1");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5a2.post345.dev456+local"
+            .parse::<Version>()
+            .unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Beta,
+        });
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5b1+local");
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Beta,
+        });
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5b2+local");
+    }
+
+    /// Test rc bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_rc() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Rc,
+        });
+        assert_eq!(version.to_string().as_str(), "0rc1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Rc,
+        });
+        assert_eq!(version.to_string().as_str(), "1.5rc1");
+
+        // three digit
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Rc,
+        });
+        assert_eq!(version.to_string().as_str(), "5.3.6rc1");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Rc,
+        });
+        assert_eq!(version.to_string().as_str(), "1.2.3.4rc1");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.post345.dev456+local"
+            .parse::<Version>()
+            .unwrap();
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Rc,
+        });
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5rc1+local");
+        version.bump(BumpCommand::BumpPrerelease {
+            kind: PrereleaseKind::Rc,
+        });
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5rc2+local");
+    }
+
+    /// Test post bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_post() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPost);
+        assert_eq!(version.to_string().as_str(), "0.post1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPost);
+        assert_eq!(version.to_string().as_str(), "1.5.post1");
+
+        // three digit
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPost);
+        assert_eq!(version.to_string().as_str(), "5.3.6.post1");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPost);
+        assert_eq!(version.to_string().as_str(), "1.2.3.4.post1");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.dev123+local".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpPost);
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5b2.post1+local");
+        version.bump(BumpCommand::BumpPost);
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5b2.post2+local");
+    }
+
+    /// Test dev bumping
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn bump_dev() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpDev);
+        assert_eq!(version.to_string().as_str(), "0.dev1");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpDev);
+        assert_eq!(version.to_string().as_str(), "1.5.dev1");
+
+        // three digit
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpDev);
+        assert_eq!(version.to_string().as_str(), "5.3.6.dev1");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpDev);
+        assert_eq!(version.to_string().as_str(), "1.2.3.4.dev1");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.post345+local".parse::<Version>().unwrap();
+        version.bump(BumpCommand::BumpDev);
+        assert_eq!(
+            version.to_string().as_str(),
+            "5!1.7.3.5b2.post345.dev1+local"
+        );
+        version.bump(BumpCommand::BumpDev);
+        assert_eq!(
+            version.to_string().as_str(),
+            "5!1.7.3.5b2.post345.dev2+local"
+        );
+    }
+
+    /// Test stable setting
+    /// Explicitly using the string display because we want to preserve formatting where possible!
+    #[test]
+    fn make_stable() {
+        // one digit
+        let mut version = "0".parse::<Version>().unwrap();
+        version.bump(BumpCommand::MakeStable);
+        assert_eq!(version.to_string().as_str(), "0");
+
+        // two digit
+        let mut version = "1.5".parse::<Version>().unwrap();
+        version.bump(BumpCommand::MakeStable);
+        assert_eq!(version.to_string().as_str(), "1.5");
+
+        // three digit
+        let mut version = "5.3.6".parse::<Version>().unwrap();
+        version.bump(BumpCommand::MakeStable);
+        assert_eq!(version.to_string().as_str(), "5.3.6");
+
+        // four digit
+        let mut version = "1.2.3.4".parse::<Version>().unwrap();
+        version.bump(BumpCommand::MakeStable);
+        assert_eq!(version.to_string().as_str(), "1.2.3.4");
+
+        // All the version junk
+        let mut version = "5!1.7.3.5b2.post345+local".parse::<Version>().unwrap();
+        version.bump(BumpCommand::MakeStable);
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5+local");
+        version.bump(BumpCommand::MakeStable);
+        assert_eq!(version.to_string().as_str(), "5!1.7.3.5+local");
     }
 }

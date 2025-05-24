@@ -160,6 +160,8 @@ Setting `tool.uv.package = false` will force a project package _not_ to be built
 the project environment. uv will ignore a declared build system when interacting with the project;
 however, uv will still respect explicit attempts to build the project such as invoking `uv build`.
 
+## Project versioning
+
 ## Project environment path
 
 The `UV_PROJECT_ENVIRONMENT` environment variable can be used to configure the project virtual
