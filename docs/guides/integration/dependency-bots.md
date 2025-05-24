@@ -60,5 +60,21 @@ need to be explicitly defined using
 
 ## Dependabot
 
-Support for uv is not yet available. Progress can be tracked at
-[dependabot/dependabot-core#10478](https://github.com/dependabot/dependabot-core/issues/10478).
+uv is supported by
+[Dependabot](https://docs.github.com/en/code-security/dependabot/ecosystems-supported-by-dependabot/supported-ecosystems-and-repositories)
+
+Dependabot uses the presence of a `uv.lock` or `pyproject.toml`.
+
+```yaml title=".github/dependabot.yml"
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    # Location of `uv.lock` and/or `pyproject.toml`
+    directory: "/"
+    schedule:
+      interval: "weekly"
+```
+
+Refer to
+[Dependabot's documentation](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference)
+for more configuration options.
