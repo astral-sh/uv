@@ -1,0 +1,196 @@
+//https://github.com/astral-sh/uv.git
+##https://github.com/astral-sh/uv.git
+!pip install matplotlib-venn
+!apt-get -qq install -y libfluidsynth1
+import cv2
+import numpy as np
+import os
+
+def estimate_ego_motion(video_path: str) -> tuple[float, float]:
+    """
+    Estimates the camera's ego-motion (speed and direction) from a video clip.
+
+    Args:
+        video_path: Path to the video clip.
+
+    Returns:
+        A tuple (speed_per_frame, direction_degrees).
+        Returns (0.0, 0.0) if motion cannot be estimated.
+    """
+    if not os.path.exists(video_path):
+        print(f"Error: Video file not found at {video_path}")
+        return 0.0, 0.0
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"Error: Could not open video file {video_path}")
+        return 0.0, 0.0
+
+    # Read the first frame
+    ret, prev_frame = cap.read()
+    if not ret:
+        print("Error: Could not read the first frame from the video.")
+        cap.release()
+        return 0.0, 0.0
+    
+    prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+
+    # Parameters for ShiTomasi corner detection
+    feature_params = dict(maxCorners=100, qualityLevel=0.3, minDistance=7, blockSize=7)
+    
+    # Detect initial good features to track
+    prev_points = cv2.goodFeaturesToTrack(prev_gray, mask=None, **feature_params)
+
+    if prev_points is None or len(prev_points) == 0:
+        print("No initial features found to track.")
+        cap.release()
+        return 0.0, 0.0
+
+    # Parameters for Lucas-Kanade optical flow
+    lk_params = dict(
+        winSize=(15, 15),
+        maxLevel=2,
+        criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03),
+    )
+
+    total_dx = 0.0
+    total_dy = 0.0
+    valid_flow_vectors_count = 0 # Counts individual valid point movements across all frames
+    frames_with_flow = 0 # Counts frames where flow was successfully calculated for at least one point
+
+    min_features_for_redetection = 10 # If tracked points drop below this, re-detect
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break  # End of video
+
+        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        # Calculate optical flow
+        next_points, status, err = cv2.calcOpticalFlowPyrLK(
+            prev_gray, gray_frame, prev_points, None, **lk_params
+        )
+
+        if next_points is not None and status is not None:
+            good_new = next_points[status.ravel() == 1]
+            good_old = prev_points[status.ravel() == 1]
+
+            frame_dx = 0.0
+            frame_dy = 0.0
+            points_in_frame_flow = 0
+
+            if len(good_new) > 0: # Ensure there are points to calculate flow from
+                for i, (new, old) in enumerate(zip(good_new, good_old)):
+                    dx = new[0] - old[0]
+                    dy = new[1] - old[1]
+                    frame_dx += dx
+                    frame_dy += dy
+                    points_in_frame_flow +=1
+                
+                if points_in_frame_flow > 0:
+                    avg_frame_dx = frame_dx / points_in_frame_flow
+                    avg_frame_dy = frame_dy / points_in_frame_flow
+                    
+                    total_dx += avg_frame_dx
+                    total_dy += avg_frame_dy
+                    valid_flow_vectors_count += points_in_frame_flow # Accumulate total number of vectors
+                    frames_with_flow += 1
+
+
+            # Update previous points and frame
+            prev_gray = gray_frame.copy()
+            prev_points = good_new.reshape(-1, 1, 2)
+
+            # Re-detect features if the number of tracked points is too low
+            if len(prev_points) < min_features_for_redetection:
+                new_features = cv2.goodFeaturesToTrack(prev_gray, mask=None, **feature_params)
+                if new_features is not None:
+                    prev_points = new_features
+                else:
+                    # No new features detected, might be end of useful tracking
+                    # print("Warning: Feature re-detection failed or found no new features.")
+                    pass # Continue with what we have, or break if prev_points is empty
+            
+            if len(prev_points) == 0:
+                # print("Lost all features, stopping.")
+                break
+
+        else: # next_points or status is None
+            # print("Warning: Optical flow calculation failed for a frame.")
+            # Attempt to re-detect features on the current gray frame and continue
+            prev_gray = gray_frame.copy() # Update prev_gray regardless
+            new_features = cv2.goodFeaturesToTrack(prev_gray, mask=None, **feature_params)
+            if new_features is not None and len(new_features) > 0:
+                prev_points = new_features
+            else:
+                # print("Lost all features after optical flow failure and re-detection failure, stopping.")
+                break
+
+
+    cap.release()
+
+    if frames_with_flow == 0: # Check frames_with_flow instead of valid_flow_vectors_count for average
+        print("No valid flow vectors were calculated across any frames.")
+        return 0.0, 0.0
+
+    # Calculate average displacement across frames that had flow
+    avg_dx_overall = total_dx / frames_with_flow
+    avg_dy_overall = total_dy / frames_with_flow
+
+    # Camera motion is the inverse of the average feature motion
+    camera_dx = -avg_dx_overall
+    camera_dy = -avg_dy_overall
+
+    speed_per_frame = np.sqrt(camera_dx**2 + camera_dy**2)
+    direction_radians = np.arctan2(camera_dy, camera_dx) # Note: camera_dy is typically 'y', camera_dx is 'x'
+    direction_degrees = np.degrees(direction_radians)
+
+    # Normalize degrees to 0-360 range (optional, atan2 gives -180 to 180)
+    # if direction_degrees < 0:
+    #     direction_degrees += 360
+
+    return speed_per_frame, direction_degrees
+
+
+if __name__ == "__main__":
+    # This assumes a video file named "video_clip.mp4" exists from the previous step.
+    # For testing, you might need to create a dummy video file or use a known video.
+    # For now, we'll use "google_io_clip.mp4" as used in the video_downloader.py example.
+    
+    video_filename = "google_io_clip.mp4" # Or "video_clip.mp4" if that's what you named it
+    
+    # Check if the expected video file exists, otherwise create a dummy one for testing structure
+    if not os.path.exists(video_filename):
+        print(f"Warning: Video file '{video_filename}' not found for testing.")
+        print("Please ensure the video file from the previous step is in the same directory or provide a valid path.")
+        # As a fallback for structural testing, let's assume the user will provide one later.
+        # If you have a standard test video, you could point to it.
+        # For now, the function handles file not found.
+        speed, direction = 0.0, 0.0 # Default if no video
+    else:
+        print(f"Estimating ego-motion for video: {video_filename}")
+        speed, direction = estimate_ego_motion(video_filename)
+
+    print(f"\n--- Ego-Motion Estimation Results ---")
+    if speed == 0.0 and direction == 0.0:
+        print("Could not estimate ego-motion. (Check warnings above if any)")
+    else:
+        print(f"Estimated Camera Speed: {speed:.2f} pixels/frame")
+        print(f"Estimated Camera Direction: {direction:.2f} degrees")
+    print("------------------------------------")
+
+    # Example with a non-existent file to test error handling
+    print("\nTesting with a non-existent video file:")
+    non_existent_video = "non_existent_dummy_video.mp4"
+    speed_ne, direction_ne = estimate_ego_motion(non_existent_video)
+    print(f"Result for non-existent file: Speed={speed_ne}, Direction={direction_ne}")
+    print("------------------------------------")
+
+    # Note: For a more robust test, one might create a dummy video file programmatically
+    # if cv2 and numpy are available and a video writing setup is simple enough.
+    # However, the prompt asks to assume video_clip.mp4 exists.
+    # The video_downloader.py created "google_io_clip.mp4", so we default to that.
+
+    # A more thorough test would involve a video with known motion characteristics.
+    # For now, the focus is on implementing the described logic.
