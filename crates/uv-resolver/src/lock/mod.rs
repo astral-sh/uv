@@ -2837,6 +2837,34 @@ struct PackageMetadata {
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
 
+impl PackageMetadata {
+    fn unwire(self, requires_python: &RequiresPython) -> PackageMetadata {
+        // We need to complexify these markers so things like
+        // `requires_python < '0'` get normalized to False
+        let unwire_requirements = |requirements: BTreeSet<Requirement>| -> BTreeSet<Requirement> {
+            requirements
+                .into_iter()
+                .map(|mut requirement| {
+                    let complexified_marker =
+                        requires_python.complexify_markers(requirement.marker);
+                    requirement.marker = complexified_marker;
+                    requirement
+                })
+                .collect()
+        };
+
+        PackageMetadata {
+            requires_dist: self.requires_dist,
+            provides_extras: self.provides_extras,
+            dependency_groups: self
+                .dependency_groups
+                .into_iter()
+                .map(|(group, requirements)| (group, unwire_requirements(requirements)))
+                .collect(),
+        }
+    }
+}
+
 impl PackageWire {
     fn unwire(
         self,
@@ -2865,9 +2893,10 @@ impl PackageWire {
                 .map(|dep| dep.unwire(requires_python, unambiguous_package_ids))
                 .collect()
         };
+
         Ok(Package {
             id: self.id,
-            metadata: self.metadata,
+            metadata: self.metadata.unwire(requires_python),
             sdist: self.sdist,
             wheels: self.wheels,
             fork_markers: self
