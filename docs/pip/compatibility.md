@@ -400,7 +400,7 @@ the `subprocess` option is supported.
 
 Unlike `pip`, uv does not enable keyring authentication by default.
 
-Unlike `pip`, uv does not wait until a request returns a HTTP 401 before searching for
+Unlike `pip`, uv does not wait until a request returns an HTTP 401 before searching for
 authentication. uv attaches authentication to all requests for hosts with credentials available.
 
 ## `egg` support

@@ -9,7 +9,7 @@ a maintainer much longer to identify the root cause of the problem.
 
 ## How to write a reproducible example
 
-When writing a reproducible example, the goal is to provide all of the context necessary for someone
+When writing a reproducible example, the goal is to provide all the context necessary for someone
 else to reproduce your example. This includes:
 
 - The platform you're using (e.g., the operating system and architecture)
@@ -124,8 +124,8 @@ In addition to the script, include _verbose_ logs (i.e., with the `-v` flag) of 
 complete error message.
 
 Whenever a script relies on external state, be sure to share that information. For example, if you
-wrote the script on Windows and it uses a Python version that you installed with `choco` and runs on
-PowerShell 6.2, please include that in the report.
+wrote the script on Windows, and it uses a Python version that you installed with `choco` and runs
+on PowerShell 6.2, please include that in the report.
 
 ### Git repository
 

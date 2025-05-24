@@ -93,7 +93,7 @@ explicit = true
 Even though `uv publish` retries failed uploads, it can happen that publishing fails in the middle,
 with some files uploaded and some files still missing. With PyPI, you can retry the exact same
 command, existing identical files will be ignored. With other registries, use
-`--check-url <index url>` with the index URL (not the publish URL) the packages belong to. When
+`--check-url <index url>` with the index URL (not the publishing URL) the packages belong to. When
 using `--index`, the index URL is used as check URL. uv will skip uploading files that are identical
 to files in the registry, and it will also handle raced parallel uploads. Note that existing files
 need to match exactly with those previously uploaded to the registry, this avoids accidentally
