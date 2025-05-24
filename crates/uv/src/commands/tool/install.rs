@@ -48,6 +48,7 @@ pub(crate) async fn install(
     with: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
@@ -247,6 +248,7 @@ pub(crate) async fn install(
         with,
         constraints,
         overrides,
+        excludes,
         BTreeMap::default(),
         &client_builder,
     )
@@ -284,6 +286,21 @@ pub(crate) async fn install(
     // Resolve the overrides.
     let overrides = resolve_names(
         spec.overrides,
+        &interpreter,
+        &settings,
+        &network_settings,
+        &state,
+        concurrency,
+        &cache,
+        &workspace_cache,
+        printer,
+        preview,
+    )
+    .await?;
+
+    // Resolve the excludes
+    let excludes = resolve_names(
+        spec.excludes,
         &interpreter,
         &settings,
         &network_settings,
@@ -409,6 +426,11 @@ pub(crate) async fn install(
             .map(NameRequirementSpecification::from)
             .collect(),
         overrides: overrides
+            .iter()
+            .cloned()
+            .map(UnresolvedRequirementSpecification::from)
+            .collect(),
+        excludes: excludes
             .iter()
             .cloned()
             .map(UnresolvedRequirementSpecification::from)
