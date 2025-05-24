@@ -4818,7 +4818,8 @@ name = "uv-cache-info"
 version = "0.0.1"
 dependencies = [
  "fs-err 3.1.0",
- "globwalk",
+ "glob",
+ "pathdiff",
  "schemars",
  "serde",
  "thiserror 2.0.12",

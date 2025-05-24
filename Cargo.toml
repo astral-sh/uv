@@ -108,7 +108,6 @@ fs2 = { version = "0.4.3" }
 futures = { version = "0.3.30" }
 glob = { version = "0.3.1" }
 globset = { version = "0.4.15" }
-globwalk = { version = "0.9.1" }
 goblin = { version = "0.9.0", default-features = false, features = ["std", "elf32", "elf64", "endian_fd"] }
 hashbrown = { version = "0.15.1" }
 hex = { version = "0.4.3" }
@@ -129,8 +128,8 @@ nanoid = { version = "0.4.0" }
 nix = { version = "0.29.0", features = ["signal"] }
 once_cell = { version = "1.20.2" }
 owo-colors = { version = "4.1.0" }
+pathdiff = { version = "0.2.3" }
 path-slash = { version = "0.2.1" }
-pathdiff = { version = "0.2.1" }
 percent-encoding = { version = "2.3.1" }
 petgraph = { version = "0.8.0" }
 proc-macro2 = { version = "1.0.86" }
