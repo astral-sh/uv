@@ -89,6 +89,7 @@ pub(crate) async fn pip_sync(
 
     // Initialize a few defaults.
     let overrides = &[];
+    let excludes = &[];
     let extras = ExtrasSpecification::default();
     let groups = BTreeMap::default();
     let upgrade = Upgrade::default();
@@ -117,6 +118,7 @@ pub(crate) async fn pip_sync(
         requirements,
         constraints,
         overrides,
+        excludes,
         &extras,
         groups,
         &client_builder,
@@ -404,6 +406,7 @@ pub(crate) async fn pip_sync(
             requirements,
             constraints,
             overrides,
+            excludes,
             source_trees,
             project,
             BTreeSet::default(),

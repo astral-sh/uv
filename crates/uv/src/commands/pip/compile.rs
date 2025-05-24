@@ -241,7 +241,7 @@ pub(crate) async fn pip_compile(
         )
         .collect();
 
-    let excludes: Vec<UnresolvedRequirementSpecification> = excludes
+    let _excludes: Vec<UnresolvedRequirementSpecification> = excludes
         .iter()
         .cloned()
         .chain(
@@ -518,6 +518,7 @@ pub(crate) async fn pip_compile(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),

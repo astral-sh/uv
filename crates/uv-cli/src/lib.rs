@@ -4252,6 +4252,10 @@ pub struct ToolRunArgs {
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
 
+    /// Excludes
+    #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub excludes: Vec<Maybe<PathBuf>>,
+
     /// Run the tool in an isolated virtual environment, ignoring any already-installed tools.
     #[arg(long)]
     pub isolated: bool,
@@ -4359,6 +4363,9 @@ pub struct ToolInstallArgs {
     /// requirements of the constituent packages.
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
+
+    #[arg(long, alias = "excludes", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub excludes: Vec<Maybe<PathBuf>>,
 
     /// Constrain build dependencies using the given requirements files when building source
     /// distributions.

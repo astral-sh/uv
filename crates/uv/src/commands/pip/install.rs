@@ -54,9 +54,11 @@ pub(crate) async fn pip_install(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
     constraints_from_workspace: Vec<Requirement>,
     overrides_from_workspace: Vec<Requirement>,
+    excludes_from_workspace: Vec<Requirement>,
     build_constraints_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
     groups: BTreeMap<PathBuf, Vec<GroupName>>,
@@ -111,6 +113,7 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
+        excludes,
         pylock,
         source_trees,
         groups,
@@ -125,6 +128,7 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
+        excludes,
         extras,
         groups,
         &client_builder,
@@ -154,6 +158,16 @@ pub(crate) async fn pip_install(
         .cloned()
         .chain(
             overrides_from_workspace
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from),
+        )
+        .collect();
+
+    let excludes: Vec<UnresolvedRequirementSpecification> = excludes
+        .iter()
+        .cloned()
+        .chain(
+            excludes_from_workspace
                 .into_iter()
                 .map(UnresolvedRequirementSpecification::from),
         )
@@ -467,6 +481,7 @@ pub(crate) async fn pip_install(
             requirements,
             constraints,
             overrides,
+            excludes,
             source_trees,
             project,
             BTreeSet::default(),

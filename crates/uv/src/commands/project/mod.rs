@@ -2592,7 +2592,6 @@ pub(crate) fn script_specification(
         requirements,
         constraints,
         overrides,
-        excludes,
     )))
 }
 
