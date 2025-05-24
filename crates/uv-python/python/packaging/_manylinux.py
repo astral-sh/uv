@@ -232,7 +232,7 @@ def platform_tags(archs: Sequence[str]) -> Iterator[str]:
     if set(archs) & {"x86_64", "i686"}:
         # On x86/i686 also oldest glibc to be supported is (2, 5).
         too_old_glibc2 = _GLibCVersion(2, 4)
-    current_glibc = _GLibCVersion(*_get_glibc_version())
+    current_glibc = _get_glibc_version()
     glibc_max_list = [current_glibc]
     # We can assume compatibility across glibc major versions.
     # https://sourceware.org/bugzilla/show_bug.cgi?id=24636
@@ -252,11 +252,8 @@ def platform_tags(archs: Sequence[str]) -> Iterator[str]:
                 min_minor = -1
             for glibc_minor in range(glibc_max.minor, min_minor, -1):
                 glibc_version = _GLibCVersion(glibc_max.major, glibc_minor)
-                tag = "manylinux_{}_{}".format(*glibc_version)
                 if _is_compatible(arch, glibc_version):
-                    yield f"{tag}_{arch}"
-                # Handle the legacy manylinux1, manylinux2010, manylinux2014 tags.
-                if glibc_version in _LEGACY_MANYLINUX_MAP:
-                    legacy_tag = _LEGACY_MANYLINUX_MAP[glibc_version]
-                    if _is_compatible(arch, glibc_version):
+                    yield "manylinux_{}_{}_{}".format(*glibc_version, arch)
+                    # Handle the legacy manylinux1, manylinux2010, manylinux2014 tags.
+                    if legacy_tag := _LEGACY_MANYLINUX_MAP.get(glibc_version):
                         yield f"{legacy_tag}_{arch}"
