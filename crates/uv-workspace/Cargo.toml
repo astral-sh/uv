@@ -30,6 +30,7 @@ uv-pypi-types = { workspace = true }
 uv-static = { workspace = true }
 uv-warnings = { workspace = true }
 
+clap = { workspace = true, optional = true }
 fs-err = { workspace = true }
 glob = { workspace = true }
 itertools = { workspace = true }

@@ -592,6 +592,44 @@ members = ["member1", "path/to/member2", "libs/*"]
 ---
 
 ## Configuration
+### [`add-bounds`](#add-bounds) {: #add-bounds }
+
+The default version specifier when adding a dependency.
+
+When adding a dependency to the project, if no constraint or URL is provided, a constraint
+is added based on the latest compatible version of the package. By default, a lower bound
+constraint is used, e.g., `>=1.2.3`.
+
+When `--frozen` is provided, no resolution is performed, and dependencies are always added
+without constraints.
+
+This option is in preview and may change in any future release.
+
+**Default value**: `"lower"`
+
+**Possible values**:
+
+- `"lower"`: Only a lower bound, e.g., `>=1.2.3`
+- `"major"`: Allow the same major version, similar to the semver caret, e.g., `>=1.2.3, <2.0.0`
+- `"minor"`: Allow the same minor version, similar to the semver tilde, e.g., `>=1.2.3, <1.3.0`
+- `"exact"`: Pin the exact version, e.g., `==1.2.3`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    add-bounds = "major"
+    ```
+=== "uv.toml"
+
+    ```toml
+    add-bounds = "major"
+    ```
+
+---
+
 ### [`allow-insecure-host`](#allow-insecure-host) {: #allow-insecure-host }
 
 Allow insecure connections to host.
