@@ -11798,13 +11798,12 @@ fn normalize_false_marker_dependency_groups() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided. To update the lockfile, run `uv lock`.
     ");
 
     Ok(())
