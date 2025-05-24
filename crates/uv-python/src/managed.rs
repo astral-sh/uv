@@ -87,7 +87,7 @@ pub enum Error {
     AbsolutePath(PathBuf, #[source] io::Error),
     #[error(transparent)]
     NameParseError(#[from] installation::PythonInstallationKeyError),
-    #[error(transparent)]
+    #[error("Failed to determine the current platform")]
     LibcDetection(#[from] LibcDetectionError),
     #[error(transparent)]
     MacOsDylib(#[from] macos_dylib::Error),
