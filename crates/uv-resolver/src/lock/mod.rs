@@ -5040,32 +5040,29 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         format!("`{}`", best.cyan())
                     };
-                    if let Some(version) = version {
-                        write!(
-                            f,
-                            "{}{} You're on {}, but `{}` ({}) only has wheels for the following platform{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
-                            best,
-                            package.cyan(),
-                            format!("v{version}").cyan(),
-                            tags.iter()
-                                .map(|tag| format!("`{}`", tag.cyan()))
-                                .join(", "),
-                        )
+                    let package_ref = if let Some(version) = version {
+                        format!("`{}` ({})", package.cyan(), format!("v{version}").cyan())
                     } else {
-                        write!(
-                            f,
-                            "{}{} You're on {}, but `{}` only has wheels for the following platform{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
-                            best,
-                            package.cyan(),
-                            tags.iter()
-                                .map(|tag| format!("`{}`", tag.cyan()))
-                                .join(", "),
-                        )
-                    }
+                        format!("`{}`", package.cyan())
+                    };
+                    writeln!(
+                        f,
+                        "{}{} You're on {}, but there are no wheels for the current platform, consider configuring `{}`.",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        best,
+                        "tool.uv.required-environments".green()
+                    )?;
+                    write!(
+                        f,
+                        "{}{} {} only has wheels for the following platform{s}: {}.",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        package_ref,
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                    )
                 } else {
                     if let Some(version) = version {
                         write!(
