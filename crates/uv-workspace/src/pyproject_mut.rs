@@ -7,7 +7,6 @@ use thiserror::Error;
 use toml_edit::{
     Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
 };
-use url::Url;
 
 use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Index;
@@ -15,6 +14,7 @@ use uv_fs::PortablePath;
 use uv_normalize::GroupName;
 use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
+use uv_redacted::LogSafeUrl;
 
 use crate::pyproject::{DependencyType, Source};
 
@@ -171,6 +171,7 @@ impl PyProjectTomlMut {
         &mut self,
         req: &Requirement,
         source: Option<&Source>,
+        raw: bool,
     ) -> Result<ArrayEdit, Error> {
         // Get or create `project.dependencies`.
         let dependencies = self
@@ -180,7 +181,7 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let edit = add_dependency(req, dependencies, source.is_some())?;
+        let edit = add_dependency(req, dependencies, source.is_some(), raw)?;
 
         if let Some(source) = source {
             self.add_source(&req.name, source)?;
@@ -196,6 +197,7 @@ impl PyProjectTomlMut {
         &mut self,
         req: &Requirement,
         source: Option<&Source>,
+        raw: bool,
     ) -> Result<ArrayEdit, Error> {
         // Get or create `tool.uv.dev-dependencies`.
         let dev_dependencies = self
@@ -213,7 +215,7 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let edit = add_dependency(req, dev_dependencies, source.is_some())?;
+        let edit = add_dependency(req, dev_dependencies, source.is_some(), raw)?;
 
         if let Some(source) = source {
             self.add_source(&req.name, source)?;
@@ -267,7 +269,7 @@ impl PyProjectTomlMut {
                 if table
                     .get("url")
                     .and_then(|item| item.as_str())
-                    .and_then(|url| Url::parse(url).ok())
+                    .and_then(|url| LogSafeUrl::parse(url).ok())
                     .is_some_and(|url| {
                         CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url())
                     })
@@ -304,10 +306,10 @@ impl PyProjectTomlMut {
         if table
             .get("url")
             .and_then(|item| item.as_str())
-            .and_then(|url| Url::parse(url).ok())
+            .and_then(|url| LogSafeUrl::parse(url).ok())
             .is_none_or(|url| CanonicalUrl::new(&url) != CanonicalUrl::new(index.url.url()))
         {
-            let mut formatted = Formatted::new(index.url.redacted().to_string());
+            let mut formatted = Formatted::new(index.url.removed_credentials().to_string());
             if let Some(value) = table.get("url").and_then(Item::as_value) {
                 if let Some(prefix) = value.decor().prefix() {
                     formatted.decor_mut().set_prefix(prefix.clone());
@@ -365,7 +367,7 @@ impl PyProjectTomlMut {
             if table
                 .get("url")
                 .and_then(|item| item.as_str())
-                .and_then(|url| Url::parse(url).ok())
+                .and_then(|url| LogSafeUrl::parse(url).ok())
                 .is_some_and(|url| CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url()))
             {
                 return false;
@@ -400,6 +402,7 @@ impl PyProjectTomlMut {
         group: &ExtraName,
         req: &Requirement,
         source: Option<&Source>,
+        raw: bool,
     ) -> Result<ArrayEdit, Error> {
         // Get or create `project.optional-dependencies`.
         let optional_dependencies = self
@@ -428,7 +431,7 @@ impl PyProjectTomlMut {
         .as_array_mut()
         .ok_or(Error::MalformedDependencies)?;
 
-        let added = add_dependency(req, group, source.is_some())?;
+        let added = add_dependency(req, group, source.is_some(), raw)?;
 
         // If `project.optional-dependencies` is an inline table, reformat it.
         //
@@ -457,6 +460,7 @@ impl PyProjectTomlMut {
         group: &GroupName,
         req: &Requirement,
         source: Option<&Source>,
+        raw: bool,
     ) -> Result<ArrayEdit, Error> {
         // Get or create `dependency-groups`.
         let dependency_groups = self
@@ -492,7 +496,7 @@ impl PyProjectTomlMut {
         .as_array_mut()
         .ok_or(Error::MalformedDependencies)?;
 
-        let added = add_dependency(req, group, source.is_some())?;
+        let added = add_dependency(req, group, source.is_some(), raw)?;
 
         // To avoid churn in pyproject.toml, we only sort new group keys if the
         // existing keys were sorted.
@@ -999,6 +1003,7 @@ pub fn add_dependency(
     req: &Requirement,
     deps: &mut Array,
     has_source: bool,
+    raw: bool,
 ) -> Result<ArrayEdit, Error> {
     let mut to_replace = find_dependencies(&req.name, Some(&req.marker), deps);
 
@@ -1057,7 +1062,11 @@ pub fn add_dependency(
                 Sort::Unsorted
             };
 
-            let req_string = req.to_string();
+            let req_string = if raw {
+                req.to_string_with_credentials()
+            } else {
+                req.to_string()
+            };
             let index = match sort {
                 Sort::CaseInsensitive => deps.iter().position(|dep| {
                     dep.as_str().is_some_and(|dep| {

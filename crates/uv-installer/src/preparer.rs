@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use futures::{FutureExt, Stream, TryFutureExt, TryStreamExt, stream::FuturesUnordered};
 use tracing::{debug, instrument};
-use url::Url;
 
 use uv_cache::Cache;
 use uv_configuration::BuildOptions;
@@ -14,6 +13,7 @@ use uv_distribution_types::{
 };
 use uv_pep508::PackageName;
 use uv_platform_tags::Tags;
+use uv_redacted::LogSafeUrl;
 use uv_types::{BuildContext, HashStrategy, InFlight};
 
 /// Prepare distributions for installation.
@@ -268,10 +268,10 @@ pub trait Reporter: Send + Sync {
     fn on_build_complete(&self, source: &BuildableSource, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
+    fn on_checkout_start(&self, url: &LogSafeUrl, rev: &str) -> usize;
 
     /// Callback to invoke when a repository checkout completes.
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
+    fn on_checkout_complete(&self, url: &LogSafeUrl, rev: &str, index: usize);
 }
 
 impl dyn Reporter {
@@ -299,11 +299,11 @@ impl uv_distribution::Reporter for Facade {
         self.reporter.on_build_complete(source, id);
     }
 
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+    fn on_checkout_start(&self, url: &LogSafeUrl, rev: &str) -> usize {
         self.reporter.on_checkout_start(url, rev)
     }
 
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
+    fn on_checkout_complete(&self, url: &LogSafeUrl, rev: &str, index: usize) {
         self.reporter.on_checkout_complete(url, rev, index);
     }
 

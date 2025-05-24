@@ -30,6 +30,7 @@ use uv_python::{
     PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions,
 };
+use uv_redacted::LogSafeUrl;
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{Installable, Lock, Preference};
 use uv_scripts::Pep723Item;
@@ -1464,7 +1465,7 @@ impl RunCommand {
             // We don't do this check on Windows since the file path would
             // be invalid anyway, and thus couldn't refer to a local file.
             if !cfg!(unix) || matches!(target_path.try_exists(), Ok(false)) {
-                let url = Url::parse(&target.to_string_lossy())?;
+                let url = LogSafeUrl::parse(&target.to_string_lossy())?;
 
                 let file_stem = url
                     .path_segments()
@@ -1481,7 +1482,11 @@ impl RunCommand {
                     .native_tls(network_settings.native_tls)
                     .allow_insecure_host(network_settings.allow_insecure_host.clone())
                     .build();
-                let response = client.for_host(&url).get(url.clone()).send().await?;
+                let response = client
+                    .for_host(&url)
+                    .get(Url::from(url.clone()))
+                    .send()
+                    .await?;
 
                 // Stream the response to the file.
                 let mut writer = file.as_file();
@@ -1491,7 +1496,7 @@ impl RunCommand {
                     writer.write_all(&chunk?)?;
                 }
 
-                return Ok(Self::PythonRemote(url, file, args.to_vec()));
+                return Ok(Self::PythonRemote(Url::from(url), file, args.to_vec()));
             }
         }
 

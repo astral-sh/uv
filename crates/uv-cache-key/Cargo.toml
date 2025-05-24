@@ -17,6 +17,8 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-redacted = { workspace = true }
+
 hex = { workspace = true }
 memchr = { workspace = true }
 percent-encoding = { workspace = true }

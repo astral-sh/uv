@@ -27,6 +27,7 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-redacted = { workspace = true }
 uv-small-str = { workspace = true }
 
 arcstr = { workspace = true }
@@ -50,3 +51,6 @@ version-ranges = { workspace = true }
 
 [dev-dependencies]
 toml = { workspace = true }
+
+[features]
+schemars = ["dep:schemars", "uv-redacted/schemars"]

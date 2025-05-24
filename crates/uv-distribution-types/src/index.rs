@@ -6,6 +6,7 @@ use thiserror::Error;
 use url::Url;
 
 use uv_auth::{AuthPolicy, Credentials};
+use uv_redacted::LogSafeUrl;
 
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
@@ -82,7 +83,7 @@ pub struct Index {
     /// url = "https://pypi.org/simple"
     /// publish-url = "https://upload.pypi.org/legacy/"
     /// ```
-    pub publish_url: Option<Url>,
+    pub publish_url: Option<LogSafeUrl>,
     /// When uv should use authentication for requests to the index.
     ///
     /// ```toml
@@ -201,7 +202,7 @@ impl Index {
     ///
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
-    pub fn root_url(&self) -> Option<Url> {
+    pub fn root_url(&self) -> Option<LogSafeUrl> {
         self.url.root()
     }
 

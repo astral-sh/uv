@@ -1622,9 +1622,13 @@ pub async fn download_to_disk(url: &str, path: &Path) {
     let client = uv_client::BaseClientBuilder::new()
         .allow_insecure_host(trusted_hosts)
         .build();
-    let url: reqwest::Url = url.parse().unwrap();
+    let url = url.parse().unwrap();
     let client = client.for_host(&url);
-    let response = client.request(http::Method::GET, url).send().await.unwrap();
+    let response = client
+        .request(http::Method::GET, reqwest::Url::from(url))
+        .send()
+        .await
+        .unwrap();
 
     let mut file = tokio::fs::File::create(path).await.unwrap();
     let mut stream = response.bytes_stream();

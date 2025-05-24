@@ -1,7 +1,6 @@
 use std::{fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
@@ -17,6 +16,7 @@ use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_redacted::LogSafeUrl;
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
@@ -1837,7 +1837,7 @@ pub struct OptionsWire {
 
     // #[serde(flatten)]
     // publish: PublishOptions
-    publish_url: Option<Url>,
+    publish_url: Option<LogSafeUrl>,
     trusted_publishing: Option<TrustedPublishing>,
     check_url: Option<IndexUrl>,
 
@@ -2019,7 +2019,7 @@ pub struct PublishOptions {
             publish-url = "https://test.pypi.org/legacy/"
         "#
     )]
-    pub publish_url: Option<Url>,
+    pub publish_url: Option<LogSafeUrl>,
 
     /// Configure trusted publishing via GitHub Actions.
     ///

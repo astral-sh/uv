@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-use url::Url;
 
 use uv_distribution_types::{
     Diagnostic, InstalledDist, Name, NameRequirementSpecification, Requirement,
@@ -18,6 +17,7 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VersionOrUrl;
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_redacted::LogSafeUrl;
 use uv_types::InstalledPackagesProvider;
 use uv_warnings::warn_user;
 
@@ -38,7 +38,7 @@ pub struct SitePackages {
     /// virtual environment, which we handle gracefully.
     by_name: FxHashMap<PackageName, Vec<usize>>,
     /// The installed editable distributions, keyed by URL.
-    by_url: FxHashMap<Url, Vec<usize>>,
+    by_url: FxHashMap<LogSafeUrl, Vec<usize>>,
 }
 
 impl SitePackages {
@@ -174,7 +174,7 @@ impl SitePackages {
     }
 
     /// Returns the distributions installed from the given URL, if any.
-    pub fn get_urls(&self, url: &Url) -> Vec<&InstalledDist> {
+    pub fn get_urls(&self, url: &LogSafeUrl) -> Vec<&InstalledDist> {
         let Some(indexes) = self.by_url.get(url) else {
             return Vec::new();
         };

@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
 use pubgrub::Ranges;
-use url::Url;
 
 use uv_normalize::PackageName;
 use uv_pep440::Version;
+use uv_redacted::LogSafeUrl;
 use uv_torch::TorchBackend;
 
 use crate::pubgrub::{PubGrubDependency, PubGrubPackage, PubGrubPackageInner};
@@ -21,7 +21,7 @@ impl SystemDependency {
     /// Extract a [`SystemDependency`] from an index URL.
     ///
     /// For example, given `https://download.pytorch.org/whl/cu124`, returns CUDA 12.4.
-    pub(super) fn from_index(index: &Url) -> Option<Self> {
+    pub(super) fn from_index(index: &LogSafeUrl) -> Option<Self> {
         let backend = TorchBackend::from_index(index)?;
         let cuda_version = backend.cuda_version()?;
         Some(Self {
@@ -51,22 +51,21 @@ impl From<SystemDependency> for PubGrubDependency {
 mod tests {
     use std::str::FromStr;
 
-    use url::Url;
-
     use uv_normalize::PackageName;
     use uv_pep440::Version;
+    use uv_redacted::LogSafeUrl;
 
     use crate::resolver::system::SystemDependency;
 
     #[test]
     fn pypi() {
-        let url = Url::parse("https://pypi.org/simple").unwrap();
+        let url = LogSafeUrl::parse("https://pypi.org/simple").unwrap();
         assert_eq!(SystemDependency::from_index(&url), None);
     }
 
     #[test]
     fn pytorch_cuda_12_4() {
-        let url = Url::parse("https://download.pytorch.org/whl/cu124").unwrap();
+        let url = LogSafeUrl::parse("https://download.pytorch.org/whl/cu124").unwrap();
         assert_eq!(
             SystemDependency::from_index(&url),
             Some(SystemDependency {
@@ -78,7 +77,7 @@ mod tests {
 
     #[test]
     fn pytorch_cpu() {
-        let url = Url::parse("https://download.pytorch.org/whl/cpu").unwrap();
+        let url = LogSafeUrl::parse("https://download.pytorch.org/whl/cpu").unwrap();
         assert_eq!(SystemDependency::from_index(&url), None);
     }
 }

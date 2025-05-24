@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use owo_colors::OwoColorize;
 use tokio::task::JoinError;
 use url::Url;
+use uv_redacted::LogSafeUrl;
 use zip::result::ZipError;
 
 use crate::metadata::MetadataError;
@@ -28,7 +29,7 @@ pub enum Error {
     #[error(transparent)]
     JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
     #[error("Expected a file URL, but received: {0}")]
-    NonFileUrl(Url),
+    NonFileUrl(LogSafeUrl),
     #[error(transparent)]
     Git(#[from] uv_git::GitResolverError),
     #[error(transparent)]
@@ -103,7 +104,7 @@ pub enum Error {
     #[error(transparent)]
     MetadataLowering(#[from] MetadataError),
     #[error("Distribution not found at: {0}")]
-    NotFound(Url),
+    NotFound(LogSafeUrl),
     #[error("Attempted to re-extract the source distribution for `{}`, but the {} hash didn't match. Run `{}` to clear the cache.", _0, _1, "uv cache clean".green())]
     CacheHeal(String, HashAlgorithm),
     #[error("The source distribution requires Python {0}, but {1} is installed")]

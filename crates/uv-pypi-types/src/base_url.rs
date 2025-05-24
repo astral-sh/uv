@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
-use url::Url;
+use uv_redacted::LogSafeUrl;
 
 /// Join a relative URL to a base URL.
-pub fn base_url_join_relative(base: &str, relative: &str) -> Result<Url, JoinRelativeError> {
-    let base_url = Url::parse(base).map_err(|err| JoinRelativeError::ParseError {
+pub fn base_url_join_relative(base: &str, relative: &str) -> Result<LogSafeUrl, JoinRelativeError> {
+    let base_url = LogSafeUrl::parse(base).map_err(|err| JoinRelativeError::ParseError {
         original: base.to_string(),
         source: err,
     })?;
@@ -32,26 +32,26 @@ pub enum JoinRelativeError {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct BaseUrl(
     #[serde(
-        serialize_with = "Url::serialize_internal",
-        deserialize_with = "Url::deserialize_internal"
+        serialize_with = "LogSafeUrl::serialize_internal",
+        deserialize_with = "LogSafeUrl::deserialize_internal"
     )]
-    Url,
+    LogSafeUrl,
 );
 
 impl BaseUrl {
-    /// Return the underlying [`Url`].
-    pub fn as_url(&self) -> &Url {
+    /// Return the underlying [`LogSafeUrl`].
+    pub fn as_url(&self) -> &LogSafeUrl {
         &self.0
     }
 
-    /// Return the underlying [`Url`] as a serialized string.
+    /// Return the underlying [`LogSafeUrl`] as a serialized string.
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 }
 
-impl From<Url> for BaseUrl {
-    fn from(url: Url) -> Self {
+impl From<LogSafeUrl> for BaseUrl {
+    fn from(url: LogSafeUrl) -> Self {
         Self(url)
     }
 }
