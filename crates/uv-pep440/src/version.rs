@@ -762,41 +762,38 @@ impl Serialize for Version {
 /// Shows normalized version
 impl std::fmt::Display for Version {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let epoch = if self.epoch() == 0 {
-            String::new()
-        } else {
-            format!("{}!", self.epoch())
-        };
-        let release = self
-            .release()
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<String>>()
-            .join(".");
-        let pre = self
-            .pre()
-            .as_ref()
-            .map(|Prerelease { kind, number }| format!("{kind}{number}"))
-            .unwrap_or_default();
-        let post = self
-            .post()
-            .map(|post| format!(".post{post}"))
-            .unwrap_or_default();
-        let dev = self
-            .dev()
-            .map(|dev| format!(".dev{dev}"))
-            .unwrap_or_default();
-        let local = if self.local().is_empty() {
-            String::new()
-        } else {
+        if self.epoch() != 0 {
+            write!(f, "{}!", self.epoch())?;
+        }
+        let release = self.release();
+        let mut release_iter = release.iter();
+        if let Some(first) = release_iter.next() {
+            write!(f, "{first}")?;
+            for n in release_iter {
+                write!(f, ".{n}")?;
+            }
+        }
+
+        if let Some(Prerelease { kind, number }) = self.pre() {
+            write!(f, "{kind}{number}")?;
+        }
+        if let Some(post) = self.post() {
+            write!(f, ".post{post}")?;
+        }
+        if let Some(dev) = self.dev() {
+            write!(f, ".dev{dev}")?;
+        }
+        if !self.local().is_empty() {
             match self.local() {
                 LocalVersionSlice::Segments(_) => {
-                    format!("+{}", self.local())
+                    write!(f, "+{}", self.local())?;
                 }
-                LocalVersionSlice::Max => "+".to_string(),
+                LocalVersionSlice::Max => {
+                    write!(f, "+")?;
+                }
             }
-        };
-        write!(f, "{epoch}{release}{pre}{post}{dev}{local}")
+        }
+        Ok(())
     }
 }
 
