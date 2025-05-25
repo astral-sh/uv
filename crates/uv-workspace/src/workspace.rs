@@ -43,7 +43,7 @@ pub struct WorkspaceCache(Arc<Mutex<FxHashMap<WorkspaceCacheKey, WorkspaceMember
 #[derive(thiserror::Error, Debug)]
 pub enum WorkspaceError {
     // Workspace structure errors.
-    #[error("No `pyproject.toml` found in current directory or any parent directory")]
+    #[error("No `pyproject.toml` found in current directory or any parent directory\nhint: To create one run `uv init`")]
     MissingPyprojectToml,
     #[error("Workspace member `{}` is missing a `pyproject.toml` (matches: `{}`)", _0.simplified_display(), _1)]
     MissingPyprojectTomlMember(PathBuf, String),
