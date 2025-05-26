@@ -13,7 +13,7 @@ use tracing::{debug, instrument};
 use url::Url;
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_git_types::GitUrl;
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 
 use crate::GIT_STORE;
 use crate::git::GitRemote;
@@ -82,7 +82,7 @@ impl GitSource {
 
         // Authenticate the URL, if necessary.
         let remote = if let Some(credentials) = GIT_STORE.get(&canonical) {
-            Cow::Owned(LogSafeUrl::from(
+            Cow::Owned(DisplaySafeUrl::from(
                 credentials.apply(Url::from(self.git.repository().clone())),
             ))
         } else {
@@ -180,8 +180,8 @@ impl Fetch {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a repository checkout begins.
-    fn on_checkout_start(&self, url: &LogSafeUrl, rev: &str) -> usize;
+    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize;
 
     /// Callback to invoke when a repository checkout completes.
-    fn on_checkout_complete(&self, url: &LogSafeUrl, rev: &str, index: usize);
+    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, index: usize);
 }

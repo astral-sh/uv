@@ -7,7 +7,7 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VerbatimUrl;
 
 use uv_normalize::PackageName;
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 
 use crate::{DirectorySourceDist, GitSourceDist, Name, PathSourceDist, SourceDist};
 
@@ -102,8 +102,8 @@ pub enum SourceUrl<'a> {
 }
 
 impl SourceUrl<'_> {
-    /// Return the [`LogSafeUrl`] of the source.
-    pub fn url(&self) -> &LogSafeUrl {
+    /// Return the [`DisplaySafeUrl`] of the source.
+    pub fn url(&self) -> &DisplaySafeUrl {
         match self {
             Self::Direct(dist) => dist.url,
             Self::Git(dist) => dist.url,
@@ -147,7 +147,7 @@ impl std::fmt::Display for SourceUrl<'_> {
 
 #[derive(Debug, Clone)]
 pub struct DirectSourceUrl<'a> {
-    pub url: &'a LogSafeUrl,
+    pub url: &'a DisplaySafeUrl,
     pub subdirectory: Option<&'a Path>,
     pub ext: SourceDistExtension,
 }
@@ -185,7 +185,7 @@ impl<'a> From<&'a GitSourceDist> for GitSourceUrl<'a> {
 
 #[derive(Debug, Clone)]
 pub struct PathSourceUrl<'a> {
-    pub url: &'a LogSafeUrl,
+    pub url: &'a DisplaySafeUrl,
     pub path: Cow<'a, Path>,
     pub ext: SourceDistExtension,
 }
@@ -208,7 +208,7 @@ impl<'a> From<&'a PathSourceDist> for PathSourceUrl<'a> {
 
 #[derive(Debug, Clone)]
 pub struct DirectorySourceUrl<'a> {
-    pub url: &'a LogSafeUrl,
+    pub url: &'a DisplaySafeUrl,
     pub install_path: Cow<'a, Path>,
     pub editable: bool,
 }

@@ -14,7 +14,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository};
 use uv_pypi_types::{ConflictItem, ParsedUrlError, VerbatimParsedUrl};
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 use uv_workspace::Workspace;
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 
@@ -528,11 +528,11 @@ pub enum LoweringError {
     #[error(transparent)]
     InvalidVerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
     #[error("Fragments are not allowed in URLs: `{0}`")]
-    ForbiddenFragment(LogSafeUrl),
+    ForbiddenFragment(DisplaySafeUrl),
     #[error(
         "`{0}` is associated with a URL source, but references a Git repository. Consider using a Git source instead (e.g., `{0} = {{ git = \"{1}\" }}`)"
     )]
-    MissingGitSource(PackageName, LogSafeUrl),
+    MissingGitSource(PackageName, DisplaySafeUrl),
     #[error("`workspace = false` is not yet supported")]
     WorkspaceFalse,
     #[error("Source with `editable = true` must refer to a local directory, not a file: `{0}`")]
@@ -572,7 +572,7 @@ impl std::fmt::Display for SourceKind {
 
 /// Convert a Git source into a [`RequirementSource`].
 fn git_source(
-    git: &LogSafeUrl,
+    git: &DisplaySafeUrl,
     subdirectory: Option<Box<Path>>,
     rev: Option<String>,
     tag: Option<String>,
@@ -587,7 +587,7 @@ fn git_source(
     };
 
     // Create a PEP 508-compatible URL.
-    let mut url = LogSafeUrl::parse(&format!("git+{git}"))?;
+    let mut url = DisplaySafeUrl::parse(&format!("git+{git}"))?;
     if let Some(rev) = reference.as_str() {
         let path = format!("{}@{}", url.path(), rev);
         url.set_path(&path);
@@ -612,7 +612,7 @@ fn git_source(
 /// Convert a URL source into a [`RequirementSource`].
 fn url_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
-    url: LogSafeUrl,
+    url: DisplaySafeUrl,
     subdirectory: Option<Box<Path>>,
 ) -> Result<RequirementSource, LoweringError> {
     let mut verbatim_url = url.clone();

@@ -38,7 +38,7 @@ use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 
@@ -60,7 +60,7 @@ pub enum PublishError {
     #[error("Failed to publish: `{}`", _0.user_display())]
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
-    PublishSend(PathBuf, LogSafeUrl, #[source] PublishSendError),
+    PublishSend(PathBuf, DisplaySafeUrl, #[source] PublishSendError),
     #[error("Failed to obtain token for trusted publishing")]
     TrustedPublishing(#[from] TrustedPublishingError),
     #[error("{0} are not allowed when using trusted publishing")]
@@ -309,7 +309,7 @@ pub async fn check_trusted_publishing(
     password: Option<&str>,
     keyring_provider: KeyringProviderType,
     trusted_publishing: TrustedPublishing,
-    registry: &LogSafeUrl,
+    registry: &DisplaySafeUrl,
     client: &BaseClient,
 ) -> Result<TrustedPublishResult, PublishError> {
     match trusted_publishing {
@@ -380,7 +380,7 @@ pub async fn upload(
     file: &Path,
     raw_filename: &str,
     filename: &DistFilename,
-    registry: &LogSafeUrl,
+    registry: &DisplaySafeUrl,
     client: &BaseClient,
     credentials: &Credentials,
     check_url_client: Option<&CheckUrlClient<'_>>,
@@ -752,7 +752,7 @@ async fn build_request(
     file: &Path,
     raw_filename: &str,
     filename: &DistFilename,
-    registry: &LogSafeUrl,
+    registry: &DisplaySafeUrl,
     client: &BaseClient,
     credentials: &Credentials,
     form_metadata: &[(&'static str, String)],
@@ -893,7 +893,7 @@ mod tests {
     use uv_auth::Credentials;
     use uv_client::BaseClientBuilder;
     use uv_distribution_filename::DistFilename;
-    use uv_redacted::LogSafeUrl;
+    use uv_redacted::DisplaySafeUrl;
 
     struct DummyReporter;
 
@@ -973,7 +973,7 @@ mod tests {
             &file,
             raw_filename,
             &filename,
-            &LogSafeUrl::parse("https://example.org/upload").unwrap(),
+            &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
             &BaseClientBuilder::new().build(),
             &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
             &form_metadata,
@@ -1122,7 +1122,7 @@ mod tests {
             &file,
             raw_filename,
             &filename,
-            &LogSafeUrl::parse("https://example.org/upload").unwrap(),
+            &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
             &BaseClientBuilder::new().build(),
             &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
             &form_metadata,

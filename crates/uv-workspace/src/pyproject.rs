@@ -28,7 +28,7 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::{
     Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
 };
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -891,7 +891,7 @@ pub enum Source {
     /// ```
     Git {
         /// The repository URL (without the `git+` prefix).
-        git: LogSafeUrl,
+        git: DisplaySafeUrl,
         /// The path to the directory with the `pyproject.toml`, if it's not in the archive root.
         subdirectory: Option<PortablePathBuf>,
         // Only one of the three may be used; we'll validate this later and emit a custom error.
@@ -915,7 +915,7 @@ pub enum Source {
     /// flask = { url = "https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl" }
     /// ```
     Url {
-        url: LogSafeUrl,
+        url: DisplaySafeUrl,
         /// For source distributions, the path to the directory with the `pyproject.toml`, if it's
         /// not in the archive root.
         subdirectory: Option<PortablePathBuf>,
@@ -989,12 +989,12 @@ impl<'de> Deserialize<'de> for Source {
         #[derive(Deserialize, Debug, Clone)]
         #[serde(rename_all = "kebab-case", deny_unknown_fields)]
         struct CatchAll {
-            git: Option<LogSafeUrl>,
+            git: Option<DisplaySafeUrl>,
             subdirectory: Option<PortablePathBuf>,
             rev: Option<String>,
             tag: Option<String>,
             branch: Option<String>,
-            url: Option<LogSafeUrl>,
+            url: Option<DisplaySafeUrl>,
             path: Option<PortablePathBuf>,
             editable: Option<bool>,
             package: Option<bool>,
@@ -1083,7 +1083,7 @@ impl<'de> Deserialize<'de> for Source {
 
             // If the user prefixed the URL with `git+`, strip it.
             let git = if let Some(git) = git.as_str().strip_prefix("git+") {
-                LogSafeUrl::parse(git).map_err(serde::de::Error::custom)?
+                DisplaySafeUrl::parse(git).map_err(serde::de::Error::custom)?
             } else {
                 git
             };

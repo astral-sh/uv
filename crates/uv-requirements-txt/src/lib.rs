@@ -55,7 +55,7 @@ use uv_fs::Simplified;
 use uv_pep508::{Pep508Error, RequirementOrigin, VerbatimUrl, expand_env_vars};
 use uv_pypi_types::VerbatimParsedUrl;
 #[cfg(feature = "http")]
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 
 use crate::requirement::EditableError;
 pub use crate::requirement::RequirementsTxtRequirement;
@@ -951,7 +951,7 @@ async fn read_url_to_string(
                 url: path.as_ref().to_owned(),
             })?;
 
-    let url = LogSafeUrl::from_str(path_utf8)
+    let url = DisplaySafeUrl::from_str(path_utf8)
         .map_err(|err| RequirementsTxtParserError::InvalidUrl(path_utf8.to_string(), err))?;
     let response = client
         .for_host(&url)
@@ -1049,7 +1049,7 @@ pub enum RequirementsTxtParserError {
         url: PathBuf,
     },
     #[cfg(feature = "http")]
-    Reqwest(LogSafeUrl, reqwest_middleware::Error),
+    Reqwest(DisplaySafeUrl, reqwest_middleware::Error),
     #[cfg(feature = "http")]
     InvalidUrl(String, url::ParseError),
 }
@@ -1303,11 +1303,11 @@ impl From<io::Error> for RequirementsTxtParserError {
 
 #[cfg(feature = "http")]
 impl RequirementsTxtParserError {
-    fn from_reqwest(url: LogSafeUrl, err: reqwest::Error) -> Self {
+    fn from_reqwest(url: DisplaySafeUrl, err: reqwest::Error) -> Self {
         Self::Reqwest(url, reqwest_middleware::Error::Reqwest(err))
     }
 
-    fn from_reqwest_middleware(url: LogSafeUrl, err: reqwest_middleware::Error) -> Self {
+    fn from_reqwest_middleware(url: DisplaySafeUrl, err: reqwest_middleware::Error) -> Self {
         Self::Reqwest(url, err)
     }
 }

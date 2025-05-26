@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use uv_distribution_types::BuildableSource;
 use uv_pep508::PackageName;
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a source distribution build is kicked off.
@@ -12,10 +12,10 @@ pub trait Reporter: Send + Sync {
     fn on_build_complete(&self, source: &BuildableSource, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
-    fn on_checkout_start(&self, url: &LogSafeUrl, rev: &str) -> usize;
+    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize;
 
     /// Callback to invoke when a repository checkout completes.
-    fn on_checkout_complete(&self, url: &LogSafeUrl, rev: &str, id: usize);
+    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, id: usize);
 
     /// Callback to invoke when a download is kicked off.
     fn on_download_start(&self, name: &PackageName, size: Option<u64>) -> usize;
@@ -43,11 +43,11 @@ struct Facade {
 }
 
 impl uv_git::Reporter for Facade {
-    fn on_checkout_start(&self, url: &LogSafeUrl, rev: &str) -> usize {
+    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize {
         self.reporter.on_checkout_start(url, rev)
     }
 
-    fn on_checkout_complete(&self, url: &LogSafeUrl, rev: &str, id: usize) {
+    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, id: usize) {
         self.reporter.on_checkout_complete(url, rev, id);
     }
 }

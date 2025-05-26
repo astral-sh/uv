@@ -18,7 +18,7 @@ use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
@@ -5838,7 +5838,7 @@ pub struct PublishArgs {
     ///
     /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
     #[arg(long, env = EnvVars::UV_PUBLISH_URL)]
-    pub publish_url: Option<LogSafeUrl>,
+    pub publish_url: Option<DisplaySafeUrl>,
 
     /// Check an index URL for existing files to skip duplicate uploads.
     ///

@@ -6,7 +6,7 @@ use uv_cache_key::{CanonicalUrl, RepositoryUrl};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::HashDigest;
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 
 /// A unique identifier for a package. A package can either be identified by a name (e.g., `black`)
 /// or a URL (e.g., `git+https://github.com/psf/black`).
@@ -25,7 +25,7 @@ impl PackageId {
     }
 
     /// Create a new [`PackageId`] from a URL.
-    pub fn from_url(url: &LogSafeUrl) -> Self {
+    pub fn from_url(url: &DisplaySafeUrl) -> Self {
         Self::Url(CanonicalUrl::new(url))
     }
 }
@@ -55,7 +55,7 @@ impl VersionId {
     }
 
     /// Create a new [`VersionId`] from a URL.
-    pub fn from_url(url: &LogSafeUrl) -> Self {
+    pub fn from_url(url: &DisplaySafeUrl) -> Self {
         Self::Url(CanonicalUrl::new(url))
     }
 }

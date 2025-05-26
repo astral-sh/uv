@@ -45,7 +45,7 @@ use uv_pypi_types::{
     ConflictPackage, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
     ParsedGitUrl,
 };
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::WorkspaceMember;
@@ -2229,7 +2229,7 @@ impl Package {
                     Source::Direct(url, direct) => {
                         let filename: WheelFilename =
                             self.wheels[best_wheel_index].filename.clone();
-                        let url = LogSafeUrl::from(ParsedArchiveUrl {
+                        let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                             url: url.to_url().map_err(LockErrorKind::InvalidUrl)?,
                             subdirectory: direct.subdirectory.clone(),
                             ext: DistExtension::Wheel,
@@ -2391,7 +2391,7 @@ impl Package {
                     GitUrl::from_commit(url, GitReference::from(git.kind.clone()), git.precise)?;
 
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-                let url = LogSafeUrl::from(ParsedGitUrl {
+                let url = DisplaySafeUrl::from(ParsedGitUrl {
                     url: git_url.clone(),
                     subdirectory: git.subdirectory.clone(),
                 });
@@ -2410,7 +2410,7 @@ impl Package {
                     return Ok(None);
                 };
                 let location = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
-                let url = LogSafeUrl::from(ParsedArchiveUrl {
+                let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                     url: location.clone(),
                     subdirectory: direct.subdirectory.clone(),
                     ext: DistExtension::Source(ext),
@@ -2490,7 +2490,7 @@ impl Package {
                     version: version.clone(),
                 })?;
                 let file_url =
-                    LogSafeUrl::from_file_path(workspace_root.join(path).join(file_path))
+                    DisplaySafeUrl::from_file_path(workspace_root.join(path).join(file_path))
                         .map_err(|()| LockErrorKind::PathToUrl)?;
                 let filename = sdist
                     .filename()
@@ -3368,7 +3368,7 @@ impl TryFrom<SourceWire> for Source {
         match wire {
             Registry { registry } => Ok(Source::Registry(registry.into())),
             Git { git } => {
-                let url = LogSafeUrl::parse(&git)
+                let url = DisplaySafeUrl::parse(&git)
                     .map_err(|err| SourceParseError::InvalidUrl {
                         given: git.to_string(),
                         err,
@@ -3876,8 +3876,8 @@ impl From<GitSourceKind> for GitReference {
     }
 }
 
-/// Construct the lockfile-compatible [`LogSafeUrl`] for a [`GitSourceDist`].
-fn locked_git_url(git_dist: &GitSourceDist) -> LogSafeUrl {
+/// Construct the lockfile-compatible [`DisplaySafeUrl`] for a [`GitSourceDist`].
+fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
     let mut url = git_dist.git.repository().clone();
 
     // Remove the credentials.
@@ -4146,8 +4146,9 @@ impl Wheel {
                         .into());
                     }
                 };
-                let file_url = LogSafeUrl::from_file_path(root.join(index_path).join(file_path))
-                    .map_err(|()| LockErrorKind::PathToUrl)?;
+                let file_url =
+                    DisplaySafeUrl::from_file_path(root.join(index_path).join(file_path))
+                        .map_err(|()| LockErrorKind::PathToUrl)?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: SmallString::from(filename.to_string()),
@@ -4534,8 +4535,8 @@ fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlEr
     }
 }
 
-/// Convert a [`LogSafeUrl`] into a normalized [`UrlString`] by removing the fragment.
-fn normalize_url(mut url: LogSafeUrl) -> UrlString {
+/// Convert a [`DisplaySafeUrl`] into a normalized [`UrlString`] by removing the fragment.
+fn normalize_url(mut url: DisplaySafeUrl) -> UrlString {
     url.set_fragment(None);
     UrlString::from(url)
 }
@@ -4578,7 +4579,7 @@ fn normalize_requirement(
             };
 
             // Reconstruct the PEP 508 URL from the underlying data.
-            let url = LogSafeUrl::from(ParsedGitUrl {
+            let url = DisplaySafeUrl::from(ParsedGitUrl {
                 url: git.clone(),
                 subdirectory: subdirectory.clone(),
             });
@@ -4683,7 +4684,7 @@ fn normalize_requirement(
             location.set_fragment(None);
 
             // Reconstruct the PEP 508 URL from the underlying data.
-            let url = LogSafeUrl::from(ParsedArchiveUrl {
+            let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                 url: location.clone(),
                 subdirectory: subdirectory.clone(),
                 ext,

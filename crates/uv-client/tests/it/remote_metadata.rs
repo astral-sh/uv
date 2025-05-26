@@ -7,7 +7,7 @@ use uv_client::RegistryClientBuilder;
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{BuiltDist, DirectUrlBuiltDist, IndexCapabilities};
 use uv_pep508::VerbatimUrl;
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 
 #[tokio::test]
 async fn remote_metadata_with_and_without_cache() -> Result<()> {
@@ -21,7 +21,7 @@ async fn remote_metadata_with_and_without_cache() -> Result<()> {
         let filename = WheelFilename::from_str(url.rsplit_once('/').unwrap().1)?;
         let dist = BuiltDist::DirectUrl(DirectUrlBuiltDist {
             filename,
-            location: Box::new(LogSafeUrl::parse(url).unwrap()),
+            location: Box::new(DisplaySafeUrl::parse(url).unwrap()),
             url: VerbatimUrl::from_str(url).unwrap(),
         });
         let capabilities = IndexCapabilities::default();

@@ -14,7 +14,7 @@ use uv_fs::PortablePath;
 use uv_normalize::GroupName;
 use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 
 use crate::pyproject::{DependencyType, Source};
 
@@ -269,7 +269,7 @@ impl PyProjectTomlMut {
                 if table
                     .get("url")
                     .and_then(|item| item.as_str())
-                    .and_then(|url| LogSafeUrl::parse(url).ok())
+                    .and_then(|url| DisplaySafeUrl::parse(url).ok())
                     .is_some_and(|url| {
                         CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url())
                     })
@@ -306,7 +306,7 @@ impl PyProjectTomlMut {
         if table
             .get("url")
             .and_then(|item| item.as_str())
-            .and_then(|url| LogSafeUrl::parse(url).ok())
+            .and_then(|url| DisplaySafeUrl::parse(url).ok())
             .is_none_or(|url| CanonicalUrl::new(&url) != CanonicalUrl::new(index.url.url()))
         {
             let mut formatted = Formatted::new(index.url.without_credentials().to_string());
@@ -367,7 +367,7 @@ impl PyProjectTomlMut {
             if table
                 .get("url")
                 .and_then(|item| item.as_str())
-                .and_then(|url| LogSafeUrl::parse(url).ok())
+                .and_then(|url| DisplaySafeUrl::parse(url).ok())
                 .is_some_and(|url| CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url()))
             {
                 return false;

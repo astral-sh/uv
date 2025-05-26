@@ -10,7 +10,7 @@ use uv_cache_key::cache_digest;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{File, FileLocation, IndexUrl, UrlString};
 use uv_pypi_types::HashDigests;
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};
@@ -20,13 +20,13 @@ use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive};
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
     #[error("Expected a file URL, but received: {0}")]
-    NonFileUrl(LogSafeUrl),
+    NonFileUrl(DisplaySafeUrl),
 
     #[error("Failed to read `--find-links` directory: {0}")]
     FindLinksDirectory(PathBuf, #[source] FindLinksDirectoryError),
 
     #[error("Failed to read `--find-links` URL: {0}")]
-    FindLinksUrl(LogSafeUrl, #[source] Error),
+    FindLinksUrl(DisplaySafeUrl, #[source] Error),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -159,7 +159,7 @@ impl<'a> FlatIndexClient<'a> {
     /// Read a flat remote index from a `--find-links` URL.
     async fn read_from_url(
         &self,
-        url: &LogSafeUrl,
+        url: &DisplaySafeUrl,
         flat_index: &IndexUrl,
     ) -> Result<FlatIndexEntries, Error> {
         let cache_entry = self.cache.entry(
@@ -189,7 +189,7 @@ impl<'a> FlatIndexClient<'a> {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = LogSafeUrl::from(response.url().clone());
+                let url = DisplaySafeUrl::from(response.url().clone());
 
                 let text = response
                     .text()
@@ -294,7 +294,7 @@ impl<'a> FlatIndexClient<'a> {
             };
 
             // SAFETY: The index path is itself constructed from a URL.
-            let url = LogSafeUrl::from_file_path(entry.path()).unwrap();
+            let url = DisplaySafeUrl::from_file_path(entry.path()).unwrap();
 
             let file = File {
                 dist_info_metadata: false,

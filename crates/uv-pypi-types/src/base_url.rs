@@ -1,9 +1,12 @@
 use serde::{Deserialize, Serialize};
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 
 /// Join a relative URL to a base URL.
-pub fn base_url_join_relative(base: &str, relative: &str) -> Result<LogSafeUrl, JoinRelativeError> {
-    let base_url = LogSafeUrl::parse(base).map_err(|err| JoinRelativeError::ParseError {
+pub fn base_url_join_relative(
+    base: &str,
+    relative: &str,
+) -> Result<DisplaySafeUrl, JoinRelativeError> {
+    let base_url = DisplaySafeUrl::parse(base).map_err(|err| JoinRelativeError::ParseError {
         original: base.to_string(),
         source: err,
     })?;
@@ -32,26 +35,26 @@ pub enum JoinRelativeError {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct BaseUrl(
     #[serde(
-        serialize_with = "LogSafeUrl::serialize_internal",
-        deserialize_with = "LogSafeUrl::deserialize_internal"
+        serialize_with = "DisplaySafeUrl::serialize_internal",
+        deserialize_with = "DisplaySafeUrl::deserialize_internal"
     )]
-    LogSafeUrl,
+    DisplaySafeUrl,
 );
 
 impl BaseUrl {
-    /// Return the underlying [`LogSafeUrl`].
-    pub fn as_url(&self) -> &LogSafeUrl {
+    /// Return the underlying [`DisplaySafeUrl`].
+    pub fn as_url(&self) -> &DisplaySafeUrl {
         &self.0
     }
 
-    /// Return the underlying [`LogSafeUrl`] as a serialized string.
+    /// Return the underlying [`DisplaySafeUrl`] as a serialized string.
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 }
 
-impl From<LogSafeUrl> for BaseUrl {
-    fn from(url: LogSafeUrl) -> Self {
+impl From<DisplaySafeUrl> for BaseUrl {
+    fn from(url: DisplaySafeUrl) -> Self {
         Self(url)
     }
 }

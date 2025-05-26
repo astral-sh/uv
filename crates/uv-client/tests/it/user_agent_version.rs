@@ -16,7 +16,7 @@ use uv_client::LineHaul;
 use uv_client::RegistryClientBuilder;
 use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
 use uv_platform_tags::{Arch, Os, Platform};
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 use uv_version::version;
 
 #[tokio::test]
@@ -55,7 +55,7 @@ async fn test_user_agent_has_version() -> Result<()> {
     let client = RegistryClientBuilder::new(cache).build();
 
     // Send request to our dummy server
-    let url = LogSafeUrl::from_str(&format!("http://{addr}"))?;
+    let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
     let res = client
         .cached_client()
         .uncached()
@@ -152,7 +152,7 @@ async fn test_user_agent_has_linehaul() -> Result<()> {
     let client = builder.build();
 
     // Send request to our dummy server
-    let url = LogSafeUrl::from_str(&format!("http://{addr}"))?;
+    let url = DisplaySafeUrl::from_str(&format!("http://{addr}"))?;
     let res = client
         .cached_client()
         .uncached()

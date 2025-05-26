@@ -12,7 +12,7 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 use uv_types::AnyErrorBuild;
 
 #[derive(Debug, thiserror::Error)]
@@ -28,7 +28,7 @@ pub enum Error {
     #[error(transparent)]
     JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
     #[error("Expected a file URL, but received: {0}")]
-    NonFileUrl(LogSafeUrl),
+    NonFileUrl(DisplaySafeUrl),
     #[error(transparent)]
     Git(#[from] uv_git::GitResolverError),
     #[error(transparent)]
@@ -89,7 +89,7 @@ pub enum Error {
     #[error("The source distribution is missing a `PKG-INFO` file")]
     MissingPkgInfo,
     #[error("The source distribution `{}` has no subdirectory `{}`", _0, _1.display())]
-    MissingSubdirectory(LogSafeUrl, PathBuf),
+    MissingSubdirectory(DisplaySafeUrl, PathBuf),
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] uv_pypi_types::MetadataError),
     #[error("Failed to extract metadata from `requires.txt`")]
@@ -103,7 +103,7 @@ pub enum Error {
     #[error(transparent)]
     MetadataLowering(#[from] MetadataError),
     #[error("Distribution not found at: {0}")]
-    NotFound(LogSafeUrl),
+    NotFound(DisplaySafeUrl),
     #[error("Attempted to re-extract the source distribution for `{}`, but the {} hash didn't match. Run `{}` to clear the cache.", _0, _1, "uv cache clean".green())]
     CacheHeal(String, HashAlgorithm),
     #[error("The source distribution requires Python {0}, but {1} is installed")]

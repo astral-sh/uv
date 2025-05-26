@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use uv_cache_key::{CanonicalUrl, cache_digest};
 use uv_distribution_types::IndexUrl;
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 
 /// Cache wheels and their metadata, both from remote wheels and built from source distributions.
 #[derive(Debug, Clone)]
@@ -10,16 +10,16 @@ pub enum WheelCache<'a> {
     /// Either PyPI or an alternative index, which we key by index URL.
     Index(&'a IndexUrl),
     /// A direct URL dependency, which we key by URL.
-    Url(&'a LogSafeUrl),
+    Url(&'a DisplaySafeUrl),
     /// A path dependency, which we key by URL.
-    Path(&'a LogSafeUrl),
+    Path(&'a DisplaySafeUrl),
     /// An editable dependency, which we key by URL.
-    Editable(&'a LogSafeUrl),
+    Editable(&'a DisplaySafeUrl),
     /// A Git dependency, which we key by URL and SHA.
     ///
     /// Note that this variant only exists for source distributions; wheels can't be delivered
     /// through Git.
-    Git(&'a LogSafeUrl, &'a str),
+    Git(&'a DisplaySafeUrl, &'a str),
 }
 
 impl WheelCache<'_> {

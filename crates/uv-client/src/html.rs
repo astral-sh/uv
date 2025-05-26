@@ -8,7 +8,7 @@ use url::Url;
 use uv_pep440::VersionSpecifiers;
 use uv_pypi_types::{BaseUrl, CoreMetadata, File, Hashes, Yanked};
 use uv_pypi_types::{HashError, LenientVersionSpecifiers};
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 
 /// A parsed structure from PyPI "HTML" index format for a single package.
 #[derive(Debug, Clone)]
@@ -28,7 +28,7 @@ impl SimpleHtml {
         // Parse the first `<base>` tag, if any, to determine the base URL to which all
         // relative URLs should be resolved. The HTML spec requires that the `<base>` tag
         // appear before other tags with attribute values of URLs.
-        let base = BaseUrl::from(LogSafeUrl::from(
+        let base = BaseUrl::from(DisplaySafeUrl::from(
             dom.nodes()
                 .iter()
                 .filter_map(|node| node.as_tag())

@@ -13,7 +13,7 @@ use uv_fs::Simplified;
 use uv_git_types::GitReference;
 use uv_normalize::PackageName;
 use uv_pypi_types::{ParsedArchiveUrl, ParsedGitUrl};
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 
 use crate::lock::export::{ExportableRequirement, ExportableRequirements};
 use crate::lock::{Package, PackageId, Source};
@@ -95,7 +95,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     .expect("Internal Git URLs must have supported schemes");
 
                     // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-                    let url = LogSafeUrl::from(ParsedGitUrl {
+                    let url = DisplaySafeUrl::from(ParsedGitUrl {
                         url: git_url.clone(),
                         subdirectory: git.subdirectory.clone(),
                     });
@@ -103,7 +103,7 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                     write!(f, "{} @ {}", package.id.name, url)?;
                 }
                 Source::Direct(url, direct) => {
-                    let url = LogSafeUrl::from(ParsedArchiveUrl {
+                    let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                         url: url.to_url().map_err(|_| std::fmt::Error)?,
                         subdirectory: direct.subdirectory.clone(),
                         ext: DistExtension::Source(SourceDistExtension::TarGz),

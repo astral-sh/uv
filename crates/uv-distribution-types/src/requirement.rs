@@ -13,7 +13,7 @@ use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
     MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl, marker,
 };
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 
 use crate::{IndexMetadata, IndexUrl};
 
@@ -391,7 +391,7 @@ pub enum RequirementSource {
     /// e.g.`foo @ https://example.org/foo-1.0.zip`.
     Url {
         /// The remote location of the archive file, without subdirectory fragment.
-        location: LogSafeUrl,
+        location: DisplaySafeUrl,
         /// For source distributions, the path to the distribution if it is not in the archive
         /// root.
         subdirectory: Option<Box<Path>>,
@@ -682,7 +682,7 @@ enum RequirementSourceWire {
     Git { git: String },
     /// Ex) `source = { url = "<https://example.org/foo-1.0.zip>" }`
     Direct {
-        url: LogSafeUrl,
+        url: DisplaySafeUrl,
         subdirectory: Option<PortablePathBuf>,
     },
     /// Ex) `source = { path = "/home/ferris/iniconfig-2.0.0-py3-none-any.whl" }`
@@ -697,7 +697,7 @@ enum RequirementSourceWire {
     Registry {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
         specifier: VersionSpecifiers,
-        index: Option<LogSafeUrl>,
+        index: Option<DisplaySafeUrl>,
         conflict: Option<ConflictItem>,
     },
 }
@@ -826,7 +826,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 conflict,
             }),
             RequirementSourceWire::Git { git } => {
-                let mut repository = LogSafeUrl::parse(&git)?;
+                let mut repository = DisplaySafeUrl::parse(&git)?;
 
                 let mut reference = GitReference::DefaultBranch;
                 let mut subdirectory: Option<PortablePathBuf> = None;
@@ -852,7 +852,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 repository.remove_credentials();
 
                 // Create a PEP 508-compatible URL.
-                let mut url = LogSafeUrl::parse(&format!("git+{repository}"))?;
+                let mut url = DisplaySafeUrl::parse(&format!("git+{repository}"))?;
                 if let Some(rev) = reference.as_str() {
                     let path = format!("{}@{}", url.path(), rev);
                     url.set_path(&path);

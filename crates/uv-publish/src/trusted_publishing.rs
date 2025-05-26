@@ -12,7 +12,7 @@ use std::fmt::Display;
 use thiserror::Error;
 use tracing::{debug, trace};
 use url::Url;
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
 #[derive(Debug, Error)]
@@ -24,9 +24,9 @@ pub enum TrustedPublishingError {
     #[error(transparent)]
     Url(#[from] url::ParseError),
     #[error("Failed to fetch: `{0}`")]
-    Reqwest(LogSafeUrl, #[source] reqwest::Error),
+    Reqwest(DisplaySafeUrl, #[source] reqwest::Error),
     #[error("Failed to fetch: `{0}`")]
-    ReqwestMiddleware(LogSafeUrl, #[source] reqwest_middleware::Error),
+    ReqwestMiddleware(DisplaySafeUrl, #[source] reqwest_middleware::Error),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::error::Error),
     #[error(
@@ -95,7 +95,7 @@ pub struct OidcTokenClaims {
 
 /// Returns the short-lived token to use for uploading.
 pub(crate) async fn get_token(
-    registry: &LogSafeUrl,
+    registry: &DisplaySafeUrl,
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
     // If this fails, we can skip the audience request.
@@ -125,13 +125,13 @@ pub(crate) async fn get_token(
 }
 
 async fn get_audience(
-    registry: &LogSafeUrl,
+    registry: &DisplaySafeUrl,
     client: &ClientWithMiddleware,
 ) -> Result<String, TrustedPublishingError> {
     // `pypa/gh-action-pypi-publish` uses `netloc` (RFC 1808), which is deprecated for authority
     // (RFC 3986).
     let audience_url =
-        LogSafeUrl::parse(&format!("https://{}/_/oidc/audience", registry.authority()))?;
+        DisplaySafeUrl::parse(&format!("https://{}/_/oidc/audience", registry.authority()))?;
     debug!("Querying the trusted publishing audience from {audience_url}");
     let response = client
         .get(Url::from(audience_url.clone()))
@@ -156,7 +156,7 @@ async fn get_oidc_token(
     let oidc_token_url = env::var(EnvVars::ACTIONS_ID_TOKEN_REQUEST_URL).map_err(|err| {
         TrustedPublishingError::from_var_err(EnvVars::ACTIONS_ID_TOKEN_REQUEST_URL, err)
     })?;
-    let mut oidc_token_url = LogSafeUrl::parse(&oidc_token_url)?;
+    let mut oidc_token_url = DisplaySafeUrl::parse(&oidc_token_url)?;
     oidc_token_url
         .query_pairs_mut()
         .append_pair("audience", audience);
@@ -190,11 +190,11 @@ fn decode_oidc_token(oidc_token: &str) -> Option<OidcTokenClaims> {
 }
 
 async fn get_publish_token(
-    registry: &LogSafeUrl,
+    registry: &DisplaySafeUrl,
     oidc_token: &str,
     client: &ClientWithMiddleware,
 ) -> Result<TrustedPublishingToken, TrustedPublishingError> {
-    let mint_token_url = LogSafeUrl::parse(&format!(
+    let mint_token_url = DisplaySafeUrl::parse(&format!(
         "https://{}/_/oidc/mint-token",
         registry.authority()
     ))?;

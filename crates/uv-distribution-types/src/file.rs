@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::split_scheme;
 use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
-use uv_redacted::LogSafeUrl;
+use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
 /// Error converting [`uv_pypi_types::File`] to [`distribution_type::File`].
@@ -87,13 +87,14 @@ impl FileLocation {
     /// This returns an error if any of the URL parsing fails, or if, for
     /// example, the location is a path and the path isn't valid UTF-8.
     /// (Because URLs must be valid UTF-8.)
-    pub fn to_url(&self) -> Result<LogSafeUrl, ToUrlError> {
+    pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
         match *self {
             FileLocation::RelativeUrl(ref base, ref path) => {
-                let base_url = LogSafeUrl::parse(base).map_err(|err| ToUrlError::InvalidBase {
-                    base: base.to_string(),
-                    err,
-                })?;
+                let base_url =
+                    DisplaySafeUrl::parse(base).map_err(|err| ToUrlError::InvalidBase {
+                        base: base.to_string(),
+                        err,
+                    })?;
                 let joined = base_url.join(path).map_err(|err| ToUrlError::InvalidJoin {
                     base: base.to_string(),
                     path: path.to_string(),
@@ -142,9 +143,9 @@ impl UrlString {
         Self(url)
     }
 
-    /// Converts a [`UrlString`] to a [`LogSafeUrl`].
-    pub fn to_url(&self) -> Result<LogSafeUrl, ToUrlError> {
-        LogSafeUrl::from_str(&self.0).map_err(|err| ToUrlError::InvalidAbsolute {
+    /// Converts a [`UrlString`] to a [`DisplaySafeUrl`].
+    pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
+        DisplaySafeUrl::from_str(&self.0).map_err(|err| ToUrlError::InvalidAbsolute {
             absolute: self.0.to_string(),
             err,
         })
@@ -178,14 +179,14 @@ impl AsRef<str> for UrlString {
     }
 }
 
-impl From<LogSafeUrl> for UrlString {
-    fn from(value: LogSafeUrl) -> Self {
+impl From<DisplaySafeUrl> for UrlString {
+    fn from(value: DisplaySafeUrl) -> Self {
         Self(value.as_str().into())
     }
 }
 
-impl From<&LogSafeUrl> for UrlString {
-    fn from(value: &LogSafeUrl) -> Self {
+impl From<&DisplaySafeUrl> for UrlString {
+    fn from(value: &DisplaySafeUrl) -> Self {
         Self(value.as_str().into())
     }
 }
