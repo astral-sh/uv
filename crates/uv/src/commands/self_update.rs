@@ -26,10 +26,10 @@ pub(crate) async fn self_update(
             "{}",
             format_args!(
                 concat!(
-                "{}{} Self-update exited because network is disabled.",
-                "\n",
-                "\n",
-                "Hint: Remove --offline to continue self update."
+                    "{}{} Self-update exited because network is disabled.",
+                    "\n",
+                    "\n",
+                    "Hint: Remove --offline to continue self update."
                 ),
                 "error".red().bold(),
                 ":".bold()
