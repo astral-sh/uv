@@ -128,7 +128,7 @@ impl IndexUrl {
     }
 
     /// Return the redacted URL for the index, omitting any sensitive credentials.
-    pub fn removed_credentials(&self) -> Cow<'_, LogSafeUrl> {
+    pub fn without_credentials(&self) -> Cow<'_, LogSafeUrl> {
         let url = self.url();
         if url.username().is_empty() && url.password().is_none() {
             Cow::Borrowed(url)

@@ -3,7 +3,6 @@ use std::str::FromStr;
 
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::split_scheme;
@@ -176,18 +175,6 @@ impl UrlString {
 impl AsRef<str> for UrlString {
     fn as_ref(&self) -> &str {
         &self.0
-    }
-}
-
-impl From<Url> for UrlString {
-    fn from(value: Url) -> Self {
-        Self(value.as_str().into())
-    }
-}
-
-impl From<&Url> for UrlString {
-    fn from(value: &Url) -> Self {
-        Self(value.as_str().into())
     }
 }
 

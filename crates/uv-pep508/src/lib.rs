@@ -17,7 +17,7 @@
 #![warn(missing_docs)]
 
 use std::error::Error;
-use std::fmt::{Debug, Display, Formatter, Write};
+use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -145,59 +145,71 @@ impl<T: Pep508Url> Requirement<T> {
         }
     }
 
-    /// Returns string representation without masking credentials.
-    pub fn to_string_with_credentials(&self) -> String {
-        let mut buffer = String::new();
-        fmt_requirement(self, &mut buffer, true).expect("Formatting failed");
-        buffer
+    /// Returns a [`Display`] implementation that doesn't mask credentials.
+    pub fn displayable_with_credentials(&self) -> impl Display {
+        RequirementDisplay {
+            requirement: self,
+            display_credentials: true,
+        }
     }
 }
 
 impl<T: Pep508Url + Display> Display for Requirement<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        fmt_requirement(self, f, false)
+        RequirementDisplay {
+            requirement: self,
+            display_credentials: false,
+        }
+        .fmt(f)
     }
 }
 
-fn fmt_requirement<T: Pep508Url, W: Write>(
-    req: &Requirement<T>,
-    f: &mut W,
+struct RequirementDisplay<'a, T>
+where
+    T: Pep508Url + Display,
+{
+    requirement: &'a Requirement<T>,
     display_credentials: bool,
-) -> std::fmt::Result {
-    write!(f, "{}", req.name)?;
-    if !req.extras.is_empty() {
-        write!(
-            f,
-            "[{}]",
-            req.extras
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
-        )?;
-    }
-    if let Some(version_or_url) = &req.version_or_url {
-        match version_or_url {
-            VersionOrUrl::VersionSpecifier(version_specifier) => {
-                let version_specifier: Vec<String> =
-                    version_specifier.iter().map(ToString::to_string).collect();
-                write!(f, "{}", version_specifier.join(","))?;
-            }
-            VersionOrUrl::Url(url) => {
-                let url_string = if display_credentials {
-                    url.to_string_with_credentials()
-                } else {
-                    url.to_string()
-                };
-                // We add the space for markers later if necessary
-                write!(f, " @ {url_string}")?;
+}
+
+impl<T: Pep508Url + Display> Display for RequirementDisplay<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.requirement.name)?;
+        if !self.requirement.extras.is_empty() {
+            write!(
+                f,
+                "[{}]",
+                self.requirement
+                    .extras
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )?;
+        }
+        if let Some(version_or_url) = &self.requirement.version_or_url {
+            match version_or_url {
+                VersionOrUrl::VersionSpecifier(version_specifier) => {
+                    let version_specifier: Vec<String> =
+                        version_specifier.iter().map(ToString::to_string).collect();
+                    write!(f, "{}", version_specifier.join(","))?;
+                }
+                VersionOrUrl::Url(url) => {
+                    let url_string = if self.display_credentials {
+                        url.displayable_with_credentials().to_string()
+                    } else {
+                        url.to_string()
+                    };
+                    // We add the space for markers later if necessary
+                    write!(f, " @ {url_string}")?;
+                }
             }
         }
+        if let Some(marker) = self.requirement.marker.contents() {
+            write!(f, " ; {marker}")?;
+        }
+        Ok(())
     }
-    if let Some(marker) = req.marker.contents() {
-        write!(f, " ; {marker}")?;
-    }
-    Ok(())
 }
 
 /// <https://github.com/serde-rs/serde/issues/908#issuecomment-298027413>
@@ -276,8 +288,8 @@ pub trait Pep508Url: Display + Debug + Sized {
     /// Parse a url from `name @ <url>`. Defaults to [`Url::parse_url`].
     fn parse_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err>;
 
-    /// Returns string representation without masking credentials.
-    fn to_string_with_credentials(&self) -> String;
+    /// Returns a [`Display`] implementation that doesn't mask credentials.
+    fn displayable_with_credentials(&self) -> impl Display;
 }
 
 impl Pep508Url for Url {
@@ -287,8 +299,8 @@ impl Pep508Url for Url {
         Url::parse(url)
     }
 
-    fn to_string_with_credentials(&self) -> String {
-        self.to_string()
+    fn displayable_with_credentials(&self) -> impl Display {
+        self
     }
 }
 

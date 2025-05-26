@@ -31,7 +31,7 @@ impl GitStore {
 /// Returns `true` if the store was updated.
 pub fn store_credentials_from_url(url: &LogSafeUrl) -> bool {
     if let Some(credentials) = Credentials::from_url(url) {
-        trace!("Caching credentials for {}", url);
+        trace!("Caching credentials for {url}");
         GIT_STORE.insert(RepositoryUrl::new(url), credentials);
         true
     } else {

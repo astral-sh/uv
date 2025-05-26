@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -337,7 +337,7 @@ impl Pep508Url for VerbatimUrl {
         }
     }
 
-    fn to_string_with_credentials(&self) -> String {
+    fn displayable_with_credentials(&self) -> impl Display {
         self.url.to_string_with_credentials()
     }
 }

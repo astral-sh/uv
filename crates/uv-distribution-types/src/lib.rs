@@ -1462,7 +1462,7 @@ impl Identifier for BuildableSource<'_> {
 #[cfg(test)]
 mod test {
     use crate::{BuiltDist, Dist, RemoteSource, SourceDist, UrlString};
-    use url::Url;
+    use uv_redacted::LogSafeUrl;
 
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
@@ -1486,7 +1486,7 @@ mod test {
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment",
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment/3",
         ] {
-            let url = Url::parse(url).unwrap();
+            let url = LogSafeUrl::parse(url).unwrap();
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
             let url = UrlString::from(url.clone());
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");

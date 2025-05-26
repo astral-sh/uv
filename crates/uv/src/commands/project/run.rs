@@ -1199,7 +1199,7 @@ pub(crate) enum RunCommand {
     /// Execute a `pythonw` script provided via `stdin`.
     PythonGuiStdin(Vec<u8>, Vec<OsString>),
     /// Execute a Python script provided via a remote URL.
-    PythonRemote(Url, tempfile::NamedTempFile, Vec<OsString>),
+    PythonRemote(LogSafeUrl, tempfile::NamedTempFile, Vec<OsString>),
     /// Execute an external command.
     External(OsString, Vec<OsString>),
     /// Execute an empty command (in practice, `python` with no arguments).
@@ -1496,7 +1496,7 @@ impl RunCommand {
                     writer.write_all(&chunk?)?;
                 }
 
-                return Ok(Self::PythonRemote(Url::from(url), file, args.to_vec()));
+                return Ok(Self::PythonRemote(url, file, args.to_vec()));
             }
         }
 

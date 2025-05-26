@@ -3,7 +3,7 @@ use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use url::Url;
 
-/// A URL wrapper that safely handles credentials for logging purposes.
+/// A [`Url`] wrapper that redacts credentials when displaying the URL.
 ///
 /// `LogSafeUrl` wraps the standard [`url::Url`] type, providing functionality to mask
 /// secrets by default when the URL is displayed or logged. This helps prevent accidental
@@ -53,8 +53,6 @@ impl LogSafeUrl {
     }
 
     /// Serialize with Serde using the internal representation of the `Url` struct.
-    ///
-    /// This method is only available if the `serde` Cargo feature is enabled.
     #[inline]
     pub fn serialize_internal<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -64,14 +62,17 @@ impl LogSafeUrl {
     }
 
     /// Serialize with Serde using the internal representation of the `Url` struct.
-    ///
-    /// This method is only available if the `serde` Cargo feature is enabled.
     #[inline]
     pub fn deserialize_internal<'de, D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         Url::deserialize_internal(deserializer).map(LogSafeUrl::from)
+    }
+
+    #[allow(clippy::result_unit_err)]
+    pub fn from_file_path<P: AsRef<std::path::Path>>(path: P) -> Result<LogSafeUrl, ()> {
+        Url::from_file_path(path).map(LogSafeUrl::from)
     }
 
     /// Remove the credentials from a URL, allowing the generic `git` username (without a password)

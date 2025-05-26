@@ -1333,7 +1333,8 @@ impl PylockTomlWheel {
             UrlString::from(url)
         } else if let Some(path) = self.path.as_ref() {
             let path = install_path.join(path);
-            let url = Url::from_file_path(path).map_err(|()| PylockTomlErrorKind::PathToUrl)?;
+            let url =
+                LogSafeUrl::from_file_path(path).map_err(|()| PylockTomlErrorKind::PathToUrl)?;
             UrlString::from(url)
         } else {
             return Err(PylockTomlErrorKind::WheelMissingPathUrl(name.clone()));
@@ -1488,7 +1489,8 @@ impl PylockTomlSdist {
             UrlString::from(url)
         } else if let Some(path) = self.path.as_ref() {
             let path = install_path.join(path);
-            let url = Url::from_file_path(path).map_err(|()| PylockTomlErrorKind::PathToUrl)?;
+            let url =
+                LogSafeUrl::from_file_path(path).map_err(|()| PylockTomlErrorKind::PathToUrl)?;
             UrlString::from(url)
         } else {
             return Err(PylockTomlErrorKind::SdistMissingPathUrl(name.clone()));

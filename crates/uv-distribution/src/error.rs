@@ -2,8 +2,6 @@ use std::path::PathBuf;
 
 use owo_colors::OwoColorize;
 use tokio::task::JoinError;
-use url::Url;
-use uv_redacted::LogSafeUrl;
 use zip::result::ZipError;
 
 use crate::metadata::MetadataError;
@@ -14,6 +12,7 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_redacted::LogSafeUrl;
 use uv_types::AnyErrorBuild;
 
 #[derive(Debug, thiserror::Error)]
@@ -90,7 +89,7 @@ pub enum Error {
     #[error("The source distribution is missing a `PKG-INFO` file")]
     MissingPkgInfo,
     #[error("The source distribution `{}` has no subdirectory `{}`", _0, _1.display())]
-    MissingSubdirectory(Url, PathBuf),
+    MissingSubdirectory(LogSafeUrl, PathBuf),
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] uv_pypi_types::MetadataError),
     #[error("Failed to extract metadata from `requires.txt`")]

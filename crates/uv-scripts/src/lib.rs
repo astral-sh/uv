@@ -12,6 +12,7 @@ use url::Url;
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::PackageName;
 use uv_pypi_types::VerbatimParsedUrl;
+use uv_redacted::LogSafeUrl;
 use uv_settings::{GlobalOptions, ResolverInstallerOptions};
 use uv_workspace::pyproject::Sources;
 
@@ -25,7 +26,7 @@ pub enum Pep723Item {
     /// A PEP 723 script provided via `stdin`.
     Stdin(Pep723Metadata),
     /// A PEP 723 script provided via a remote URL.
-    Remote(Pep723Metadata, Url),
+    Remote(Pep723Metadata, LogSafeUrl),
 }
 
 impl Pep723Item {

@@ -63,8 +63,8 @@ impl Pep508Url for VerbatimParsedUrl {
         })
     }
 
-    fn to_string_with_credentials(&self) -> String {
-        self.verbatim.to_string_with_credentials()
+    fn displayable_with_credentials(&self) -> impl Display {
+        self.verbatim.displayable_with_credentials()
     }
 }
 

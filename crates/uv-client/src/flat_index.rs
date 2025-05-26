@@ -294,7 +294,7 @@ impl<'a> FlatIndexClient<'a> {
             };
 
             // SAFETY: The index path is itself constructed from a URL.
-            let url = Url::from_file_path(entry.path()).unwrap();
+            let url = LogSafeUrl::from_file_path(entry.path()).unwrap();
 
             let file = File {
                 dist_info_metadata: false,
@@ -303,7 +303,7 @@ impl<'a> FlatIndexClient<'a> {
                 requires_python: None,
                 size: None,
                 upload_time_utc_ms: None,
-                url: FileLocation::AbsoluteUrl(UrlString::from(&url)),
+                url: FileLocation::AbsoluteUrl(UrlString::from(url)),
                 yanked: None,
             };
 

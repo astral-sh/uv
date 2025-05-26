@@ -453,7 +453,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(subdirectory) = subdirectory {
             if !source_dist_entry.path().join(subdirectory).is_dir() {
                 return Err(Error::MissingSubdirectory(
-                    Url::from(url.clone()),
+                    url.clone(),
                     subdirectory.to_path_buf(),
                 ));
             }
@@ -583,7 +583,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(subdirectory) = subdirectory {
             if !source_dist_entry.path().join(subdirectory).is_dir() {
                 return Err(Error::MissingSubdirectory(
-                    url.clone(),
+                    LogSafeUrl::from(url.clone()),
                     subdirectory.to_path_buf(),
                 ));
             }
@@ -1469,7 +1469,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(subdirectory) = resource.subdirectory {
             if !fetch.path().join(subdirectory).is_dir() {
                 return Err(Error::MissingSubdirectory(
-                    Url::from(resource.url.to_url()),
+                    resource.url.to_url(),
                     subdirectory.to_path_buf(),
                 ));
             }
@@ -1659,7 +1659,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         if let Some(subdirectory) = resource.subdirectory {
             if !fetch.path().join(subdirectory).is_dir() {
                 return Err(Error::MissingSubdirectory(
-                    Url::from(resource.url.to_url()),
+                    resource.url.to_url(),
                     subdirectory.to_path_buf(),
                 ));
             }

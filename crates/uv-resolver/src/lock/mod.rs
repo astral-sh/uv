@@ -1395,7 +1395,7 @@ impl Lock {
                 .into_iter()
                 .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index.url().removed_credentials().as_ref()))
+                        Some(UrlString::from(index.url().without_credentials().as_ref()))
                     }
                     IndexUrl::Path(_) => None,
                 })
@@ -2489,8 +2489,9 @@ impl Package {
                     name: name.clone(),
                     version: version.clone(),
                 })?;
-                let file_url = Url::from_file_path(workspace_root.join(path).join(file_path))
-                    .map_err(|()| LockErrorKind::PathToUrl)?;
+                let file_url =
+                    LogSafeUrl::from_file_path(workspace_root.join(path).join(file_path))
+                        .map_err(|()| LockErrorKind::PathToUrl)?;
                 let filename = sdist
                     .filename()
                     .ok_or_else(|| LockErrorKind::MissingFilename {
@@ -3154,7 +3155,7 @@ impl Source {
         match index_url {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 // Remove any sensitive credentials from the index URL.
-                let redacted = index_url.removed_credentials();
+                let redacted = index_url.without_credentials();
                 let source = RegistrySource::Url(UrlString::from(redacted.as_ref()));
                 Ok(Source::Registry(source))
             }
@@ -3367,7 +3368,7 @@ impl TryFrom<SourceWire> for Source {
         match wire {
             Registry { registry } => Ok(Source::Registry(registry.into())),
             Git { git } => {
-                let url = Url::parse(&git)
+                let url = LogSafeUrl::parse(&git)
                     .map_err(|err| SourceParseError::InvalidUrl {
                         given: git.to_string(),
                         err,
@@ -4145,7 +4146,7 @@ impl Wheel {
                         .into());
                     }
                 };
-                let file_url = Url::from_file_path(root.join(index_path).join(file_path))
+                let file_url = LogSafeUrl::from_file_path(root.join(index_path).join(file_path))
                     .map_err(|()| LockErrorKind::PathToUrl)?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,

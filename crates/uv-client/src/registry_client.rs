@@ -485,7 +485,7 @@ impl RegistryClient {
             // ref https://github.com/servo/rust-url/issues/333
             .push("");
 
-        trace!("Fetching metadata for {package_name} from {}", &url);
+        trace!("Fetching metadata for {package_name} from {url}");
 
         let cache_entry = self.cache.entry(
             CacheBucket::Simple,
@@ -626,9 +626,8 @@ impl RegistryClient {
     async fn fetch_local_index(
         &self,
         package_name: &PackageName,
-        url: &Url,
+        url: &LogSafeUrl,
     ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
-        let url = LogSafeUrl::from(url.clone());
         let path = url
             .to_file_path()
             .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?
@@ -644,7 +643,7 @@ impl RegistryClient {
                 return Err(Error::from(ErrorKind::Io(err)));
             }
         };
-        let metadata = SimpleMetadata::from_html(&text, package_name, &url)?;
+        let metadata = SimpleMetadata::from_html(&text, package_name, url)?;
         OwnedArchive::from_unarchived(&metadata)
     }
 
