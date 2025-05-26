@@ -94,7 +94,7 @@ fn make_child_cmdline() -> CString {
                 // the executable. This ensures that the correct installation
                 // directories are added to `sys.path` when running with a junction
                 // trampoline.
-                let python_home_set = if let Ok(home) = env::var("PYTHONHOME") {
+                let python_home_set = if let Ok(home) = std::env::var("PYTHONHOME") {
                     !home.is_empty()
                 } else {
                     false
