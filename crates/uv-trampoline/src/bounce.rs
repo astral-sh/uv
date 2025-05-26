@@ -87,12 +87,19 @@ fn make_child_cmdline() -> CString {
                 // (in `launcher.c`). This allows virtual environments to
                 // be correctly detected when using trampolines.
                 std::env::set_var("__PYVENV_LAUNCHER__", &executable_name);
+
                 // If this is not a virtual environment (indicated by the presence
-                // of a `pyvenv.cfg` file with a `home` key), then set `PYTHONHOME`
-                // to the parent directory of the executable. This ensures that the
-                // correct directories are added to `sys.path` when running with a
-                // junction trampoline.
-                if !check_pyvenvcfg_home(python_exe.as_path()) {
+                // of a `pyvenv.cfg` file with a `home` key) and `PYTHONHOME` has
+                // not been set, then set `PYTHONHOME` to the parent directory of
+                // the executable. This ensures that the correct installation
+                // directories are added to `sys.path` when running with a junction
+                // trampoline.
+                let python_home_set = if let Ok(home) = env::var("PYTHONHOME") {
+                    !home.is_empty()
+                } else {
+                    false
+                };
+                if !pyvenv_cfg_home_exists(python_exe.as_path()) && !python_home_set {
                     std::env::set_var(
                         "PYTHONHOME",
                         python_exe
@@ -141,7 +148,7 @@ fn push_quoted_path(path: &Path, command: &mut Vec<u8>) {
     command.extend(br#"""#);
 }
 
-fn check_pyvenvcfg_home(exec_dir: &Path) -> bool {
+fn pyvenv_cfg_home_exists(exec_dir: &Path) -> bool {
     let Some(parent_dir) = exec_dir.parent() else {
         return false;
     };
