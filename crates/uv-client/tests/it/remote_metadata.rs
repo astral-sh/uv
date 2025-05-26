@@ -10,6 +10,7 @@ use uv_pep508::VerbatimUrl;
 use uv_redacted::DisplaySafeUrl;
 
 #[tokio::test]
+#[cfg(feature = "pypi")]
 async fn remote_metadata_with_and_without_cache() -> Result<()> {
     let cache = Cache::temp()?.init()?;
     let client = RegistryClientBuilder::new(cache).build();
