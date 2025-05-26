@@ -295,7 +295,23 @@ jobs:
         with:
           tool: cargo-nextest
 
+      # Get crash dumps to debug the `exit_code: -1073741819` failures
+      - name: Configure crash dumps
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $dumps = "$env:GITHUB_WORKSPACE\dumps"
+          New-Item -Path $dumps -ItemType Directory -Force
+
+          # https://github.com/microsoft/terminal/wiki/Troubleshooting-Tips#capture-automatically
+          $reg = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps"
+          New-Item -Path $reg -Force | Out-Null
+          Set-ItemProperty -Path $reg -Name "DumpFolder" -Value $dumps
+          Set-ItemProperty -Path $reg -Name "DumpType" -Value 2
+
       - name: "Cargo test"
+        id: test
+        continue-on-error: true
         working-directory: ${{ env.UV_WORKSPACE }}
         env:
           # Avoid permission errors during concurrent tests
@@ -308,6 +324,42 @@ jobs:
             --features python,pypi,python-managed \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+
+      # Get crash dumps to debug the `exit_code: -1073741819` failures (contd.)
+      - name: Analyze crashes
+        if: steps.test.outcome == 'failure'
+        shell: powershell
+        run: |
+          $dumps = Get-ChildItem "$env:GITHUB_WORKSPACE\dumps\*.dmp" -ErrorAction SilentlyContinue
+          if (!$dumps) { exit 0 }
+
+          Write-Host "Found $($dumps.Count) crash dump(s)"
+
+          # Download cdb if needed
+          $cdb = "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe"
+          if (!(Test-Path $cdb)) {
+            # https://github.com/microsoft/react-native-windows/blob/f1570a5ef1c4fc1e78d0a0ad5af848ab91a4061c/vnext/Scripts/Analyze-Crash.ps1#L44-L56
+            Invoke-WebRequest "https://go.microsoft.com/fwlink/?linkid=2173743" -OutFile "$env:TEMP\sdk.exe"
+            Start-Process "$env:TEMP\sdk.exe" -ArgumentList "/features OptionId.WindowsDesktopDebuggers /quiet" -Wait
+          }
+
+          # Analyze each dump
+          foreach ($dump in $dumps) {
+            Write-Host "`n=== $($dump.Name) ==="
+            & $cdb -z $dump -c "!analyze -v; .ecxr; k; q" 2>&1 | Select-String -Pattern "(ExceptionCode:|SYMBOL_NAME:|IMAGE_NAME:|STACK_TEXT:)" -Context 0,2
+          }
+
+      - name: Upload crash dumps
+        if: steps.test.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: crash-dumps-${{ github.run_number }}
+          path: dumps/*.dmp
+          if-no-files-found: ignore
+
+      - name: Fail if tests failed
+        if: steps.test.outcome == 'failure'
+        run: exit 1
 
   # Separate jobs for the nightly crate
   windows-trampoline-check:
