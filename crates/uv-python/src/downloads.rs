@@ -90,7 +90,7 @@ pub enum Error {
     NoDownloadFound(PythonDownloadRequest),
     #[error("A mirror was provided via `{0}`, but the URL does not match the expected format: {0}")]
     Mirror(&'static str, &'static str),
-    #[error(transparent)]
+    #[error("Failed to determine the current platform")]
     LibcDetection(#[from] LibcDetectionError),
     #[error(
         "Remote python downloads JSON is not yet supported, please use a local path (without `file://` prefix)"
