@@ -1,7 +1,7 @@
 use std::sync::{Arc, LazyLock};
 
 use http::{Extensions, StatusCode};
-use url::Url;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlRef};
 
 use crate::{
     CREDENTIALS_CACHE, CredentialsCache, KeyringProvider,
@@ -274,6 +274,7 @@ impl Middleware for AuthMiddleware {
             trace!("Checking for credentials for {url}");
             (request, None)
         };
+        let retry_request_url = DisplaySafeUrlRef::from(retry_request.url());
 
         let username = credentials
             .as_ref()
@@ -282,13 +283,13 @@ impl Middleware for AuthMiddleware {
         let credentials = if let Some(index_url) = maybe_index_url {
             self.cache().get_url(index_url, &username).or_else(|| {
                 self.cache()
-                    .get_realm(Realm::from(retry_request.url()), username)
+                    .get_realm(Realm::from(&*retry_request_url), username)
             })
         } else {
             // Since there is no known index for this URL, check if there are credentials in
             // the realm-level cache.
             self.cache()
-                .get_realm(Realm::from(retry_request.url()), username)
+                .get_realm(Realm::from(&*retry_request_url), username)
         }
         .or(credentials);
 
@@ -307,7 +308,7 @@ impl Middleware for AuthMiddleware {
         if let Some(credentials) = self
             .fetch_credentials(
                 credentials.as_deref(),
-                retry_request.url(),
+                retry_request_url,
                 maybe_index_url,
                 auth_policy,
             )
@@ -362,7 +363,7 @@ impl AuthMiddleware {
             // Nothing to insert into the cache if we don't have credentials
             return next.run(request, extensions).await;
         };
-        let url = request.url().clone();
+        let url = DisplaySafeUrl::from(request.url().clone());
         if matches!(auth_policy, AuthPolicy::Always) && credentials.password().is_none() {
             return Err(Error::Middleware(format_err!("Missing password for {url}")));
         }
@@ -387,8 +388,8 @@ impl AuthMiddleware {
         mut request: Request,
         extensions: &mut Extensions,
         next: Next<'_>,
-        url: &str,
-        index_url: Option<&Url>,
+        url: &DisplaySafeUrl,
+        index_url: Option<&DisplaySafeUrl>,
         auth_policy: AuthPolicy,
     ) -> reqwest_middleware::Result<Response> {
         let credentials = Arc::new(credentials);
@@ -430,7 +431,12 @@ impl AuthMiddleware {
             // Do not insert already-cached credentials
             None
         } else if let Some(credentials) = self
-            .fetch_credentials(Some(&credentials), request.url(), index_url, auth_policy)
+            .fetch_credentials(
+                Some(&credentials),
+                DisplaySafeUrlRef::from(request.url()),
+                index_url,
+                auth_policy,
+            )
             .await
         {
             request = credentials.authenticate(request);
@@ -462,8 +468,8 @@ impl AuthMiddleware {
     async fn fetch_credentials(
         &self,
         credentials: Option<&Credentials>,
-        url: &Url,
-        maybe_index_url: Option<&Url>,
+        url: DisplaySafeUrlRef<'_>,
+        maybe_index_url: Option<&DisplaySafeUrl>,
         auth_policy: AuthPolicy,
     ) -> Option<Arc<Credentials>> {
         let username = Username::from(
@@ -475,7 +481,7 @@ impl AuthMiddleware {
         let key = if let Some(index_url) = maybe_index_url {
             (FetchUrl::Index(index_url.clone()), username)
         } else {
-            (FetchUrl::Realm(Realm::from(url)), username)
+            (FetchUrl::Realm(Realm::from(&*url)), username)
         };
         if !self.cache().fetches.register(key.clone()) {
             let credentials = self
@@ -502,7 +508,7 @@ impl AuthMiddleware {
             debug!("Checking netrc for credentials for {url}");
             Credentials::from_netrc(
                 netrc,
-                url,
+                &url,
                 credentials
                     .as_ref()
                     .and_then(|credentials| credentials.username()),
@@ -523,17 +529,17 @@ impl AuthMiddleware {
                 if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
                     if let Some(index_url) = maybe_index_url {
                         debug!("Checking keyring for credentials for index URL {}@{}", username, index_url);
-                        keyring.fetch(index_url, Some(username)).await
+                        keyring.fetch(&DisplaySafeUrlRef::from(index_url), Some(username)).await
                     } else {
                         debug!("Checking keyring for credentials for full URL {}@{}", username, url);
-                        keyring.fetch(url, Some(username)).await
+                        keyring.fetch(&url, Some(username)).await
                     }
                 } else if matches!(auth_policy, AuthPolicy::Always) {
                     if let Some(index_url) = maybe_index_url {
                         debug!(
                             "Checking keyring for credentials for index URL {index_url} without username due to `authenticate = always`"
                         );
-                        keyring.fetch(index_url, None).await
+                        keyring.fetch(&DisplaySafeUrlRef::from(index_url), None).await
                     } else {
                         None
                     }
@@ -558,24 +564,17 @@ impl AuthMiddleware {
     }
 }
 
-fn tracing_url(request: &Request, credentials: Option<&Credentials>) -> String {
-    if !tracing::enabled!(tracing::Level::DEBUG) {
-        return request.url().to_string();
-    }
-
-    let mut url = request.url().clone();
+fn tracing_url(request: &Request, credentials: Option<&Credentials>) -> DisplaySafeUrl {
+    let mut url = DisplaySafeUrl::from(request.url().clone());
     if let Some(creds) = credentials {
-        if creds.password().is_some() {
-            if let Some(username) = creds.username() {
-                let _ = url.set_username(username);
-            }
-            let _ = url.set_password(Some("****"));
-        // A username on its own might be a secret token.
-        } else if creds.username().is_some() {
-            let _ = url.set_username("****");
+        if let Some(username) = creds.username() {
+            let _ = url.set_username(username);
+        }
+        if let Some(password) = creds.password() {
+            let _ = url.set_password(Some(password));
         }
     }
-    url.to_string()
+    url
 }
 
 #[cfg(test)]
@@ -1749,13 +1748,13 @@ mod tests {
         let base_url_2 = base_url.join("prefix_2")?;
         let indexes = Indexes::from_indexes(vec![
             Index {
-                url: base_url_1.clone(),
-                root_url: base_url_1.clone(),
+                url: DisplaySafeUrl::from(base_url_1.clone()),
+                root_url: DisplaySafeUrl::from(base_url_1.clone()),
                 auth_policy: AuthPolicy::Auto,
             },
             Index {
-                url: base_url_2.clone(),
-                root_url: base_url_2.clone(),
+                url: DisplaySafeUrl::from(base_url_2.clone()),
+                root_url: DisplaySafeUrl::from(base_url_2.clone()),
                 auth_policy: AuthPolicy::Auto,
             },
         ]);
@@ -1857,8 +1856,8 @@ mod tests {
         let base_url = Url::parse(&server.uri())?;
         let index_url = base_url.join("prefix_1")?;
         let indexes = Indexes::from_indexes(vec![Index {
-            url: index_url.clone(),
-            root_url: index_url.clone(),
+            url: DisplaySafeUrl::from(index_url.clone()),
+            root_url: DisplaySafeUrl::from(index_url.clone()),
             auth_policy: AuthPolicy::Auto,
         }]);
 
@@ -1912,7 +1911,7 @@ mod tests {
     }
 
     fn indexes_for(url: &Url, policy: AuthPolicy) -> Indexes {
-        let mut url = url.clone();
+        let mut url = DisplaySafeUrl::from(url.clone());
         url.set_password(None).ok();
         url.set_username("").ok();
         Indexes::from_indexes(vec![Index {
@@ -2104,16 +2103,14 @@ mod tests {
     }
 
     #[test]
-    #[tracing_test::traced_test(level = "debug")]
     fn test_tracing_url() {
         // No credentials
         let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
         assert_eq!(
             tracing_url(&req, None),
-            "https://pypi-proxy.fly.dev/basic-auth/simple"
+            DisplaySafeUrl::parse("https://pypi-proxy.fly.dev/basic-auth/simple").unwrap()
         );
 
-        // Mask username if there is a username but no password
         let creds = Credentials::Basic {
             username: Username::new(Some(String::from("user"))),
             password: None,
@@ -2121,10 +2118,9 @@ mod tests {
         let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
         assert_eq!(
             tracing_url(&req, Some(&creds)),
-            "https://****@pypi-proxy.fly.dev/basic-auth/simple"
+            DisplaySafeUrl::parse("https://user@pypi-proxy.fly.dev/basic-auth/simple").unwrap()
         );
 
-        // Log username but mask password if a password is present
         let creds = Credentials::Basic {
             username: Username::new(Some(String::from("user"))),
             password: Some(Password::new(String::from("password"))),
@@ -2132,7 +2128,8 @@ mod tests {
         let req = create_request("https://pypi-proxy.fly.dev/basic-auth/simple");
         assert_eq!(
             tracing_url(&req, Some(&creds)),
-            "https://user:****@pypi-proxy.fly.dev/basic-auth/simple"
+            DisplaySafeUrl::parse("https://user:password@pypi-proxy.fly.dev/basic-auth/simple")
+                .unwrap()
         );
     }
 

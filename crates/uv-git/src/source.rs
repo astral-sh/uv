@@ -10,7 +10,6 @@ use anyhow::Result;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, instrument};
 
-use url::Url;
 use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_git_types::GitUrl;
 use uv_redacted::DisplaySafeUrl;
@@ -82,9 +81,7 @@ impl GitSource {
 
         // Authenticate the URL, if necessary.
         let remote = if let Some(credentials) = GIT_STORE.get(&canonical) {
-            Cow::Owned(DisplaySafeUrl::from(
-                credentials.apply(Url::from(self.git.repository().clone())),
-            ))
+            Cow::Owned(credentials.apply(self.git.repository().clone()))
         } else {
             Cow::Borrowed(self.git.repository())
         };

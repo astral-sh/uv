@@ -9,6 +9,7 @@ use tracing::trace;
 use url::Url;
 
 use uv_once_map::OnceMap;
+use uv_redacted::DisplaySafeUrl;
 
 use crate::Realm;
 use crate::credentials::{Credentials, Username};
@@ -18,7 +19,7 @@ type FxOnceMap<K, V> = OnceMap<K, V, BuildHasherDefault<FxHasher>>;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum FetchUrl {
     /// A full index URL
-    Index(Url),
+    Index(DisplaySafeUrl),
     /// A realm URL
     Realm(Realm),
 }
