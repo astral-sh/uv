@@ -2082,6 +2082,7 @@ impl PipInstallSettings {
             editable,
             constraints,
             overrides,
+            excludes,
             build_constraints,
             extra,
             all_extras,
@@ -2182,6 +2183,10 @@ impl PipInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             overrides: overrides
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            excludes: excludes
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),

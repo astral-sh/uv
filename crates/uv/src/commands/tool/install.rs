@@ -615,6 +615,7 @@ pub(crate) async fn install(
         requirements,
         constraints,
         overrides,
+        excludes,
         build_constraints,
         printer,
     )

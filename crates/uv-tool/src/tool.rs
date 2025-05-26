@@ -353,6 +353,9 @@ impl Tool {
         &self.overrides
     }
 
+    pub fn excludes(&self) -> &[Requirement] {
+        &self.excludes
+    }
     pub fn build_constraints(&self) -> &[Requirement] {
         &self.build_constraints
     }

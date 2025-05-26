@@ -512,6 +512,7 @@ impl RequirementsSpecification {
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
+        excludes: Vec<Requirement>,
     ) -> Self {
         Self {
             requirements: requirements
@@ -523,6 +524,10 @@ impl RequirementsSpecification {
                 .map(NameRequirementSpecification::from)
                 .collect(),
             overrides: overrides
+                .into_iter()
+                .map(UnresolvedRequirementSpecification::from)
+                .collect(),
+            excludes: excludes
                 .into_iter()
                 .map(UnresolvedRequirementSpecification::from)
                 .collect(),
