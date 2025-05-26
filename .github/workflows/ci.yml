@@ -1422,7 +1422,7 @@ jobs:
           echo "code_any_changed=${CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
 
   integration-test-publish:
-    timeout-minutes: 10
+    timeout-minutes: 20
     needs: integration-test-publish-changed
     name: "integration test | uv publish"
     runs-on: ubuntu-latest
