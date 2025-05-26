@@ -2119,18 +2119,12 @@ fn install_git_private_https_pat() {
 
     let context = TestContext::new("3.8");
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
-
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     let package = format!(
         "uv-private-pypackage@ git+https://{token}@github.com/astral-test/uv-private-pypackage"
     );
 
-    uv_snapshot!(filters, context.pip_install().arg(package)
-        , @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg(package)
+        , @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2139,8 +2133,8 @@ fn install_git_private_https_pat() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://***@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
-    "###);
+     + uv-private-pypackage==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+    ");
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
 }
@@ -2153,16 +2147,11 @@ fn install_git_private_https_pat_mixed_with_public() {
     let context = TestContext::new("3.8");
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     let package = format!(
         "uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"
     );
 
-    uv_snapshot!(filters, context.pip_install().arg(package).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"),
+    uv_snapshot!(context.filters(), context.pip_install().arg(package).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"),
     @r###"
     success: true
     exit_code: 0
@@ -2172,7 +2161,7 @@ fn install_git_private_https_pat_mixed_with_public() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://***@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###);
 
@@ -2187,11 +2176,6 @@ fn install_git_private_https_multiple_pat() {
     let token_1 = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let token_2 = decode_token(common::READ_ONLY_GITHUB_TOKEN_2);
 
-    let filters: Vec<_> = [(token_1.as_str(), "***_1"), (token_2.as_str(), "***_2")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     let package_1 = format!(
         "uv-private-pypackage @ git+https://{token_1}@github.com/astral-test/uv-private-pypackage"
     );
@@ -2199,7 +2183,7 @@ fn install_git_private_https_multiple_pat() {
         "uv-private-pypackage-2 @ git+https://{token_2}@github.com/astral-test/uv-private-pypackage-2"
     );
 
-    uv_snapshot!(filters, context.pip_install().arg(package_1).arg(package_2)
+    uv_snapshot!(context.filters(), context.pip_install().arg(package_1).arg(package_2)
         , @r###"
     success: true
     exit_code: 0
@@ -2209,8 +2193,8 @@ fn install_git_private_https_multiple_pat() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://***_1@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
-     + uv-private-pypackage-2==0.1.0 (from git+https://***_2@github.com/astral-test/uv-private-pypackage-2@45c0bec7365710f09b1f4dbca61c86dde9537e4e)
+     + uv-private-pypackage==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage-2==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage-2@45c0bec7365710f09b1f4dbca61c86dde9537e4e)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -2223,11 +2207,7 @@ fn install_git_private_https_pat_at_ref() {
     let context = TestContext::new("3.8");
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
-    let mut filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
+    let mut filters = context.filters();
     filters.push((r"git\+https://", ""));
 
     // A user is _required_ on Windows
@@ -2241,8 +2221,8 @@ fn install_git_private_https_pat_at_ref() {
     let package = format!(
         "uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac"
     );
-    uv_snapshot!(filters, context.pip_install()
-        .arg(package), @r###"
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(package), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2251,8 +2231,8 @@ fn install_git_private_https_pat_at_ref() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from ***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
-    "###);
+     + uv-private-pypackage==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
+    ");
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
 }
@@ -2270,12 +2250,7 @@ fn install_git_private_https_pat_and_username() {
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let user = "astral-test-bot";
 
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
-    uv_snapshot!(filters, context.pip_install().arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"))
+    uv_snapshot!(context.filters(), context.pip_install().arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"))
         , @r###"
     success: true
     exit_code: 0
@@ -2285,7 +2260,7 @@ fn install_git_private_https_pat_and_username() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://astral-test-bot:***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
+     + uv-private-pypackage==0.1.0 (from git+https://astral-test-bot:****@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -2301,7 +2276,10 @@ fn install_git_private_https_pat_not_authorized() {
     let token = "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";
 
     let mut filters = context.filters();
-    filters.insert(0, (token, "***"));
+    // TODO(john): We need this filter because we are displaying the token when
+    // an underlying process error message is being displayed. We should actually
+    // mask it.
+    filters.push((token, "***"));
     filters.push(("`.*/git fetch (.*)`", "`git fetch $1`"));
 
     // We provide a username otherwise (since the token is invalid), the git cli will prompt for a password
@@ -2314,7 +2292,7 @@ fn install_git_private_https_pat_not_authorized() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `uv-private-pypackage @ git+https://git:***@github.com/astral-test/uv-private-pypackage`
+      × Failed to download and build `uv-private-pypackage @ git+https://git:****@github.com/astral-test/uv-private-pypackage`
       ├─▶ Git operation failed
       ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
       ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
@@ -2334,17 +2312,12 @@ fn install_github_artifact_private_https_pat_mixed_with_public() {
     let context = TestContext::new("3.8");
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     let private_package = format!(
         "uv-private-pypackage @ https://{token}@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl"
     );
     let public_package = "uv-public-pypackage @ https://raw.githubusercontent.com/astral-test/uv-public-pypackage/main/dist/uv_public_pypackage-0.1.0-py3-none-any.whl";
 
-    uv_snapshot!(filters, context.pip_install().arg(private_package).arg(public_package),
+    uv_snapshot!(context.filters(), context.pip_install().arg(private_package).arg(public_package),
     @r###"
     success: true
     exit_code: 0
@@ -2354,7 +2327,7 @@ fn install_github_artifact_private_https_pat_mixed_with_public() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + uv-private-pypackage==0.1.0 (from https://***@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
+     + uv-private-pypackage==0.1.0 (from https://****@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
      + uv-public-pypackage==0.1.0 (from https://raw.githubusercontent.com/astral-test/uv-public-pypackage/main/dist/uv_public_pypackage-0.1.0-py3-none-any.whl)
     "###);
 
@@ -2370,11 +2343,6 @@ fn install_github_artifact_private_https_multiple_pat() {
     let token_1 = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let token_2 = decode_token(common::READ_ONLY_GITHUB_TOKEN_2);
 
-    let filters: Vec<_> = [(token_1.as_str(), "***_1"), (token_2.as_str(), "***_2")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     let package_1 = format!(
         "uv-private-pypackage @ https://astral-test-bot:{token_1}@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl"
     );
@@ -2382,7 +2350,7 @@ fn install_github_artifact_private_https_multiple_pat() {
         "uv-private-pypackage-2 @ https://astral-test-bot:{token_2}@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl"
     );
 
-    uv_snapshot!(filters, context.pip_install().arg(package_1).arg(package_2)
+    uv_snapshot!(context.filters(), context.pip_install().arg(package_1).arg(package_2)
         , @r###"
     success: true
     exit_code: 0
@@ -2392,8 +2360,8 @@ fn install_github_artifact_private_https_multiple_pat() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + uv-private-pypackage==0.1.0 (from https://astral-test-bot:***_1@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
-     + uv-private-pypackage-2==0.1.0 (from https://astral-test-bot:***_2@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl)
+     + uv-private-pypackage==0.1.0 (from https://astral-test-bot:****@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
+     + uv-private-pypackage-2==0.1.0 (from https://astral-test-bot:****@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");

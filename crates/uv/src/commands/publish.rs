@@ -8,7 +8,6 @@ use console::Term;
 use owo_colors::OwoColorize;
 use tokio::sync::Semaphore;
 use tracing::{debug, info};
-use url::Url;
 use uv_auth::Credentials;
 use uv_cache::Cache;
 use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBuilder};
@@ -17,6 +16,7 @@ use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
 use uv_publish::{
     CheckUrlClient, TrustedPublishResult, check_trusted_publishing, files_for_publishing, upload,
 };
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlRef};
 use uv_warnings::warn_user_once;
 
 use crate::commands::reporters::PublishReporter;
@@ -26,7 +26,7 @@ use crate::settings::NetworkSettings;
 
 pub(crate) async fn publish(
     paths: Vec<String>,
-    publish_url: Url,
+    publish_url: DisplaySafeUrl,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
     network_settings: &NetworkSettings,
@@ -196,7 +196,7 @@ enum Prompt {
 ///
 /// Returns the publish URL, the username and the password.
 async fn gather_credentials(
-    mut publish_url: Url,
+    mut publish_url: DisplaySafeUrl,
     mut username: Option<String>,
     mut password: Option<String>,
     trusted_publishing: TrustedPublishing,
@@ -205,7 +205,7 @@ async fn gather_credentials(
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
     printer: Printer,
-) -> Result<(Url, Credentials)> {
+) -> Result<(DisplaySafeUrl, Credentials)> {
     // Support reading username and password from the URL, for symmetry with the index API.
     if let Some(url_password) = publish_url.password() {
         if password.is_some_and(|password| password != url_password) {
@@ -296,7 +296,7 @@ async fn gather_credentials(
             if let Some(username) = &username {
                 debug!("Fetching password from keyring");
                 if let Some(keyring_password) = keyring_provider
-                    .fetch(&publish_url, Some(username))
+                    .fetch(&DisplaySafeUrlRef::from(&publish_url), Some(username))
                     .await
                     .as_ref()
                     .and_then(|credentials| credentials.password())
@@ -342,13 +342,14 @@ mod tests {
     use std::str::FromStr;
 
     use insta::assert_snapshot;
-    use url::Url;
+
+    use uv_redacted::DisplaySafeUrl;
 
     async fn get_credentials(
-        url: Url,
+        url: DisplaySafeUrl,
         username: Option<String>,
         password: Option<String>,
-    ) -> Result<(Url, Credentials)> {
+    ) -> Result<(DisplaySafeUrl, Credentials)> {
         let client = BaseClientBuilder::new().build();
         gather_credentials(
             url,
@@ -366,10 +367,10 @@ mod tests {
 
     #[tokio::test]
     async fn username_password_sources() {
-        let example_url = Url::from_str("https://example.com").unwrap();
-        let example_url_username = Url::from_str("https://ferris@example.com").unwrap();
+        let example_url = DisplaySafeUrl::from_str("https://example.com").unwrap();
+        let example_url_username = DisplaySafeUrl::from_str("https://ferris@example.com").unwrap();
         let example_url_username_password =
-            Url::from_str("https://ferris:f3rr1s@example.com").unwrap();
+            DisplaySafeUrl::from_str("https://ferris:f3rr1s@example.com").unwrap();
 
         let (publish_url, credentials) = get_credentials(example_url.clone(), None, None)
             .await

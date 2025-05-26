@@ -26,6 +26,7 @@ use uv_distribution_filename::{ExtensionError, SourceDistExtension};
 use uv_extract::hash::Hasher;
 use uv_fs::{Simplified, rename_with_retry};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
 use crate::PythonVariant;
@@ -51,9 +52,9 @@ pub enum Error {
     #[error("Invalid request key (too many parts): {0}")]
     TooManyParts(String),
     #[error("Failed to download {0}")]
-    NetworkError(Url, #[source] WrappedReqwestError),
+    NetworkError(DisplaySafeUrl, #[source] WrappedReqwestError),
     #[error("Failed to download {0}")]
-    NetworkMiddlewareError(Url, #[source] anyhow::Error),
+    NetworkMiddlewareError(DisplaySafeUrl, #[source] anyhow::Error),
     #[error("Failed to extract archive: {0}")]
     ExtractError(String, #[source] uv_extract::Error),
     #[error("Failed to hash installation")]
@@ -1060,11 +1061,14 @@ fn parse_json_downloads(
 }
 
 impl Error {
-    pub(crate) fn from_reqwest(url: Url, err: reqwest::Error) -> Self {
+    pub(crate) fn from_reqwest(url: DisplaySafeUrl, err: reqwest::Error) -> Self {
         Self::NetworkError(url, WrappedReqwestError::from(err))
     }
 
-    pub(crate) fn from_reqwest_middleware(url: Url, err: reqwest_middleware::Error) -> Self {
+    pub(crate) fn from_reqwest_middleware(
+        url: DisplaySafeUrl,
+        err: reqwest_middleware::Error,
+    ) -> Self {
         match err {
             reqwest_middleware::Error::Middleware(error) => {
                 Self::NetworkMiddlewareError(url, error)
@@ -1155,6 +1159,7 @@ async fn read_url(
     url: &Url,
     client: &BaseClient,
 ) -> Result<(impl AsyncRead + Unpin, Option<u64>), Error> {
+    let url = DisplaySafeUrl::from(url.clone());
     if url.scheme() == "file" {
         // Loads downloaded distribution from the given `file://` URL.
         let path = url
@@ -1167,8 +1172,8 @@ async fn read_url(
         Ok((Either::Left(reader), Some(size)))
     } else {
         let response = client
-            .for_host(url)
-            .get(url.clone())
+            .for_host(&url)
+            .get(Url::from(url.clone()))
             .send()
             .await
             .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;
@@ -1176,7 +1181,7 @@ async fn read_url(
         // Ensure the request was successful.
         response
             .error_for_status_ref()
-            .map_err(|err| Error::from_reqwest(url.clone(), err))?;
+            .map_err(|err| Error::from_reqwest(url, err))?;
 
         let size = response.content_length();
         let stream = response

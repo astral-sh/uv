@@ -4671,9 +4671,9 @@ dependencies = [
  "test-log",
  "tokio",
  "tracing",
- "tracing-test",
  "url",
  "uv-once-map",
+ "uv-redacted",
  "uv-small-str",
  "uv-static",
  "uv-warnings",
@@ -4801,7 +4801,6 @@ dependencies = [
  "serde",
  "tempfile",
  "tracing",
- "url",
  "uv-cache-info",
  "uv-cache-key",
  "uv-dirs",
@@ -4809,6 +4808,7 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "uv-pypi-types",
+ "uv-redacted",
  "uv-static",
  "walkdir",
 ]
@@ -4836,6 +4836,7 @@ dependencies = [
  "percent-encoding",
  "seahash",
  "url",
+ "uv-redacted",
 ]
 
 [[package]]
@@ -4858,6 +4859,7 @@ dependencies = [
  "uv-pep508",
  "uv-pypi-types",
  "uv-python",
+ "uv-redacted",
  "uv-resolver",
  "uv-settings",
  "uv-static",
@@ -5087,6 +5089,7 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-pypi-types",
+ "uv-redacted",
  "uv-types",
  "uv-workspace",
  "walkdir",
@@ -5144,6 +5147,7 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-pypi-types",
+ "uv-redacted",
  "uv-small-str",
  "version-ranges",
 ]
@@ -5318,6 +5322,7 @@ dependencies = [
  "uv-platform-tags",
  "uv-pypi-types",
  "uv-python",
+ "uv-redacted",
  "uv-static",
  "uv-types",
  "uv-warnings",
@@ -5413,6 +5418,7 @@ dependencies = [
  "uv-fs",
  "uv-normalize",
  "uv-pep440",
+ "uv-redacted",
  "version-ranges",
 ]
 
@@ -5470,6 +5476,7 @@ dependencies = [
  "uv-fs",
  "uv-metadata",
  "uv-pypi-types",
+ "uv-redacted",
  "uv-static",
  "uv-warnings",
 ]
@@ -5501,6 +5508,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep440",
  "uv-pep508",
+ "uv-redacted",
  "uv-small-str",
 ]
 
@@ -5554,6 +5562,7 @@ dependencies = [
  "uv-pep508",
  "uv-platform-tags",
  "uv-pypi-types",
+ "uv-redacted",
  "uv-state",
  "uv-static",
  "uv-trampoline-builder",
@@ -5568,6 +5577,8 @@ dependencies = [
 name = "uv-redacted"
 version = "0.0.1"
 dependencies = [
+ "schemars",
+ "serde",
  "url",
 ]
 
@@ -5598,6 +5609,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep508",
  "uv-pypi-types",
+ "uv-redacted",
  "uv-requirements-txt",
  "uv-resolver",
  "uv-types",
@@ -5633,6 +5645,7 @@ dependencies = [
  "uv-normalize",
  "uv-pep508",
  "uv-pypi-types",
+ "uv-redacted",
  "uv-warnings",
 ]
 
@@ -5684,6 +5697,7 @@ dependencies = [
  "uv-platform-tags",
  "uv-pypi-types",
  "uv-python",
+ "uv-redacted",
  "uv-requirements-txt",
  "uv-small-str",
  "uv-static",
@@ -5707,6 +5721,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-pypi-types",
+ "uv-redacted",
  "uv-settings",
  "uv-workspace",
 ]
@@ -5736,6 +5751,7 @@ dependencies = [
  "uv-pep508",
  "uv-pypi-types",
  "uv-python",
+ "uv-redacted",
  "uv-resolver",
  "uv-static",
  "uv-torch",
@@ -5851,7 +5867,6 @@ dependencies = [
  "anyhow",
  "rustc-hash",
  "thiserror 2.0.12",
- "url",
  "uv-cache",
  "uv-configuration",
  "uv-distribution-filename",
@@ -5863,6 +5878,7 @@ dependencies = [
  "uv-pep508",
  "uv-pypi-types",
  "uv-python",
+ "uv-redacted",
  "uv-workspace",
 ]
 
@@ -5917,7 +5933,6 @@ dependencies = [
  "toml",
  "toml_edit",
  "tracing",
- "url",
  "uv-build-backend",
  "uv-cache-key",
  "uv-distribution-types",
@@ -5929,6 +5944,7 @@ dependencies = [
  "uv-pep440",
  "uv-pep508",
  "uv-pypi-types",
+ "uv-redacted",
  "uv-static",
  "uv-warnings",
 ]

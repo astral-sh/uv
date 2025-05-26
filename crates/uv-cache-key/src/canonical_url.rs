@@ -4,6 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
 use url::Url;
+use uv_redacted::DisplaySafeUrl;
 
 use crate::cache_key::{CacheKey, CacheKeyHasher};
 
@@ -16,10 +17,10 @@ use crate::cache_key::{CacheKey, CacheKeyHasher};
 /// string value of the `Url` it contains. This is intentional, because all fetching should still
 /// happen within the context of the original URL.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct CanonicalUrl(Url);
+pub struct CanonicalUrl(DisplaySafeUrl);
 
 impl CanonicalUrl {
-    pub fn new(url: &Url) -> Self {
+    pub fn new(url: &DisplaySafeUrl) -> Self {
         let mut url = url.clone();
 
         // If the URL cannot be a base, then it's not a valid URL anyway.
@@ -42,8 +43,8 @@ impl CanonicalUrl {
         // almost certainly not using the same case conversion rules that GitHub
         // does. (See issue #84)
         if url.host_str() == Some("github.com") {
-            url.set_scheme(url.scheme().to_lowercase().as_str())
-                .unwrap();
+            let scheme = url.scheme().to_lowercase();
+            url.set_scheme(&scheme).unwrap();
             let path = url.path().to_lowercase();
             url.set_path(&path);
         }
@@ -56,7 +57,8 @@ impl CanonicalUrl {
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("git"));
             if needs_chopping {
                 let prefix = &prefix[..prefix.len() - 4];
-                url.set_path(&format!("{prefix}@{suffix}"));
+                let path = format!("{prefix}@{suffix}");
+                url.set_path(&path);
             }
         } else {
             // Ex) `git+https://github.com/pypa/sample-namespace-packages.git`
@@ -97,7 +99,7 @@ impl CanonicalUrl {
     }
 
     pub fn parse(url: &str) -> Result<Self, url::ParseError> {
-        Ok(Self::new(&Url::parse(url)?))
+        Ok(Self::new(&DisplaySafeUrl::parse(url)?))
     }
 }
 
@@ -117,7 +119,7 @@ impl Hash for CanonicalUrl {
     }
 }
 
-impl From<CanonicalUrl> for Url {
+impl From<CanonicalUrl> for DisplaySafeUrl {
     fn from(value: CanonicalUrl) -> Self {
         value.0
     }
@@ -138,10 +140,10 @@ impl std::fmt::Display for CanonicalUrl {
 /// [`CanonicalUrl`] values, but the same [`RepositoryUrl`], since they map to the same
 /// resource.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct RepositoryUrl(Url);
+pub struct RepositoryUrl(DisplaySafeUrl);
 
 impl RepositoryUrl {
-    pub fn new(url: &Url) -> Self {
+    pub fn new(url: &DisplaySafeUrl) -> Self {
         let mut url = CanonicalUrl::new(url).0;
 
         // If a Git URL ends in a reference (like a branch, tag, or commit), remove it.
@@ -163,7 +165,7 @@ impl RepositoryUrl {
     }
 
     pub fn parse(url: &str) -> Result<Self, url::ParseError> {
-        Ok(Self::new(&Url::parse(url)?))
+        Ok(Self::new(&DisplaySafeUrl::parse(url)?))
     }
 }
 

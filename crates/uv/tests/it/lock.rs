@@ -7983,11 +7983,6 @@ fn lock_redact_git_pep508() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
         r#"
@@ -8000,7 +7995,7 @@ fn lock_redact_git_pep508() -> Result<()> {
         token = token,
     })?;
 
-    uv_snapshot!(&filters, context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8012,7 +8007,7 @@ fn lock_redact_git_pep508() -> Result<()> {
     let lock = context.read("uv.lock");
 
     insta::with_settings!({
-        filters => filters.clone(),
+        filters => context.filters(),
     }, {
         assert_snapshot!(
             lock, @r#"
@@ -8043,7 +8038,7 @@ fn lock_redact_git_pep508() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8053,7 +8048,7 @@ fn lock_redact_git_pep508() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(&filters, context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8073,11 +8068,6 @@ fn lock_redact_git_sources() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
         r#"
@@ -8093,7 +8083,7 @@ fn lock_redact_git_sources() -> Result<()> {
         token = token,
     })?;
 
-    uv_snapshot!(&filters, context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8105,7 +8095,7 @@ fn lock_redact_git_sources() -> Result<()> {
     let lock = context.read("uv.lock");
 
     insta::with_settings!({
-        filters => filters.clone(),
+        filters => context.filters(),
     }, {
         assert_snapshot!(
             lock, @r#"
@@ -8136,7 +8126,7 @@ fn lock_redact_git_sources() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8146,7 +8136,7 @@ fn lock_redact_git_sources() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(&filters, context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8166,11 +8156,6 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
         r#"
@@ -8183,7 +8168,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
         token = token,
     })?;
 
-    uv_snapshot!(&filters, context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8196,7 +8181,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     let lock = context.read("uv.lock");
 
     insta::with_settings!({
-        filters => filters.clone(),
+        filters => context.filters(),
     }, {
         assert_snapshot!(
             lock, @r#"
@@ -8221,7 +8206,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8232,7 +8217,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(&filters, context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8249,12 +8234,6 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
 #[test]
 fn lock_redact_index_sources() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
-    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
-
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8274,7 +8253,7 @@ fn lock_redact_index_sources() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(&filters, context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8286,7 +8265,7 @@ fn lock_redact_index_sources() -> Result<()> {
     let lock = context.read("uv.lock");
 
     insta::with_settings!({
-        filters => filters.clone(),
+        filters => context.filters(),
     }, {
         assert_snapshot!(
             lock, @r#"
@@ -8321,7 +8300,7 @@ fn lock_redact_index_sources() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8331,7 +8310,7 @@ fn lock_redact_index_sources() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(&filters, context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8348,12 +8327,6 @@ fn lock_redact_index_sources() -> Result<()> {
 #[test]
 fn lock_redact_url_sources() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
-    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
-
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(r#"
@@ -8367,7 +8340,7 @@ fn lock_redact_url_sources() -> Result<()> {
         iniconfig = { url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
         "#)?;
 
-    uv_snapshot!(&filters, context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8379,7 +8352,7 @@ fn lock_redact_url_sources() -> Result<()> {
     let lock = context.read("uv.lock");
 
     insta::with_settings!({
-        filters => filters.clone(),
+        filters => context.filters(),
     }, {
         assert_snapshot!(
             lock, @r#"
@@ -8413,7 +8386,7 @@ fn lock_redact_url_sources() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8423,7 +8396,7 @@ fn lock_redact_url_sources() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(&filters, context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8431,8 +8404,8 @@ fn lock_redact_url_sources() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-    "###);
+     + iniconfig==2.0.0 (from https://public:****@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+    ");
 
     Ok(())
 }
@@ -15837,7 +15810,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG No workspace root found, using project root
     DEBUG Ignoring existing lockfile due to mismatched requirements for: `project==0.1.0`
       Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([]), index: None, conflict: None }, origin: None }}
-      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: Url { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None }), format: Simple }), conflict: None }, origin: None }}
+      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: https://test.pypi.org/simple, given: None }), format: Simple }), conflict: None }, origin: None }}
     DEBUG Solving with installed Python version: 3.12.[X]
     DEBUG Solving with target Python version: >=3.12
     DEBUG Adding direct dependency: project*

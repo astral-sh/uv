@@ -27,6 +27,7 @@ use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests};
+use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
@@ -529,7 +530,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.
     async fn stream_wheel(
         &self,
-        url: Url,
+        url: DisplaySafeUrl,
         filename: &WheelFilename,
         size: Option<u64>,
         wheel_entry: &CacheEntry,
@@ -666,7 +667,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Download a wheel from a URL, then unzip it into the cache.
     async fn download_wheel(
         &self,
-        url: Url,
+        url: DisplaySafeUrl,
         filename: &WheelFilename,
         size: Option<u64>,
         wheel_entry: &CacheEntry,
@@ -980,11 +981,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
-    fn request(&self, url: Url) -> Result<reqwest::Request, reqwest::Error> {
+    fn request(&self, url: DisplaySafeUrl) -> Result<reqwest::Request, reqwest::Error> {
         self.client
             .unmanaged
             .uncached_client(&url)
-            .get(url)
+            .get(Url::from(url))
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading

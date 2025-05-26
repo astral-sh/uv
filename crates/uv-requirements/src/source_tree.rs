@@ -16,6 +16,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::RequirementOrigin;
+use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
@@ -180,7 +181,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             return Ok(metadata);
         }
 
-        let Ok(url) = Url::from_directory_path(source_tree) else {
+        let Ok(url) = Url::from_directory_path(source_tree).map(DisplaySafeUrl::from) else {
             return Err(anyhow::anyhow!("Failed to convert path to URL"));
         };
         let source = SourceUrl::Directory(DirectorySourceUrl {

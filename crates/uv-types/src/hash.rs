@@ -2,7 +2,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
-use url::Url;
 
 use uv_configuration::HashCheckingMode;
 use uv_distribution_types::{
@@ -12,6 +11,7 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pypi_types::{HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
+use uv_redacted::DisplaySafeUrl;
 
 #[derive(Debug, Default, Clone)]
 pub enum HashStrategy {
@@ -76,7 +76,7 @@ impl HashStrategy {
     }
 
     /// Return the [`HashPolicy`] for the given direct URL package.
-    pub fn get_url(&self, url: &Url) -> HashPolicy {
+    pub fn get_url(&self, url: &DisplaySafeUrl) -> HashPolicy {
         match self {
             Self::None => HashPolicy::None,
             Self::Generate(mode) => HashPolicy::Generate(*mode),
@@ -109,7 +109,7 @@ impl HashStrategy {
     }
 
     /// Returns `true` if the given direct URL package is allowed.
-    pub fn allows_url(&self, url: &Url) -> bool {
+    pub fn allows_url(&self, url: &DisplaySafeUrl) -> bool {
         match self {
             Self::None => true,
             Self::Generate(_) => true,

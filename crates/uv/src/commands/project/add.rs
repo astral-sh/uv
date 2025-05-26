@@ -24,7 +24,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
     Index, IndexName, IndexUrls, NameRequirementSpecification, Requirement, RequirementSource,
-    UnresolvedRequirement, VersionId, redact_credentials,
+    UnresolvedRequirement, VersionId,
 };
 use uv_fs::Simplified;
 use uv_git::GIT_STORE;
@@ -33,6 +33,7 @@ use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
 use uv_pep508::{ExtraName, MarkerTree, UnnamedRequirement, VersionOrUrl};
 use uv_pypi_types::{ParsedUrl, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonDownloads, PythonEnvironment, PythonPreference, PythonRequest};
+use uv_redacted::DisplaySafeUrl;
 use uv_requirements::{NamedRequirementsResolver, RequirementsSource, RequirementsSpecification};
 use uv_resolver::FlatIndex;
 use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
@@ -627,7 +628,7 @@ fn edits(
             }
         };
 
-        // Redact any credentials. By default, we avoid writing sensitive credentials to files that
+        // Remove any credentials. By default, we avoid writing sensitive credentials to files that
         // will be checked into version control (e.g., `pyproject.toml` and `uv.lock`). Instead,
         // we store the credentials in a global store, and reuse them during resolution. The
         // expectation is that subsequent resolutions steps will succeed by reading from (e.g.) the
@@ -649,7 +650,7 @@ fn edits(
                     GIT_STORE.insert(RepositoryUrl::new(&git), credentials);
 
                     // Redact the credentials.
-                    redact_credentials(&mut git);
+                    git.remove_credentials();
                 }
                 Some(Source::Git {
                     git,
@@ -705,13 +706,15 @@ fn edits(
 
         // Update the `pyproject.toml`.
         let edit = match &dependency_type {
-            DependencyType::Production => toml.add_dependency(&requirement, source.as_ref())?,
-            DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref())?,
+            DependencyType::Production => {
+                toml.add_dependency(&requirement, source.as_ref(), raw)?
+            }
+            DependencyType::Dev => toml.add_dev_dependency(&requirement, source.as_ref(), raw)?,
             DependencyType::Optional(extra) => {
-                toml.add_optional_dependency(extra, &requirement, source.as_ref())?
+                toml.add_optional_dependency(extra, &requirement, source.as_ref(), raw)?
             }
             DependencyType::Group(group) => {
-                toml.add_dependency_group_requirement(group, &requirement, source.as_ref())?
+                toml.add_dependency_group_requirement(group, &requirement, source.as_ref(), raw)?
             }
         };
 
@@ -863,6 +866,7 @@ async fn lock_and_sync(
             // Invalidate the project metadata.
             if let AddTarget::Project(VirtualProject::Project(ref project), _) = target {
                 let url = Url::from_file_path(project.project_root())
+                    .map(DisplaySafeUrl::from)
                     .expect("project root is a valid URL");
                 let version_id = VersionId::from_url(&url);
                 let existing = lock_state.index().distributions().remove(&version_id);

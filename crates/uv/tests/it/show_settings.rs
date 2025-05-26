@@ -112,21 +112,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         name: None,
                         url: Pypi(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://pypi.org/simple,
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
@@ -293,21 +279,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         name: None,
                         url: Pypi(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://pypi.org/simple,
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
@@ -475,21 +447,7 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
                         name: None,
                         url: Pypi(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://pypi.org/simple,
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
@@ -689,21 +647,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         name: None,
                         url: Pypi(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://pypi.org/simple,
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
@@ -1032,21 +976,7 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
                         name: None,
                         url: Pypi(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://pypi.org/simple,
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
@@ -1240,21 +1170,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         name: None,
                         url: Pypi(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://pypi.org/simple,
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
@@ -1272,21 +1188,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "test.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://test.pypi.org/simple,
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
@@ -1455,21 +1357,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "test.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://test.pypi.org/simple,
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
@@ -1489,21 +1377,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         name: None,
                         url: Pypi(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://pypi.org/simple,
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
@@ -1521,21 +1395,7 @@ fn resolve_index_url() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "test.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://test.pypi.org/simple,
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
@@ -1728,21 +1588,7 @@ fn resolve_find_links() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "download.pytorch.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/whl/torch_stable.html",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://download.pytorch.org/whl/torch_stable.html,
                                 given: Some(
                                     "https://download.pytorch.org/whl/torch_stable.html",
                                 ),
@@ -2097,21 +1943,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "download.pytorch.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/whl",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://download.pytorch.org/whl,
                                 given: Some(
                                     "https://download.pytorch.org/whl",
                                 ),
@@ -2129,21 +1961,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "test.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://test.pypi.org/simple,
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
@@ -2310,21 +2128,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "download.pytorch.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/whl",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://download.pytorch.org/whl,
                                 given: Some(
                                     "https://download.pytorch.org/whl",
                                 ),
@@ -2342,21 +2146,7 @@ fn resolve_top_level() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "test.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://test.pypi.org/simple,
                                 given: Some(
                                     "https://test.pypi.org/simple",
                                 ),
@@ -3537,21 +3327,7 @@ fn resolve_both() -> anyhow::Result<()> {
                         name: None,
                         url: Pypi(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://pypi.org/simple,
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
@@ -3843,21 +3619,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
                         name: None,
                         url: Pypi(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://pypi.org/simple,
                                 given: Some(
                                     "https://pypi.org/simple",
                                 ),
@@ -4629,21 +4391,7 @@ fn index_priority() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "cli.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://cli.pypi.org/simple,
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
@@ -4663,21 +4411,7 @@ fn index_priority() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "file.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://file.pypi.org/simple,
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
@@ -4844,21 +4578,7 @@ fn index_priority() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "cli.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://cli.pypi.org/simple,
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
@@ -4878,21 +4598,7 @@ fn index_priority() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "file.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://file.pypi.org/simple,
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
@@ -5065,21 +4771,7 @@ fn index_priority() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "cli.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://cli.pypi.org/simple,
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
@@ -5099,21 +4791,7 @@ fn index_priority() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "file.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://file.pypi.org/simple,
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
@@ -5281,21 +4959,7 @@ fn index_priority() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "cli.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://cli.pypi.org/simple,
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
@@ -5315,21 +4979,7 @@ fn index_priority() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "file.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://file.pypi.org/simple,
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
@@ -5504,21 +5154,7 @@ fn index_priority() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "cli.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://cli.pypi.org/simple,
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
@@ -5538,21 +5174,7 @@ fn index_priority() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "file.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://file.pypi.org/simple,
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),
@@ -5720,21 +5342,7 @@ fn index_priority() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "cli.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://cli.pypi.org/simple,
                                 given: Some(
                                     "https://cli.pypi.org/simple",
                                 ),
@@ -5754,21 +5362,7 @@ fn index_priority() -> anyhow::Result<()> {
                         name: None,
                         url: Url(
                             VerbatimUrl {
-                                url: Url {
-                                    scheme: "https",
-                                    cannot_be_a_base: false,
-                                    username: "",
-                                    password: None,
-                                    host: Some(
-                                        Domain(
-                                            "file.pypi.org",
-                                        ),
-                                    ),
-                                    port: None,
-                                    path: "/simple",
-                                    query: None,
-                                    fragment: None,
-                                },
+                                url: https://file.pypi.org/simple,
                                 given: Some(
                                     "https://file.pypi.org/simple",
                                 ),

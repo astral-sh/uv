@@ -1,19 +1,19 @@
 use http::Extensions;
 use std::fmt::Debug;
+use uv_redacted::DisplaySafeUrl;
 
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
-use url::Url;
 
 /// A custom error type for the offline middleware.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OfflineError {
-    url: Url,
+    url: DisplaySafeUrl,
 }
 
 impl OfflineError {
     /// Returns the URL that caused the error.
-    pub(crate) fn url(&self) -> &Url {
+    pub(crate) fn url(&self) -> &DisplaySafeUrl {
         &self.url
     }
 }
@@ -43,7 +43,7 @@ impl Middleware for OfflineMiddleware {
     ) -> reqwest_middleware::Result<Response> {
         Err(reqwest_middleware::Error::Middleware(
             OfflineError {
-                url: req.url().clone(),
+                url: DisplaySafeUrl::from(req.url().clone()),
             }
             .into(),
         ))

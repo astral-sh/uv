@@ -16,6 +16,7 @@ use url::Url;
 
 use uv_fs::Simplified;
 use uv_git_types::{GitHubRepository, GitOid, GitReference};
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_version::version;
 
@@ -132,7 +133,7 @@ impl Display for ReferenceOrOid<'_> {
 #[derive(PartialEq, Clone, Debug)]
 pub(crate) struct GitRemote {
     /// URL to a remote repository.
-    url: Url,
+    url: DisplaySafeUrl,
 }
 
 /// A local clone of a remote repository's database. Multiple [`GitCheckout`]s
@@ -205,12 +206,12 @@ impl GitRepository {
 
 impl GitRemote {
     /// Creates an instance for a remote repository URL.
-    pub(crate) fn new(url: &Url) -> Self {
+    pub(crate) fn new(url: &DisplaySafeUrl) -> Self {
         Self { url: url.clone() }
     }
 
     /// Gets the remote repository URL.
-    pub(crate) fn url(&self) -> &Url {
+    pub(crate) fn url(&self) -> &DisplaySafeUrl {
         &self.url
     }
 

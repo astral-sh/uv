@@ -1518,7 +1518,7 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     name.cyan(),
-                    found_index.redacted().cyan(),
+                    found_index.without_credentials().cyan(),
                     PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
                     next_index.cyan(),
                     "--index-strategy unsafe-best-match".green(),
@@ -1530,7 +1530,7 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    index.redacted().cyan(),
+                    index.without_credentials().cyan(),
                     "401 Unauthorized".red(),
                 )
             }
@@ -1540,7 +1540,7 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    index.redacted().cyan(),
+                    index.without_credentials().cyan(),
                     "403 Forbidden".red(),
                 )
             }

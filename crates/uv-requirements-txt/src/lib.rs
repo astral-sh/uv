@@ -54,6 +54,8 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_pep508::{Pep508Error, RequirementOrigin, VerbatimUrl, expand_env_vars};
 use uv_pypi_types::VerbatimParsedUrl;
+#[cfg(feature = "http")]
+use uv_redacted::DisplaySafeUrl;
 
 use crate::requirement::EditableError;
 pub use crate::requirement::RequirementsTxtRequirement;
@@ -949,11 +951,11 @@ async fn read_url_to_string(
                 url: path.as_ref().to_owned(),
             })?;
 
-    let url = Url::from_str(path_utf8)
+    let url = DisplaySafeUrl::from_str(path_utf8)
         .map_err(|err| RequirementsTxtParserError::InvalidUrl(path_utf8.to_string(), err))?;
     let response = client
         .for_host(&url)
-        .get(url.clone())
+        .get(Url::from(url.clone()))
         .send()
         .await
         .map_err(|err| RequirementsTxtParserError::from_reqwest_middleware(url.clone(), err))?;
@@ -1047,7 +1049,7 @@ pub enum RequirementsTxtParserError {
         url: PathBuf,
     },
     #[cfg(feature = "http")]
-    Reqwest(Url, reqwest_middleware::Error),
+    Reqwest(DisplaySafeUrl, reqwest_middleware::Error),
     #[cfg(feature = "http")]
     InvalidUrl(String, url::ParseError),
 }
@@ -1301,11 +1303,11 @@ impl From<io::Error> for RequirementsTxtParserError {
 
 #[cfg(feature = "http")]
 impl RequirementsTxtParserError {
-    fn from_reqwest(url: Url, err: reqwest::Error) -> Self {
+    fn from_reqwest(url: DisplaySafeUrl, err: reqwest::Error) -> Self {
         Self::Reqwest(url, reqwest_middleware::Error::Reqwest(err))
     }
 
-    fn from_reqwest_middleware(url: Url, err: reqwest_middleware::Error) -> Self {
+    fn from_reqwest_middleware(url: DisplaySafeUrl, err: reqwest_middleware::Error) -> Self {
         Self::Reqwest(url, err)
     }
 }
@@ -2039,7 +2041,7 @@ mod test {
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
         }, {
-            insta::assert_debug_snapshot!(requirements, @r###"
+            insta::assert_debug_snapshot!(requirements, @r#"
             RequirementsTxt {
                 requirements: [],
                 constraints: [],
@@ -2050,34 +2052,14 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Directory(
                                         ParsedDirectoryUrl {
-                                            url: Url {
-                                                scheme: "file",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: None,
-                                                port: None,
-                                                path: "/foo/bar",
-                                                query: None,
-                                                fragment: None,
-                                            },
+                                            url: file:///foo/bar,
                                             install_path: "/foo/bar",
                                             editable: true,
                                             virtual: false,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
-                                            scheme: "file",
-                                            cannot_be_a_base: false,
-                                            username: "",
-                                            password: None,
-                                            host: None,
-                                            port: None,
-                                            path: "/foo/bar",
-                                            query: None,
-                                            fragment: None,
-                                        },
+                                        url: file:///foo/bar,
                                         given: Some(
                                             "/foo/bar",
                                         ),
@@ -2102,7 +2084,7 @@ mod test {
                 no_binary: None,
                 only_binary: None,
             }
-            "###);
+            "#);
         });
 
         Ok(())
@@ -2187,7 +2169,7 @@ mod test {
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
         }, {
-            insta::assert_debug_snapshot!(requirements, @r###"
+            insta::assert_debug_snapshot!(requirements, @r#"
             RequirementsTxt {
                 requirements: [
                     RequirementEntry {
@@ -2333,21 +2315,7 @@ mod test {
                 editables: [],
                 index_url: Some(
                     VerbatimUrl {
-                        url: Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "test.pypi.org",
-                                ),
-                            ),
-                            port: None,
-                            path: "/simple/",
-                            query: None,
-                            fragment: None,
-                        },
+                        url: https://test.pypi.org/simple/,
                         given: Some(
                             "https://test.pypi.org/simple/",
                         ),
@@ -2359,7 +2327,7 @@ mod test {
                 no_binary: All,
                 only_binary: None,
             }
-            "###);
+            "#);
         });
 
         Ok(())
@@ -2402,7 +2370,7 @@ mod test {
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
         }, {
-            insta::assert_debug_snapshot!(requirements, @r###"
+            insta::assert_debug_snapshot!(requirements, @r#"
             RequirementsTxt {
                 requirements: [
                     RequirementEntry {
@@ -2411,33 +2379,13 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
-                                                scheme: "file",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: None,
-                                                port: None,
-                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.3.0-py3-none-any.whl",
-                                                query: None,
-                                                fragment: None,
-                                            },
+                                            url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.3.0-py3-none-any.whl,
                                             install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.3.0-py3-none-any.whl",
                                             ext: Wheel,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
-                                            scheme: "file",
-                                            cannot_be_a_base: false,
-                                            username: "",
-                                            password: None,
-                                            host: None,
-                                            port: None,
-                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.3.0-py3-none-any.whl",
-                                            query: None,
-                                            fragment: None,
-                                        },
+                                        url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.3.0-py3-none-any.whl,
                                         given: Some(
                                             "importlib_metadata-8.3.0-py3-none-any.whl",
                                         ),
@@ -2460,33 +2408,13 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
-                                                scheme: "file",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: None,
-                                                port: None,
-                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
-                                                query: None,
-                                                fragment: None,
-                                            },
+                                            url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl,
                                             install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
                                             ext: Wheel,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
-                                            scheme: "file",
-                                            cannot_be_a_base: false,
-                                            username: "",
-                                            password: None,
-                                            host: None,
-                                            port: None,
-                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
-                                            query: None,
-                                            fragment: None,
-                                        },
+                                        url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl,
                                         given: Some(
                                             "importlib_metadata-8.2.0-py3-none-any.whl",
                                         ),
@@ -2509,33 +2437,13 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
-                                                scheme: "file",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: None,
-                                                port: None,
-                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
-                                                query: None,
-                                                fragment: None,
-                                            },
+                                            url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl,
                                             install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
                                             ext: Wheel,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
-                                            scheme: "file",
-                                            cannot_be_a_base: false,
-                                            username: "",
-                                            password: None,
-                                            host: None,
-                                            port: None,
-                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
-                                            query: None,
-                                            fragment: None,
-                                        },
+                                        url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl,
                                         given: Some(
                                             "importlib_metadata-8.2.0-py3-none-any.whl",
                                         ),
@@ -2562,33 +2470,13 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
-                                                scheme: "file",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: None,
-                                                port: None,
-                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
-                                                query: None,
-                                                fragment: None,
-                                            },
+                                            url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl,
                                             install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
                                             ext: Wheel,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
-                                            scheme: "file",
-                                            cannot_be_a_base: false,
-                                            username: "",
-                                            password: None,
-                                            host: None,
-                                            port: None,
-                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
-                                            query: None,
-                                            fragment: None,
-                                        },
+                                        url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl,
                                         given: Some(
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
@@ -2611,33 +2499,13 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
-                                                scheme: "file",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: None,
-                                                port: None,
-                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
-                                                query: None,
-                                                fragment: None,
-                                            },
+                                            url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl,
                                             install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
                                             ext: Wheel,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
-                                            scheme: "file",
-                                            cannot_be_a_base: false,
-                                            username: "",
-                                            password: None,
-                                            host: None,
-                                            port: None,
-                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
-                                            query: None,
-                                            fragment: None,
-                                        },
+                                        url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl,
                                         given: Some(
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
@@ -2660,33 +2528,13 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
-                                                scheme: "file",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: None,
-                                                port: None,
-                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
-                                                query: None,
-                                                fragment: None,
-                                            },
+                                            url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl,
                                             install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
                                             ext: Wheel,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
-                                            scheme: "file",
-                                            cannot_be_a_base: false,
-                                            username: "",
-                                            password: None,
-                                            host: None,
-                                            port: None,
-                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
-                                            query: None,
-                                            fragment: None,
-                                        },
+                                        url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl,
                                         given: Some(
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
@@ -2717,7 +2565,7 @@ mod test {
                 no_binary: None,
                 only_binary: None,
             }
-            "###);
+            "#);
         });
 
         Ok(())

@@ -27,12 +27,12 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
+uv-redacted = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 rustc-hash = { workspace = true }
 thiserror = { workspace = true }
-url = { workspace = true }
 
 [features]
 default = []

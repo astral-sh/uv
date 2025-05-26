@@ -3,11 +3,10 @@ use std::ops::Deref;
 
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use async_zip::error::ZipError;
-use url::Url;
 
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_normalize::PackageName;
-use uv_redacted::redacted_url;
+use uv_redacted::DisplaySafeUrl;
 
 use crate::middleware::OfflineError;
 use crate::{FlatIndexError, html};
@@ -30,12 +29,12 @@ impl Error {
     }
 
     /// Create a new error from a JSON parsing error.
-    pub(crate) fn from_json_err(err: serde_json::Error, url: Url) -> Self {
+    pub(crate) fn from_json_err(err: serde_json::Error, url: DisplaySafeUrl) -> Self {
         ErrorKind::BadJson { source: err, url }.into()
     }
 
     /// Create a new error from an HTML parsing error.
-    pub(crate) fn from_html_err(err: html::Error, url: Url) -> Self {
+    pub(crate) fn from_html_err(err: html::Error, url: DisplaySafeUrl) -> Self {
         ErrorKind::BadHtml { source: err, url }.into()
     }
 
@@ -160,10 +159,10 @@ pub enum ErrorKind {
     Flat(#[from] FlatIndexError),
 
     #[error("Expected a file URL, but received: {0}")]
-    NonFileUrl(Url),
+    NonFileUrl(DisplaySafeUrl),
 
     #[error("Expected an index URL, but received non-base URL: {0}")]
-    CannotBeABase(Url),
+    CannotBeABase(DisplaySafeUrl),
 
     #[error("Failed to read metadata: `{0}`")]
     Metadata(String, #[source] uv_metadata::Error),
@@ -196,16 +195,22 @@ pub enum ErrorKind {
 
     /// An error that happened while making a request or in a reqwest middleware.
     #[error("Failed to fetch: `{0}`")]
-    WrappedReqwestError(Url, #[source] WrappedReqwestError),
+    WrappedReqwestError(DisplaySafeUrl, #[source] WrappedReqwestError),
 
-    #[error("Received some unexpected JSON from {}", redacted_url(url))]
-    BadJson { source: serde_json::Error, url: Url },
+    #[error("Received some unexpected JSON from {}", url)]
+    BadJson {
+        source: serde_json::Error,
+        url: DisplaySafeUrl,
+    },
 
-    #[error("Received some unexpected HTML from {}", redacted_url(url))]
-    BadHtml { source: html::Error, url: Url },
+    #[error("Received some unexpected HTML from {}", url)]
+    BadHtml {
+        source: html::Error,
+        url: DisplaySafeUrl,
+    },
 
     #[error("Failed to read zip with range requests: `{0}`")]
-    AsyncHttpRangeReader(Url, #[source] AsyncHttpRangeReaderError),
+    AsyncHttpRangeReader(DisplaySafeUrl, #[source] AsyncHttpRangeReaderError),
 
     #[error("{0} is not a valid wheel filename")]
     WheelFilename(#[source] WheelFilenameError),
@@ -232,13 +237,13 @@ pub enum ErrorKind {
     Encode(#[source] rmp_serde::encode::Error),
 
     #[error("Missing `Content-Type` header for {0}")]
-    MissingContentType(Url),
+    MissingContentType(DisplaySafeUrl),
 
     #[error("Invalid `Content-Type` header for {0}")]
-    InvalidContentTypeHeader(Url, #[source] http::header::ToStrError),
+    InvalidContentTypeHeader(DisplaySafeUrl, #[source] http::header::ToStrError),
 
     #[error("Unsupported `Content-Type` \"{1}\" for {0}. Expected JSON or HTML.")]
-    UnsupportedMediaType(Url, String),
+    UnsupportedMediaType(DisplaySafeUrl, String),
 
     #[error("Reading from cache archive failed: {0}")]
     ArchiveRead(String),
@@ -253,11 +258,14 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
-    pub(crate) fn from_reqwest(url: Url, error: reqwest::Error) -> Self {
+    pub(crate) fn from_reqwest(url: DisplaySafeUrl, error: reqwest::Error) -> Self {
         Self::WrappedReqwestError(url, WrappedReqwestError::from(error))
     }
 
-    pub(crate) fn from_reqwest_middleware(url: Url, err: reqwest_middleware::Error) -> Self {
+    pub(crate) fn from_reqwest_middleware(
+        url: DisplaySafeUrl,
+        err: reqwest_middleware::Error,
+    ) -> Self {
         if let reqwest_middleware::Error::Middleware(ref underlying) = err {
             if let Some(err) = underlying.downcast_ref::<OfflineError>() {
                 return Self::Offline(err.url().to_string());

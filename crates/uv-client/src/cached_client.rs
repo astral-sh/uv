@@ -12,6 +12,7 @@ use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 
 use uv_cache::{CacheEntry, Freshness};
 use uv_fs::write_atomic;
+use uv_redacted::DisplaySafeUrl;
 
 use crate::BaseClient;
 use crate::base_client::is_extended_transient_error;
@@ -481,11 +482,11 @@ impl CachedClient {
         cached: DataWithCachePolicy,
         new_cache_policy_builder: CachePolicyBuilder,
     ) -> Result<CachedResponse, Error> {
-        let url = req.url().clone();
+        let url = DisplaySafeUrl::from(req.url().clone());
         debug!("Sending revalidation request for: {url}");
         let response = self
             .0
-            .for_host(req.url())
+            .for_host(&url)
             .execute(req)
             .instrument(info_span!("revalidation_request", url = url.as_str()))
             .await
@@ -521,7 +522,7 @@ impl CachedClient {
         &self,
         req: Request,
     ) -> Result<(Response, Option<Box<CachePolicy>>), Error> {
-        let url = req.url().clone();
+        let url = DisplaySafeUrl::from(req.url().clone());
         trace!("Sending fresh {} request for {}", req.method(), url);
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let response = self

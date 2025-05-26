@@ -30,7 +30,7 @@ use uv_distribution_types::{
     Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexMetadata,
     IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
     RegistrySourceDist, RemoteSource, Requirement, RequirementSource, ResolvedDist, StaticMetadata,
-    ToUrlError, UrlString, redact_credentials,
+    ToUrlError, UrlString,
 };
 use uv_fs::{PortablePath, PortablePathBuf, relative_to};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -45,6 +45,7 @@ use uv_pypi_types::{
     ConflictPackage, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
     ParsedGitUrl,
 };
+use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::WorkspaceMember;
@@ -1404,7 +1405,7 @@ impl Lock {
                 .into_iter()
                 .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index.url().redacted().as_ref()))
+                        Some(UrlString::from(index.url().without_credentials().as_ref()))
                     }
                     IndexUrl::Path(_) => None,
                 })
@@ -2238,7 +2239,7 @@ impl Package {
                     Source::Direct(url, direct) => {
                         let filename: WheelFilename =
                             self.wheels[best_wheel_index].filename.clone();
-                        let url = Url::from(ParsedArchiveUrl {
+                        let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                             url: url.to_url().map_err(LockErrorKind::InvalidUrl)?,
                             subdirectory: direct.subdirectory.clone(),
                             ext: DistExtension::Wheel,
@@ -2400,7 +2401,7 @@ impl Package {
                     GitUrl::from_commit(url, GitReference::from(git.kind.clone()), git.precise)?;
 
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-                let url = Url::from(ParsedGitUrl {
+                let url = DisplaySafeUrl::from(ParsedGitUrl {
                     url: git_url.clone(),
                     subdirectory: git.subdirectory.clone(),
                 });
@@ -2419,7 +2420,7 @@ impl Package {
                     return Ok(None);
                 };
                 let location = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
-                let url = Url::from(ParsedArchiveUrl {
+                let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                     url: location.clone(),
                     subdirectory: direct.subdirectory.clone(),
                     ext: DistExtension::Source(ext),
@@ -2498,8 +2499,9 @@ impl Package {
                     name: name.clone(),
                     version: version.clone(),
                 })?;
-                let file_url = Url::from_file_path(workspace_root.join(path).join(file_path))
-                    .map_err(|()| LockErrorKind::PathToUrl)?;
+                let file_url =
+                    DisplaySafeUrl::from_file_path(workspace_root.join(path).join(file_path))
+                        .map_err(|()| LockErrorKind::PathToUrl)?;
                 let filename = sdist
                     .filename()
                     .ok_or_else(|| LockErrorKind::MissingFilename {
@@ -3192,7 +3194,7 @@ impl Source {
         match index_url {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 // Remove any sensitive credentials from the index URL.
-                let redacted = index_url.redacted();
+                let redacted = index_url.without_credentials();
                 let source = RegistrySource::Url(UrlString::from(redacted.as_ref()));
                 Ok(Source::Registry(source))
             }
@@ -3405,7 +3407,7 @@ impl TryFrom<SourceWire> for Source {
         match wire {
             Registry { registry } => Ok(Source::Registry(registry.into())),
             Git { git } => {
-                let url = Url::parse(&git)
+                let url = DisplaySafeUrl::parse(&git)
                     .map_err(|err| SourceParseError::InvalidUrl {
                         given: git.to_string(),
                         err,
@@ -3913,12 +3915,12 @@ impl From<GitSourceKind> for GitReference {
     }
 }
 
-/// Construct the lockfile-compatible [`URL`] for a [`GitSourceDist`].
-fn locked_git_url(git_dist: &GitSourceDist) -> Url {
+/// Construct the lockfile-compatible [`DisplaySafeUrl`] for a [`GitSourceDist`].
+fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
     let mut url = git_dist.git.repository().clone();
 
-    // Redact the credentials.
-    redact_credentials(&mut url);
+    // Remove the credentials.
+    url.remove_credentials();
 
     // Clear out any existing state.
     url.set_fragment(None);
@@ -4183,8 +4185,9 @@ impl Wheel {
                         .into());
                     }
                 };
-                let file_url = Url::from_file_path(root.join(index_path).join(file_path))
-                    .map_err(|()| LockErrorKind::PathToUrl)?;
+                let file_url =
+                    DisplaySafeUrl::from_file_path(root.join(index_path).join(file_path))
+                        .map_err(|()| LockErrorKind::PathToUrl)?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: SmallString::from(filename.to_string()),
@@ -4571,8 +4574,8 @@ fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlEr
     }
 }
 
-/// Convert a [`Url`] into a normalized [`UrlString`] by removing the fragment.
-fn normalize_url(mut url: Url) -> UrlString {
+/// Convert a [`DisplaySafeUrl`] into a normalized [`UrlString`] by removing the fragment.
+fn normalize_url(mut url: DisplaySafeUrl) -> UrlString {
     url.set_fragment(None);
     UrlString::from(url)
 }
@@ -4606,8 +4609,8 @@ fn normalize_requirement(
             let git = {
                 let mut repository = git.repository().clone();
 
-                // Redact the credentials.
-                redact_credentials(&mut repository);
+                // Remove the credentials.
+                repository.remove_credentials();
 
                 // Remove the fragment and query from the URL; they're already present in the source.
                 repository.set_fragment(None);
@@ -4617,7 +4620,7 @@ fn normalize_requirement(
             };
 
             // Reconstruct the PEP 508 URL from the underlying data.
-            let url = Url::from(ParsedGitUrl {
+            let url = DisplaySafeUrl::from(ParsedGitUrl {
                 url: git.clone(),
                 subdirectory: subdirectory.clone(),
             });
@@ -4692,7 +4695,7 @@ fn normalize_requirement(
             let index = index
                 .map(|index| index.url.into_url())
                 .map(|mut index| {
-                    redact_credentials(&mut index);
+                    index.remove_credentials();
                     index
                 })
                 .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index))));
@@ -4715,14 +4718,14 @@ fn normalize_requirement(
             ext,
             url: _,
         } => {
-            // Redact the credentials.
-            redact_credentials(&mut location);
+            // Remove the credentials.
+            location.remove_credentials();
 
             // Remove the fragment from the URL; it's already present in the source.
             location.set_fragment(None);
 
             // Reconstruct the PEP 508 URL from the underlying data.
-            let url = Url::from(ParsedArchiveUrl {
+            let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                 url: location.clone(),
                 subdirectory: subdirectory.clone(),
                 ext,

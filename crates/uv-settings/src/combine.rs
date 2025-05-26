@@ -11,6 +11,7 @@ use uv_distribution_types::{Index, IndexUrl, PipExtraIndex, PipFindLinks, PipInd
 use uv_install_wheel::LinkMode;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_torch::TorchMode;
 
@@ -82,6 +83,7 @@ impl_combine_or!(IndexStrategy);
 impl_combine_or!(IndexUrl);
 impl_combine_or!(KeyringProviderType);
 impl_combine_or!(LinkMode);
+impl_combine_or!(DisplaySafeUrl);
 impl_combine_or!(NonZeroUsize);
 impl_combine_or!(PathBuf);
 impl_combine_or!(PipExtraIndex);
