@@ -38,6 +38,7 @@ use url::Url;
 /// ```
 #[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "schemars", schemars(transparent))]
 pub struct LogSafeUrl(Url);
 
 impl LogSafeUrl {
