@@ -11767,6 +11767,89 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
     Ok(())
 }
 
+/// This checks that markers that normalize to 'false', which are serialized
+/// to the lockfile as `python_full_version < '0'`, get read back as false.
+/// Otherwise `uv lock --check` will always fail.
+#[test]
+fn normalize_false_marker_dependency_groups() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        [dependency-groups]
+        dev = [
+            "pytest;python_full_version>'3.8' and python_full_version<'3.6'"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// This checks that markers that normalize to 'false', which are serialized
+/// to the lockfile as `python_full_version < '0'`, get read back as false.
+/// Otherwise `uv lock --check` will always fail.
+#[test]
+fn normalize_false_marker_requires_dist() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "debug"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = [
+            "pytest; python_full_version>'3.8' and python_full_version<'3.6'"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// Change indexes between locking operations.
 #[test]
 fn lock_change_index() -> Result<()> {

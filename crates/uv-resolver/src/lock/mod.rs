@@ -1144,7 +1144,9 @@ impl Lock {
             Some(
                 FlatRequiresDist::from_requirements(requires_dist.clone(), &package.id.name)
                     .into_iter()
-                    .map(|requirement| normalize_requirement(requirement, root))
+                    .map(|requirement| {
+                        normalize_requirement(requirement, root, &self.requires_python)
+                    })
                     .collect::<Result<BTreeSet<_>, _>>()?,
             )
         } else {
@@ -1153,14 +1155,14 @@ impl Lock {
 
         // Validate the `requires-dist` metadata.
         let expected: BTreeSet<_> = Box::into_iter(requires_dist)
-            .map(|requirement| normalize_requirement(requirement, root))
+            .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
             .collect::<Result<_, _>>()?;
         let actual: BTreeSet<_> = package
             .metadata
             .requires_dist
             .iter()
             .cloned()
-            .map(|requirement| normalize_requirement(requirement, root))
+            .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
             .collect::<Result<_, _>>()?;
 
         if expected != actual && flattened.is_none_or(|expected| expected != actual) {
@@ -1180,7 +1182,9 @@ impl Lock {
                 Ok::<_, LockError>((
                     group,
                     Box::into_iter(requirements)
-                        .map(|requirement| normalize_requirement(requirement, root))
+                        .map(|requirement| {
+                            normalize_requirement(requirement, root, &self.requires_python)
+                        })
                         .collect::<Result<_, _>>()?,
                 ))
             })
@@ -1196,7 +1200,9 @@ impl Lock {
                     requirements
                         .iter()
                         .cloned()
-                        .map(|requirement| normalize_requirement(requirement, root))
+                        .map(|requirement| {
+                            normalize_requirement(requirement, root, &self.requires_python)
+                        })
                         .collect::<Result<_, _>>()?,
                 ))
             })
@@ -1263,14 +1269,14 @@ impl Lock {
             let expected: BTreeSet<_> = requirements
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .requirements
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedRequirements(expected, actual));
@@ -1282,14 +1288,14 @@ impl Lock {
             let expected: BTreeSet<_> = constraints
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .constraints
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
@@ -1301,14 +1307,14 @@ impl Lock {
             let expected: BTreeSet<_> = overrides
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .overrides
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
@@ -1320,14 +1326,14 @@ impl Lock {
             let expected: BTreeSet<_> = build_constraints
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .build_constraints
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedBuildConstraints(
@@ -1347,7 +1353,9 @@ impl Lock {
                         requirements
                             .iter()
                             .cloned()
-                            .map(|requirement| normalize_requirement(requirement, root))
+                            .map(|requirement| {
+                                normalize_requirement(requirement, root, &self.requires_python)
+                            })
                             .collect::<Result<_, _>>()?,
                     ))
                 })
@@ -1363,7 +1371,9 @@ impl Lock {
                         requirements
                             .iter()
                             .cloned()
-                            .map(|requirement| normalize_requirement(requirement, root))
+                            .map(|requirement| {
+                                normalize_requirement(requirement, root, &self.requires_python)
+                            })
                             .collect::<Result<_, _>>()?,
                     ))
                 })
@@ -2837,6 +2847,34 @@ struct PackageMetadata {
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
 
+impl PackageMetadata {
+    fn unwire(self, requires_python: &RequiresPython) -> PackageMetadata {
+        // We need to complexify these markers so things like
+        // `requires_python < '0'` get normalized to False
+        let unwire_requirements = |requirements: BTreeSet<Requirement>| -> BTreeSet<Requirement> {
+            requirements
+                .into_iter()
+                .map(|mut requirement| {
+                    let complexified_marker =
+                        requires_python.complexify_markers(requirement.marker);
+                    requirement.marker = complexified_marker;
+                    requirement
+                })
+                .collect()
+        };
+
+        PackageMetadata {
+            requires_dist: unwire_requirements(self.requires_dist),
+            provides_extras: self.provides_extras,
+            dependency_groups: self
+                .dependency_groups
+                .into_iter()
+                .map(|(group, requirements)| (group, unwire_requirements(requirements)))
+                .collect(),
+        }
+    }
+}
+
 impl PackageWire {
     fn unwire(
         self,
@@ -2865,9 +2903,10 @@ impl PackageWire {
                 .map(|dep| dep.unwire(requires_python, unambiguous_package_ids))
                 .collect()
         };
+
         Ok(Package {
             id: self.id,
-            metadata: self.metadata,
+            metadata: self.metadata.unwire(requires_python),
             sdist: self.sdist,
             wheels: self.wheels,
             fork_markers: self
@@ -4546,9 +4585,11 @@ fn normalize_url(mut url: Url) -> UrlString {
 /// 2. Ensures that the lock and install paths are appropriately framed with respect to the
 ///    current [`Workspace`].
 /// 3. Removes the `origin` field, which is only used in `requirements.txt`.
+/// 4. Simplifies the markers using the provided [`RequiresPython`] instance.
 fn normalize_requirement(
     mut requirement: Requirement,
     root: &Path,
+    requires_python: &RequiresPython,
 ) -> Result<Requirement, LockError> {
     // Sort the extras and groups for consistency.
     requirement.extras.sort();
@@ -4585,7 +4626,7 @@ fn normalize_requirement(
                 name: requirement.name,
                 extras: requirement.extras,
                 groups: requirement.groups,
-                marker: requirement.marker,
+                marker: requires_python.simplify_markers(requirement.marker),
                 source: RequirementSource::Git {
                     git,
                     subdirectory,
@@ -4608,7 +4649,7 @@ fn normalize_requirement(
                 name: requirement.name,
                 extras: requirement.extras,
                 groups: requirement.groups,
-                marker: requirement.marker,
+                marker: requires_python.simplify_markers(requirement.marker),
                 source: RequirementSource::Path {
                     install_path,
                     ext,
@@ -4632,7 +4673,7 @@ fn normalize_requirement(
                 name: requirement.name,
                 extras: requirement.extras,
                 groups: requirement.groups,
-                marker: requirement.marker,
+                marker: requires_python.simplify_markers(requirement.marker),
                 source: RequirementSource::Directory {
                     install_path,
                     editable,
@@ -4659,7 +4700,7 @@ fn normalize_requirement(
                 name: requirement.name,
                 extras: requirement.extras,
                 groups: requirement.groups,
-                marker: requirement.marker,
+                marker: requires_python.simplify_markers(requirement.marker),
                 source: RequirementSource::Registry {
                     specifier,
                     index,
@@ -4691,7 +4732,7 @@ fn normalize_requirement(
                 name: requirement.name,
                 extras: requirement.extras,
                 groups: requirement.groups,
-                marker: requirement.marker,
+                marker: requires_python.simplify_markers(requirement.marker),
                 source: RequirementSource::Url {
                     location,
                     subdirectory,
