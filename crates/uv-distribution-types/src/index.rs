@@ -3,7 +3,6 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use url::Url;
 
 use uv_auth::{AuthPolicy, Credentials};
 use uv_redacted::DisplaySafeUrl;
@@ -194,7 +193,7 @@ impl Index {
     }
 
     /// Return the raw [`Url`] of the index.
-    pub fn raw_url(&self) -> &Url {
+    pub fn raw_url(&self) -> &DisplaySafeUrl {
         self.url.url()
     }
 

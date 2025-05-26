@@ -16,7 +16,7 @@ use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
 use uv_publish::{
     CheckUrlClient, TrustedPublishResult, check_trusted_publishing, files_for_publishing, upload,
 };
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlRef};
 use uv_warnings::warn_user_once;
 
 use crate::commands::reporters::PublishReporter;
@@ -296,7 +296,7 @@ async fn gather_credentials(
             if let Some(username) = &username {
                 debug!("Fetching password from keyring");
                 if let Some(keyring_password) = keyring_provider
-                    .fetch(&publish_url, Some(username))
+                    .fetch(&DisplaySafeUrlRef::from(&publish_url), Some(username))
                     .await
                     .as_ref()
                     .and_then(|credentials| credentials.password())
