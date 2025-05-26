@@ -907,7 +907,7 @@ jobs:
           ./uv pip install anyio
 
   integration-test-deadsnakes-39-linux:
-    timeout-minutes: 5
+    timeout-minutes: 15
     needs: build-binary-linux-libc
     name: "integration test | deadsnakes python3.9 on ubuntu"
     runs-on: ubuntu-latest
@@ -955,14 +955,20 @@ jobs:
           ./uv pip install -v anyio
 
   integration-test-free-threaded-linux:
-    timeout-minutes: 5
+    timeout-minutes: 15
     needs: build-binary-linux-libc
     name: "integration test | free-threaded on linux"
     runs-on: ubuntu-latest
     steps:
       - name: "Install python3.13-nogil"
         run: |
-          sudo add-apt-repository ppa:deadsnakes
+          for i in {1..5}; do
+            sudo add-apt-repository ppa:deadsnakes && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
+            if [ $i -eq 5 ]; then
+              echo "Failed to add repository after 5 attempts"
+              exit 1
+            fi
+          done
           sudo apt-get update
           sudo apt-get install python3.13-nogil
 
