@@ -1435,6 +1435,34 @@ impl VirtualProject {
         options: &DiscoveryOptions,
         cache: &WorkspaceCache,
     ) -> Result<Self, WorkspaceError> {
+        Self::discover_impl(path, options, cache, false).await
+    }
+
+    /// Equivalent to [`VirtualProject::discover`] but consider it acceptable for
+    /// both `[project]` and `[tool.uv.workspace]` to be missing.
+    ///
+    /// If they are, we act as if an empty `[tool.uv.workspace]` was found.
+    pub async fn discover_defaulted(
+        path: &Path,
+        options: &DiscoveryOptions,
+        cache: &WorkspaceCache,
+    ) -> Result<Self, WorkspaceError> {
+        Self::discover_impl(path, options, cache, true).await
+    }
+
+    /// Find the current project or virtual workspace root, given the current directory.
+    ///
+    /// Similar to calling [`ProjectWorkspace::discover`] with a fallback to [`Workspace::discover`],
+    /// but avoids rereading the `pyproject.toml` (and relying on error-handling as control flow).
+    ///
+    /// This method requires an absolute path and panics otherwise, i.e. this method only supports
+    /// discovering the main workspace.
+    async fn discover_impl(
+        path: &Path,
+        options: &DiscoveryOptions,
+        cache: &WorkspaceCache,
+        default_missing_workspace: bool,
+    ) -> Result<Self, WorkspaceError> {
         assert!(
             path.is_absolute(),
             "virtual project discovery with relative path"
@@ -1490,6 +1518,24 @@ impl VirtualProject {
             let workspace = Workspace::collect_members(
                 project_path,
                 workspace.clone(),
+                pyproject_toml,
+                None,
+                options,
+                cache,
+            )
+            .await?;
+
+            Ok(Self::NonProject(workspace))
+        } else if default_missing_workspace {
+            // Otherwise it's a pyproject.toml that maybe contains dependency-groups
+            // that we want to treat like a project/workspace to handle those uniformly
+            let project_path = std::path::absolute(project_root)
+                .map_err(WorkspaceError::Normalize)?
+                .clone();
+
+            let workspace = Workspace::collect_members(
+                project_path,
+                ToolUvWorkspace::default(),
                 pyproject_toml,
                 None,
                 options,

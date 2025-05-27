@@ -9633,6 +9633,43 @@ fn dependency_group() -> Result<()> {
 }
 
 #[test]
+fn virtual_dependency_group() -> Result<()> {
+    // testing basic `uv pip install --group` functionality
+    // when the pyproject.toml is virtual
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            bar = ["iniconfig"]
+            dev = ["sniffio"]
+            "#,
+        )?;
+        Ok(context)
+    }
+
+    // 'bar' using path sugar
+    let context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+#[test]
 fn many_pyproject_group() -> Result<()> {
     // `uv pip install --group` tests with multiple projects
     fn new_context() -> Result<TestContext> {
