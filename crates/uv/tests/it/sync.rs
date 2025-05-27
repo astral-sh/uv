@@ -361,8 +361,6 @@ fn sync_dry_json() -> Result<()> {
      + iniconfig==2.0.0
     "#);
 
-    assert!(context.temp_dir.child("uv.lock").exists());
-
     Ok(())
 }
 

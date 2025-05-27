@@ -341,7 +341,7 @@ pub(crate) async fn sync(
             .await
             {
                 Ok(..) => {
-                    // If we're succesfully exiting early, be sure to print buffered json output
+                    // If we're successfully exiting early, be sure to print buffered json output
                     if format.is_json() {
                         report.print_json(printer)?;
                     }
