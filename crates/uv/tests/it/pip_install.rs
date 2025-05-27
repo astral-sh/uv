@@ -11350,3 +11350,89 @@ fn pep_751_dependency() -> Result<()> {
 
     Ok(())
 }
+
+/// Check that we warn for overlapping packages but not for correctly overlapping namespace
+/// packages.
+#[test]
+fn overlapping_packages_warning() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .build()
+        .arg("--preview")
+        .arg(context.workspace_root.join("scripts/packages/built-by-uv"))
+        .arg("--out-dir")
+        .arg(context.temp_dir.path())
+        .assert()
+        .success();
+
+    // Overlaps with `built-by-uv`
+    let also_build_by_uv = context.temp_dir.child("also-built-by-uv");
+    also_build_by_uv.child("pyproject.toml").write_str(
+        r#"
+        [project]
+        name = "also-built-by-uv"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv.build-backend]
+        module-name = "built_by_uv"
+
+        [build-system]
+        requires = ["uv_build>=0.7,<10000"]
+        build-backend = "uv_build"
+        "#,
+    )?;
+    also_build_by_uv
+        .child("src")
+        .child("built_by_uv")
+        .child("__init__.py")
+        .touch()?;
+    context
+        .build()
+        .arg("--preview")
+        .arg(also_build_by_uv.path())
+        .arg("--out-dir")
+        .arg(context.temp_dir.path())
+        .assert()
+        .success();
+
+    // Check that overlapping packages show a warning
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-deps")
+        .arg(context.temp_dir.join("built_by_uv-0.1.0-py3-none-any.whl"))
+        .arg(context.temp_dir.join("also_built_by_uv-0.1.0-py3-none-any.whl")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    warning: The module built_by_uv exists in two packages! This leads to a race condition and likely to a broken installation. Consider removing either built-by-uv (built_by_uv-0.1.0-py3-none-any.whl) or also-built-by-uv (also_built_by_uv-0.1.0-py3-none-any.whl).
+    Installed 2 packages in [TIME]
+     + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also_built_by_uv-0.1.0-py3-none-any.whl)
+     + built-by-uv==0.1.0 (from file://[TEMP_DIR]/built_by_uv-0.1.0-py3-none-any.whl)
+    "
+    );
+
+    // Check that correctly overlapping namespace packages don't show a warning
+    uv_snapshot!(context.pip_install()
+        .arg("--no-deps")
+        .arg("poetry")
+        .arg("poetry-core"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + poetry==1.8.2
+     + poetry-core==1.9.0
+    "
+    );
+
+    Ok(())
+}

@@ -25,22 +25,28 @@ pub struct Locks {
 
 impl Locks {
     /// Warn when a module exists in multiple packages.
-    fn warn_module_conflict(&self, module: &OsStr, filename: &WheelFilename) {
-        if let Some(existing) = self
+    fn warn_module_conflict(&self, module: &OsStr, wheel_a: &WheelFilename) {
+        if let Some(wheel_b) = self
             .modules
             .lock()
             .unwrap()
-            .insert(module.to_os_string(), filename.clone())
+            .insert(module.to_os_string(), wheel_a.clone())
         {
+            // Sort for consistent output, at least with two packages
+            let (wheel_a, wheel_b) = if wheel_b.name > wheel_a.name {
+                (&wheel_b, wheel_a)
+            } else {
+                (wheel_a, &wheel_b)
+            };
             warn_user!(
                 "The module {} exists in two packages! \
                 This leads to a race condition and likely to a broken installation. \
                 Consider removing either {} ({}) or {} ({}).",
                 module.simplified_display(),
-                existing.name,
-                existing,
-                filename.name,
-                filename,
+                wheel_a.name,
+                wheel_a,
+                wheel_b.name,
+                wheel_b,
             );
         }
     }
@@ -548,7 +554,7 @@ fn synchronized_copy(from: &Path, to: &Path, locks: &Locks) -> std::io::Result<(
 /// Warn when a module exists in multiple packages.
 fn warn_module_conflict(locks: &Locks, filename: &WheelFilename, relative: &Path) {
     // Check for `__init__.py` to account for namespace packages.
-    // TODO(konsti): We need to handle namespace packages, too.
+    // TODO(konsti): We need to warn for overlapping namespace packages, too.
     if relative.components().count() == 2
         && relative.components().next_back().unwrap().as_os_str() == "__init__.py"
     {
