@@ -207,8 +207,8 @@ the `requires-python` value from a `pyproject.toml`.
 The `--python` option can be used to request a specific version. See the
 [Python version](./python-versions.md) documentation for more details.
 
-If a Python version is _uninstalled_, the tool environment will be broken and the tool may be
-unusable.
+If the Python version used by a tool is _uninstalled_, the tool environment will be broken and the
+tool may be unusable.
 
 ## Tool executables
 
