@@ -779,7 +779,7 @@ fn install_sdist_url() -> Result<()> {
 /// Install a package with source archive format `.tar.bz2`.
 #[test]
 fn install_sdist_archive_type_bz2() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(&format!(
@@ -922,6 +922,7 @@ fn install_version_then_install_url() -> Result<()> {
 
 /// Test that we select the last 3.8 compatible numpy version instead of trying to compile an
 /// incompatible sdist <https://github.com/astral-sh/uv/issues/388>
+#[cfg(feature = "python-eol")]
 #[test]
 fn install_numpy_py38() -> Result<()> {
     let context = TestContext::new("3.8");
@@ -5538,7 +5539,7 @@ fn preserve_markers() -> Result<()> {
 /// Include a `build_constraints.txt` file with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
 
@@ -5568,7 +5569,7 @@ fn incompatible_build_constraint() -> Result<()> {
 /// Include a `build_constraints.txt` file with a compatible constraint.
 #[test]
 fn compatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
 
@@ -5596,7 +5597,7 @@ fn compatible_build_constraint() -> Result<()> {
 
 #[test]
 fn sync_seed() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
@@ -5618,7 +5619,7 @@ fn sync_seed() -> Result<()> {
 
     // Syncing should remove the seed packages.
     uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.txt"), @r###"
+        .arg("requirements.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5630,29 +5631,29 @@ fn sync_seed() -> Result<()> {
     Installed 1 package in [TIME]
      - pip==24.0
      + requests==1.2.0
-    "###
+    "
     );
 
     // Re-create the environment with seed packages.
     uv_snapshot!(context.filters(), context.venv()
-        .arg("--seed"), @r###"
+        .arg("--seed"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtual environment with seed packages at: .venv
      + pip==24.0
      + setuptools==69.2.0
      + wheel==0.43.0
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // Syncing should retain the seed packages.
     uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.txt"), @r###"
+        .arg("requirements.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5661,7 +5662,7 @@ fn sync_seed() -> Result<()> {
     Resolved 1 package in [TIME]
     Installed 1 package in [TIME]
      + requests==1.2.0
-    "###
+    "
     );
 
     Ok(())

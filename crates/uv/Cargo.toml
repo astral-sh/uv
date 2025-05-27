@@ -156,6 +156,7 @@ default-tests = [
     "pypi",
     "python",
     "python-managed",
+    "python-eol",
     "slow-tests",
     "test-ecosystem"
 ]
@@ -169,6 +170,8 @@ pypi = []
 python = []
 # Introduces a testing dependency on a local Python installation with specific patch versions.
 python-patch = []
+# Introduces a testing dependency on a local Python installation with an EOL version.
+python-eol = []
 # Introduces a testing dependency on managed Python installations.
 python-managed = []
 # Include "slow" test cases.

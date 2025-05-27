@@ -18,8 +18,8 @@ use wiremock::{
 #[cfg(feature = "git")]
 use crate::common::{self, decode_token};
 use crate::common::{
-    TestContext, build_vendor_links_url, download_to_disk, get_bin, uv_snapshot, venv_bin_path,
-    venv_to_interpreter,
+    DEFAULT_PYTHON_VERSION, TestContext, build_vendor_links_url, download_to_disk, get_bin,
+    uv_snapshot, venv_bin_path, venv_to_interpreter,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -1949,7 +1949,7 @@ async fn install_deduplicated_indices() {
 #[test]
 #[cfg(feature = "git")]
 fn install_git_public_https() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     uv_snapshot!(
         context
@@ -1974,7 +1974,7 @@ fn install_git_public_https() {
 #[test]
 #[cfg(feature = "git")]
 fn install_implicit_git_public_https() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     uv_snapshot!(
         context
@@ -1999,7 +1999,7 @@ fn install_implicit_git_public_https() {
 #[test]
 #[cfg(feature = "git")]
 fn update_ref_git_public_https() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     uv_snapshot!(
         context
@@ -2046,7 +2046,7 @@ fn update_ref_git_public_https() {
 #[test]
 #[cfg(feature = "git")]
 fn install_git_public_https_missing_branch_or_tag() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
@@ -2075,7 +2075,7 @@ fn install_git_public_https_missing_branch_or_tag() {
 #[test]
 #[cfg(feature = "git")]
 fn install_git_public_https_missing_commit() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
@@ -2117,7 +2117,7 @@ fn install_git_public_https_missing_commit() {
 fn install_git_private_https_pat() {
     use crate::common::decode_token;
 
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let package = format!(
         "uv-private-pypackage@ git+https://{token}@github.com/astral-test/uv-private-pypackage"
@@ -2144,7 +2144,7 @@ fn install_git_private_https_pat() {
 #[test]
 #[cfg(all(not(windows), feature = "git"))]
 fn install_git_private_https_pat_mixed_with_public() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
     let package = format!(
@@ -2172,7 +2172,7 @@ fn install_git_private_https_pat_mixed_with_public() {
 #[test]
 #[cfg(all(not(windows), feature = "git"))]
 fn install_git_private_https_multiple_pat() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token_1 = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let token_2 = decode_token(common::READ_ONLY_GITHUB_TOKEN_2);
 
@@ -2204,7 +2204,7 @@ fn install_git_private_https_multiple_pat() {
 #[test]
 #[cfg(feature = "git")]
 fn install_git_private_https_pat_at_ref() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
     let mut filters = context.filters();
@@ -2246,7 +2246,7 @@ fn install_git_private_https_pat_at_ref() {
 #[cfg(feature = "git")]
 #[ignore]
 fn install_git_private_https_pat_and_username() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let user = "astral-test-bot";
 
@@ -2270,7 +2270,7 @@ fn install_git_private_https_pat_and_username() {
 #[test]
 #[cfg(all(not(windows), feature = "git"))]
 fn install_git_private_https_pat_not_authorized() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     // A revoked token
     let token = "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";
@@ -2309,7 +2309,7 @@ fn install_git_private_https_pat_not_authorized() {
 #[test]
 #[cfg(not(windows))]
 fn install_github_artifact_private_https_pat_mixed_with_public() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
     let private_package = format!(
@@ -2339,7 +2339,7 @@ fn install_github_artifact_private_https_pat_mixed_with_public() {
 #[test]
 #[cfg(not(windows))]
 fn install_github_artifact_private_https_multiple_pat() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token_1 = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let token_2 = decode_token(common::READ_ONLY_GITHUB_TOKEN_2);
 
@@ -2373,7 +2373,7 @@ fn install_github_artifact_private_https_multiple_pat() {
 #[test]
 #[cfg(feature = "git")]
 fn install_git_private_https_interactive() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     let package = "uv-private-pypackage@ git+https://github.com/astral-test/uv-private-pypackage";
 
@@ -6343,7 +6343,7 @@ fn already_installed_multiple_versions() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn already_installed_remote_url() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     // First, install from the remote URL
     uv_snapshot!(context.filters(), context.pip_install().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"), @r###"
@@ -8262,7 +8262,7 @@ fn install_unsupported_environment_yml() -> Result<()> {
 /// Include a `build_constraints.txt` file with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
     constraints_txt.write_str("setuptools==1")?;
@@ -8289,7 +8289,7 @@ fn incompatible_build_constraint() -> Result<()> {
 /// Include a `build_constraints.txt` file with a compatible constraint.
 #[test]
 fn compatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
     constraints_txt.write_str("setuptools>=40")?;
@@ -8297,7 +8297,7 @@ fn compatible_build_constraint() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("requests==1.2")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8307,7 +8307,7 @@ fn compatible_build_constraint() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + requests==1.2.0
-    "###
+    "
     );
 
     Ok(())
@@ -8316,7 +8316,7 @@ fn compatible_build_constraint() -> Result<()> {
 /// Include `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint_in_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8345,6 +8345,7 @@ build-constraint-dependencies = [
 }
 
 /// Include a `build_constraints.txt` file with a compatible constraint.
+#[cfg(feature = "python-eol")]
 #[test]
 fn compatible_build_constraint_in_pyproject_toml() -> Result<()> {
     let context = TestContext::new("3.8");
@@ -8359,7 +8360,7 @@ build-constraint-dependencies = [
     )?;
 
     uv_snapshot!(context.pip_install()
-        .arg("requests==1.2"), @r###"
+        .arg("requests==1.2"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8369,7 +8370,7 @@ build-constraint-dependencies = [
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + requests==1.2.0
-    "###
+    "
     );
 
     Ok(())
@@ -8378,7 +8379,7 @@ build-constraint-dependencies = [
 /// Merge `build_constraints.txt` with `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     // Incompatible setuptools version in pyproject.toml, compatible in build_constraints.txt.
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
@@ -8442,7 +8443,7 @@ build-constraint-dependencies = [
 /// Merge `build_constraints.txt` with `build-constraint-dependencies` in pyproject.toml with a compatible constraint.
 #[test]
 fn compatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
     constraints_txt.write_str("setuptools>=40")?;
@@ -8458,7 +8459,7 @@ build-constraint-dependencies = [
     uv_snapshot!(context.pip_install()
         .arg("requests==1.2")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8468,7 +8469,7 @@ build-constraint-dependencies = [
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + requests==1.2.0
-    "###
+    "
     );
     Ok(())
 }
@@ -8569,7 +8570,7 @@ fn install_build_isolation_package() -> Result<()> {
 /// Install a package with an unsupported extension.
 #[test]
 fn invalid_extension() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz")
@@ -8589,7 +8590,7 @@ fn invalid_extension() {
 /// Install a package without unsupported extension.
 #[test]
 fn no_extension() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6")

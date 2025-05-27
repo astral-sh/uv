@@ -1,4 +1,4 @@
-use crate::common::{TestContext, uv_snapshot};
+use crate::common::{DEFAULT_PYTHON_VERSION, TestContext, uv_snapshot};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -898,7 +898,7 @@ fn build_constraints() -> Result<()> {
 
 #[test]
 fn build_sha() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let filters = context
         .filters()
         .into_iter()

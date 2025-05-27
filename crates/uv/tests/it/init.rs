@@ -2365,7 +2365,7 @@ fn init_requires_python_version() -> Result<()> {
     })?;
 
     let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("3.8"), @r###"
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("3.9"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2380,15 +2380,15 @@ fn init_requires_python_version() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
-        requires-python = ">=3.8"
+        requires-python = ">=3.9"
         dependencies = []
-        "###
+        "#
         );
     });
 
@@ -2397,7 +2397,7 @@ fn init_requires_python_version() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            python_version, @"3.8"
+            python_version, @"3.9"
         );
     });
 
@@ -2466,9 +2466,9 @@ fn init_requires_python_specifiers() -> Result<()> {
 /// Run `uv init`, inferring the `requires-python` from the `.python-version` file.
 #[test]
 fn init_requires_python_version_file() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
-    context.temp_dir.child(".python-version").write_str("3.8")?;
+    context.temp_dir.child(".python-version").write_str("3.9")?;
 
     let child = context.temp_dir.join("foo");
     uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child), @r###"
@@ -2485,15 +2485,15 @@ fn init_requires_python_version_file() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "foo"
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
-        requires-python = ">=3.8"
+        requires-python = ">=3.9"
         dependencies = []
-        "###
+        "#
         );
     });
 

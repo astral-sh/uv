@@ -270,7 +270,7 @@ fn package() -> Result<()> {
 /// Ensure that we use the maximum Python version when a workspace contains mixed requirements.
 #[test]
 fn mixed_requires_python() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     // Create a workspace root with a minimum Python requirement of Python 3.12.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -296,7 +296,7 @@ fn mixed_requires_python() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
-    // Create a child with a minimum Python requirement of Python 3.8.
+    // Create a child with a minimum Python requirement of Python 3.9.
     let child = context.temp_dir.child("packages").child("bird-feeder");
     child.create_dir_all()?;
 
@@ -312,7 +312,7 @@ fn mixed_requires_python() -> Result<()> {
         [project]
         name = "bird-feeder"
         version = "0.1.0"
-        requires-python = ">=3.8"
+        requires-python = ">=3.9"
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -339,15 +339,15 @@ fn mixed_requires_python() -> Result<()> {
     "###);
 
     // Running `uv sync` again should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.8"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.9"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
-    error: The requested interpreter resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.8. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.8.[X]` followed by `uv pip install -e .`.
-    "###);
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
+    error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.9. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.9.[X]` followed by `uv pip install -e .`.
+    ");
 
     Ok(())
 }
@@ -8401,14 +8401,14 @@ fn sync_locked_script() -> Result<()> {
 
 #[test]
 fn sync_script_with_compatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let test_script = context.temp_dir.child("script.py");
 
     // Compatible build constraints.
     test_script.write_str(indoc! { r#"
         # /// script
-        # requires-python = ">=3.8"
+        # requires-python = ">=3.9"
         # dependencies = [
         #   "anyio>=3",
         #   "requests==1.2"
@@ -8454,7 +8454,7 @@ fn sync_script_with_compatible_build_constraints() -> Result<()> {
 
 #[test]
 fn sync_script_with_incompatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let test_script = context.temp_dir.child("script.py");
     let filters = context
@@ -8469,7 +8469,7 @@ fn sync_script_with_incompatible_build_constraints() -> Result<()> {
     // Incompatible build constraints.
     test_script.write_str(indoc! { r#"
         # /// script
-        # requires-python = ">=3.8"
+        # requires-python = ">=3.9"
         # dependencies = [
         #   "anyio>=3",
         #   "requests==1.2"
