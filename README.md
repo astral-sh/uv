@@ -284,6 +284,16 @@ We are passionate about supporting contributors of all levels of experience and 
 you get involved in the project. See the
 [contributing guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md) to get started.
 
+## FAQ
+
+#### How do you pronounce uv?
+
+It's pronounced as "you - vee" ([`/juː viː/`](https://en.wikipedia.org/wiki/Help:IPA/English#Key))
+
+#### How should I stylize uv?
+
+Just "uv", please. See the [style guide](./STYLE.md#styling-uv) for details.
+
 ## Acknowledgements
 
 uv's dependency resolver uses [PubGrub](https://github.com/pubgrub-rs/pubgrub) under the hood. We're
