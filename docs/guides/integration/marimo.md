@@ -12,12 +12,12 @@ interactive computing with the reproducibility and reusability of traditional so
 version with Git, run as scripts, and share as apps. Because marimo notebooks are stored as pure
 Python scripts, they are able to integrate tightly with uv.
 
-You can readily use marimo as a standalone tool, as scripts that contain their own dependencies, in
+You can readily use marimo as a standalone tool, as self-contained scripts, in
 projects, and in non-project environments.
 
 ## Using marimo as a standalone tool
 
-For adhoc access to marimo notebooks, start a marimo server at any time in an isolated environment
+For ad-hoc access to marimo notebooks, start a marimo server at any time in an isolated environment
 with:
 
 ```console
@@ -39,13 +39,13 @@ using inline script metadata, via uv's [support for scripts](../../guides/script
 $ uv add --script my_notebook.py numpy
 ```
 
-To run a notebook containing script metadata, use
+To run a notebook containing inline script metadata, use
 
 ```console
 $ uvx marimo edit --sandbox my_notebook.py
 ```
 
-and marimo will automatically use uv to start your notebook in an isolated virtual environment with
+marimo will automatically use uv to start your notebook in an isolated virtual environment with
 your script's dependencies. Packages installed from the marimo UI will automatically be added to the
 notebook's script metadata.
 
