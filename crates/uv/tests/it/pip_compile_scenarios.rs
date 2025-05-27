@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/HEAD/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.47/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -67,7 +67,7 @@ fn compatible_python_incompatible_override() -> Result<()> {
 
     let output = uv_snapshot!(filters, command(&context, python_versions)
         .arg("--python-version=3.9")
-        , @r###"
+        , @r"
                  success: false
                  exit_code: 1
                  ----- stdout -----
@@ -79,7 +79,7 @@ fn compatible_python_incompatible_override() -> Result<()> {
                        And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
 
                        hint: The `--python-version` value (>=3.9) includes Python versions that are not supported by your dependencies (e.g., package-a==1.0.0 only supports >=3.10). Consider using a higher `--python-version` value.
-                 "###
+                 "
     );
 
     output.assert().failure();
@@ -120,7 +120,7 @@ fn incompatible_python_compatible_override_available_no_wheels() -> Result<()> {
     // Since there is a compatible Python version available on the system, it should be used to build the source distributions.
     let output = uv_snapshot!(filters, command(&context, python_versions)
         .arg("--python-version=3.11")
-        , @r###"
+        , @r"
                  success: true
                  exit_code: 0
                  ----- stdout -----
@@ -131,7 +131,7 @@ fn incompatible_python_compatible_override_available_no_wheels() -> Result<()> {
 
                  ----- stderr -----
                  Resolved 1 package in [TIME]
-                 "###
+                 "
     );
 
     output.assert().success().stdout(predicate::str::contains(
@@ -173,7 +173,7 @@ fn incompatible_python_compatible_override_no_compatible_wheels() -> Result<()> 
     // Since there are no compatible wheels for the package and it is not compatible with the local installation, we cannot build the source distribution to determine its dependencies. However, the source distribution includes static metadata, which we can use to determine dependencies without building the package.
     let output = uv_snapshot!(filters, command(&context, python_versions)
         .arg("--python-version=3.11")
-        , @r###"
+        , @r"
                  success: true
                  exit_code: 0
                  ----- stdout -----
@@ -185,7 +185,7 @@ fn incompatible_python_compatible_override_no_compatible_wheels() -> Result<()> 
                  ----- stderr -----
                  warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                  Resolved 1 package in [TIME]
-                 "###
+                 "
     );
 
     output.assert().success();
@@ -227,7 +227,7 @@ fn incompatible_python_compatible_override_other_wheel() -> Result<()> {
     // Since there are no wheels for the version of the package compatible with the target and it is not compatible with the local installation, we cannot build the source distribution to determine its dependencies. However, the source distribution includes static metadata, which we can use to determine dependencies without building the package.
     let output = uv_snapshot!(filters, command(&context, python_versions)
         .arg("--python-version=3.11")
-        , @r###"
+        , @r"
                  success: true
                  exit_code: 0
                  ----- stdout -----
@@ -239,7 +239,7 @@ fn incompatible_python_compatible_override_other_wheel() -> Result<()> {
                  ----- stderr -----
                  warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                  Resolved 1 package in [TIME]
-                 "###
+                 "
     );
 
     output.assert().success();
@@ -279,7 +279,7 @@ fn incompatible_python_compatible_override_unavailable_no_wheels() -> Result<()>
     // Since there are no wheels for the package and it is not compatible with the local installation, we cannot build the source distribution to determine its dependencies. However, the source distribution includes static metadata, which we can use to determine dependencies without building the package.
     let output = uv_snapshot!(filters, command(&context, python_versions)
         .arg("--python-version=3.11")
-        , @r###"
+        , @r"
                  success: true
                  exit_code: 0
                  ----- stdout -----
@@ -291,7 +291,7 @@ fn incompatible_python_compatible_override_unavailable_no_wheels() -> Result<()>
                  ----- stderr -----
                  warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                  Resolved 1 package in [TIME]
-                 "###
+                 "
     );
 
     output.assert().success();
@@ -326,7 +326,7 @@ fn incompatible_python_compatible_override() -> Result<()> {
 
     let output = uv_snapshot!(filters, command(&context, python_versions)
         .arg("--python-version=3.11")
-        , @r###"
+        , @r"
                  success: true
                  exit_code: 0
                  ----- stdout -----
@@ -338,7 +338,7 @@ fn incompatible_python_compatible_override() -> Result<()> {
                  ----- stderr -----
                  warning: The requested Python version 3.11 is not available; 3.9.[X] will be used to build dependencies instead.
                  Resolved 1 package in [TIME]
-                 "###
+                 "
     );
 
     output.assert().success().stdout(predicate::str::contains(
@@ -353,18 +353,18 @@ fn incompatible_python_compatible_override() -> Result<()> {
 /// ```text
 /// python-patch-override-no-patch
 /// ├── environment
-/// │   └── python3.8.18
+/// │   └── python3.9.20
 /// ├── root
 /// │   └── requires a==1.0.0
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8.4
+///         └── requires python>=3.9.4
 /// ```
 #[cfg(feature = "python-patch")]
 #[test]
 fn python_patch_override_no_patch() -> Result<()> {
-    let context = TestContext::new("3.8.18");
+    let context = TestContext::new("3.9.20");
     let python_versions = &[];
 
     // In addition to the standard filters, swap out package names for shorter messages
@@ -374,21 +374,21 @@ fn python_patch_override_no_patch() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("python-patch-override-no-patch-a==1.0.0")?;
 
-    // Since the resolver is asked to solve with 3.8, the minimum compatible Python requirement is treated as 3.8.0.
+    // Since the resolver is asked to solve with 3.9, the minimum compatible Python requirement is treated as 3.9.0.
     let output = uv_snapshot!(filters, command(&context, python_versions)
-        .arg("--python-version=3.8")
-        , @r###"
+        .arg("--python-version=3.9")
+        , @r"
                  success: false
                  exit_code: 1
                  ----- stdout -----
 
                  ----- stderr -----
                    × No solution found when resolving dependencies:
-                   ╰─▶ Because the requested Python version (>=3.8) does not satisfy Python>=3.8.4 and package-a==1.0.0 depends on Python>=3.8.4, we can conclude that package-a==1.0.0 cannot be used.
+                   ╰─▶ Because the requested Python version (>=3.9) does not satisfy Python>=3.9.4 and package-a==1.0.0 depends on Python>=3.9.4, we can conclude that package-a==1.0.0 cannot be used.
                        And because you require package-a==1.0.0, we can conclude that your requirements are unsatisfiable.
 
-                       hint: The `--python-version` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., package-a==1.0.0 only supports >=3.8.4). Consider using a higher `--python-version` value.
-                 "###
+                       hint: The `--python-version` value (>=3.9) includes Python versions that are not supported by your dependencies (e.g., package-a==1.0.0 only supports >=3.9.4). Consider using a higher `--python-version` value.
+                 "
     );
 
     output.assert().failure();
@@ -401,18 +401,18 @@ fn python_patch_override_no_patch() -> Result<()> {
 /// ```text
 /// python-patch-override-patch-compatible
 /// ├── environment
-/// │   └── python3.8.18
+/// │   └── python3.9.20
 /// ├── root
 /// │   └── requires a==1.0.0
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     └── a-1.0.0
-///         └── requires python>=3.8.0
+///         └── requires python>=3.9.0
 /// ```
 #[cfg(feature = "python-patch")]
 #[test]
 fn python_patch_override_patch_compatible() -> Result<()> {
-    let context = TestContext::new("3.8.18");
+    let context = TestContext::new("3.9.20");
     let python_versions = &[];
 
     // In addition to the standard filters, swap out package names for shorter messages
@@ -423,20 +423,20 @@ fn python_patch_override_patch_compatible() -> Result<()> {
     requirements_in.write_str("python-patch-override-patch-compatible-a==1.0.0")?;
 
     let output = uv_snapshot!(filters, command(&context, python_versions)
-        .arg("--python-version=3.8.0")
-        , @r###"
+        .arg("--python-version=3.9.0")
+        , @r"
                  success: true
                  exit_code: 0
                  ----- stdout -----
                  # This file was autogenerated by uv via the following command:
-                 #    uv pip compile requirements.in --cache-dir [CACHE_DIR] --python-version=3.8.0
+                 #    uv pip compile requirements.in --cache-dir [CACHE_DIR] --python-version=3.9.0
                  package-a==1.0.0
                      # via -r requirements.in
 
                  ----- stderr -----
-                 warning: The requested Python version 3.8.0 is not available; 3.8.18 will be used to build dependencies instead.
+                 warning: The requested Python version 3.9.0 is not available; 3.9.20 will be used to build dependencies instead.
                  Resolved 1 package in [TIME]
-                 "###
+                 "
     );
 
     output.assert().success().stdout(predicate::str::contains(

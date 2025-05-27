@@ -15,6 +15,10 @@
 #   For development purposes, the `./scripts/scenarios/generate.py` script can be used directly to generate
 #   test cases from a local set of scenarios.
 #
+#   To update the packse version, run the following command first:
+#
+#       $ uv pip compile scripts/scenarios/requirements.in -o scripts/scenarios/requirements.txt --upgrade-package packse
+#
 # See `scripts/scenarios/` for supporting files.
 set -eu
 
