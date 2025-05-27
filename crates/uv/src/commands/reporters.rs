@@ -1,11 +1,16 @@
 use std::env;
+use std::fmt::Write;
+use std::ops::Deref;
+use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashMap;
-use url::Url;
+
+use crate::commands::human_readable_bytes;
+use crate::printer::Printer;
 use uv_cache::Removal;
 use uv_distribution_types::{
     BuildableSource, CachedDist, DistributionMetadata, Name, SourceDist, VersionOrUrlRef,
@@ -13,9 +18,13 @@ use uv_distribution_types::{
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::PythonInstallationKey;
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 
-use crate::printer::Printer;
+/// Since downloads, fetches and builds run in parallel, their message output order is
+/// non-deterministic, so can't capture them in test output.
+static HAS_UV_TEST_NO_CLI_PROGRESS: LazyLock<bool> =
+    LazyLock::new(|| env::var(EnvVars::UV_TEST_NO_CLI_PROGRESS).is_ok());
 
 #[derive(Debug)]
 struct ProgressReporter {
@@ -35,16 +44,55 @@ enum ProgressMode {
     },
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
+enum ProgressBarKind {
+    /// A progress bar with an increasing value, such as a download.
+    Numeric {
+        progress: ProgressBar,
+        /// The download size in bytes, if known.
+        size: Option<u64>,
+    },
+    /// A progress spinner for a task, such as a build.
+    Spinner { progress: ProgressBar },
+}
+
+impl Deref for ProgressBarKind {
+    type Target = ProgressBar;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Numeric { progress, .. } => progress,
+            Self::Spinner { progress } => progress,
+        }
+    }
+}
+
+#[derive(Debug)]
 struct BarState {
-    /// The number of bars that precede any download bars (i.e. build/checkout status).
+    /// The number of bars that precede any download bars (i.e., build/checkout status).
     headers: usize,
     /// A list of download bar sizes, in descending order.
     sizes: Vec<u64>,
     /// A map of progress bars, by ID.
-    bars: FxHashMap<usize, ProgressBar>,
+    bars: FxHashMap<usize, ProgressBarKind>,
     /// A monotonic counter for bar IDs.
     id: usize,
+    /// The maximum length of all bar names encountered.
+    max_len: usize,
+}
+
+impl Default for BarState {
+    fn default() -> Self {
+        Self {
+            headers: 0,
+            sizes: Vec::default(),
+            bars: FxHashMap::default(),
+            id: 0,
+            // Avoid resizing the progress bar templates too often by starting with a padding
+            // that's wider than most package names.
+            max_len: 20,
+        }
+    }
 }
 
 impl BarState {
@@ -52,6 +100,32 @@ impl BarState {
     fn id(&mut self) -> usize {
         self.id += 1;
         self.id
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Direction {
+    Upload,
+    Download,
+    Extract,
+}
+
+impl Direction {
+    fn as_str(&self) -> &str {
+        match self {
+            Direction::Download => "Downloading",
+            Direction::Upload => "Uploading",
+            Direction::Extract => "Extracting",
+        }
+    }
+}
+
+impl From<uv_python::downloads::Direction> for Direction {
+    fn from(dir: uv_python::downloads::Direction) -> Self {
+        match dir {
+            uv_python::downloads::Direction::Download => Self::Download,
+            uv_python::downloads::Direction::Extract => Self::Extract,
+        }
     }
 }
 
@@ -94,19 +168,27 @@ impl ProgressReporter {
         );
 
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        progress.set_message(format!(
-            "{} {}",
+        let message = format!(
+            "   {} {}",
             "Building".bold().cyan(),
             source.to_color_string()
-        ));
+        );
+        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+            let _ = writeln!(self.printer.stderr(), "{message}");
+        }
+        progress.set_message(message);
 
         state.headers += 1;
-        state.bars.insert(id, progress);
+        state.bars.insert(id, ProgressBarKind::Spinner { progress });
         id
     }
 
     fn on_build_complete(&self, source: &BuildableSource, id: usize) {
-        let ProgressMode::Multi { state, .. } = &self.mode else {
+        let ProgressMode::Multi {
+            state,
+            multi_progress,
+        } = &self.mode
+        else {
             return;
         };
 
@@ -116,14 +198,18 @@ impl ProgressReporter {
             state.bars.remove(&id).unwrap()
         };
 
-        progress.finish_with_message(format!(
-            "   {} {}",
+        let message = format!(
+            "      {} {}",
             "Built".bold().green(),
             source.to_color_string()
-        ));
+        );
+        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+            let _ = writeln!(self.printer.stderr(), "{message}");
+        }
+        progress.finish_with_message(message);
     }
 
-    fn on_download_start(&self, name: String, size: Option<u64>) -> usize {
+    fn on_request_start(&self, direction: Direction, name: String, size: Option<u64>) -> usize {
         let ProgressMode::Multi {
             multi_progress,
             state,
@@ -137,6 +223,23 @@ impl ProgressReporter {
         // Preserve ascending order.
         let position = size.map_or(0, |size| state.sizes.partition_point(|&len| len < size));
         state.sizes.insert(position, size.unwrap_or(0));
+        state.max_len = std::cmp::max(state.max_len, name.len());
+
+        let max_len = state.max_len;
+        for progress in state.bars.values_mut() {
+            // Ignore spinners, such as for builds.
+            if let ProgressBarKind::Numeric { progress, .. } = progress {
+                let template = format!(
+                    "{{msg:{max_len}.dim}} {{bar:30.green/dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}"
+                );
+                progress.set_style(
+                    ProgressStyle::with_template(&template)
+                        .unwrap()
+                        .progress_chars("--"),
+                );
+                progress.tick();
+            }
+        }
 
         let progress = multi_progress.insert(
             // Make sure not to reorder the initial "Preparing..." bar, or any previous bars.
@@ -144,28 +247,58 @@ impl ProgressReporter {
             ProgressBar::with_draw_target(size, self.printer.target()),
         );
 
-        if size.is_some() {
+        if let Some(size) = size {
             // We're using binary bytes to match `human_readable_bytes`.
             progress.set_style(
                 ProgressStyle::with_template(
-                    "{msg:10.dim} {bar:30.green/dim} {binary_bytes:>7}/{binary_total_bytes:7}",
+                    &format!(
+                        "{{msg:{}.dim}} {{bar:30.green/dim}} {{binary_bytes:>7}}/{{binary_total_bytes:7}}", state.max_len
+                    ),
                 )
-                .unwrap()
-                .progress_chars("--"),
+                    .unwrap()
+                    .progress_chars("--"),
             );
+            // If the file is larger than 1MB, show a message to indicate that this may take
+            // a while keeping the log concise.
+            if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS && size > 1024 * 1024 {
+                let (bytes, unit) = human_readable_bytes(size);
+                let _ = writeln!(
+                    self.printer.stderr(),
+                    "{} {} {}",
+                    match direction {
+                        Direction::Download => "Downloading",
+                        Direction::Upload => "Uploading",
+                        Direction::Extract => "Extracting",
+                    }
+                    .bold()
+                    .cyan(),
+                    name,
+                    format!("({bytes:.1}{unit})").dimmed()
+                );
+            }
             progress.set_message(name);
         } else {
             progress.set_style(ProgressStyle::with_template("{wide_msg:.dim} ....").unwrap());
+            if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+                let _ = writeln!(
+                    self.printer.stderr(),
+                    "{} {}",
+                    direction.as_str().bold().cyan(),
+                    name
+                );
+            }
             progress.set_message(name);
             progress.finish();
         }
 
         let id = state.id();
-        state.bars.insert(id, progress);
+        state
+            .bars
+            .insert(id, ProgressBarKind::Numeric { progress, size });
         id
     }
 
-    fn on_download_progress(&self, id: usize, bytes: u64) {
+    fn on_request_progress(&self, id: usize, bytes: u64) {
         let ProgressMode::Multi { state, .. } = &self.mode else {
             return;
         };
@@ -173,16 +306,59 @@ impl ProgressReporter {
         state.lock().unwrap().bars[&id].inc(bytes);
     }
 
-    fn on_download_complete(&self, id: usize) {
-        let ProgressMode::Multi { state, .. } = &self.mode else {
+    fn on_request_complete(&self, direction: Direction, id: usize) {
+        let ProgressMode::Multi {
+            state,
+            multi_progress,
+        } = &self.mode
+        else {
             return;
         };
 
-        let progress = state.lock().unwrap().bars.remove(&id).unwrap();
-        progress.finish_and_clear();
+        let mut state = state.lock().unwrap();
+        if let ProgressBarKind::Numeric { progress, size } = state.bars.remove(&id).unwrap() {
+            if multi_progress.is_hidden()
+                && !*HAS_UV_TEST_NO_CLI_PROGRESS
+                && size.is_none_or(|size| size > 1024 * 1024)
+            {
+                let _ = writeln!(
+                    self.printer.stderr(),
+                    " {} {}",
+                    direction.as_str().bold().green(),
+                    progress.message()
+                );
+            }
+            progress.finish_and_clear();
+        } else {
+            debug_assert!(false, "Request progress bars are numeric");
+        }
     }
 
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+    fn on_download_progress(&self, id: usize, bytes: u64) {
+        self.on_request_progress(id, bytes);
+    }
+
+    fn on_download_complete(&self, id: usize) {
+        self.on_request_complete(Direction::Download, id);
+    }
+
+    fn on_download_start(&self, name: String, size: Option<u64>) -> usize {
+        self.on_request_start(Direction::Download, name, size)
+    }
+
+    fn on_upload_progress(&self, id: usize, bytes: u64) {
+        self.on_request_progress(id, bytes);
+    }
+
+    fn on_upload_complete(&self, id: usize) {
+        self.on_request_complete(Direction::Upload, id);
+    }
+
+    fn on_upload_start(&self, name: String, size: Option<u64>) -> usize {
+        self.on_request_start(Direction::Upload, name, size)
+    }
+
+    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize {
         let ProgressMode::Multi {
             multi_progress,
             state,
@@ -200,21 +376,24 @@ impl ProgressReporter {
         );
 
         progress.set_style(ProgressStyle::with_template("{wide_msg}").unwrap());
-        progress.set_message(format!(
-            "{} {} ({})",
-            "Updating".bold().cyan(),
-            url,
-            rev.dimmed()
-        ));
+        let message = format!("   {} {} ({})", "Updating".bold().cyan(), url, rev.dimmed());
+        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+            let _ = writeln!(self.printer.stderr(), "{message}");
+        }
+        progress.set_message(message);
         progress.finish();
 
         state.headers += 1;
-        state.bars.insert(id, progress);
+        state.bars.insert(id, ProgressBarKind::Spinner { progress });
         id
     }
 
-    fn on_checkout_complete(&self, url: &Url, rev: &str, id: usize) {
-        let ProgressMode::Multi { state, .. } = &self.mode else {
+    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, id: usize) {
+        let ProgressMode::Multi {
+            state,
+            multi_progress,
+        } = &self.mode
+        else {
             return;
         };
 
@@ -224,12 +403,16 @@ impl ProgressReporter {
             state.bars.remove(&id).unwrap()
         };
 
-        progress.finish_with_message(format!(
-            " {} {} ({})",
+        let message = format!(
+            "    {} {} ({})",
             "Updated".bold().green(),
             url,
             rev.dimmed()
-        ));
+        );
+        if multi_progress.is_hidden() && !*HAS_UV_TEST_NO_CLI_PROGRESS {
+            let _ = writeln!(self.printer.stderr(), "{message}");
+        }
+        progress.finish_with_message(message);
     }
 }
 
@@ -295,11 +478,11 @@ impl uv_installer::PrepareReporter for PrepareReporter {
         self.reporter.on_download_complete(id);
     }
 
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize {
         self.reporter.on_checkout_start(url, rev)
     }
 
-    fn on_checkout_complete(&self, url: &Url, rev: &str, id: usize) {
+    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, id: usize) {
         self.reporter.on_checkout_complete(url, rev, id);
     }
 }
@@ -359,11 +542,11 @@ impl uv_resolver::ResolverReporter for ResolverReporter {
         self.reporter.on_build_complete(source, id);
     }
 
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize {
         self.reporter.on_checkout_start(url, rev)
     }
 
-    fn on_checkout_complete(&self, url: &Url, rev: &str, id: usize) {
+    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, id: usize) {
         self.reporter.on_checkout_complete(url, rev, id);
     }
 
@@ -401,11 +584,11 @@ impl uv_distribution::Reporter for ResolverReporter {
         self.reporter.on_download_complete(id);
     }
 
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize {
         self.reporter.on_checkout_start(url, rev)
     }
 
-    fn on_checkout_complete(&self, url: &Url, rev: &str, id: usize) {
+    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, id: usize) {
         self.reporter.on_checkout_complete(url, rev, id);
     }
 }
@@ -470,21 +653,22 @@ impl PythonDownloadReporter {
 }
 
 impl uv_python::downloads::Reporter for PythonDownloadReporter {
-    fn on_progress(&self, _name: &PythonInstallationKey, id: usize) {
-        self.reporter.on_download_complete(id);
+    fn on_request_start(
+        &self,
+        direction: uv_python::downloads::Direction,
+        name: &PythonInstallationKey,
+        size: Option<u64>,
+    ) -> usize {
+        self.reporter
+            .on_request_start(direction.into(), format!("{name} ({direction})"), size)
     }
 
-    fn on_download_start(&self, name: &PythonInstallationKey, size: Option<u64>) -> usize {
-        self.reporter.on_download_start(name.to_string(), size)
+    fn on_request_progress(&self, id: usize, inc: u64) {
+        self.reporter.on_request_progress(id, inc);
     }
 
-    fn on_download_progress(&self, id: usize, inc: u64) {
-        self.reporter.on_download_progress(id, inc);
-    }
-
-    fn on_download_complete(&self) {
-        self.reporter.root.set_message("");
-        self.reporter.root.finish_and_clear();
+    fn on_request_complete(&self, direction: uv_python::downloads::Direction, id: usize) {
+        self.reporter.on_request_complete(direction.into(), id);
     }
 }
 
@@ -516,16 +700,16 @@ impl uv_publish::Reporter for PublishReporter {
         self.reporter.on_download_complete(id);
     }
 
-    fn on_download_start(&self, name: &str, size: Option<u64>) -> usize {
-        self.reporter.on_download_start(name.to_string(), size)
+    fn on_upload_start(&self, name: &str, size: Option<u64>) -> usize {
+        self.reporter.on_upload_start(name.to_string(), size)
     }
 
-    fn on_download_progress(&self, id: usize, inc: u64) {
-        self.reporter.on_download_progress(id, inc);
+    fn on_upload_progress(&self, id: usize, inc: u64) {
+        self.reporter.on_upload_progress(id, inc);
     }
 
-    fn on_download_complete(&self, id: usize) {
-        self.reporter.on_download_complete(id);
+    fn on_upload_complete(&self, id: usize) {
+        self.reporter.on_upload_complete(id);
     }
 }
 

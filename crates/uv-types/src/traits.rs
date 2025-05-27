@@ -2,22 +2,21 @@ use std::fmt::{Debug, Display, Formatter};
 use std::future::Future;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use uv_distribution_filename::DistFilename;
 
 use anyhow::Result;
+use rustc_hash::FxHashSet;
 
 use uv_cache::Cache;
-use uv_configuration::{
-    BuildKind, BuildOptions, BuildOutput, ConfigSettings, LowerBound, SourceStrategy,
-};
+use uv_configuration::{BuildKind, BuildOptions, BuildOutput, ConfigSettings, SourceStrategy};
+use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, InstalledDist,
-    IsBuildBackendError, Resolution, SourceDist,
+    CachedDist, DependencyMetadata, DistributionId, IndexCapabilities, IndexLocations,
+    InstalledDist, IsBuildBackendError, Requirement, Resolution, SourceDist,
 };
 use uv_git::GitResolver;
 use uv_pep508::PackageName;
-use uv_pypi_types::Requirement;
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_workspace::WorkspaceCache;
 
 ///  Avoids cyclic crate dependencies between resolver, installer and builder.
 ///
@@ -43,9 +42,9 @@ use uv_python::{Interpreter, PythonEnvironment};
 ///         │          └───────▲────────┘          │
 ///         │                  │                   │
 ///         │                  │                   │
-/// ┌───────┴────────┐ ┌───────┴────────┐ ┌────────┴───────┐
-/// │  uv-resolver   │ │  uv-installer  │ │    uv-build    │
-/// └───────▲────────┘ └───────▲────────┘ └────────▲───────┘
+/// ┌───────┴────────┐ ┌───────┴────────┐ ┌────────┴────────────────┐
+/// │  uv-resolver   │ │  uv-installer  │ │    uv-build-frontend    │
+/// └───────▲────────┘ └───────▲────────┘ └────────▲────────────────┘
 ///         │                  │                   │
 ///         └─────────────┐    │    ┌──────────────┘
 ///                    ┌──┴────┴────┴───┐
@@ -83,19 +82,20 @@ pub trait BuildContext {
     /// The [`ConfigSettings`] used to build distributions.
     fn config_settings(&self) -> &ConfigSettings;
 
-    /// Whether to warn on missing lower bounds.
-    fn bounds(&self) -> LowerBound;
-
     /// Whether to incorporate `tool.uv.sources` when resolving requirements.
     fn sources(&self) -> SourceStrategy;
 
     /// The index locations being searched.
     fn locations(&self) -> &IndexLocations;
 
+    /// Workspace discovery caching.
+    fn workspace_cache(&self) -> &WorkspaceCache;
+
     /// Resolve the given requirements into a ready-to-install set of package versions.
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
+        build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<Resolution, impl IsBuildBackendError>> + 'a;
 
     /// Install the given set of package versions into the virtual environment. The environment must
@@ -104,6 +104,7 @@ pub trait BuildContext {
         &'a self,
         resolution: &'a Resolution,
         venv: &'a PythonEnvironment,
+        build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<Vec<CachedDist>, impl IsBuildBackendError>> + 'a;
 
     /// Set up a source distribution build by installing the required dependencies. A wrapper for
@@ -123,6 +124,7 @@ pub trait BuildContext {
         sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
+        build_stack: BuildStack,
     ) -> impl Future<Output = Result<Self::SourceDistBuilder, impl IsBuildBackendError>> + 'a;
 
     /// Build by calling directly into the uv build backend without PEP 517, if possible.
@@ -187,18 +189,18 @@ impl InstalledPackagesProvider for EmptyInstalledPackages {
     }
 }
 
-/// `anyhow::Error`-like wrapper type for [`BuildDispatch`] method return values, that also makes
-/// `IsBuildBackendError` work as `thiserror` `#[source]`.
+/// [`anyhow::Error`]-like wrapper type for [`BuildDispatch`] method return values, that also makes
+/// [`IsBuildBackendError`] work as [`thiserror`] `#[source]`.
 ///
 /// The errors types have the same problem as [`BuildDispatch`] generally: The `uv-resolver`,
 /// `uv-installer` and `uv-build-frontend` error types all reference each other:
 /// Resolution and installation may need to build packages, while the build frontend needs to
 /// resolve and install for the PEP 517 build environment.
 ///
-/// Usually, `anyhow::Error` is opaque error type of choice. In this case though, we error type
+/// Usually, [`anyhow::Error`] is opaque error type of choice. In this case though, we error type
 /// that we can inspect on whether it's a build backend error with [`IsBuildBackendError`], and
-/// `anyhow::Error` does not allow attaching more traits. The next choice would be
-/// `Box<dyn std::error::Error + IsBuildFrontendError + Send + Sync + 'static>`, but `thiserror`
+/// [`anyhow::Error`] does not allow attaching more traits. The next choice would be
+/// `Box<dyn std::error::Error + IsBuildFrontendError + Send + Sync + 'static>`, but [`thiserror`]
 /// complains about the internal `AsDynError` not being implemented when being used as `#[source]`.
 /// This struct is an otherwise transparent error wrapper that thiserror recognizes.
 pub struct AnyErrorBuild(Box<dyn IsBuildBackendError>);
@@ -242,5 +244,25 @@ impl Deref for AnyErrorBuild {
 
     fn deref(&self) -> &Self::Target {
         &*self.0
+    }
+}
+
+/// The stack of packages being built.
+#[derive(Debug, Clone, Default)]
+pub struct BuildStack(FxHashSet<DistributionId>);
+
+impl BuildStack {
+    /// Return an empty stack.
+    pub fn empty() -> Self {
+        Self(FxHashSet::default())
+    }
+
+    pub fn contains(&self, id: &DistributionId) -> bool {
+        self.0.contains(id)
+    }
+
+    /// Push a package onto the stack.
+    pub fn insert(&mut self, id: DistributionId) -> bool {
+        self.0.insert(id)
     }
 }

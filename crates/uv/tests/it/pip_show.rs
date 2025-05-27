@@ -8,7 +8,7 @@ use indoc::indoc;
 
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn show_empty() {

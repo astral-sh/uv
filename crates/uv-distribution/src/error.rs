@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use owo_colors::OwoColorize;
 use tokio::task::JoinError;
-use url::Url;
 use zip::result::ZipError;
 
 use crate::metadata::MetadataError;
@@ -12,7 +11,8 @@ use uv_distribution_types::{InstalledDist, InstalledDistError, IsBuildBackendErr
 use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pypi_types::{HashAlgorithm, HashDigest, ParsedUrlError};
+use uv_pypi_types::{HashAlgorithm, HashDigest};
+use uv_redacted::DisplaySafeUrl;
 use uv_types::AnyErrorBuild;
 
 #[derive(Debug, thiserror::Error)]
@@ -21,16 +21,14 @@ pub enum Error {
     NoBuild,
 
     // Network error
-    #[error("Failed to parse URL: {0}")]
-    Url(String, #[source] url::ParseError),
     #[error("Expected an absolute path, but received: {}", _0.user_display())]
     RelativePath(PathBuf),
     #[error(transparent)]
-    ParsedUrl(#[from] ParsedUrlError),
+    InvalidUrl(#[from] uv_distribution_types::ToUrlError),
     #[error(transparent)]
     JoinRelativeUrl(#[from] uv_pypi_types::JoinRelativeError),
     #[error("Expected a file URL, but received: {0}")]
-    NonFileUrl(Url),
+    NonFileUrl(DisplaySafeUrl),
     #[error(transparent)]
     Git(#[from] uv_git::GitResolverError),
     #[error(transparent)]
@@ -86,18 +84,12 @@ pub enum Error {
     ReadInstalled(Box<InstalledDist>, #[source] InstalledDistError),
     #[error("Failed to read zip archive from built wheel")]
     Zip(#[from] ZipError),
-    #[error("Source distribution directory contains neither readable `pyproject.toml` nor `setup.py`: `{}`", _0.user_display())]
-    DirWithoutEntrypoint(PathBuf),
-    #[error("Failed to extract archive")]
-    Extract(#[from] uv_extract::Error),
+    #[error("Failed to extract archive: {0}")]
+    Extract(String, #[source] uv_extract::Error),
     #[error("The source distribution is missing a `PKG-INFO` file")]
     MissingPkgInfo,
-    #[error("The source distribution is missing an `egg-info` directory")]
-    MissingEggInfo,
-    #[error("The source distribution is missing a `requires.txt` file")]
-    MissingRequiresTxt,
     #[error("The source distribution `{}` has no subdirectory `{}`", _0, _1.display())]
-    MissingSubdirectory(Url, PathBuf),
+    MissingSubdirectory(DisplaySafeUrl, PathBuf),
     #[error("Failed to extract static metadata from `PKG-INFO`")]
     PkgInfo(#[source] uv_pypi_types::MetadataError),
     #[error("Failed to extract metadata from `requires.txt`")]
@@ -111,7 +103,7 @@ pub enum Error {
     #[error(transparent)]
     MetadataLowering(#[from] MetadataError),
     #[error("Distribution not found at: {0}")]
-    NotFound(Url),
+    NotFound(DisplaySafeUrl),
     #[error("Attempted to re-extract the source distribution for `{}`, but the {} hash didn't match. Run `{}` to clear the cache.", _0, _1, "uv cache clean".green())]
     CacheHeal(String, HashAlgorithm),
     #[error("The source distribution requires Python {0}, but {1} is installed")]
@@ -142,13 +134,17 @@ pub enum Error {
     )]
     MissingHashes { distribution: String },
 
-    #[error("Hash-checking is enabled, but no hashes were computed for: `{distribution}`\n\nExpected:\n{expected}")]
+    #[error(
+        "Hash-checking is enabled, but no hashes were computed for: `{distribution}`\n\nExpected:\n{expected}"
+    )]
     MissingActualHashes {
         distribution: String,
         expected: String,
     },
 
-    #[error("Hash-checking is enabled, but no hashes were provided for: `{distribution}`\n\nComputed:\n{actual}")]
+    #[error(
+        "Hash-checking is enabled, but no hashes were provided for: `{distribution}`\n\nComputed:\n{actual}"
+    )]
     MissingExpectedHashes {
         distribution: String,
         actual: String,

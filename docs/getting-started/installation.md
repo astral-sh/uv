@@ -25,23 +25,23 @@ uv provides a standalone installer to download and install uv:
     Request a specific version by including it in the URL:
 
     ```console
-    $ curl -LsSf https://astral.sh/uv/0.5.13/install.sh | sh
+    $ curl -LsSf https://astral.sh/uv/0.7.8/install.sh | sh
     ```
 
 === "Windows"
 
     Use `irm` to download the script and execute it with `iex`:
 
-    ```console
-    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    ```pwsh-session
+    PS> powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
 
     Changing the [execution policy](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-7.4#powershell-execution-policies) allows running a script from the internet.
 
     Request a specific version by including it in the URL:
 
-    ```console
-    $ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.5.13/install.ps1 | iex"
+    ```pwsh-session
+    PS> powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/0.7.8/install.ps1 | iex"
     ```
 
 !!! tip
@@ -56,8 +56,8 @@ uv provides a standalone installer to download and install uv:
 
     === "Windows"
 
-        ```console
-        $ powershell -c "irm https://astral.sh/uv/install.ps1 | more"
+        ```pwsh-session
+        PS> powershell -c "irm https://astral.sh/uv/install.ps1 | more"
         ```
 
     Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
@@ -105,12 +105,20 @@ uv is available in the core Homebrew packages.
 $ brew install uv
 ```
 
-### Winget
+### WinGet
 
-uv is available via [winget](https://winstall.app/apps/astral-sh.uv).
+uv is available via [WinGet](https://winstall.app/apps/astral-sh.uv).
 
 ```console
 $ winget install --id=astral-sh.uv  -e
+```
+
+### Scoop
+
+uv is available via [Scoop](https://scoop.sh/#/apps?q=uv).
+
+```console
+$ scoop install main/uv
 ```
 
 ### Docker
@@ -150,39 +158,77 @@ $ pip install --upgrade uv
 
 ## Shell autocompletion
 
+!!! tip
+
+    You can run `echo $SHELL` to help you determine your shell.
+
 To enable shell autocompletion for uv commands, run one of the following:
 
-=== "Linux and macOS"
+=== "Bash"
 
     ```bash
-    # Determine your shell (e.g., with `echo $SHELL`), then run one of:
     echo 'eval "$(uv generate-shell-completion bash)"' >> ~/.bashrc
+    ```
+
+=== "Zsh"
+
+    ```bash
     echo 'eval "$(uv generate-shell-completion zsh)"' >> ~/.zshrc
-    echo 'uv generate-shell-completion fish | source' >> ~/.config/fish/config.fish
+    ```
+
+=== "fish"
+
+    ```bash
+    echo 'uv generate-shell-completion fish | source' > ~/.config/fish/completions/uv.fish
+    ```
+
+=== "Elvish"
+
+    ```bash
     echo 'eval (uv generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
     ```
 
-=== "Windows"
+=== "PowerShell / pwsh"
 
     ```powershell
+    if (!(Test-Path -Path $PROFILE)) {
+      New-Item -ItemType File -Path $PROFILE -Force
+    }
     Add-Content -Path $PROFILE -Value '(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression'
     ```
 
 To enable shell autocompletion for uvx, run one of the following:
 
-=== "Linux and macOS"
+=== "Bash"
 
     ```bash
-    # Determine your shell (e.g., with `echo $SHELL`), then run one of:
     echo 'eval "$(uvx --generate-shell-completion bash)"' >> ~/.bashrc
+    ```
+
+=== "Zsh"
+
+    ```bash
     echo 'eval "$(uvx --generate-shell-completion zsh)"' >> ~/.zshrc
-    echo 'uvx --generate-shell-completion fish | source' >> ~/.config/fish/config.fish
+    ```
+
+=== "fish"
+
+    ```bash
+    echo 'uvx --generate-shell-completion fish | source' > ~/.config/fish/completions/uvx.fish
+    ```
+
+=== "Elvish"
+
+    ```bash
     echo 'eval (uvx --generate-shell-completion elvish | slurp)' >> ~/.elvish/rc.elv
     ```
 
-=== "Windows"
+=== "PowerShell / pwsh"
 
     ```powershell
+    if (!(Test-Path -Path $PROFILE)) {
+      New-Item -ItemType File -Path $PROFILE -Force
+    }
     Add-Content -Path $PROFILE -Value '(& uvx --generate-shell-completion powershell) | Out-String | Invoke-Expression'
     ```
 
@@ -214,9 +260,9 @@ If you need to remove uv from your system, follow these steps:
 
     === "Windows"
 
-        ```powershell
-        $ rm $HOME\.local\bin\uv.exe
-        $ rm $HOME\.local\bin\uvx.exe
+        ```pwsh-session
+        PS> rm $HOME\.local\bin\uv.exe
+        PS> rm $HOME\.local\bin\uvx.exe
         ```
 
     !!! note

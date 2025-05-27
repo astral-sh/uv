@@ -29,6 +29,7 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-redacted = { workspace = true }
 uv-state = { workspace = true }
 uv-static = { workspace = true }
 uv-trampoline-builder = { workspace = true }
@@ -47,10 +48,12 @@ reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
 rmp-serde = { workspace = true }
+rustc-hash = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sys-info = { workspace = true }
 target-lexicon = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
@@ -59,21 +62,25 @@ tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
 url = { workspace = true }
 which = { workspace = true }
+once_cell = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { workspace = true }
 windows-registry = { workspace = true }
 windows-result = { workspace = true }
+windows-sys = { workspace = true }
 
 [dev-dependencies]
-anyhow = { version = "1.0.89" }
+anyhow = { workspace = true }
 assert_fs = { version = "1.1.2" }
 indoc = { workspace = true }
 insta = { version = "1.40.0" }
-itertools = { version = "0.13.0" }
+itertools = { version = "0.14.0" }
 temp-env = { version = "0.3.6" }
 tempfile = { workspace = true }
 test-log = { version = "0.2.16", features = ["trace"], default-features = false }
+
+[build-dependencies]
+serde_json = { workspace = true }

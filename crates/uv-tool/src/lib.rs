@@ -32,15 +32,13 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error("Failed to update `uv-receipt.toml` at {0}")]
-    ReceiptWrite(PathBuf, #[source] Box<toml::ser::Error>),
+    ReceiptWrite(PathBuf, #[source] Box<toml_edit::ser::Error>),
     #[error("Failed to read `uv-receipt.toml` at {0}")]
     ReceiptRead(PathBuf, #[source] Box<toml::de::Error>),
     #[error(transparent)]
     VirtualEnvError(#[from] uv_virtualenv::Error),
     #[error("Failed to read package entry points {0}")]
     EntrypointRead(#[from] uv_install_wheel::Error),
-    #[error("Failed to find dist-info directory `{0}` in environment at {1}")]
-    DistInfoMissing(String, PathBuf),
     #[error("Failed to find a directory to install executables into")]
     NoExecutableDirectory,
     #[error(transparent)]
@@ -53,8 +51,6 @@ pub enum Error {
     EnvironmentRead(PathBuf, String),
     #[error("Failed find package `{0}` in tool environment")]
     MissingToolPackage(PackageName),
-    #[error(transparent)]
-    Serialization(#[from] toml_edit::ser::Error),
 }
 
 /// A collection of uv-managed tools installed on the current system.
@@ -78,8 +74,8 @@ impl InstalledTools {
     /// 2. A directory in the system-appropriate user-level data directory, e.g., `~/.local/uv/tools`
     /// 3. A directory in the local data directory, e.g., `./.uv/tools`
     pub fn from_settings() -> Result<Self, Error> {
-        if let Some(tool_dir) = std::env::var_os(EnvVars::UV_TOOL_DIR) {
-            Ok(Self::from_path(tool_dir))
+        if let Some(tool_dir) = std::env::var_os(EnvVars::UV_TOOL_DIR).filter(|s| !s.is_empty()) {
+            Ok(Self::from_path(std::path::absolute(tool_dir)?))
         } else {
             Ok(Self::from_path(
                 StateStore::from_settings(None)?.bucket(StateBucket::Tools),
@@ -101,9 +97,14 @@ impl InstalledTools {
     #[allow(clippy::type_complexity)]
     pub fn tools(&self) -> Result<Vec<(PackageName, Result<Tool, Error>)>, Error> {
         let mut tools = Vec::new();
-        for directory in uv_fs::directories(self.root()) {
-            let name = directory.file_name().unwrap().to_string_lossy().to_string();
-            let name = PackageName::from_str(&name)?;
+        for directory in uv_fs::directories(self.root())? {
+            let Some(name) = directory
+                .file_name()
+                .and_then(|file_name| file_name.to_str())
+            else {
+                continue;
+            };
+            let name = PackageName::from_str(name)?;
             let path = directory.join("uv-receipt.toml");
             let contents = match fs_err::read_to_string(&path) {
                 Ok(contents) => contents,
@@ -159,7 +160,9 @@ impl InstalledTools {
             path.user_display()
         );
 
-        let doc = tool_receipt.to_toml()?;
+        let doc = tool_receipt
+            .to_toml()
+            .map_err(|err| Error::ReceiptWrite(path.clone(), Box::new(err)))?;
 
         // Save the modified `uv-receipt.toml`.
         fs_err::write(&path, doc)?;
@@ -224,19 +227,22 @@ impl InstalledTools {
             Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(
                 interpreter_path,
             ))) => {
-                if interpreter_path.is_symlink() {
-                    let target_path = fs_err::read_link(&interpreter_path)?;
-                    warn!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
-                        interpreter_path.user_display(),
-                        target_path.user_display()
-                    );
-                } else {
-                    warn!(
-                        "Ignoring existing virtual environment with missing Python interpreter: {}",
-                        interpreter_path.user_display()
-                    );
-                }
+                warn!(
+                    "Ignoring existing virtual environment with missing Python interpreter: {}",
+                    interpreter_path.user_display()
+                );
+
+                Ok(None)
+            }
+            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenSymlink(
+                broken_symlink,
+            ))) => {
+                let target_path = fs_err::read_link(&broken_symlink.path)?;
+                warn!(
+                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                    broken_symlink.path.user_display(),
+                    target_path.user_display()
+                );
 
                 Ok(None)
             }
@@ -379,7 +385,7 @@ fn find_dist_info<'a>(
         .get_packages(package_name)
         .iter()
         .find(|package| package.version() == package_version)
-        .map(|dist| dist.path())
+        .map(|dist| dist.install_path())
         .ok_or_else(|| Error::MissingToolPackage(package_name.clone()))
 }
 
@@ -408,13 +414,10 @@ pub fn entrypoint_paths(
     let layout = site_packages.interpreter().layout();
     let script_relative = pathdiff::diff_paths(&layout.scheme.scripts, &layout.scheme.purelib)
         .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Could not find relative path for: {}",
-                    layout.scheme.scripts.simplified_display()
-                ),
-            )
+            io::Error::other(format!(
+                "Could not find relative path for: {}",
+                layout.scheme.scripts.simplified_display()
+            ))
         })?;
 
     // Identify any installed binaries (both entrypoints and scripts from the `.data` directory).

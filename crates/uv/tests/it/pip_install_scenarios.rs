@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.42/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/HEAD/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -14,8 +14,8 @@ use assert_cmd::prelude::*;
 use uv_static::EnvVars;
 
 use crate::common::{
-    build_vendor_links_url, get_bin, packse_index_url, uv_snapshot, venv_to_interpreter,
-    TestContext,
+    TestContext, build_vendor_links_url, get_bin, packse_index_url, uv_snapshot,
+    venv_to_interpreter,
 };
 
 fn assert_command(venv: &Path, command: &str, temp_dir: &Path) -> Assert {
@@ -50,7 +50,7 @@ fn command(context: &TestContext) -> Command {
         .arg(packse_index_url())
         .arg("--find-links")
         .arg(build_vendor_links_url());
-    context.add_shared_args(&mut command, true);
+    context.add_shared_options(&mut command, true);
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command
 }
@@ -836,8 +836,8 @@ fn extra_incompatible_with_extra() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a[extra-c]==1.0.0 is available and package-a[extra-c]==1.0.0 depends on package-b==2.0.0, we can conclude that all versions of package-a[extra-c] depend on package-b==2.0.0.
-          And because package-a[extra-b]==1.0.0 depends on package-b==1.0.0 and only package-a[extra-b]==1.0.0 is available, we can conclude that all versions of package-a[extra-b] and all versions of package-a[extra-c] are incompatible.
+      ╰─▶ Because only package-a[extra-b]==1.0.0 is available and package-a[extra-b]==1.0.0 depends on package-b==1.0.0, we can conclude that all versions of package-a[extra-b] depend on package-b==1.0.0.
+          And because package-a[extra-c]==1.0.0 depends on package-b==2.0.0 and only package-a[extra-c]==1.0.0 is available, we can conclude that all versions of package-a[extra-b] and all versions of package-a[extra-c] are incompatible.
           And because you require package-a[extra-b] and package-a[extra-c], we can conclude that your requirements are unsatisfiable.
     "###);
 
@@ -4079,6 +4079,7 @@ fn no_sdist_no_wheels_with_matching_abi() {
     filters.push((r"no-sdist-no-wheels-with-matching-abi-", "package-"));
 
     uv_snapshot!(filters, command(&context)
+        .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-abi-a")
         , @r###"
     success: false
@@ -4087,8 +4088,10 @@ fn no_sdist_no_wheels_with_matching_abi() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python ABI tag, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python ABI tag (e.g., `cp38`), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: You require CPython 3.8 (`cp38`), but we only found wheels for `package-a` (v1.0.0) with the following Python ABI tag: `graalpy240_310_native`
     "###);
 
     assert_not_installed(
@@ -4119,6 +4122,7 @@ fn no_sdist_no_wheels_with_matching_platform() {
     filters.push((r"no-sdist-no-wheels-with-matching-platform-", "package-"));
 
     uv_snapshot!(filters, command(&context)
+        .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-platform-a")
         , @r###"
     success: false
@@ -4127,8 +4131,10 @@ fn no_sdist_no_wheels_with_matching_platform() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching platform tag, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_17_x86_64`), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: Wheels are available for `package-a` (v1.0.0) on the following platform: `macosx_10_0_ppc64`
     "###);
 
     assert_not_installed(
@@ -4159,6 +4165,7 @@ fn no_sdist_no_wheels_with_matching_python() {
     filters.push((r"no-sdist-no-wheels-with-matching-python-", "package-"));
 
     uv_snapshot!(filters, command(&context)
+        .arg("--python-platform=x86_64-manylinux2014")
         .arg("no-sdist-no-wheels-with-matching-python-a")
         , @r###"
     success: false
@@ -4167,8 +4174,10 @@ fn no_sdist_no_wheels_with_matching_python() {
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python implementation tag, we can conclude that all versions of package-a cannot be used.
+      ╰─▶ Because only package-a==1.0.0 is available and package-a==1.0.0 has no wheels with a matching Python implementation tag (e.g., `cp38`), we can conclude that all versions of package-a cannot be used.
           And because you require package-a, we can conclude that your requirements are unsatisfiable.
+
+          hint: You require CPython 3.8 (`cp38`), but we only found wheels for `package-a` (v1.0.0) with the following Python implementation tag: `graalpy310`
     "###);
 
     assert_not_installed(

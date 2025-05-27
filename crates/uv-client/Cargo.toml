@@ -1,7 +1,7 @@
 [package]
 name = "uv-client"
 version = "0.0.1"
-edition = "2021"
+edition = { workspace = true }
 
 [lib]
 doctest = false
@@ -23,7 +23,10 @@ uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-small-str = { workspace = true }
+uv-redacted = { workspace = true }
 uv-static = { workspace = true }
+uv-torch = { workspace = true }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 
@@ -38,11 +41,13 @@ html-escape = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
+percent-encoding = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 reqwest-retry = { workspace = true }
 rkyv = { workspace = true }
 rmp-serde = { workspace = true }
+rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sys-info = { workspace = true }
@@ -52,7 +57,6 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-urlencoding = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

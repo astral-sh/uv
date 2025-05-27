@@ -12,12 +12,14 @@ use tracing::trace;
 use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
-use uv_normalize::{ExtraName, PackageName};
-use uv_pep440::{LocalVersionSlice, Version};
+use uv_normalize::{ExtraName, InvalidNameError, PackageName};
+use uv_pep440::{LocalVersionSlice, LowerBound, Version};
+use uv_platform_tags::Tags;
 use uv_static::EnvVars;
 
 use crate::candidate_selector::CandidateSelector;
 use crate::dependency_provider::UvDependencyProvider;
+use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::AllowPrerelease;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubReportFormatter};
@@ -26,7 +28,7 @@ use crate::resolution::ConflictingDistributionError;
 use crate::resolver::{
     MetadataUnavailable, ResolverEnvironment, UnavailablePackage, UnavailableReason,
 };
-use crate::Options;
+use crate::{InMemoryIndex, Options};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -44,13 +46,6 @@ pub enum ResolveError {
 
     #[error("Attempted to wait on an unregistered task: `{_0}`")]
     UnregisteredTask(String),
-
-    #[error("Found conflicting extra `{extra}` unconditionally enabled in `{requirement}`")]
-    ConflictingExtra {
-        // Boxed because `Requirement` is large.
-        requirement: Box<uv_pypi_types::Requirement>,
-        extra: ExtraName,
-    },
 
     #[error(
         "Requirements contain conflicting URLs for package `{package_name}`{}:\n- {}",
@@ -85,7 +80,9 @@ pub enum ResolveError {
     #[error("Requirements contain conflicting indexes for package `{0}`: `{1}` vs. `{2}`")]
     ConflictingIndexes(PackageName, String, String),
 
-    #[error("Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file.")]
+    #[error(
+        "Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file."
+    )]
     DisallowedUrl(PackageName, String),
 
     #[error(transparent)]
@@ -103,12 +100,14 @@ pub enum ResolveError {
     ),
 
     #[error(transparent)]
-    NoSolution(#[from] NoSolutionError),
+    NoSolution(#[from] Box<NoSolutionError>),
 
     #[error("Attempted to construct an invalid version specifier")]
     InvalidVersion(#[from] uv_pep440::VersionSpecifierBuildError),
 
-    #[error("In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`")]
+    #[error(
+        "In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`"
+    )]
     UnhashedPackage(PackageName),
 
     #[error("found conflicting distribution in resolution: {0}")]
@@ -116,6 +115,27 @@ pub enum ResolveError {
 
     #[error("Package `{0}` is unavailable")]
     PackageUnavailable(PackageName),
+
+    #[error("Invalid extra value in conflict marker: {reason}: {raw_extra}")]
+    InvalidExtraInConflictMarker {
+        reason: String,
+        raw_extra: ExtraName,
+    },
+
+    #[error("Invalid {kind} value in conflict marker: {name_error}")]
+    InvalidValueInConflictMarker {
+        kind: &'static str,
+        #[source]
+        name_error: InvalidNameError,
+    },
+    #[error(
+        "The index returned metadata for the wrong package: expected {request} for {expected}, got {request} for {actual}"
+    )]
+    MismatchedPackageName {
+        request: &'static str,
+        expected: PackageName,
+        actual: PackageName,
+    },
 }
 
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
@@ -129,9 +149,9 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for ResolveError {
 pub(crate) type ErrorTree = DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>;
 
 /// A wrapper around [`pubgrub::error::NoSolutionError`] that displays a resolution failure report.
-#[derive(Debug)]
 pub struct NoSolutionError {
     error: pubgrub::NoSolutionError<UvDependencyProvider>,
+    index: InMemoryIndex,
     available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
     available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
     selector: CandidateSelector,
@@ -141,7 +161,9 @@ pub struct NoSolutionError {
     unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
     incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
     fork_urls: ForkUrls,
+    fork_indexes: ForkIndexes,
     env: ResolverEnvironment,
+    tags: Option<Tags>,
     workspace_members: BTreeSet<PackageName>,
     options: Options,
 }
@@ -150,6 +172,7 @@ impl NoSolutionError {
     /// Create a new [`NoSolutionError`] from a [`pubgrub::NoSolutionError`].
     pub(crate) fn new(
         error: pubgrub::NoSolutionError<UvDependencyProvider>,
+        index: InMemoryIndex,
         available_versions: FxHashMap<PackageName, BTreeSet<Version>>,
         available_indexes: FxHashMap<PackageName, BTreeSet<IndexUrl>>,
         selector: CandidateSelector,
@@ -159,12 +182,15 @@ impl NoSolutionError {
         unavailable_packages: FxHashMap<PackageName, UnavailablePackage>,
         incomplete_packages: FxHashMap<PackageName, BTreeMap<Version, MetadataUnavailable>>,
         fork_urls: ForkUrls,
+        fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
+        tags: Option<Tags>,
         workspace_members: BTreeSet<PackageName>,
         options: Options,
     ) -> Self {
         Self {
             error,
+            index,
             available_versions,
             available_indexes,
             selector,
@@ -174,7 +200,9 @@ impl NoSolutionError {
             unavailable_packages,
             incomplete_packages,
             fork_urls,
+            fork_indexes,
             env,
+            tags,
             workspace_members,
             options,
         }
@@ -234,7 +262,7 @@ impl NoSolutionError {
             match derivation_tree {
                 DerivationTree::External(External::NotRoot(_, _)) => Some(derivation_tree),
                 DerivationTree::External(External::NoVersions(package, versions)) => {
-                    if SentinelRange::from(&versions).is_sentinel() {
+                    if SentinelRange::from(&versions).is_complement() {
                         return None;
                     }
 
@@ -294,9 +322,77 @@ impl NoSolutionError {
         strip(derivation_tree).expect("derivation tree should contain at least one term")
     }
 
+    /// Given a [`DerivationTree`], identify the largest required Python version that is missing.
+    pub fn find_requires_python(&self) -> LowerBound {
+        fn find(derivation_tree: &ErrorTree, minimum: &mut LowerBound) {
+            match derivation_tree {
+                DerivationTree::Derived(derived) => {
+                    find(derived.cause1.as_ref(), minimum);
+                    find(derived.cause2.as_ref(), minimum);
+                }
+                DerivationTree::External(External::FromDependencyOf(.., package, version)) => {
+                    if let PubGrubPackageInner::Python(_) = &**package {
+                        if let Some((lower, ..)) = version.bounding_range() {
+                            let lower = LowerBound::new(lower.cloned());
+                            if lower > *minimum {
+                                *minimum = lower;
+                            }
+                        }
+                    }
+                }
+                DerivationTree::External(_) => {}
+            }
+        }
+
+        let mut minimum = LowerBound::default();
+        find(&self.error, &mut minimum);
+        minimum
+    }
+
     /// Initialize a [`NoSolutionHeader`] for this error.
     pub fn header(&self) -> NoSolutionHeader {
         NoSolutionHeader::new(self.env.clone())
+    }
+}
+
+impl std::fmt::Debug for NoSolutionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Include every field except `index`, which doesn't implement `Debug`.
+        let Self {
+            error,
+            index: _,
+            available_versions,
+            available_indexes,
+            selector,
+            python_requirement,
+            index_locations,
+            index_capabilities,
+            unavailable_packages,
+            incomplete_packages,
+            fork_urls,
+            fork_indexes,
+            env,
+            tags,
+            workspace_members,
+            options,
+        } = self;
+        f.debug_struct("NoSolutionError")
+            .field("error", error)
+            .field("available_versions", available_versions)
+            .field("available_indexes", available_indexes)
+            .field("selector", selector)
+            .field("python_requirement", python_requirement)
+            .field("index_locations", index_locations)
+            .field("index_capabilities", index_capabilities)
+            .field("unavailable_packages", unavailable_packages)
+            .field("incomplete_packages", incomplete_packages)
+            .field("fork_urls", fork_urls)
+            .field("fork_indexes", fork_indexes)
+            .field("env", env)
+            .field("tags", tags)
+            .field("workspace_members", workspace_members)
+            .field("options", options)
+            .finish()
     }
 }
 
@@ -309,6 +405,7 @@ impl std::fmt::Display for NoSolutionError {
             available_versions: &self.available_versions,
             python_requirement: &self.python_requirement,
             workspace_members: &self.workspace_members,
+            tags: self.tags.as_ref(),
         };
 
         // Transform the error tree for reporting
@@ -357,6 +454,7 @@ impl std::fmt::Display for NoSolutionError {
         let mut additional_hints = IndexSet::default();
         formatter.generate_hints(
             &tree,
+            &self.index,
             &self.selector,
             &self.index_locations,
             &self.index_capabilities,
@@ -364,7 +462,9 @@ impl std::fmt::Display for NoSolutionError {
             &self.unavailable_packages,
             &self.incomplete_packages,
             &self.fork_urls,
+            &self.fork_indexes,
             &self.env,
+            self.tags.as_ref(),
             &self.workspace_members,
             &self.options,
             &mut additional_hints,
@@ -740,17 +840,17 @@ fn simplify_derivation_tree_markers(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
 ) {
     match tree {
-        DerivationTree::External(External::NotRoot(ref mut pkg, _)) => {
+        DerivationTree::External(External::NotRoot(pkg, _)) => {
             pkg.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::NoVersions(ref mut pkg, _)) => {
+        DerivationTree::External(External::NoVersions(pkg, _)) => {
             pkg.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::FromDependencyOf(ref mut pkg1, _, ref mut pkg2, _)) => {
+        DerivationTree::External(External::FromDependencyOf(pkg1, _, pkg2, _)) => {
             pkg1.simplify_markers(python_requirement);
             pkg2.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::Custom(ref mut pkg, _, _)) => {
+        DerivationTree::External(External::Custom(pkg, _, _)) => {
             pkg.simplify_markers(python_requirement);
         }
         DerivationTree::Derived(derived) => {
@@ -949,13 +1049,30 @@ impl<'range> From<&'range Range<Version>> for SentinelRange<'range> {
 }
 
 impl SentinelRange<'_> {
-    /// Returns `true` if the range appears to be, e.g., `>1.0.0, <1.0.0+[max]`.
+    /// Returns `true` if the range appears to be, e.g., `>=1.0.0, <1.0.0+[max]`.
     pub fn is_sentinel(&self) -> bool {
+        self.0.iter().all(|(lower, upper)| {
+            let (Bound::Included(lower), Bound::Excluded(upper)) = (lower, upper) else {
+                return false;
+            };
+            if !lower.local().is_empty() {
+                return false;
+            }
+            if upper.local() != LocalVersionSlice::Max {
+                return false;
+            }
+            *lower == upper.clone().without_local()
+        })
+    }
+
+    /// Returns `true` if the range appears to be, e.g., `>1.0.0, <1.0.0+[max]` (i.e., a sentinel
+    /// range with the non-local version removed).
+    pub fn is_complement(&self) -> bool {
         self.0.iter().all(|(lower, upper)| {
             let (Bound::Excluded(lower), Bound::Excluded(upper)) = (lower, upper) else {
                 return false;
             };
-            if lower.local() == LocalVersionSlice::Max {
+            if !lower.local().is_empty() {
                 return false;
             }
             if upper.local() != LocalVersionSlice::Max {

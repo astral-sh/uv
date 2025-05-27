@@ -1,7 +1,7 @@
 [package]
 name = "uv-scripts"
 version = "0.0.1"
-edition = "2021"
+edition = { workspace = true }
 description = "Parse PEP 723-style Python scripts."
 
 [lib]
@@ -14,6 +14,7 @@ workspace = true
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-redacted = { workspace = true }
 uv-settings = { workspace = true }
 uv-workspace = { workspace = true }
 
@@ -23,3 +24,4 @@ memchr = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 toml = { workspace = true }
+url = { workspace = true }

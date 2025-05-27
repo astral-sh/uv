@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use tracing::warn;
+use walkdir::WalkDir;
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum GitInfoError {
     #[error("The repository at {0} is missing a `.git` directory")]
@@ -80,24 +83,27 @@ impl Tags {
             .find(|git_dir| git_dir.exists())
             .ok_or_else(|| GitInfoError::MissingGitDir(path.to_path_buf()))?;
 
-        let git_refs_path =
-            git_refs(&git_dir).ok_or_else(|| GitInfoError::MissingRefs(git_dir.clone()))?;
+        let git_tags_path = git_refs(&git_dir)
+            .ok_or_else(|| GitInfoError::MissingRefs(git_dir.clone()))?
+            .join("tags");
 
         let mut tags = BTreeMap::new();
 
         // Map each tag to its commit.
-        let read_dir = match fs_err::read_dir(git_refs_path.join("tags")) {
-            Ok(read_dir) => read_dir,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(Self(tags));
-            }
-            Err(err) => return Err(err.into()),
-        };
-        for entry in read_dir {
-            let entry = entry?;
+        for entry in WalkDir::new(&git_tags_path).contents_first(true) {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    warn!("Failed to read Git tags: {err}");
+                    continue;
+                }
+            };
             let path = entry.path();
-            if let Some(tag) = path.file_name().and_then(|name| name.to_str()) {
-                let commit = fs_err::read_to_string(&path)?.trim().to_string();
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            if let Ok(Some(tag)) = path.strip_prefix(&git_tags_path).map(|name| name.to_str()) {
+                let commit = fs_err::read_to_string(path)?.trim().to_string();
 
                 // The commit should be 40 hexadecimal characters.
                 if commit.len() != 40 {

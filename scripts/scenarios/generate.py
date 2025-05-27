@@ -269,9 +269,9 @@ def update_common_mod_rs(packse_version: str):
         url_matcher = re.compile(
             re.escape(before_version) + '[^"]+' + re.escape(after_version)
         )
-        assert (
-            len(url_matcher.findall(test_common)) == 1
-        ), f"PACKSE_VERSION not found in {TESTS_COMMON_MOD_RS}"
+        assert len(url_matcher.findall(test_common)) == 1, (
+            f"PACKSE_VERSION not found in {TESTS_COMMON_MOD_RS}"
+        )
         test_common = url_matcher.sub(build_vendor_links_url, test_common)
         TESTS_COMMON_MOD_RS.write_text(test_common)
 

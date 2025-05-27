@@ -5,9 +5,9 @@ pub use crate::sources::*;
 pub use crate::specification::*;
 pub use crate::unnamed::*;
 
-use uv_distribution_types::{Dist, DistErrorKind, GitSourceDist, SourceDist};
-use uv_git::GitUrl;
-use uv_pypi_types::{Requirement, RequirementSource};
+use uv_distribution_types::{
+    Dist, DistErrorKind, GitSourceDist, Requirement, RequirementSource, SourceDist,
+};
 
 mod extras;
 mod lookahead;
@@ -30,6 +30,9 @@ pub enum Error {
 
     #[error(transparent)]
     WheelFilename(#[from] uv_distribution_filename::WheelFilenameError),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 impl Error {
@@ -58,24 +61,15 @@ pub(crate) fn required_dist(
             *ext,
         )?,
         RequirementSource::Git {
-            repository,
-            reference,
-            precise,
+            git,
             subdirectory,
             url,
-        } => {
-            let git_url = if let Some(precise) = precise {
-                GitUrl::from_commit(repository.clone(), reference.clone(), *precise)
-            } else {
-                GitUrl::from_reference(repository.clone(), reference.clone())
-            };
-            Dist::Source(SourceDist::Git(GitSourceDist {
-                name: requirement.name.clone(),
-                git: Box::new(git_url),
-                subdirectory: subdirectory.clone(),
-                url: url.clone(),
-            }))
-        }
+        } => Dist::Source(SourceDist::Git(GitSourceDist {
+            name: requirement.name.clone(),
+            git: Box::new(git.clone()),
+            subdirectory: subdirectory.clone(),
+            url: url.clone(),
+        })),
         RequirementSource::Path {
             install_path,
             ext,

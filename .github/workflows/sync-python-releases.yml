@@ -16,26 +16,24 @@ jobs:
     if: github.repository == 'astral-sh/uv'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
         with:
           version: "latest"
           enable-cache: true
       - name: Sync Python Releases
         run: |
           uv run -- fetch-download-metadata.py
-          uv run -- template-download-metadata.py
         working-directory: ./crates/uv-python
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: "Create Pull Request"
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
         with:
           commit-message: "Sync latest Python releases"
           add-paths: |
             crates/uv-python/download-metadata.json
-            crates/uv-python/src/downloads.inc
           branch: "sync-python-releases"
           title: "Sync latest Python releases"
           body: "Automated update for Python releases."

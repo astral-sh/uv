@@ -4,7 +4,7 @@ use assert_fs::fixture::FileWriteStr;
 use assert_fs::fixture::PathChild;
 use assert_fs::prelude::*;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn list_empty_columns() {
@@ -189,6 +189,7 @@ fn list_outdated_freeze() {
 }
 
 #[test]
+#[cfg(feature = "git")]
 fn list_outdated_git() -> Result<()> {
     let context = TestContext::new("3.12");
 

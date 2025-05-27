@@ -25,9 +25,11 @@ uv-normalize = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true, features = ["clap", "schemars"]}
+uv-redacted = { workspace = true }
 uv-resolver = { workspace = true, features = ["clap"] }
 uv-settings = { workspace = true, features = ["schemars"] }
 uv-static = { workspace = true }
+uv-torch = { workspace = true, features = ["clap"] }
 uv-version = { workspace = true }
 uv-warnings = { workspace = true }
 

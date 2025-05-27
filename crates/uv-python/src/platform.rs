@@ -1,5 +1,5 @@
 use crate::cpuinfo::detect_hardware_floating_point_support;
-use crate::libc::{detect_linux_libc, LibcDetectionError, LibcVersion};
+use crate::libc::{LibcDetectionError, LibcVersion, detect_linux_libc};
 use std::fmt::Display;
 use std::ops::Deref;
 use std::{fmt, str::FromStr};
@@ -101,6 +101,34 @@ impl Arch {
             family: target_lexicon::HOST.architecture,
             variant: None,
         }
+    }
+
+    /// Does the current architecture support running the other?
+    ///
+    /// When the architecture is equal, this is always true. Otherwise, this is true if the
+    /// architecture is transparently emulated or is a microarchitecture with worse performance
+    /// characteristics.
+    pub(crate) fn supports(self, other: Self) -> bool {
+        if self == other {
+            return true;
+        }
+
+        // TODO: Implement `variant` support checks
+
+        // Windows ARM64 runs emulated x86_64 binaries transparently
+        if cfg!(windows) && matches!(self.family, target_lexicon::Architecture::Aarch64(_)) {
+            return other.family == target_lexicon::Architecture::X86_64;
+        }
+
+        false
+    }
+
+    pub fn family(&self) -> target_lexicon::Architecture {
+        self.family
+    }
+
+    pub fn is_arm(&self) -> bool {
+        matches!(self.family, target_lexicon::Architecture::Arm(_))
     }
 }
 
@@ -256,6 +284,10 @@ impl From<&uv_platform_tags::Arch> for Arch {
                 family: target_lexicon::Architecture::S390x,
                 variant: None,
             },
+            uv_platform_tags::Arch::Powerpc => Self {
+                family: target_lexicon::Architecture::Powerpc,
+                variant: None,
+            },
             uv_platform_tags::Arch::Powerpc64 => Self {
                 family: target_lexicon::Architecture::Powerpc64,
                 variant: None,
@@ -272,6 +304,10 @@ impl From<&uv_platform_tags::Arch> for Arch {
             },
             uv_platform_tags::Arch::X86_64 => Self {
                 family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            },
+            uv_platform_tags::Arch::LoongArch64 => Self {
+                family: target_lexicon::Architecture::LoongArch64,
                 variant: None,
             },
             uv_platform_tags::Arch::Riscv64 => Self {

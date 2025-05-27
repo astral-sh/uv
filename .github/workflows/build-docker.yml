@@ -15,6 +15,17 @@ on:
         type: string
   pull_request:
     paths:
+      # We want to ensure that the maturin builds still work when we change
+      # Project metadata
+      - pyproject.toml
+      - Cargo.toml
+      - .cargo/config.toml
+      # Toolchain or dependency versions
+      - Cargo.lock
+      - rust-toolchain.toml
+      # The Dockerfile itself
+      - Dockerfile
+      # And the workflow itself
       - .github/workflows/build-docker.yml
 
 env:
@@ -22,6 +33,7 @@ env:
 
 jobs:
   docker-build:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-build') }}
     name: Build Docker image (ghcr.io/astral-sh/uv) for ${{ matrix.platform }}
     runs-on: ubuntu-latest
     environment:
@@ -33,13 +45,21 @@ jobs:
           - linux/amd64
           - linux/arm64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           submodules: recursive
 
-      - uses: docker/setup-buildx-action@v3
+      # Login to DockerHub first, to avoid rate-limiting
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        # PRs from forks don't have access to secrets, disable this step in that case.
+        if: ${{ github.event.pull_request.head.repo.full_name == 'astral-sh/uv' }}
+        with:
+          username: astralshbot
+          password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -60,7 +80,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
         with:
           images: ${{ env.UV_BASE_IMG }}
           # Defining this makes sure the org.opencontainers.image.version OCI label becomes the actual release version and not the branch name
@@ -76,7 +96,7 @@ jobs:
       # Adapted from https://docs.docker.com/build/ci/github-actions/multi-platform/
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@1dc73863535b631f98b2378be8619f83b136f4a0 # v6.17.0
         with:
           context: .
           platforms: ${{ matrix.platform }}
@@ -92,7 +112,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digests
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: digests-${{ env.PLATFORM_TUPLE }}
           path: /tmp/digests/*
@@ -108,18 +128,24 @@ jobs:
       - docker-build
     if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
     steps:
+      # Login to DockerHub first, to avoid rate-limiting
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          username: astralshbot
+          password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
+
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: /tmp/digests
           pattern: digests-*
           merge-multiple: true
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
         with:
           images: ${{ env.UV_BASE_IMG }}
           # Order is on purpose such that the label org.opencontainers.image.version has the first pattern with the full version
@@ -127,7 +153,7 @@ jobs:
             type=pep440,pattern={{ version }},value=${{ fromJson(inputs.plan).announcement_tag }}
             type=pep440,pattern={{ major }}.{{ minor }},value=${{ fromJson(inputs.plan).announcement_tag }}
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -152,27 +178,34 @@ jobs:
     needs:
       - docker-publish
     if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+    permissions:
+      packages: write
+      attestations: write # needed to push image attestations to the Github attestation store
+      id-token: write # needed for signing the images with GitHub OIDC Token
     strategy:
       fail-fast: false
       matrix:
         # Mapping of base image followed by a comma followed by one or more base tags (comma separated)
         # Note, org.opencontainers.image.version label will use the first base tag (use the most specific tag first)
         image-mapping:
-          - alpine:3.20,alpine3.20,alpine
+          - alpine:3.21,alpine3.21,alpine
           - debian:bookworm-slim,bookworm-slim,debian-slim
           - buildpack-deps:bookworm,bookworm,debian
+          - python:3.14-rc-alpine,python3.14-rc-alpine
           - python:3.13-alpine,python3.13-alpine
           - python:3.12-alpine,python3.12-alpine
           - python:3.11-alpine,python3.11-alpine
           - python:3.10-alpine,python3.10-alpine
           - python:3.9-alpine,python3.9-alpine
           - python:3.8-alpine,python3.8-alpine
+          - python:3.14-rc-bookworm,python3.14-rc-bookworm
           - python:3.13-bookworm,python3.13-bookworm
           - python:3.12-bookworm,python3.12-bookworm
           - python:3.11-bookworm,python3.11-bookworm
           - python:3.10-bookworm,python3.10-bookworm
           - python:3.9-bookworm,python3.9-bookworm
           - python:3.8-bookworm,python3.8-bookworm
+          - python:3.14-rc-slim-bookworm,python3.14-rc-bookworm-slim
           - python:3.13-slim-bookworm,python3.13-bookworm-slim
           - python:3.12-slim-bookworm,python3.12-bookworm-slim
           - python:3.11-slim-bookworm,python3.11-bookworm-slim
@@ -180,9 +213,15 @@ jobs:
           - python:3.9-slim-bookworm,python3.9-bookworm-slim
           - python:3.8-slim-bookworm,python3.8-bookworm-slim
     steps:
-      - uses: docker/setup-buildx-action@v3
+      # Login to DockerHub first, to avoid rate-limiting
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          username: astralshbot
+          password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
 
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -230,7 +269,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
         # ghcr.io prefers index level annotations
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
@@ -242,7 +281,8 @@ jobs:
             ${{ env.TAG_PATTERNS }}
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        id: build-and-push
+        uses: docker/build-push-action@1dc73863535b631f98b2378be8619f83b136f4a0 # v6.17.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -253,6 +293,13 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
+        with:
+          subject-name: ${{ env.UV_BASE_IMG }}
+          subject-digest: ${{ steps.build-and-push.outputs.digest }}
+          # push-to-registry is explicitly not enabled to maintain full control over the top image
 
   # This is effectively a duplicate of `docker-publish` to make https://github.com/astral-sh/uv/pkgs/container/uv
   # show the uv base image first since GitHub always shows the last updated image digests
@@ -265,19 +312,29 @@ jobs:
     needs:
       - docker-publish-extra
     if: ${{ inputs.plan != '' && !fromJson(inputs.plan).announcement_tag_is_implicit }}
+    permissions:
+      packages: write
+      attestations: write # needed to push image attestations to the Github attestation store
+      id-token: write # needed for signing the images with GitHub OIDC Token
     steps:
+      # Login to DockerHub first, to avoid rate-limiting
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          username: astralshbot
+          password: ${{ secrets.DOCKERHUB_TOKEN_RO }}
+
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: /tmp/digests
           pattern: digests-*
           merge-multiple: true
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: index
         with:
@@ -287,7 +344,7 @@ jobs:
             type=pep440,pattern={{ version }},value=${{ fromJson(inputs.plan).announcement_tag }}
             type=pep440,pattern={{ major }}.{{ minor }},value=${{ fromJson(inputs.plan).announcement_tag }}
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -306,3 +363,29 @@ jobs:
             "${annotations[@]}" \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.UV_BASE_IMG }}@sha256:%s ' *)
+
+      - name: Share manifest digest
+        id: manifest-digest
+        # To sign the manifest, we need it's digest. Unfortunately "docker
+        # buildx imagetools create" does not (yet) have a clean way of sharing
+        # the digest of the manifest it creates (see docker/buildx#2407), so
+        # we use a separate command to retrieve it.
+        # imagetools inspect [TAG] --format '{{json .Manifest}}' gives us
+        # the machine readable JSON description of the manifest, and the
+        # jq command extracts the digest from this. The digest is then
+        # sent to the Github step output file for sharing with other steps.
+        run: |
+          digest="$(
+            docker buildx imagetools inspect \
+              "${UV_BASE_IMG}:${DOCKER_METADATA_OUTPUT_VERSION}" \
+              --format '{{json .Manifest}}' \
+            | jq -r '.digest'
+          )"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
+        with:
+          subject-name: ${{ env.UV_BASE_IMG }}
+          subject-digest: ${{ steps.manifest-digest.outputs.digest }}
+          # push-to-registry is explicitly not enabled to maintain full control over the top image

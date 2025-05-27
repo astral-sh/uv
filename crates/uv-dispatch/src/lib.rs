@@ -16,27 +16,29 @@ use uv_build_frontend::{SourceBuild, SourceBuildContext};
 use uv_cache::Cache;
 use uv_client::RegistryClient;
 use uv_configuration::{
-    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, LowerBound, PreviewMode,
-    Reinstall, SourceStrategy,
+    BuildKind, BuildOptions, ConfigSettings, Constraints, IndexStrategy, PreviewMode, Reinstall,
+    SourceStrategy,
 };
 use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, DependencyMetadata, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
-    Resolution, SourceDist, VersionOrUrlRef,
+    CachedDist, DependencyMetadata, Identifier, IndexCapabilities, IndexLocations,
+    IsBuildBackendError, Name, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{Installer, Plan, Planner, Preparer, SitePackages};
-use uv_pypi_types::{Conflicts, Requirement};
+use uv_pypi_types::Conflicts;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_resolver::{
     ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
     PythonRequirement, Resolver, ResolverEnvironment,
 };
 use uv_types::{
-    AnyErrorBuild, BuildContext, BuildIsolation, EmptyInstalledPackages, HashStrategy, InFlight,
+    AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages, HashStrategy,
+    InFlight,
 };
+use uv_workspace::WorkspaceCache;
 
 #[derive(Debug, Error)]
 pub enum BuildDispatchError {
@@ -85,15 +87,15 @@ pub struct BuildDispatch<'a> {
     shared_state: SharedState,
     dependency_metadata: &'a DependencyMetadata,
     build_isolation: BuildIsolation<'a>,
-    link_mode: uv_install_wheel::linker::LinkMode,
+    link_mode: uv_install_wheel::LinkMode,
     build_options: &'a BuildOptions,
     config_settings: &'a ConfigSettings,
     hasher: &'a HashStrategy,
     exclude_newer: Option<ExcludeNewer>,
     source_build_context: SourceBuildContext,
     build_extra_env_vars: FxHashMap<OsString, OsString>,
-    bounds: LowerBound,
     sources: SourceStrategy,
+    workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: PreviewMode,
 }
@@ -111,12 +113,12 @@ impl<'a> BuildDispatch<'a> {
         index_strategy: IndexStrategy,
         config_settings: &'a ConfigSettings,
         build_isolation: BuildIsolation<'a>,
-        link_mode: uv_install_wheel::linker::LinkMode,
+        link_mode: uv_install_wheel::LinkMode,
         build_options: &'a BuildOptions,
         hasher: &'a HashStrategy,
         exclude_newer: Option<ExcludeNewer>,
-        bounds: LowerBound,
         sources: SourceStrategy,
+        workspace_cache: WorkspaceCache,
         concurrency: Concurrency,
         preview: PreviewMode,
     ) -> Self {
@@ -138,8 +140,8 @@ impl<'a> BuildDispatch<'a> {
             exclude_newer,
             source_build_context: SourceBuildContext::default(),
             build_extra_env_vars: FxHashMap::default(),
-            bounds,
             sources,
+            workspace_cache,
             concurrency,
             preview,
         }
@@ -162,7 +164,7 @@ impl<'a> BuildDispatch<'a> {
 }
 
 #[allow(refining_impl_trait)]
-impl<'a> BuildContext for BuildDispatch<'a> {
+impl BuildContext for BuildDispatch<'_> {
     type SourceDistBuilder = SourceBuild;
 
     fn interpreter(&self) -> &Interpreter {
@@ -193,10 +195,6 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.config_settings
     }
 
-    fn bounds(&self) -> LowerBound {
-        self.bounds
-    }
-
     fn sources(&self) -> SourceStrategy {
         self.sources
     }
@@ -205,9 +203,14 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         self.index_locations
     }
 
+    fn workspace_cache(&self) -> &WorkspaceCache {
+        &self.workspace_cache
+    }
+
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
+        build_stack: &'data BuildStack,
     ) -> Result<Resolution, BuildDispatchError> {
         let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let marker_env = self.interpreter.resolver_marker_environment();
@@ -223,8 +226,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
                 .build(),
             &python_requirement,
             ResolverEnvironment::specific(marker_env),
-            // Conflicting groups only make sense when doing
-            // universal resolution.
+            // Conflicting groups only make sense when doing universal resolution.
             Conflicts::empty(),
             Some(tags),
             self.flat_index,
@@ -232,7 +234,8 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             self.hasher,
             self,
             EmptyInstalledPackages,
-            DistributionDatabase::new(self.client, self, self.concurrency.downloads),
+            DistributionDatabase::new(self.client, self, self.concurrency.downloads)
+                .with_build_stack(build_stack),
         )?;
         let resolution = Resolution::from(resolver.resolve().await.with_context(|| {
             format!(
@@ -257,6 +260,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         &'data self,
         resolution: &'data Resolution,
         venv: &'data PythonEnvironment,
+        build_stack: &'data BuildStack,
     ) -> Result<Vec<CachedDist>, BuildDispatchError> {
         debug!(
             "Installing in {} in {}",
@@ -296,17 +300,27 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             return Ok(vec![]);
         }
 
+        // Verify that none of the missing distributions are already in the build stack.
+        for dist in &remote {
+            let id = dist.distribution_id();
+            if build_stack.contains(&id) {
+                return Err(BuildDispatchError::BuildFrontend(
+                    uv_build_frontend::Error::CyclicBuildDependency(dist.name().clone()).into(),
+                ));
+            }
+        }
+
         // Download any missing distributions.
         let wheels = if remote.is_empty() {
             vec![]
         } else {
-            // TODO(konstin): Check that there is no endless recursion.
             let preparer = Preparer::new(
                 self.cache,
                 tags,
                 self.hasher,
                 self.build_options,
-                DistributionDatabase::new(self.client, self, self.concurrency.downloads),
+                DistributionDatabase::new(self.client, self, self.concurrency.downloads)
+                    .with_build_stack(build_stack),
             );
 
             debug!(
@@ -367,6 +381,7 @@ impl<'a> BuildContext for BuildDispatch<'a> {
         sources: SourceStrategy,
         build_kind: BuildKind,
         build_output: BuildOutput,
+        mut build_stack: BuildStack,
     ) -> Result<SourceBuild, uv_build_frontend::Error> {
         let dist_name = dist.map(uv_distribution_types::Name::name);
         let dist_version = dist
@@ -392,6 +407,11 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             return Err(err);
         }
 
+        // Push the current distribution onto the build stack, to prevent cyclic dependencies.
+        if let Some(dist) = dist {
+            build_stack.insert(dist.distribution_id());
+        }
+
         let builder = SourceBuild::setup(
             source,
             subdirectory,
@@ -404,8 +424,10 @@ impl<'a> BuildContext for BuildDispatch<'a> {
             version_id,
             self.index_locations,
             sources,
+            self.workspace_cache(),
             self.config_settings.clone(),
             self.build_isolation,
+            &build_stack,
             build_kind,
             self.build_extra_env_vars.clone(),
             build_output,
@@ -491,41 +513,44 @@ impl<'a> BuildContext for BuildDispatch<'a> {
 pub struct SharedState {
     /// The resolved Git references.
     git: GitResolver,
+    /// The discovered capabilities for each registry index.
+    capabilities: IndexCapabilities,
     /// The fetched package versions and metadata.
     index: InMemoryIndex,
     /// The downloaded distributions.
     in_flight: InFlight,
-    /// The discovered capabilities for each registry index.
-    capabilities: IndexCapabilities,
 }
 
 impl SharedState {
-    pub fn new(
-        git: GitResolver,
-        index: InMemoryIndex,
-        in_flight: InFlight,
-        capabilities: IndexCapabilities,
-    ) -> Self {
+    /// Fork the [`SharedState`], creating a new in-memory index and in-flight cache.
+    ///
+    /// State that is universally applicable (like the Git resolver and index capabilities)
+    /// are retained.
+    #[must_use]
+    pub fn fork(&self) -> Self {
         Self {
-            git,
-            index,
-            in_flight,
-            capabilities,
+            git: self.git.clone(),
+            capabilities: self.capabilities.clone(),
+            ..Default::default()
         }
     }
 
+    /// Return the [`GitResolver`] used by the [`SharedState`].
     pub fn git(&self) -> &GitResolver {
         &self.git
     }
 
+    /// Return the [`InMemoryIndex`] used by the [`SharedState`].
     pub fn index(&self) -> &InMemoryIndex {
         &self.index
     }
 
+    /// Return the [`InFlight`] used by the [`SharedState`].
     pub fn in_flight(&self) -> &InFlight {
         &self.in_flight
     }
 
+    /// Return the [`IndexCapabilities`] used by the [`SharedState`].
     pub fn capabilities(&self) -> &IndexCapabilities {
         &self.capabilities
     }

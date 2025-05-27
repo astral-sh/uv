@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 
-use crate::vendor::{CloneableSeekableReader, HasLength};
 use crate::Error;
+use crate::vendor::{CloneableSeekableReader, HasLength};
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
 use tracing::warn;

@@ -1,14 +1,14 @@
 pub use base_client::{
-    is_extended_transient_error, AuthIntegration, BaseClient, BaseClientBuilder,
-    UvRetryableStrategy, DEFAULT_RETRIES,
+    AuthIntegration, BaseClient, BaseClientBuilder, DEFAULT_RETRIES, ExtraMiddleware,
+    UvRetryableStrategy, is_extended_transient_error,
 };
 pub use cached_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
 pub use error::{Error, ErrorKind, WrappedReqwestError};
-pub use flat_index::{FlatIndexClient, FlatIndexEntries, FlatIndexError};
+pub use flat_index::{FlatIndexClient, FlatIndexEntries, FlatIndexEntry, FlatIndexError};
 pub use linehaul::LineHaul;
 pub use registry_client::{
-    Connectivity, RegistryClient, RegistryClientBuilder, SimpleMetadata, SimpleMetadatum,
-    VersionFiles,
+    Connectivity, MetadataFormat, RegistryClient, RegistryClientBuilder, SimpleMetadata,
+    SimpleMetadatum, VersionFiles,
 };
 pub use rkyvutil::{Deserializer, OwnedArchive, Serializer, Validator};
 

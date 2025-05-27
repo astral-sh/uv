@@ -1,25 +1,51 @@
 ## Project metadata
+### [`build-constraint-dependencies`](#build-constraint-dependencies) {: #build-constraint-dependencies }
+
+Constraints to apply when solving build dependencies.
+
+Build constraints are used to restrict the versions of build dependencies that are selected
+when building a package during resolution or installation.
+
+Including a package as a constraint will _not_ trigger installation of the package during
+a build; instead, the package must be requested elsewhere in the project's build dependency
+graph.
+
+!!! note
+    In `uv lock`, `uv sync`, and `uv run`, uv will only read `build-constraint-dependencies` from
+    the `pyproject.toml` at the workspace root, and will ignore any declarations in other
+    workspace members or `uv.toml` files.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Ensure that the setuptools v60.0.0 is used whenever a package has a build dependency
+# on setuptools.
+build-constraint-dependencies = ["setuptools==60.0.0"]
+```
+
+---
+
 ### [`conflicts`](#conflicts) {: #conflicts }
 
-Conflicting extras or groups may be declared here.
+Declare collections of extras or dependency groups that are conflicting
+(i.e., mutually exclusive).
 
-It's useful to declare conflicts when, for example, two or more extras
-have mutually incompatible dependencies. Extra `foo` might depend
-on `numpy==2.0.0` while extra `bar` might depend on `numpy==2.1.0`.
-These extras cannot be activated at the same time. This usually isn't
-a problem for pip-style workflows, but when using projects in uv that
-support with universal resolution, it will try to produce a resolution
-that satisfies both extras simultaneously.
+It's useful to declare conflicts when two or more extras have mutually
+incompatible dependencies. For example, extra `foo` might depend
+on `numpy==2.0.0` while extra `bar` depends on `numpy==2.1.0`. While these
+dependencies conflict, it may be the case that users are not expected to
+activate both `foo` and `bar` at the same time, making it possible to
+generate a universal resolution for the project despite the incompatibility.
 
-When this happens, resolution will fail, because one cannot install
-both `numpy 2.0.0` and `numpy 2.1.0` into the same environment.
-
-To work around this, you may specify `foo` and `bar` as conflicting
-extras (you can do the same with groups). When doing universal
-resolution in project mode, these extras will get their own "forks"
-distinct from one another in order to permit conflicting dependencies.
-In exchange, if one tries to install from the lock file with both
-conflicting extras activated, installation will fail.
+By making such conflicts explicit, uv can generate a universal resolution
+for a project, taking into account that certain combinations of extras and
+groups are mutually exclusive. In exchange, installation will fail if a
+user attempts to activate both conflicting extras.
 
 **Default value**: `[]`
 
@@ -29,21 +55,22 @@ conflicting extras activated, installation will fail.
 
 ```toml title="pyproject.toml"
 [tool.uv]
-# Require that `package[test1]` and `package[test2]`
-# requirements are resolved in different forks so that they
-# cannot conflict with one another.
+# Require that `package[extra1]` and `package[extra2]` are resolved
+# in different forks so that they cannot conflict with one another.
 conflicts = [
     [
-        { extra = "test1" },
-        { extra = "test2" },
+        { extra = "extra1" },
+        { extra = "extra2" },
     ]
 ]
 
-# Or, to declare conflicting groups:
+# Require that the dependency groups `group1` and `group2`
+# are resolved in different forks so that they cannot conflict
+# with one another.
 conflicts = [
     [
-        { group = "test1" },
-        { group = "test2" },
+        { group = "group1" },
+        { group = "group2" },
     ]
 ]
 ```
@@ -75,7 +102,7 @@ transitive dependencies.
 ```toml title="pyproject.toml"
 [tool.uv]
 # Ensure that the grpcio version is always less than 1.65, if it's requested by a
-# transitive dependency.
+# direct or transitive dependency.
 constraint-dependencies = ["grpcio<1.65"]
 ```
 
@@ -85,9 +112,11 @@ constraint-dependencies = ["grpcio<1.65"]
 
 The list of `dependency-groups` to install by default.
 
+Can also be the literal `"all"` to default enable all groups.
+
 **Default value**: `["dev"]`
 
-**Type**: `list[str]`
+**Type**: `str | list[str]`
 
 **Example usage**:
 
@@ -107,8 +136,8 @@ not appear in the project's published metadata.
 
 Use of this field is not recommend anymore. Instead, use the `dependency-groups.dev` field
 which is a standardized way to declare development dependencies. The contents of
-`tool.uv.dev-dependencies` and `dependency-groups.dev` are combined to determine the the
-final requirements of the `dev` dependency group.
+`tool.uv.dev-dependencies` and `dependency-groups.dev` are combined to determine the final
+requirements of the `dev` dependency group.
 
 **Default value**: `[]`
 
@@ -131,7 +160,7 @@ By default, uv will resolve for all possible environments during a `uv lock` ope
 However, you can restrict the set of supported environments to improve performance and avoid
 unsatisfiable branches in the solution space.
 
-These environments will also respected when `uv pip compile` is invoked with the
+These environments will also be respected when `uv pip compile` is invoked with the
 `--universal` flag.
 
 **Default value**: `[]`
@@ -161,7 +190,7 @@ higher priority than any indexes specified via [`index_url`](#index-url) or
 [`extra_index_url`](#extra-index-url). uv will only consider the first index that contains
 a given package, unless an alternative [index strategy](#index-strategy) is specified.
 
-If an index is marked as `explicit = true`, it will be used exclusively for those
+If an index is marked as `explicit = true`, it will be used exclusively for the
 dependencies that select it explicitly via `[tool.uv.sources]`, as in:
 
 ```toml
@@ -273,6 +302,45 @@ package = false
 
 ---
 
+### [`required-environments`](#required-environments) {: #required-environments }
+
+A list of required platforms, for packages that lack source distributions.
+
+When a package does not have a source distribution, it's availability will be limited to
+the platforms supported by its built distributions (wheels). For example, if a package only
+publishes wheels for Linux, then it won't be installable on macOS or Windows.
+
+By default, uv requires each package to include at least one wheel that is compatible with
+the designated Python version. The `required-environments` setting can be used to ensure that
+the resulting resolution contains wheels for specific platforms, or fails if no such wheels
+are available.
+
+While the `environments` setting _limits_ the set of environments that uv will consider when
+resolving dependencies, `required-environments` _expands_ the set of platforms that uv _must_
+support when resolving dependencies.
+
+For example, `environments = ["sys_platform == 'darwin'"]` would limit uv to solving for
+macOS (and ignoring Linux and Windows). On the other hand, `required-environments = ["sys_platform == 'darwin'"]`
+would _require_ that any package without a source distribution include a wheel for macOS in
+order to be installable.
+
+**Default value**: `[]`
+
+**Type**: `str | list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Require that the package is available for macOS ARM and x86 (Intel).
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+]
+```
+
+---
+
 ### [`sources`](#sources) {: #sources }
 
 The sources to use when resolving dependencies.
@@ -295,6 +363,183 @@ See [Dependencies](../concepts/projects/dependencies.md) for more.
 httpx = { git = "https://github.com/encode/httpx", tag = "0.27.0" }
 pytest = { url = "https://files.pythonhosted.org/packages/6b/77/7440a06a8ead44c7757a64362dd22df5760f9b12dc5f11b6188cd2fc27a0/pytest-8.3.3-py3-none-any.whl" }
 pydantic = { path = "/path/to/pydantic", editable = true }
+```
+
+---
+
+### `build-backend`
+
+Settings for the uv build backend (`uv_build`).
+
+!!! note
+
+    The uv build backend is currently in preview and may change in any future release.
+
+Note that those settings only apply when using the `uv_build` backend, other build backends
+(such as hatchling) have their own configuration.
+
+All options that accept globs use the portable glob patterns from
+[PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).
+
+#### [`data`](#build-backend_data) {: #build-backend_data }
+<span id="data"></span>
+
+Data includes for wheels.
+
+Each entry is a directory, whose contents are copied to the matching directory in the wheel
+in `<name>-<version>.data/(purelib|platlib|headers|scripts|data)`. Upon installation, this
+data is moved to its target location, as defined by
+<https://docs.python.org/3.12/library/sysconfig.html#installation-paths>. Usually, small
+data files are included by placing them in the Python module instead of using data includes.
+
+- `scripts`: Installed to the directory for executables, `<venv>/bin` on Unix or
+  `<venv>\Scripts` on Windows. This directory is added to `PATH` when the virtual
+  environment  is activated or when using `uv run`, so this data type can be used to install
+  additional binaries. Consider using `project.scripts` instead for Python entrypoints.
+- `data`: Installed over the virtualenv environment root.
+
+    Warning: This may override existing files!
+
+- `headers`: Installed to the include directory. Compilers building Python packages
+  with this package as build requirement use the include directory to find additional header
+  files.
+- `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended
+  to uses these two options.
+
+**Default value**: `{}`
+
+**Type**: `dict[str, str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+data = { "headers": "include/headers", "scripts": "bin" }
+```
+
+---
+
+#### [`default-excludes`](#build-backend_default-excludes) {: #build-backend_default-excludes }
+<span id="default-excludes"></span>
+
+If set to `false`, the default excludes aren't applied.
+
+Default excludes: `__pycache__`, `*.pyc`, and `*.pyo`.
+
+**Default value**: `true`
+
+**Type**: `bool`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+default-excludes = false
+```
+
+---
+
+#### [`module-name`](#build-backend_module-name) {: #build-backend_module-name }
+<span id="module-name"></span>
+
+The name of the module directory inside `module-root`.
+
+The default module name is the package name with dots and dashes replaced by underscores.
+
+Package names need to be valid Python identifiers, and the directory needs to contain a
+`__init__.py`. An exception are stubs packages, whose name ends with `-stubs`, with the stem
+being the module name, and which contain a `__init__.pyi` file.
+
+Note that using this option runs the risk of creating two packages with different names but
+the same module names. Installing such packages together leads to unspecified behavior,
+often with corrupted files or directory trees.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+module-name = "sklearn"
+```
+
+---
+
+#### [`module-root`](#build-backend_module-root) {: #build-backend_module-root }
+<span id="module-root"></span>
+
+The directory that contains the module directory.
+
+Common values are `src` (src layout, the default) or an empty path (flat layout).
+
+**Default value**: `"src"`
+
+**Type**: `str`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+module-root = ""
+```
+
+---
+
+#### [`source-exclude`](#build-backend_source-exclude) {: #build-backend_source-exclude }
+<span id="source-exclude"></span>
+
+Glob expressions which files and directories to exclude from the source distribution.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+source-exclude = ["*.bin"]
+```
+
+---
+
+#### [`source-include`](#build-backend_source-include) {: #build-backend_source-include }
+<span id="source-include"></span>
+
+Glob expressions which files and directories to additionally include in the source
+distribution.
+
+`pyproject.toml` and the contents of the module directory are always included.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+source-include = ["tests/**"]
+```
+
+---
+
+#### [`wheel-exclude`](#build-backend_wheel-exclude) {: #build-backend_wheel-exclude }
+<span id="wheel-exclude"></span>
+
+Glob expressions which files and directories to exclude from the wheel.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+wheel-exclude = ["*.bin"]
 ```
 
 ---
@@ -382,8 +627,8 @@ bypasses SSL verification and could expose you to MITM attacks.
 
 Path to the cache directory.
 
-Defaults to `$HOME/Library/Caches/uv` on macOS, `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on
-Linux, and `%LOCALAPPDATA%\uv\cache` on Windows.
+Defaults to `$XDG_CACHE_HOME/uv` or `$HOME/.cache/uv` on Linux and macOS, and
+`%LOCALAPPDATA%\uv\cache` on Windows.
 
 **Default value**: `None`
 
@@ -411,10 +656,11 @@ The keys to consider when caching builds for the project.
 
 Cache keys enable you to specify the files or directories that should trigger a rebuild when
 modified. By default, uv will rebuild a project whenever the `pyproject.toml`, `setup.py`,
-or `setup.cfg` files in the project directory are modified, i.e.:
+or `setup.cfg` files in the project directory are modified, or if a `src` directory is
+added or removed, i.e.:
 
 ```toml
-cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }]
+cache-keys = [{ file = "pyproject.toml" }, { file = "setup.py" }, { file = "setup.cfg" }, { dir = "src" }]
 ```
 
 As an example: if a project uses dynamic metadata to read its dependencies from a
@@ -452,12 +698,12 @@ globs are interpreted as relative to the project directory.
 
     ```toml
     [tool.uv]
-    cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true }]
+    cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true } }]
     ```
 === "uv.toml"
 
     ```toml
-    cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true }]
+    cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }, { git = { commit = true } }]
     ```
 
 ---
@@ -1413,6 +1659,32 @@ Whether to allow Python downloads.
 
 ---
 
+### [`python-downloads-json-url`](#python-downloads-json-url) {: #python-downloads-json-url }
+
+URL pointing to JSON of custom Python installations.
+
+Note that currently, only local paths are supported.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    python-downloads-json-url = "/etc/uv/python-downloads.json"
+    ```
+=== "uv.toml"
+
+    ```toml
+    python-downloads-json-url = "/etc/uv/python-downloads.json"
+    ```
+
+---
+
 ### [`python-install-mirror`](#python-install-mirror) {: #python-install-mirror }
 
 Mirror URL for downloading managed Python installations.
@@ -1518,6 +1790,35 @@ Reinstall a specific package, regardless of whether it's already installed. Impl
 
     ```toml
     reinstall-package = ["ruff"]
+    ```
+
+---
+
+### [`required-version`](#required-version) {: #required-version }
+
+Enforce a requirement on the version of uv.
+
+If the version of uv does not meet the requirement at runtime, uv will exit
+with an error.
+
+Accepts a [PEP 440](https://peps.python.org/pep-0440/) specifier, like `==0.5.0` or `>=0.5.0`.
+
+**Default value**: `null`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    required-version = ">=0.5.0"
+    ```
+=== "uv.toml"
+
+    ```toml
+    required-version = ">=0.5.0"
     ```
 
 ---
@@ -2026,11 +2327,11 @@ be correct.
 #### [`exclude-newer`](#pip_exclude-newer) {: #pip_exclude-newer }
 <span id="exclude-newer"></span>
 
-Limit candidate packages to those that were uploaded prior to the given date.
+Limit candidate packages to those that were uploaded prior to a given point in time.
 
-Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-`2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
-system's configured time zone.
+Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
+`2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
+behave consistently across timezones.
 
 **Default value**: `None`
 
@@ -2042,13 +2343,13 @@ system's configured time zone.
 
     ```toml
     [tool.uv.pip]
-    exclude-newer = "2006-12-02"
+    exclude-newer = "2006-12-02T02:07:43Z"
     ```
 === "uv.toml"
 
     ```toml
     [pip]
-    exclude-newer = "2006-12-02"
+    exclude-newer = "2006-12-02T02:07:43Z"
     ```
 
 ---
@@ -2209,6 +2510,32 @@ Include distribution hashes in the output file.
     ```toml
     [pip]
     generate-hashes = true
+    ```
+
+---
+
+#### [`group`](#pip_group) {: #pip_group }
+<span id="group"></span>
+
+Include the following dependency groups.
+
+**Default value**: `None`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    group = ["dev", "docs"]
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    group = ["dev", "docs"]
     ```
 
 ---
@@ -2496,7 +2823,7 @@ are already installed.
 <span id="no-deps"></span>
 
 Ignore package dependencies, instead only add those packages explicitly listed
-on the command line to the resulting the requirements file.
+on the command line to the resulting requirements file.
 
 **Default value**: `false`
 
@@ -3147,6 +3474,43 @@ environment. The packages will be installed at the top-level of the directory.
     ```toml
     [pip]
     target = "./target"
+    ```
+
+---
+
+#### [`torch-backend`](#pip_torch-backend) {: #pip_torch-backend }
+<span id="torch-backend"></span>
+
+The backend to use when fetching packages in the PyTorch ecosystem.
+
+When set, uv will ignore the configured index URLs for packages in the PyTorch ecosystem,
+and will instead use the defined backend.
+
+For example, when set to `cpu`, uv will use the CPU-only PyTorch index; when set to `cu126`,
+uv will use the PyTorch index for CUDA 12.6.
+
+The `auto` mode will attempt to detect the appropriate PyTorch index based on the currently
+installed CUDA drivers.
+
+This option is in preview and may change in any future release.
+
+**Default value**: `null`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv.pip]
+    torch-backend = "auto"
+    ```
+=== "uv.toml"
+
+    ```toml
+    [pip]
+    torch-backend = "auto"
     ```
 
 ---

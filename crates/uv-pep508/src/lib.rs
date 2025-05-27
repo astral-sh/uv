@@ -21,7 +21,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
 
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 use url::Url;
 
@@ -42,8 +42,8 @@ pub use uv_normalize::{ExtraName, InvalidNameError, PackageName};
 pub use uv_pep440;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 pub use verbatim_url::{
-    expand_env_vars, looks_like_git_repository, split_scheme, strip_host, Scheme, VerbatimUrl,
-    VerbatimUrlError,
+    Scheme, VerbatimUrl, VerbatimUrlError, expand_env_vars, looks_like_git_repository,
+    split_scheme, strip_host,
 };
 
 mod cursor;
@@ -124,7 +124,7 @@ pub struct Requirement<T: Pep508Url = VerbatimUrl> {
     pub name: PackageName,
     /// The list of extras such as `security`, `tests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
-    pub extras: Vec<ExtraName>,
+    pub extras: Box<[ExtraName]>,
     /// The version specifier such as `>= 2.8.1`, `== 2.8.*` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// or a URL.
@@ -144,23 +144,50 @@ impl<T: Pep508Url> Requirement<T> {
             self.version_or_url = None;
         }
     }
+
+    /// Returns a [`Display`] implementation that doesn't mask credentials.
+    pub fn displayable_with_credentials(&self) -> impl Display {
+        RequirementDisplay {
+            requirement: self,
+            display_credentials: true,
+        }
+    }
 }
 
 impl<T: Pep508Url + Display> Display for Requirement<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)?;
-        if !self.extras.is_empty() {
+        RequirementDisplay {
+            requirement: self,
+            display_credentials: false,
+        }
+        .fmt(f)
+    }
+}
+
+struct RequirementDisplay<'a, T>
+where
+    T: Pep508Url + Display,
+{
+    requirement: &'a Requirement<T>,
+    display_credentials: bool,
+}
+
+impl<T: Pep508Url + Display> Display for RequirementDisplay<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.requirement.name)?;
+        if !self.requirement.extras.is_empty() {
             write!(
                 f,
                 "[{}]",
-                self.extras
+                self.requirement
+                    .extras
                     .iter()
                     .map(ToString::to_string)
                     .collect::<Vec<_>>()
                     .join(",")
             )?;
         }
-        if let Some(version_or_url) = &self.version_or_url {
+        if let Some(version_or_url) = &self.requirement.version_or_url {
             match version_or_url {
                 VersionOrUrl::VersionSpecifier(version_specifier) => {
                     let version_specifier: Vec<String> =
@@ -168,12 +195,17 @@ impl<T: Pep508Url + Display> Display for Requirement<T> {
                     write!(f, "{}", version_specifier.join(","))?;
                 }
                 VersionOrUrl::Url(url) => {
+                    let url_string = if self.display_credentials {
+                        url.displayable_with_credentials().to_string()
+                    } else {
+                        url.to_string()
+                    };
                     // We add the space for markers later if necessary
-                    write!(f, " @ {url}")?;
+                    write!(f, " @ {url_string}")?;
                 }
             }
         }
-        if let Some(marker) = self.marker.contents() {
+        if let Some(marker) = self.requirement.marker.contents() {
             write!(f, " ; {marker}")?;
         }
         Ok(())
@@ -186,8 +218,24 @@ impl<'de, T: Pep508Url> Deserialize<'de> for Requirement<T> {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        FromStr::from_str(&s).map_err(de::Error::custom)
+        struct RequirementVisitor<T>(std::marker::PhantomData<T>);
+
+        impl<T: Pep508Url> serde::de::Visitor<'_> for RequirementVisitor<T> {
+            type Value = Requirement<T>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a string containing a PEP 508 requirement")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                FromStr::from_str(v).map_err(de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(RequirementVisitor(std::marker::PhantomData))
     }
 }
 
@@ -239,6 +287,9 @@ pub trait Pep508Url: Display + Debug + Sized {
 
     /// Parse a url from `name @ <url>`. Defaults to [`Url::parse_url`].
     fn parse_url(url: &str, working_dir: Option<&Path>) -> Result<Self, Self::Err>;
+
+    /// Returns a [`Display`] implementation that doesn't mask credentials.
+    fn displayable_with_credentials(&self) -> impl Display;
 }
 
 impl Pep508Url for Url {
@@ -246,6 +297,10 @@ impl Pep508Url for Url {
 
     fn parse_url(url: &str, _working_dir: Option<&Path>) -> Result<Self, Self::Err> {
         Url::parse(url)
+    }
+
+    fn displayable_with_credentials(&self) -> impl Display {
+        self
     }
 }
 
@@ -283,7 +338,7 @@ impl<T: Pep508Url> schemars::JsonSchema for Requirement<T> {
         "Requirement".to_string()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
             metadata: Some(Box::new(schemars::schema::Metadata {
@@ -394,12 +449,9 @@ fn parse_name<T: Pep508Url>(cursor: &mut Cursor) -> Result<PackageName, Pep508Er
     // https://peps.python.org/pep-0508/#names
     // ^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$ with re.IGNORECASE
     let start = cursor.pos();
-    let mut name = String::new();
 
     if let Some((index, char)) = cursor.next() {
-        if matches!(char, 'A'..='Z' | 'a'..='z' | '0'..='9') {
-            name.push(char);
-        } else {
+        if !matches!(char, 'A'..='Z' | 'a'..='z' | '0'..='9') {
             // Check if the user added a filesystem path without a package name. pip supports this
             // in `requirements.txt`, but it doesn't adhere to the PEP 508 grammar.
             let mut clone = cursor.clone().at(start);
@@ -430,29 +482,22 @@ fn parse_name<T: Pep508Url>(cursor: &mut Cursor) -> Result<PackageName, Pep508Er
         });
     }
 
-    loop {
-        match cursor.peek() {
-            Some((index, char @ ('A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'))) => {
-                name.push(char);
-                cursor.next();
-                // [.-_] can't be the final character
-                if cursor.peek().is_none() && matches!(char, '.' | '-' | '_') {
-                    return Err(Pep508Error {
-                        message: Pep508ErrorSource::String(format!(
-                            "Package name must end with an alphanumeric character, not '{char}'"
-                        )),
-                        start: index,
-                        len: char.len_utf8(),
-                        input: cursor.to_string(),
-                    });
-                }
-            }
-            Some(_) | None => {
-                return Ok(PackageName::new(name)
-                    .expect("`PackageName` validation should match PEP 508 parsing"));
-            }
-        }
+    cursor.take_while(|char| matches!(char, 'A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '-' | '_'));
+    let len = cursor.pos() - start;
+    // Unwrap-safety: The block above ensures that there is at least one char in the buffer.
+    let last = cursor.slice(start, len).chars().last().unwrap();
+    // [.-_] can't be the final character
+    if !matches!(last, 'A'..='Z' | 'a'..='z' | '0'..='9') {
+        return Err(Pep508Error {
+            message: Pep508ErrorSource::String(format!(
+                "Package name must end with an alphanumeric character, not `{last}`"
+            )),
+            start: cursor.pos() - last.len_utf8(),
+            len: last.len_utf8(),
+            input: cursor.to_string(),
+        });
     }
+    Ok(PackageName::from_str(cursor.slice(start, len)).unwrap())
 }
 
 /// Parse a potential URL from the [`Cursor`], advancing the [`Cursor`] to the end of the URL.
@@ -563,9 +608,9 @@ fn parse_extras_cursor<T: Pep508Url>(
             }
             (Some((pos, other)), false) => {
                 return Err(Pep508Error {
-                    message: Pep508ErrorSource::String(
-                        format!("Expected either `,` (separating extras) or `]` (ending the extras section), found `{other}`")
-                    ),
+                    message: Pep508ErrorSource::String(format!(
+                        "Expected either `,` (separating extras) or `]` (ending the extras section), found `{other}`"
+                    )),
                     start: pos,
                     len: 1,
                     input: cursor.to_string(),
@@ -624,13 +669,14 @@ fn parse_extras_cursor<T: Pep508Url>(
                 });
             }
             _ => {}
-        };
+        }
         // wsp* after the identifier
         cursor.eat_whitespace();
 
         // Add the parsed extra
         extras.push(
-            ExtraName::new(buffer).expect("`ExtraName` validation should match PEP 508 parsing"),
+            ExtraName::from_str(&buffer)
+                .expect("`ExtraName` validation should match PEP 508 parsing"),
         );
         is_first_iteration = false;
     }
@@ -935,12 +981,12 @@ fn parse_pep508_requirement<T: Pep508Url>(
     if let Some((pos, char)) = cursor.next().filter(|(_, c)| *c != '#') {
         let message = if char == '#' {
             format!(
-                r#"Expected end of input or `;`, found `{char}`; comments must be preceded by a leading space"#
+                r"Expected end of input or `;`, found `{char}`; comments must be preceded by a leading space"
             )
         } else if marker.is_none() {
-            format!(r#"Expected end of input or `;`, found `{char}`"#)
+            format!(r"Expected end of input or `;`, found `{char}`")
         } else {
-            format!(r#"Expected end of input, found `{char}`"#)
+            format!(r"Expected end of input, found `{char}`")
         };
         return Err(Pep508Error {
             message: Pep508ErrorSource::String(message),
@@ -952,7 +998,7 @@ fn parse_pep508_requirement<T: Pep508Url>(
 
     Ok(Requirement {
         name,
-        extras,
+        extras: extras.into_boxed_slice(),
         version_or_url: requirement_kind,
         marker: marker.unwrap_or_default(),
         origin: None,
@@ -973,7 +1019,7 @@ mod tests {
     use uv_pep440::{Operator, Version, VersionPattern, VersionSpecifier};
 
     use crate::cursor::Cursor;
-    use crate::marker::{parse, MarkerExpression, MarkerTree, MarkerValueVersion};
+    use crate::marker::{MarkerExpression, MarkerTree, MarkerValueVersion, parse};
     use crate::{
         MarkerOperator, MarkerValueString, Requirement, TracingReporter, VerbatimUrl, VersionOrUrl,
     };
@@ -1033,7 +1079,7 @@ mod tests {
         assert_snapshot!(
             parse_pep508_err("name_"),
             @"
-        Package name must end with an alphanumeric character, not '_'
+        Package name must end with an alphanumeric character, not `_`
         name_
             ^"
         );
@@ -1046,10 +1092,10 @@ mod tests {
         assert_eq!(input, requests.to_string());
         let expected = Requirement {
             name: PackageName::from_str("requests").unwrap(),
-            extras: vec![
+            extras: Box::new([
                 ExtraName::from_str("security").unwrap(),
                 ExtraName::from_str("tests").unwrap(),
-            ],
+            ]),
             version_or_url: Some(VersionOrUrl::VersionSpecifier(
                 [
                     VersionSpecifier::from_pattern(
@@ -1113,8 +1159,11 @@ mod tests {
     #[cfg(feature = "non-pep508-extensions")]
     fn direct_url_no_extras() {
         let numpy = crate::UnnamedRequirement::<VerbatimUrl>::from_str("https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl").unwrap();
-        assert_eq!(numpy.url.to_string(), "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl");
-        assert_eq!(numpy.extras, vec![]);
+        assert_eq!(
+            numpy.url.to_string(),
+            "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl"
+        );
+        assert_eq!(*numpy.extras, []);
     }
 
     #[test]
@@ -1128,7 +1177,7 @@ mod tests {
             numpy.url.to_string(),
             "file:///path/to/numpy-1.26.4-cp312-cp312-win32.whl"
         );
-        assert_eq!(numpy.extras, vec![ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(*numpy.extras, [ExtraName::from_str("dev").unwrap()]);
     }
 
     #[test]
@@ -1142,7 +1191,7 @@ mod tests {
             numpy.url.to_string(),
             "file:///C:/path/to/numpy-1.26.4-cp312-cp312-win32.whl"
         );
-        assert_eq!(numpy.extras, vec![ExtraName::from_str("dev").unwrap()]);
+        assert_eq!(*numpy.extras, [ExtraName::from_str("dev").unwrap()]);
     }
 
     #[test]
@@ -1232,15 +1281,15 @@ mod tests {
     #[test]
     fn error_extras1() {
         let numpy = Requirement::<Url>::from_str("black[d]").unwrap();
-        assert_eq!(numpy.extras, vec![ExtraName::from_str("d").unwrap()]);
+        assert_eq!(*numpy.extras, [ExtraName::from_str("d").unwrap()]);
     }
 
     #[test]
     fn error_extras2() {
         let numpy = Requirement::<Url>::from_str("black[d,jupyter]").unwrap();
         assert_eq!(
-            numpy.extras,
-            vec![
+            *numpy.extras,
+            [
                 ExtraName::from_str("d").unwrap(),
                 ExtraName::from_str("jupyter").unwrap(),
             ]
@@ -1250,13 +1299,13 @@ mod tests {
     #[test]
     fn empty_extras() {
         let black = Requirement::<Url>::from_str("black[]").unwrap();
-        assert_eq!(black.extras, vec![]);
+        assert_eq!(*black.extras, []);
     }
 
     #[test]
     fn empty_extras_with_spaces() {
         let black = Requirement::<Url>::from_str("black[  ]").unwrap();
-        assert_eq!(black.extras, vec![]);
+        assert_eq!(*black.extras, []);
     }
 
     #[test]
@@ -1313,7 +1362,7 @@ mod tests {
         let url = "https://github.com/pypa/pip/archive/1.3.1.zip#sha1=da9234ee9982d4bbb3c72346a6de940a148ea686";
         let expected = Requirement {
             name: PackageName::from_str("pip").unwrap(),
-            extras: vec![],
+            extras: Box::new([]),
             marker: MarkerTree::TRUE,
             version_or_url: Some(VersionOrUrl::Url(Url::parse(url).unwrap())),
             origin: None,
@@ -1339,17 +1388,17 @@ mod tests {
         let mut b = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::SysPlatform,
             operator: MarkerOperator::Equal,
-            value: "win32".to_string(),
+            value: arcstr::literal!("win32"),
         });
         let mut c = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::OsName,
             operator: MarkerOperator::Equal,
-            value: "linux".to_string(),
+            value: arcstr::literal!("linux"),
         });
         let d = MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::ImplementationName,
             operator: MarkerOperator::Equal,
-            value: "cpython".to_string(),
+            value: arcstr::literal!("cpython"),
         });
 
         c.and(d);
@@ -1517,6 +1566,24 @@ mod tests {
           ^
     "#
         );
+    }
+
+    #[test]
+    fn parse_name_with_star() {
+        assert_snapshot!(
+            parse_pep508_err("wheel-*.whl"),
+            @r"
+        Package name must end with an alphanumeric character, not `-`
+        wheel-*.whl
+             ^
+        ");
+        assert_snapshot!(
+            parse_pep508_err("wheelѦ"),
+            @r"
+        Expected one of `@`, `(`, `<`, `=`, `>`, `~`, `!`, `;`, found `Ѧ`
+        wheelѦ
+             ^
+        ");
     }
 
     #[test]

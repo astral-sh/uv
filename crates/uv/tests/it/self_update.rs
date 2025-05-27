@@ -1,13 +1,13 @@
 use std::process::Command;
 
 use axoupdater::{
-    test::helpers::{perform_runtest, RuntestArgs},
     ReleaseSourceType,
+    test::helpers::{RuntestArgs, perform_runtest},
 };
 
 use uv_static::EnvVars;
 
-use crate::common::get_bin;
+use crate::common::{TestContext, get_bin, uv_snapshot};
 
 #[test]
 fn check_self_update() {
@@ -41,4 +41,19 @@ fn check_self_update() {
         .status()
         .expect("failed to run 'uv --version'");
     assert!(status.success(), "'uv --version' returned non-zero");
+}
+
+#[test]
+fn test_self_update_offline_error() {
+    let context = TestContext::new("3.12");
+
+    uv_snapshot!(context.self_update().arg("--offline"),
+    @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)
+    ");
 }

@@ -1,15 +1,14 @@
-use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
-use uv_pep508::VerbatimUrl;
-use uv_pypi_types::{CoreMetadata, HashDigest, Yanked};
+use uv_pep508::split_scheme;
+use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
+use uv_redacted::DisplaySafeUrl;
+use uv_small_str::SmallString;
 
 /// Error converting [`uv_pypi_types::File`] to [`distribution_type::File`].
 #[derive(Debug, thiserror::Error)]
@@ -25,8 +24,8 @@ pub enum FileConversionError {
 #[rkyv(derive(Debug))]
 pub struct File {
     pub dist_info_metadata: bool,
-    pub filename: String,
-    pub hashes: Vec<HashDigest>,
+    pub filename: SmallString,
+    pub hashes: HashDigests,
     pub requires_python: Option<VersionSpecifiers>,
     pub size: Option<u64>,
     // N.B. We don't use a Jiff timestamp here because it's a little
@@ -35,30 +34,31 @@ pub struct File {
     // milliseconds.
     pub upload_time_utc_ms: Option<i64>,
     pub url: FileLocation,
-    pub yanked: Option<Yanked>,
+    pub yanked: Option<Box<Yanked>>,
 }
 
 impl File {
     /// `TryFrom` instead of `From` to filter out files with invalid requires python version specifiers
-    pub fn try_from(file: uv_pypi_types::File, base: &Url) -> Result<Self, FileConversionError> {
+    pub fn try_from(
+        file: uv_pypi_types::File,
+        base: &SmallString,
+    ) -> Result<Self, FileConversionError> {
         Ok(Self {
             dist_info_metadata: file
                 .core_metadata
                 .as_ref()
-                .or(file.dist_info_metadata.as_ref())
-                .or(file.data_dist_info_metadata.as_ref())
                 .is_some_and(CoreMetadata::is_available),
             filename: file.filename,
-            hashes: file.hashes.into_digests(),
+            hashes: HashDigests::from(file.hashes),
             requires_python: file
                 .requires_python
                 .transpose()
                 .map_err(|err| FileConversionError::RequiresPython(err.line().clone(), err))?,
             size: file.size,
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
-            url: match Url::parse(&file.url) {
-                Ok(url) => FileLocation::AbsoluteUrl(url.into()),
-                Err(_) => FileLocation::RelativeUrl(base.to_string(), file.url),
+            url: match split_scheme(&file.url) {
+                Some(..) => FileLocation::AbsoluteUrl(UrlString::new(file.url)),
+                None => FileLocation::RelativeUrl(base.clone(), file.url),
             },
             yanked: file.yanked,
         })
@@ -70,7 +70,7 @@ impl File {
 #[rkyv(derive(Debug))]
 pub enum FileLocation {
     /// URL relative to the base URL.
-    RelativeUrl(String, String),
+    RelativeUrl(SmallString, SmallString),
     /// Absolute URL.
     AbsoluteUrl(UrlString),
 }
@@ -87,32 +87,22 @@ impl FileLocation {
     /// This returns an error if any of the URL parsing fails, or if, for
     /// example, the location is a path and the path isn't valid UTF-8.
     /// (Because URLs must be valid UTF-8.)
-    pub fn to_url(&self) -> Result<Url, ToUrlError> {
+    pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
         match *self {
             FileLocation::RelativeUrl(ref base, ref path) => {
-                let base_url = Url::parse(base).map_err(|err| ToUrlError::InvalidBase {
-                    base: base.clone(),
-                    err,
-                })?;
+                let base_url =
+                    DisplaySafeUrl::parse(base).map_err(|err| ToUrlError::InvalidBase {
+                        base: base.to_string(),
+                        err,
+                    })?;
                 let joined = base_url.join(path).map_err(|err| ToUrlError::InvalidJoin {
-                    base: base.clone(),
-                    path: path.clone(),
+                    base: base.to_string(),
+                    path: path.to_string(),
                     err,
                 })?;
                 Ok(joined)
             }
-            FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.to_url()),
-        }
-    }
-
-    /// Convert this location to a URL.
-    ///
-    /// This method is identical to [`FileLocation::to_url`] except it avoids parsing absolute URLs
-    /// as they are already guaranteed to be valid.
-    pub fn to_url_string(&self) -> Result<UrlString, ToUrlError> {
-        match *self {
-            FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.clone()),
-            FileLocation::RelativeUrl(_, _) => Ok(self.to_url()?.into()),
+            FileLocation::AbsoluteUrl(ref absolute) => absolute.to_url(),
         }
     }
 }
@@ -128,7 +118,7 @@ impl Display for FileLocation {
 
 /// A [`Url`] represented as a `String`.
 ///
-/// This type is guaranteed to be a valid URL but avoids being parsed into the [`Url`] type.
+/// This type is not guaranteed to be a valid URL, and may error on conversion.
 #[derive(
     Debug,
     Clone,
@@ -145,27 +135,41 @@ impl Display for FileLocation {
 )]
 #[serde(transparent)]
 #[rkyv(derive(Debug))]
-pub struct UrlString(String);
+pub struct UrlString(SmallString);
 
 impl UrlString {
-    /// Converts a [`UrlString`] to a [`Url`].
-    pub fn to_url(&self) -> Url {
-        // This conversion can never fail as the only way to construct a `UrlString` is from a `Url`.
-        Url::from_str(&self.0).unwrap()
+    /// Create a new [`UrlString`] from a [`String`].
+    pub fn new(url: SmallString) -> Self {
+        Self(url)
+    }
+
+    /// Converts a [`UrlString`] to a [`DisplaySafeUrl`].
+    pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
+        DisplaySafeUrl::from_str(&self.0).map_err(|err| ToUrlError::InvalidAbsolute {
+            absolute: self.0.to_string(),
+            err,
+        })
     }
 
     /// Return the [`UrlString`] with any query parameters and fragments removed.
     pub fn base_str(&self) -> &str {
         self.as_ref()
-            .split_once(['#', '?'])
+            .split_once('?')
+            .or_else(|| self.as_ref().split_once('#'))
             .map(|(path, _)| path)
             .unwrap_or(self.as_ref())
     }
 
-    /// Return the [`UrlString`] with any query parameters and fragments removed.
+    /// Return the [`UrlString`] with any fragments removed.
     #[must_use]
-    pub fn as_base_url(&self) -> Self {
-        Self(self.base_str().to_string())
+    pub fn without_fragment(&self) -> Self {
+        Self(
+            self.as_ref()
+                .split_once('#')
+                .map(|(path, _)| path)
+                .map(SmallString::from)
+                .unwrap_or_else(|| self.0.clone()),
+        )
     }
 }
 
@@ -175,39 +179,15 @@ impl AsRef<str> for UrlString {
     }
 }
 
-impl From<Url> for UrlString {
-    fn from(value: Url) -> Self {
-        UrlString(value.to_string())
+impl From<DisplaySafeUrl> for UrlString {
+    fn from(value: DisplaySafeUrl) -> Self {
+        Self(value.as_str().into())
     }
 }
 
-impl From<&Url> for UrlString {
-    fn from(value: &Url) -> Self {
-        UrlString(value.to_string())
-    }
-}
-
-impl From<Cow<'_, Url>> for UrlString {
-    fn from(value: Cow<'_, Url>) -> Self {
-        UrlString(value.to_string())
-    }
-}
-
-impl From<VerbatimUrl> for UrlString {
-    fn from(value: VerbatimUrl) -> Self {
-        UrlString(value.raw().to_string())
-    }
-}
-
-impl From<&VerbatimUrl> for UrlString {
-    fn from(value: &VerbatimUrl) -> Self {
-        UrlString(value.raw().to_string())
-    }
-}
-
-impl From<UrlString> for String {
-    fn from(value: UrlString) -> Self {
-        value.0
+impl From<&DisplaySafeUrl> for UrlString {
+    fn from(value: &DisplaySafeUrl) -> Self {
+        Self(value.as_str().into())
     }
 }
 
@@ -217,12 +197,12 @@ impl Display for UrlString {
     }
 }
 
-/// An error that occurs when a `FileLocation` is not a valid URL.
+/// An error that occurs when a [`FileLocation`] is not a valid URL.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ToUrlError {
-    /// An error that occurs when the base URL in `FileLocation::Relative`
+    /// An error that occurs when the base URL in [`FileLocation::Relative`]
     /// could not be parsed as a valid URL.
-    #[error("could not parse base URL `{base}` as a valid URL")]
+    #[error("Could not parse base URL `{base}` as a valid URL")]
     InvalidBase {
         /// The base URL that could not be parsed as a valid URL.
         base: String,
@@ -231,8 +211,8 @@ pub enum ToUrlError {
         err: url::ParseError,
     },
     /// An error that occurs when the base URL could not be joined with
-    /// the relative path in a `FileLocation::Relative`.
-    #[error("could not join base URL `{base}` to relative path `{path}`")]
+    /// the relative path in a [`FileLocation::Relative`].
+    #[error("Could not join base URL `{base}` to relative path `{path}`")]
     InvalidJoin {
         /// The base URL that could not be parsed as a valid URL.
         base: String,
@@ -242,9 +222,9 @@ pub enum ToUrlError {
         #[source]
         err: url::ParseError,
     },
-    /// An error that occurs when the absolute URL in `FileLocation::Absolute`
+    /// An error that occurs when the absolute URL in [`FileLocation::Absolute`]
     /// could not be parsed as a valid URL.
-    #[error("could not parse absolute URL `{absolute}` as a valid URL")]
+    #[error("Could not parse absolute URL `{absolute}` as a valid URL")]
     InvalidAbsolute {
         /// The absolute URL that could not be parsed as a valid URL.
         absolute: String,
@@ -252,19 +232,36 @@ pub enum ToUrlError {
         #[source]
         err: url::ParseError,
     },
-    /// An error that occurs when the file path in `FileLocation::Path` is
-    /// not valid UTF-8. We need paths to be valid UTF-8 to be transformed
-    /// into URLs, which must also be UTF-8.
-    #[error("could not build URL from file path `{path}` because it is not valid UTF-8")]
-    PathNotUtf8 {
-        /// The original path that was not valid UTF-8.
-        path: PathBuf,
-    },
-    /// An error that occurs when the file URL created from a file path is not
-    /// a valid URL.
-    #[error("could not parse file path `{path}` as a valid URL")]
-    InvalidPath {
-        /// The file path URL that could not be parsed as a valid URL.
-        path: String,
-    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn base_str() {
+        let url = UrlString("https://example.com/path?query#fragment".into());
+        assert_eq!(url.base_str(), "https://example.com/path");
+
+        let url = UrlString("https://example.com/path#fragment".into());
+        assert_eq!(url.base_str(), "https://example.com/path");
+
+        let url = UrlString("https://example.com/path".into());
+        assert_eq!(url.base_str(), "https://example.com/path");
+    }
+
+    #[test]
+    fn without_fragment() {
+        let url = UrlString("https://example.com/path?query#fragment".into());
+        assert_eq!(
+            url.without_fragment(),
+            UrlString("https://example.com/path?query".into())
+        );
+
+        let url = UrlString("https://example.com/path#fragment".into());
+        assert_eq!(url.base_str(), "https://example.com/path");
+
+        let url = UrlString("https://example.com/path".into());
+        assert_eq!(url.base_str(), "https://example.com/path");
+    }
 }

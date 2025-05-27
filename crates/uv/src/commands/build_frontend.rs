@@ -3,6 +3,7 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::sync::Arc;
 use std::{fmt, io};
 
 use anyhow::{Context, Result};
@@ -10,28 +11,20 @@ use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::instrument;
 
-use crate::commands::pip::operations;
-use crate::commands::project::find_requires_python;
-use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::ExitStatus;
-use crate::printer::Printer;
-use crate::settings::{ResolverSettings, ResolverSettingsRef};
-use uv_auth::store_credentials;
 use uv_build_backend::check_direct_build;
 use uv_cache::{Cache, CacheBucket};
-use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
-    HashCheckingMode, IndexStrategy, KeyringProviderType, LowerBound, PreviewMode, SourceStrategy,
-    TrustedHost,
+    HashCheckingMode, IndexStrategy, KeyringProviderType, PreviewMode, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, SourceDist};
-use uv_fs::{relative_to, Simplified};
-use uv_install_wheel::linker::LinkMode;
+use uv_fs::{Simplified, relative_to};
+use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_python::{
@@ -42,8 +35,15 @@ use uv_python::{
 use uv_requirements::RequirementsSource;
 use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
 use uv_settings::PythonInstallMirrors;
-use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, HashStrategy};
-use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceError};
+use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
+
+use crate::commands::ExitStatus;
+use crate::commands::pip::operations;
+use crate::commands::project::{ProjectError, find_requires_python};
+use crate::commands::reporters::PythonDownloadReporter;
+use crate::printer::Printer;
+use crate::settings::{NetworkSettings, ResolverSettings};
 
 #[derive(Debug, Error)]
 enum Error {
@@ -69,6 +69,8 @@ enum Error {
     BuildDispatch(AnyErrorBuild),
     #[error(transparent)]
     BuildFrontend(#[from] uv_build_frontend::Error),
+    #[error(transparent)]
+    Project(#[from] ProjectError),
     #[error("Failed to write message")]
     Fmt(#[from] fmt::Error),
     #[error("Can't use `--force-pep517` with `--list`")]
@@ -105,14 +107,12 @@ pub(crate) async fn build_frontend(
     hash_checking: Option<HashCheckingMode>,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
-    settings: ResolverSettings,
+    settings: &ResolverSettings,
+    network_settings: &NetworkSettings,
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
@@ -132,14 +132,12 @@ pub(crate) async fn build_frontend(
         hash_checking,
         python.as_deref(),
         install_mirrors,
-        settings.as_ref(),
+        settings,
+        network_settings,
         no_config,
         python_preference,
         python_downloads,
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         printer,
         preview,
@@ -177,14 +175,12 @@ async fn build_impl(
     hash_checking: Option<HashCheckingMode>,
     python_request: Option<&str>,
     install_mirrors: PythonInstallMirrors,
-    settings: ResolverSettingsRef<'_>,
+    settings: &ResolverSettings,
+    network_settings: &NetworkSettings,
     no_config: bool,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
@@ -199,7 +195,7 @@ async fn build_impl(
     }
 
     // Extract the resolver settings.
-    let ResolverSettingsRef {
+    let ResolverSettings {
         index_locations,
         index_strategy,
         keyring_provider,
@@ -218,9 +214,9 @@ async fn build_impl(
     } = settings;
 
     let client_builder = BaseClientBuilder::default()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Determine the source to build.
     let src = if let Some(src) = src {
@@ -245,7 +241,13 @@ async fn build_impl(
     };
 
     // Attempt to discover the workspace; on failure, save the error for later.
-    let workspace = Workspace::discover(src.directory(), &DiscoveryOptions::default()).await;
+    let workspace_cache = WorkspaceCache::default();
+    let workspace = Workspace::discover(
+        src.directory(),
+        &DiscoveryOptions::default(),
+        &workspace_cache,
+    )
+    .await;
 
     // If a `--package` or `--all-packages` was provided, adjust the source directory.
     let packages = if let Some(package) = package {
@@ -258,8 +260,7 @@ async fn build_impl(
         let workspace = match workspace {
             Ok(ref workspace) => workspace,
             Err(err) => {
-                return Err(anyhow::Error::from(err)
-                    .context("`--package` was provided, but no workspace was found"));
+                return Err(err).context("`--package` was provided, but no workspace was found");
             }
         };
 
@@ -271,7 +272,13 @@ async fn build_impl(
         if !package.pyproject_toml().is_package() {
             let name = &package.project().name;
             let pyproject_toml = package.root().join("pyproject.toml");
-            return Err(anyhow::anyhow!("Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```", name.cyan(), "build-system".green(), "setuptools".cyan(), pyproject_toml.user_display().cyan()));
+            return Err(anyhow::anyhow!(
+                "Package `{}` is missing a `{}`. For example, to build with `{}`, add the following to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```",
+                name.cyan(),
+                "build-system".green(),
+                "setuptools".cyan(),
+                pyproject_toml.user_display().cyan()
+            ));
         }
 
         vec![AnnotatedSource::from(Source::Directory(Cow::Borrowed(
@@ -287,8 +294,8 @@ async fn build_impl(
         let workspace = match workspace {
             Ok(ref workspace) => workspace,
             Err(err) => {
-                return Err(anyhow::Error::from(err)
-                    .context("`--all-packages` was provided, but no workspace was found"));
+                return Err(err)
+                    .context("`--all-packages` was provided, but no workspace was found");
             }
         };
 
@@ -310,7 +317,13 @@ async fn build_impl(
             let member = workspace.packages().values().next().unwrap();
             let name = &member.project().name;
             let pyproject_toml = member.root().join("pyproject.toml");
-            return Err(anyhow::anyhow!("Workspace does contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```", name.cyan(), "setuptools".cyan(), "build-system".green(), pyproject_toml.user_display().cyan()));
+            return Err(anyhow::anyhow!(
+                "Workspace does not contain any buildable packages. For example, to build `{}` with `{}`, add a `{}` to `{}`:\n```toml\n[build-system]\nrequires = [\"setuptools\"]\nbuild-backend = \"setuptools.build_meta\"\n```",
+                name.cyan(),
+                "setuptools".cyan(),
+                "build-system".green(),
+                pyproject_toml.user_display().cyan()
+            ));
         }
 
         packages
@@ -331,27 +344,24 @@ async fn build_impl(
             cache,
             printer,
             index_locations,
-            &client_builder,
+            client_builder.clone(),
             hash_checking,
             build_logs,
             force_pep517,
             build_constraints,
-            no_build_isolation,
+            *no_build_isolation,
             no_build_isolation_package,
-            native_tls,
-            connectivity,
-            index_strategy,
-            keyring_provider,
-            allow_insecure_host,
-            exclude_newer,
-            sources,
+            *index_strategy,
+            *keyring_provider,
+            *exclude_newer,
+            *sources,
             concurrency,
             build_options,
             sdist,
             wheel,
             list,
             dependency_metadata,
-            link_mode,
+            *link_mode,
             config_setting,
             preview,
         );
@@ -411,18 +421,15 @@ async fn build_package(
     cache: &Cache,
     printer: Printer,
     index_locations: &IndexLocations,
-    client_builder: &BaseClientBuilder<'_>,
+    client_builder: BaseClientBuilder<'_>,
     hash_checking: Option<HashCheckingMode>,
     build_logs: bool,
     force_pep517: bool,
     build_constraints: &[RequirementsSource],
     no_build_isolation: bool,
     no_build_isolation_package: &[PackageName],
-    native_tls: bool,
-    connectivity: Connectivity,
     index_strategy: IndexStrategy,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: &[TrustedHost],
     exclude_newer: Option<ExcludeNewer>,
     sources: SourceStrategy,
     concurrency: Concurrency,
@@ -464,7 +471,7 @@ async fn build_package(
     // (3) `Requires-Python` in `pyproject.toml`
     if interpreter_request.is_none() {
         if let Ok(workspace) = workspace {
-            interpreter_request = find_requires_python(workspace)
+            interpreter_request = find_requires_python(workspace)?
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {
@@ -482,11 +489,12 @@ async fn build_package(
         EnvironmentPreference::Any,
         python_preference,
         python_downloads,
-        client_builder,
+        &client_builder,
         cache,
         Some(&PythonDownloadReporter::single(printer)),
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
     .into_interpreter();
@@ -494,12 +502,17 @@ async fn build_package(
     // Add all authenticated sources to the cache.
     for index in index_locations.allowed_indexes() {
         if let Some(credentials) = index.credentials() {
-            store_credentials(index.raw_url(), credentials);
+            let credentials = Arc::new(credentials);
+            uv_auth::store_credentials(index.raw_url(), credentials.clone());
+            if let Some(root_url) = index.root_url() {
+                uv_auth::store_credentials(&root_url, credentials.clone());
+            }
         }
     }
 
     // Read build constraints.
-    let build_constraints = operations::read_constraints(build_constraints, client_builder).await?;
+    let build_constraints =
+        operations::read_constraints(build_constraints, &client_builder).await?;
 
     // Collect the set of required hashes.
     let hasher = if let Some(hash_checking) = hash_checking {
@@ -517,18 +530,16 @@ async fn build_package(
 
     let build_constraints = Constraints::from_requirements(
         build_constraints
-            .iter()
-            .map(|constraint| constraint.requirement.clone()),
+            .into_iter()
+            .map(|constraint| constraint.requirement),
     );
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(native_tls)
-        .connectivity(connectivity)
-        .index_urls(index_locations.index_urls())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
+        .index_locations(index_locations)
         .index_strategy(index_strategy)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host.to_vec())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -547,15 +558,16 @@ async fn build_package(
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
-        let client = FlatIndexClient::new(&client, cache);
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), cache);
         let entries = client
-            .fetch(index_locations.flat_indexes().map(Index::url))
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
         FlatIndex::from_entries(entries, None, &hasher, build_options)
     };
 
     // Initialize any shared state.
     let state = SharedState::default();
+    let workspace_cache = WorkspaceCache::default();
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
@@ -574,8 +586,8 @@ async fn build_package(
         build_options,
         &hasher,
         exclude_newer,
-        LowerBound::Allow,
         sources,
+        workspace_cache,
         concurrency,
         preview,
     );
@@ -620,7 +632,7 @@ async fn build_package(
                 BuildOutput::Quiet
             }
         }
-        Printer::Quiet => BuildOutput::Quiet,
+        Printer::Quiet | Printer::Silent => BuildOutput::Quiet,
     };
 
     let mut build_results = Vec::new();
@@ -664,7 +676,7 @@ async fn build_package(
             build_results.push(sdist_build.clone());
 
             // Extract the source distribution into a temporary directory.
-            let path = output_dir.join(sdist_build.filename().to_string());
+            let path = output_dir.join(sdist_build.raw_filename());
             let reader = fs_err::tokio::File::open(&path).await?;
             let ext = SourceDistExtension::from_path(path.as_path())
                 .map_err(|err| Error::InvalidSourceDistExt(path.user_display().to_string(), err))?;
@@ -691,7 +703,7 @@ async fn build_package(
                 subdirectory,
                 version_id,
                 build_output,
-                Some(sdist_build.filename().version()),
+                Some(sdist_build.normalized_filename().version()),
             )
             .await?;
             build_results.push(wheel_build);
@@ -763,7 +775,7 @@ async fn build_package(
                 subdirectory,
                 version_id,
                 build_output,
-                Some(sdist_build.filename().version()),
+                Some(sdist_build.normalized_filename().version()),
             )
             .await?;
             build_results.push(sdist_build);
@@ -862,9 +874,10 @@ async fn build_sdist(
                 uv_build_backend::list_source_dist(&source_tree_, uv_version::version())
             })
             .await??;
-
+            let raw_filename = filename.to_string();
             BuildMessage::List {
-                filename: DistFilename::SourceDistFilename(filename),
+                normalized_filename: DistFilename::SourceDistFilename(filename),
+                raw_filename,
                 source_tree: source_tree.to_path_buf(),
                 file_list,
             }
@@ -893,10 +906,11 @@ async fn build_sdist(
             .to_string();
 
             BuildMessage::Build {
-                filename: DistFilename::SourceDistFilename(
+                normalized_filename: DistFilename::SourceDistFilename(
                     SourceDistFilename::parsed_normalized_filename(&filename)
                         .map_err(Error::InvalidBuiltSourceDistFilename)?,
                 ),
+                raw_filename: filename,
                 output_dir: output_dir.to_path_buf(),
             }
         }
@@ -921,15 +935,17 @@ async fn build_sdist(
                     sources,
                     BuildKind::Sdist,
                     build_output,
+                    BuildStack::default(),
                 )
                 .await
                 .map_err(|err| Error::BuildDispatch(err.into()))?;
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
-                filename: DistFilename::SourceDistFilename(
+                normalized_filename: DistFilename::SourceDistFilename(
                     SourceDistFilename::parsed_normalized_filename(&filename)
                         .map_err(Error::InvalidBuiltSourceDistFilename)?,
                 ),
+                raw_filename: filename,
                 output_dir: output_dir.to_path_buf(),
             }
         }
@@ -963,8 +979,10 @@ async fn build_wheel(
                 uv_build_backend::list_wheel(&source_tree_, uv_version::version())
             })
             .await??;
+            let raw_filename = filename.to_string();
             BuildMessage::List {
-                filename: DistFilename::WheelFilename(filename),
+                normalized_filename: DistFilename::WheelFilename(filename),
+                raw_filename,
                 source_tree: source_tree.to_path_buf(),
                 file_list,
             }
@@ -992,8 +1010,10 @@ async fn build_wheel(
             })
             .await??;
 
+            let raw_filename = filename.to_string();
             BuildMessage::Build {
-                filename: DistFilename::WheelFilename(filename),
+                normalized_filename: DistFilename::WheelFilename(filename),
+                raw_filename,
                 output_dir: output_dir.to_path_buf(),
             }
         }
@@ -1018,20 +1038,22 @@ async fn build_wheel(
                     sources,
                     BuildKind::Wheel,
                     build_output,
+                    BuildStack::default(),
                 )
                 .await
                 .map_err(|err| Error::BuildDispatch(err.into()))?;
             let filename = builder.build(output_dir).await?;
             BuildMessage::Build {
-                filename: DistFilename::WheelFilename(
+                normalized_filename: DistFilename::WheelFilename(
                     WheelFilename::from_str(&filename).map_err(Error::InvalidBuiltWheelFilename)?,
                 ),
+                raw_filename: filename,
                 output_dir: output_dir.to_path_buf(),
             }
         }
     };
     if let Some(expected) = version {
-        let actual = build_message.filename().version();
+        let actual = build_message.normalized_filename().version();
         if expected != actual {
             return Err(Error::VersionMismatch(expected.clone(), actual.clone()));
         }
@@ -1132,15 +1154,19 @@ impl Source<'_> {
 enum BuildMessage {
     /// A built wheel or source distribution.
     Build {
-        /// The name of the built distribution.
-        filename: DistFilename,
+        /// The normalized name of the built distribution.
+        normalized_filename: DistFilename,
+        /// The name of the built distribution before parsing and normalization.
+        raw_filename: String,
         /// The location of the built distribution.
         output_dir: PathBuf,
     },
     /// Show the list of files that would be included in a distribution.
     List {
-        /// The name of the build distribution.
-        filename: DistFilename,
+        /// The normalized name of the build distribution.
+        normalized_filename: DistFilename,
+        /// The name of the built distribution before parsing and normalization.
+        raw_filename: String,
         // All source files are relative to the source tree.
         source_tree: PathBuf,
         // Included file and source file, if not generated.
@@ -1149,39 +1175,55 @@ enum BuildMessage {
 }
 
 impl BuildMessage {
-    /// The filename of the wheel or source distribution.
-    fn filename(&self) -> &DistFilename {
+    /// The normalized filename of the wheel or source distribution.
+    fn normalized_filename(&self) -> &DistFilename {
         match self {
-            BuildMessage::Build { filename: name, .. } => name,
-            BuildMessage::List { filename: name, .. } => name,
+            BuildMessage::Build {
+                normalized_filename: name,
+                ..
+            } => name,
+            BuildMessage::List {
+                normalized_filename: name,
+                ..
+            } => name,
+        }
+    }
+
+    /// The filename of the wheel or source distribution before normalization.
+    fn raw_filename(&self) -> &str {
+        match self {
+            BuildMessage::Build {
+                raw_filename: name, ..
+            } => name,
+            BuildMessage::List {
+                raw_filename: name, ..
+            } => name,
         }
     }
 
     fn print(&self, printer: Printer) -> Result<()> {
         match self {
             BuildMessage::Build {
-                filename,
+                raw_filename,
                 output_dir,
+                ..
             } => {
                 writeln!(
                     printer.stderr(),
                     "Successfully built {}",
-                    output_dir
-                        .join(filename.to_string())
-                        .user_display()
-                        .bold()
-                        .cyan()
+                    output_dir.join(raw_filename).user_display().bold().cyan()
                 )?;
             }
             BuildMessage::List {
-                filename,
+                raw_filename,
                 file_list,
                 source_tree,
+                ..
             } => {
                 writeln!(
                     printer.stdout(),
                     "{}",
-                    format!("Building {filename} will include the following files:").bold()
+                    format!("Building {raw_filename} will include the following files:").bold()
                 )?;
                 for (file, source) in file_list {
                     if let Some(source) = source {

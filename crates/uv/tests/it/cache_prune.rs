@@ -5,8 +5,8 @@ use indoc::indoc;
 
 use uv_static::EnvVars;
 
-use crate::common::uv_snapshot;
 use crate::common::TestContext;
+use crate::common::uv_snapshot;
 
 /// `cache prune` should be a no-op if there's nothing out-of-date in the cache.
 #[test]
@@ -136,7 +136,7 @@ fn prune_cached_env() {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling cache environment: [CACHE_DIR]/environments-v1/[ENTRY]
+    DEBUG Removing dangling cache environment: [CACHE_DIR]/environments-v2/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
     "###);
@@ -158,7 +158,7 @@ fn prune_stale_symlink() -> Result<()> {
         .success();
 
     // Remove the wheels directory, causing the symlink to become stale.
-    let wheels = context.cache_dir.child("wheels-v3");
+    let wheels = context.cache_dir.child("wheels-v5");
     fs_err::remove_dir_all(wheels)?;
 
     let filters: Vec<_> = context
@@ -191,7 +191,7 @@ fn prune_stale_symlink() -> Result<()> {
 /// `cache prune --ci` should remove all unzipped archives.
 #[test]
 fn prune_unzipped() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-01T00:00Z");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str(indoc! { r"
@@ -204,7 +204,7 @@ fn prune_unzipped() -> Result<()> {
         .collect();
 
     // Install a requirement, to populate the cache.
-    uv_snapshot!(&filters, context.pip_install().arg("-r").env_remove(EnvVars::UV_EXCLUDE_NEWER).arg("requirements.txt").arg("--reinstall"), @r###"
+    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--reinstall"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -234,7 +234,7 @@ fn prune_unzipped() -> Result<()> {
     requirements_txt.write_str(indoc! { r"
         source-distribution==0.0.1
     " })?;
-    uv_snapshot!(&filters, context.pip_install().arg("-r").env_remove(EnvVars::UV_EXCLUDE_NEWER).arg("requirements.txt").arg("--offline"), @r###"
+    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -250,14 +250,14 @@ fn prune_unzipped() -> Result<()> {
     requirements_txt.write_str(indoc! { r"
         iniconfig
     " })?;
-    uv_snapshot!(&filters, context.pip_install().arg("-r").env_remove(EnvVars::UV_EXCLUDE_NEWER).arg("requirements.txt").arg("--offline"), @r###"
+    uv_snapshot!(&filters, context.pip_install().arg("-r").arg("requirements.txt").arg("--offline"), @r###"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because all versions of iniconfig need to be downloaded from a registry and you require iniconfig, we can conclude that your requirements are unsatisfiable.
+      ╰─▶ Because iniconfig<=2.0.0 needs to be downloaded from a registry and you require iniconfig, we can conclude that your requirements are unsatisfiable.
 
           hint: Pre-releases are available for `iniconfig` in the requested range (e.g., 0.2.dev0), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
@@ -348,7 +348,7 @@ fn prune_stale_revision() -> Result<()> {
     ----- stderr -----
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v6/[ENTRY]
+    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v9/[ENTRY]
     DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
     Removed [N] files ([SIZE])
     "###);
@@ -375,6 +375,7 @@ fn prune_stale_revision() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)
     "###);

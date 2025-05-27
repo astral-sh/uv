@@ -48,15 +48,21 @@ use url::Url;
 use uv_client::BaseClient;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{NoBinary, NoBuild, PackageNameSpecifier};
-use uv_distribution_types::{UnresolvedRequirement, UnresolvedRequirementSpecification};
+use uv_distribution_types::{
+    Requirement, UnresolvedRequirement, UnresolvedRequirementSpecification,
+};
 use uv_fs::Simplified;
-use uv_pep508::{expand_env_vars, Pep508Error, RequirementOrigin, VerbatimUrl};
-use uv_pypi_types::{Requirement, VerbatimParsedUrl};
+use uv_pep508::{Pep508Error, RequirementOrigin, VerbatimUrl, expand_env_vars};
+use uv_pypi_types::VerbatimParsedUrl;
+#[cfg(feature = "http")]
+use uv_redacted::DisplaySafeUrl;
 
 use crate::requirement::EditableError;
 pub use crate::requirement::RequirementsTxtRequirement;
+use crate::shquote::unquote;
 
 mod requirement;
+mod shquote;
 
 /// We emit one of those for each `requirements.txt` entry.
 enum RequirementsTxtStatement {
@@ -88,6 +94,8 @@ enum RequirementsTxtStatement {
     NoBinary(NoBinary),
     /// `--only-binary`
     OnlyBinary(NoBuild),
+    /// An unsupported option (e.g., `--trusted-host`).
+    UnsupportedOption(UnsupportedOption),
 }
 
 /// A [Requirement] with additional metadata from the `requirements.txt`, currently only hashes but in
@@ -384,6 +392,35 @@ impl RequirementsTxt {
                 RequirementsTxtStatement::OnlyBinary(only_binary) => {
                     data.only_binary.extend(only_binary);
                 }
+                RequirementsTxtStatement::UnsupportedOption(flag) => {
+                    if requirements_txt == Path::new("-") {
+                        if flag.cli() {
+                            uv_warnings::warn_user!(
+                                "Ignoring unsupported option from stdin: `{flag}` (hint: pass `{flag}` on the command line instead)",
+                                flag = flag.green()
+                            );
+                        } else {
+                            uv_warnings::warn_user!(
+                                "Ignoring unsupported option from stdin: `{flag}`",
+                                flag = flag.green()
+                            );
+                        }
+                    } else {
+                        if flag.cli() {
+                            uv_warnings::warn_user!(
+                                "Ignoring unsupported option in `{path}`: `{flag}` (hint: pass `{flag}` on the command line instead)",
+                                path = requirements_txt.user_display().cyan(),
+                                flag = flag.green()
+                            );
+                        } else {
+                            uv_warnings::warn_user!(
+                                "Ignoring unsupported option in `{path}`: `{flag}`",
+                                path = requirements_txt.user_display().cyan(),
+                                flag = flag.green()
+                            );
+                        }
+                    }
+                }
             }
         }
         Ok(data)
@@ -416,10 +453,70 @@ impl RequirementsTxt {
     }
 }
 
-/// Parse a single entry, that is a requirement, an inclusion or a comment line
+/// An unsupported option (e.g., `--trusted-host`).
 ///
-/// Consumes all preceding trivia (whitespace and comments). If it returns None, we've reached
-/// the end of file
+/// See: <https://pip.pypa.io/en/stable/reference/requirements-file-format/#global-options>
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UnsupportedOption {
+    PreferBinary,
+    RequireHashes,
+    Pre,
+    TrustedHost,
+    UseFeature,
+}
+
+impl UnsupportedOption {
+    /// The name of the unsupported option.
+    fn name(self) -> &'static str {
+        match self {
+            UnsupportedOption::PreferBinary => "--prefer-binary",
+            UnsupportedOption::RequireHashes => "--require-hashes",
+            UnsupportedOption::Pre => "--pre",
+            UnsupportedOption::TrustedHost => "--trusted-host",
+            UnsupportedOption::UseFeature => "--use-feature",
+        }
+    }
+
+    /// Returns `true` if the option is supported on the CLI.
+    fn cli(self) -> bool {
+        match self {
+            UnsupportedOption::PreferBinary => false,
+            UnsupportedOption::RequireHashes => true,
+            UnsupportedOption::Pre => true,
+            UnsupportedOption::TrustedHost => true,
+            UnsupportedOption::UseFeature => false,
+        }
+    }
+
+    /// Returns an iterator over all unsupported options.
+    fn iter() -> impl Iterator<Item = UnsupportedOption> {
+        [
+            UnsupportedOption::PreferBinary,
+            UnsupportedOption::RequireHashes,
+            UnsupportedOption::Pre,
+            UnsupportedOption::TrustedHost,
+            UnsupportedOption::UseFeature,
+        ]
+        .iter()
+        .copied()
+    }
+}
+
+impl Display for UnsupportedOption {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+/// Returns `true` if the character is a newline or a comment character.
+const fn is_terminal(c: char) -> bool {
+    matches!(c, '\n' | '\r' | '#')
+}
+
+/// Parse a single entry, that is a requirement, an inclusion or a comment line.
+///
+/// Consumes all preceding trivia (whitespace and comments). If it returns `None`, we've reached
+/// the end of file.
 fn parse_entry(
     s: &mut Scanner,
     content: &str,
@@ -436,23 +533,43 @@ fn parse_entry(
 
     let start = s.cursor();
     Ok(Some(if s.eat_if("-r") || s.eat_if("--requirement") {
-        let requirements_file = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let filename = parse_value("--requirement", content, s, |c: char| !is_terminal(c))?;
+        let filename = unquote(filename)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| filename.to_string());
         let end = s.cursor();
         RequirementsTxtStatement::Requirements {
-            filename: requirements_file.to_string(),
+            filename,
             start,
             end,
         }
     } else if s.eat_if("-c") || s.eat_if("--constraint") {
-        let constraints_file = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
+        let filename = parse_value("--constraint", content, s, |c: char| !is_terminal(c))?;
+        let filename = unquote(filename)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| filename.to_string());
         let end = s.cursor();
         RequirementsTxtStatement::Constraint {
-            filename: constraints_file.to_string(),
+            filename,
             start,
             end,
         }
     } else if s.eat_if("-e") || s.eat_if("--editable") {
-        s.eat_whitespace();
+        if s.eat_if('=') {
+            // Explicit equals sign.
+        } else if s.eat_if(char::is_whitespace) {
+            // Key and value are separated by whitespace instead.
+            s.eat_whitespace();
+        } else {
+            let (line, column) = calculate_row_column(content, s.cursor());
+            return Err(RequirementsTxtParserError::Parser {
+                message: format!("Expected '=' or whitespace, found {:?}", s.peek()),
+                line,
+                column,
+            });
+        }
 
         let source = if requirements_txt == Path::new("-") {
             None
@@ -475,8 +592,13 @@ fn parse_entry(
             hashes,
         })
     } else if s.eat_if("-i") || s.eat_if("--index-url") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
-        let expanded = expand_env_vars(given);
+        let given = parse_value("--index-url", content, s, |c: char| !is_terminal(c))?;
+        let given = unquote(given)
+            .ok()
+            .flatten()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(given));
+        let expanded = expand_env_vars(given.as_ref());
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
             .filter(|path| path.exists())
@@ -501,8 +623,13 @@ fn parse_entry(
         };
         RequirementsTxtStatement::IndexUrl(url.with_given(given))
     } else if s.eat_if("--extra-index-url") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
-        let expanded = expand_env_vars(given);
+        let given = parse_value("--extra-index-url", content, s, |c: char| !is_terminal(c))?;
+        let given = unquote(given)
+            .ok()
+            .flatten()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(given));
+        let expanded = expand_env_vars(given.as_ref());
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
             .filter(|path| path.exists())
@@ -529,8 +656,13 @@ fn parse_entry(
     } else if s.eat_if("--no-index") {
         RequirementsTxtStatement::NoIndex
     } else if s.eat_if("--find-links") || s.eat_if("-f") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
-        let expanded = expand_env_vars(given);
+        let given = parse_value("--find-links", content, s, |c: char| !is_terminal(c))?;
+        let given = unquote(given)
+            .ok()
+            .flatten()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(given));
+        let expanded = expand_env_vars(given.as_ref());
         let url = if let Some(path) = std::path::absolute(expanded.as_ref())
             .ok()
             .filter(|path| path.exists())
@@ -555,8 +687,13 @@ fn parse_entry(
         };
         RequirementsTxtStatement::FindLinks(url.with_given(given))
     } else if s.eat_if("--no-binary") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
-        let specifier = PackageNameSpecifier::from_str(given).map_err(|err| {
+        let given = parse_value("--no-binary", content, s, |c: char| !is_terminal(c))?;
+        let given = unquote(given)
+            .ok()
+            .flatten()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(given));
+        let specifier = PackageNameSpecifier::from_str(given.as_ref()).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
                 specifier: given.to_string(),
@@ -566,8 +703,13 @@ fn parse_entry(
         })?;
         RequirementsTxtStatement::NoBinary(NoBinary::from_pip_arg(specifier))
     } else if s.eat_if("--only-binary") {
-        let given = parse_value(content, s, |c: char| !['\n', '\r', '#'].contains(&c))?;
-        let specifier = PackageNameSpecifier::from_str(given).map_err(|err| {
+        let given = parse_value("--only-binary", content, s, |c: char| !is_terminal(c))?;
+        let given = unquote(given)
+            .ok()
+            .flatten()
+            .map(Cow::Owned)
+            .unwrap_or(Cow::Borrowed(given));
+        let specifier = PackageNameSpecifier::from_str(given.as_ref()).map_err(|err| {
             RequirementsTxtParserError::NoBinary {
                 source: err,
                 specifier: given.to_string(),
@@ -590,14 +732,20 @@ fn parse_entry(
             hashes,
         })
     } else if let Some(char) = s.peek() {
-        let (line, column) = calculate_row_column(content, s.cursor());
-        return Err(RequirementsTxtParserError::Parser {
-            message: format!(
-                "Unexpected '{char}', expected '-c', '-e', '-r' or the start of a requirement"
-            ),
-            line,
-            column,
-        });
+        // Identify an unsupported option, like `--trusted-host`.
+        if let Some(option) = UnsupportedOption::iter().find(|option| s.eat_if(option.name())) {
+            s.eat_while(|c: char| !is_terminal(c));
+            RequirementsTxtStatement::UnsupportedOption(option)
+        } else {
+            let (line, column) = calculate_row_column(content, s.cursor());
+            return Err(RequirementsTxtParserError::Parser {
+                message: format!(
+                    "Unexpected '{char}', expected '-c', '-e', '-r' or the start of a requirement"
+                ),
+                line,
+                column,
+            });
+        }
     } else {
         // EOF
         return Ok(None);
@@ -741,14 +889,14 @@ fn parse_hashes(content: &str, s: &mut Scanner) -> Result<Vec<String>, Requireme
             column,
         });
     }
-    let hash = parse_value(content, s, |c: char| !c.is_whitespace())?;
+    let hash = parse_value("--hash", content, s, |c: char| !c.is_whitespace())?;
     hashes.push(hash.to_string());
     loop {
         eat_wrappable_whitespace(s);
         if !s.eat_if("--hash") {
             break;
         }
-        let hash = parse_value(content, s, |c: char| !c.is_whitespace())?;
+        let hash = parse_value("--hash", content, s, |c: char| !c.is_whitespace())?;
         hashes.push(hash.to_string());
     }
     Ok(hashes)
@@ -756,25 +904,37 @@ fn parse_hashes(content: &str, s: &mut Scanner) -> Result<Vec<String>, Requireme
 
 /// In `-<key>=<value>` or `-<key> value`, this parses the part after the key
 fn parse_value<'a, T>(
+    option: &str,
     content: &str,
     s: &mut Scanner<'a>,
     while_pattern: impl Pattern<T>,
 ) -> Result<&'a str, RequirementsTxtParserError> {
-    if s.eat_if('=') {
-        // Explicit equals sign
-        Ok(s.eat_while(while_pattern).trim_end())
+    let value = if s.eat_if('=') {
+        // Explicit equals sign.
+        s.eat_while(while_pattern).trim_end()
     } else if s.eat_if(char::is_whitespace) {
-        // Key and value are separated by whitespace instead
+        // Key and value are separated by whitespace instead.
         s.eat_whitespace();
-        Ok(s.eat_while(while_pattern).trim_end())
+        s.eat_while(while_pattern).trim_end()
     } else {
         let (line, column) = calculate_row_column(content, s.cursor());
-        Err(RequirementsTxtParserError::Parser {
+        return Err(RequirementsTxtParserError::Parser {
             message: format!("Expected '=' or whitespace, found {:?}", s.peek()),
             line,
             column,
-        })
+        });
+    };
+
+    if value.is_empty() {
+        let (line, column) = calculate_row_column(content, s.cursor());
+        return Err(RequirementsTxtParserError::Parser {
+            message: format!("`{option}` must be followed by an argument"),
+            line,
+            column,
+        });
     }
+
+    Ok(value)
 }
 
 /// Fetch the contents of a URL and return them as a string.
@@ -791,11 +951,11 @@ async fn read_url_to_string(
                 url: path.as_ref().to_owned(),
             })?;
 
-    let url = Url::from_str(path_utf8)
+    let url = DisplaySafeUrl::from_str(path_utf8)
         .map_err(|err| RequirementsTxtParserError::InvalidUrl(path_utf8.to_string(), err))?;
     let response = client
         .for_host(&url)
-        .get(url.clone())
+        .get(Url::from(url.clone()))
         .send()
         .await
         .map_err(|err| RequirementsTxtParserError::from_reqwest_middleware(url.clone(), err))?;
@@ -889,7 +1049,7 @@ pub enum RequirementsTxtParserError {
         url: PathBuf,
     },
     #[cfg(feature = "http")]
-    Reqwest(Url, reqwest_middleware::Error),
+    Reqwest(DisplaySafeUrl, reqwest_middleware::Error),
     #[cfg(feature = "http")]
     InvalidUrl(String, url::ParseError),
 }
@@ -917,7 +1077,10 @@ impl Display for RequirementsTxtParserError {
                 write!(f, "Unsupported editable requirement")
             }
             Self::MissingRequirementPrefix(given) => {
-                write!(f, "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?")
+                write!(
+                    f,
+                    "Requirement `{given}` looks like a requirements file but was passed as a package name. Did you mean `-r {given}`?"
+                )
             }
             Self::NoBinary { specifier, .. } => {
                 write!(f, "Invalid specifier for `--no-binary`: {specifier}")
@@ -1140,11 +1303,11 @@ impl From<io::Error> for RequirementsTxtParserError {
 
 #[cfg(feature = "http")]
 impl RequirementsTxtParserError {
-    fn from_reqwest(url: Url, err: reqwest::Error) -> Self {
+    fn from_reqwest(url: DisplaySafeUrl, err: reqwest::Error) -> Self {
         Self::Reqwest(url, reqwest_middleware::Error::Reqwest(err))
     }
 
-    fn from_reqwest_middleware(url: Url, err: reqwest_middleware::Error) -> Self {
+    fn from_reqwest_middleware(url: DisplaySafeUrl, err: reqwest_middleware::Error) -> Self {
         Self::Reqwest(url, err)
     }
 }
@@ -1205,7 +1368,7 @@ mod test {
     use uv_client::BaseClientBuilder;
     use uv_fs::Simplified;
 
-    use crate::{calculate_row_column, RequirementsTxt};
+    use crate::{RequirementsTxt, calculate_row_column};
 
     fn workspace_test_data_dir() -> PathBuf {
         Path::new("./test-data").simple_canonicalize().unwrap()
@@ -1644,6 +1807,35 @@ mod test {
     }
 
     #[tokio::test]
+    async fn missing_value() -> Result<()> {
+        let temp_dir = assert_fs::TempDir::new()?;
+        let requirements_txt = temp_dir.child("requirements.txt");
+        requirements_txt.write_str(indoc! {"
+            flask
+            --no-binary
+        "})?;
+
+        let error = RequirementsTxt::parse(
+            requirements_txt.path(),
+            temp_dir.path(),
+            &BaseClientBuilder::new(),
+        )
+        .await
+        .unwrap_err();
+        let errors = anyhow::Error::new(error).chain().join("\n");
+
+        let requirement_txt = regex::escape(&requirements_txt.path().user_display().to_string());
+        let filters = vec![(requirement_txt.as_str(), "<REQUIREMENTS_TXT>")];
+        insta::with_settings!({
+            filters => filters
+        }, {
+            insta::assert_snapshot!(errors, @"`--no-binary` must be followed by an argument at <REQUIREMENTS_TXT>:3:1");
+        });
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn missing_r() -> Result<()> {
         let temp_dir = assert_fs::TempDir::new()?;
 
@@ -1849,7 +2041,7 @@ mod test {
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
         }, {
-            insta::assert_debug_snapshot!(requirements, @r###"
+            insta::assert_debug_snapshot!(requirements, @r#"
             RequirementsTxt {
                 requirements: [],
                 constraints: [],
@@ -1860,34 +2052,14 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Directory(
                                         ParsedDirectoryUrl {
-                                            url: Url {
-                                                scheme: "file",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: None,
-                                                port: None,
-                                                path: "/foo/bar",
-                                                query: None,
-                                                fragment: None,
-                                            },
+                                            url: file:///foo/bar,
                                             install_path: "/foo/bar",
                                             editable: true,
                                             virtual: false,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
-                                            scheme: "file",
-                                            cannot_be_a_base: false,
-                                            username: "",
-                                            password: None,
-                                            host: None,
-                                            port: None,
-                                            path: "/foo/bar",
-                                            query: None,
-                                            fragment: None,
-                                        },
+                                        url: file:///foo/bar,
                                         given: Some(
                                             "/foo/bar",
                                         ),
@@ -1912,7 +2084,7 @@ mod test {
                 no_binary: None,
                 only_binary: None,
             }
-            "###);
+            "#);
         });
 
         Ok(())
@@ -1997,7 +2169,7 @@ mod test {
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
         }, {
-            insta::assert_debug_snapshot!(requirements, @r###"
+            insta::assert_debug_snapshot!(requirements, @r#"
             RequirementsTxt {
                 requirements: [
                     RequirementEntry {
@@ -2143,21 +2315,7 @@ mod test {
                 editables: [],
                 index_url: Some(
                     VerbatimUrl {
-                        url: Url {
-                            scheme: "https",
-                            cannot_be_a_base: false,
-                            username: "",
-                            password: None,
-                            host: Some(
-                                Domain(
-                                    "test.pypi.org",
-                                ),
-                            ),
-                            port: None,
-                            path: "/simple/",
-                            query: None,
-                            fragment: None,
-                        },
+                        url: https://test.pypi.org/simple/,
                         given: Some(
                             "https://test.pypi.org/simple/",
                         ),
@@ -2169,7 +2327,7 @@ mod test {
                 no_binary: All,
                 only_binary: None,
             }
-            "###);
+            "#);
         });
 
         Ok(())
@@ -2212,7 +2370,7 @@ mod test {
         insta::with_settings!({
             filters => path_filters(&path_filter(temp_dir.path())),
         }, {
-            insta::assert_debug_snapshot!(requirements, @r###"
+            insta::assert_debug_snapshot!(requirements, @r#"
             RequirementsTxt {
                 requirements: [
                     RequirementEntry {
@@ -2221,33 +2379,13 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
-                                                scheme: "file",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: None,
-                                                port: None,
-                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.3.0-py3-none-any.whl",
-                                                query: None,
-                                                fragment: None,
-                                            },
+                                            url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.3.0-py3-none-any.whl,
                                             install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.3.0-py3-none-any.whl",
                                             ext: Wheel,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
-                                            scheme: "file",
-                                            cannot_be_a_base: false,
-                                            username: "",
-                                            password: None,
-                                            host: None,
-                                            port: None,
-                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.3.0-py3-none-any.whl",
-                                            query: None,
-                                            fragment: None,
-                                        },
+                                        url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.3.0-py3-none-any.whl,
                                         given: Some(
                                             "importlib_metadata-8.3.0-py3-none-any.whl",
                                         ),
@@ -2270,33 +2408,13 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
-                                                scheme: "file",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: None,
-                                                port: None,
-                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
-                                                query: None,
-                                                fragment: None,
-                                            },
+                                            url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl,
                                             install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
                                             ext: Wheel,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
-                                            scheme: "file",
-                                            cannot_be_a_base: false,
-                                            username: "",
-                                            password: None,
-                                            host: None,
-                                            port: None,
-                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
-                                            query: None,
-                                            fragment: None,
-                                        },
+                                        url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl,
                                         given: Some(
                                             "importlib_metadata-8.2.0-py3-none-any.whl",
                                         ),
@@ -2319,33 +2437,13 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
-                                                scheme: "file",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: None,
-                                                port: None,
-                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
-                                                query: None,
-                                                fragment: None,
-                                            },
+                                            url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl,
                                             install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
                                             ext: Wheel,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
-                                            scheme: "file",
-                                            cannot_be_a_base: false,
-                                            username: "",
-                                            password: None,
-                                            host: None,
-                                            port: None,
-                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl",
-                                            query: None,
-                                            fragment: None,
-                                        },
+                                        url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0-py3-none-any.whl,
                                         given: Some(
                                             "importlib_metadata-8.2.0-py3-none-any.whl",
                                         ),
@@ -2372,33 +2470,13 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
-                                                scheme: "file",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: None,
-                                                port: None,
-                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
-                                                query: None,
-                                                fragment: None,
-                                            },
+                                            url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl,
                                             install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
                                             ext: Wheel,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
-                                            scheme: "file",
-                                            cannot_be_a_base: false,
-                                            username: "",
-                                            password: None,
-                                            host: None,
-                                            port: None,
-                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
-                                            query: None,
-                                            fragment: None,
-                                        },
+                                        url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl,
                                         given: Some(
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
@@ -2421,33 +2499,13 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
-                                                scheme: "file",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: None,
-                                                port: None,
-                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
-                                                query: None,
-                                                fragment: None,
-                                            },
+                                            url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl,
                                             install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
                                             ext: Wheel,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
-                                            scheme: "file",
-                                            cannot_be_a_base: false,
-                                            username: "",
-                                            password: None,
-                                            host: None,
-                                            port: None,
-                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
-                                            query: None,
-                                            fragment: None,
-                                        },
+                                        url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl,
                                         given: Some(
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
@@ -2470,33 +2528,13 @@ mod test {
                                 url: VerbatimParsedUrl {
                                     parsed_url: Path(
                                         ParsedPathUrl {
-                                            url: Url {
-                                                scheme: "file",
-                                                cannot_be_a_base: false,
-                                                username: "",
-                                                password: None,
-                                                host: None,
-                                                port: None,
-                                                path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
-                                                query: None,
-                                                fragment: None,
-                                            },
+                                            url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl,
                                             install_path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
                                             ext: Wheel,
                                         },
                                     ),
                                     verbatim: VerbatimUrl {
-                                        url: Url {
-                                            scheme: "file",
-                                            cannot_be_a_base: false,
-                                            username: "",
-                                            password: None,
-                                            host: None,
-                                            port: None,
-                                            path: "<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl",
-                                            query: None,
-                                            fragment: None,
-                                        },
+                                        url: file://<REQUIREMENTS_DIR>/importlib_metadata-8.2.0+local-py3-none-any.whl,
                                         given: Some(
                                             "importlib_metadata-8.2.0+local-py3-none-any.whl",
                                         ),
@@ -2527,7 +2565,7 @@ mod test {
                 no_binary: None,
                 only_binary: None,
             }
-            "###);
+            "#);
         });
 
         Ok(())

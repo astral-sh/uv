@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
 use uv_bench::criterion::black_box;
-use uv_bench::criterion::{criterion_group, criterion_main, measurement::WallTime, Criterion};
+use uv_bench::criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
-use uv_pypi_types::Requirement;
+use uv_distribution_types::Requirement;
 use uv_python::PythonEnvironment;
 use uv_resolver::Manifest;
 
@@ -86,13 +86,13 @@ mod resolver {
     use uv_cache::Cache;
     use uv_client::RegistryClient;
     use uv_configuration::{
-        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, LowerBound,
-        PreviewMode, SourceStrategy,
+        BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, PreviewMode,
+        SourceStrategy,
     };
     use uv_dispatch::{BuildDispatch, SharedState};
     use uv_distribution::DistributionDatabase;
     use uv_distribution_types::{DependencyMetadata, IndexLocations};
-    use uv_install_wheel::linker::LinkMode;
+    use uv_install_wheel::LinkMode;
     use uv_pep440::Version;
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
     use uv_platform_tags::{Arch, Os, Platform, Tags};
@@ -103,6 +103,7 @@ mod resolver {
         Resolver, ResolverEnvironment, ResolverOutput,
     };
     use uv_types::{BuildIsolation, EmptyInstalledPackages, HashStrategy};
+    use uv_workspace::WorkspaceCache;
 
     static MARKERS: LazyLock<MarkerEnvironment> = LazyLock::new(|| {
         MarkerEnvironment::try_from(MarkerEnvironmentBuilder {
@@ -144,7 +145,7 @@ mod resolver {
         let concurrency = Concurrency::default();
         let config_settings = ConfigSettings::default();
         let exclude_newer = Some(
-            jiff::civil::date(2024, 8, 8)
+            jiff::civil::date(2024, 9, 1)
                 .to_zoned(jiff::tz::TimeZone::UTC)
                 .unwrap()
                 .timestamp()
@@ -161,6 +162,7 @@ mod resolver {
         let sources = SourceStrategy::default();
         let dependency_metadata = DependencyMetadata::default();
         let conflicts = Conflicts::empty();
+        let workspace_cache = WorkspaceCache::default();
 
         let python_requirement = if universal {
             PythonRequirement::from_requires_python(
@@ -187,8 +189,8 @@ mod resolver {
             &build_options,
             &hashes,
             exclude_newer,
-            LowerBound::default(),
             sources,
+            workspace_cache,
             concurrency,
             PreviewMode::Enabled,
         );

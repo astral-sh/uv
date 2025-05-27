@@ -45,6 +45,7 @@ uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
 uv-resolver = { workspace = true }
 uv-types = { workspace = true }
+uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 codspeed-criterion-compat = { version = "2.7.2", default-features = false, optional = true }
@@ -57,6 +58,4 @@ ignored = ["uv-extract"]
 
 [features]
 codspeed = ["codspeed-criterion-compat"]
-performance = [
-  "uv-extract/performance"
-]
+static = ["uv-extract/static"]

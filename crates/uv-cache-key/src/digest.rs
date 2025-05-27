@@ -1,6 +1,8 @@
-use crate::cache_key::{CacheKey, CacheKeyHasher};
-use seahash::SeaHasher;
 use std::hash::{Hash, Hasher};
+
+use seahash::SeaHasher;
+
+use crate::cache_key::{CacheKey, CacheKeyHasher};
 
 /// Compute a hex string hash of a `CacheKey` object.
 ///

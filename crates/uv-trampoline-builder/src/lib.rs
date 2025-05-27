@@ -5,8 +5,8 @@ use std::str::Utf8Error;
 use fs_err::File;
 use thiserror::Error;
 use uv_fs::Simplified;
-use zip::write::FileOptions;
 use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 #[cfg(all(windows, target_arch = "x86"))]
 const LAUNCHER_I686_GUI: &[u8] =
@@ -250,7 +250,8 @@ pub fn windows_script_launcher(
         // We're using the zip writer, but with stored compression
         // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
         // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
-        let stored = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let stored =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
         let mut archive = ZipWriter::new(Cursor::new(&mut payload));
         let error_msg = "Writing to Vec<u8> should never fail";
         archive.start_file("__main__.py", stored).expect(error_msg);
@@ -268,7 +269,7 @@ pub fn windows_script_launcher(
     launcher.extend_from_slice(&payload);
     launcher.extend_from_slice(python_path.as_bytes());
     launcher.extend_from_slice(
-        &u32::try_from(python_path.as_bytes().len())
+        &u32::try_from(python_path.len())
             .expect("file path should be smaller than 4GB")
             .to_le_bytes(),
     );
@@ -300,7 +301,7 @@ pub fn windows_python_launcher(
     launcher.extend_from_slice(launcher_bin);
     launcher.extend_from_slice(python_path.as_bytes());
     launcher.extend_from_slice(
-        &u32::try_from(python_path.as_bytes().len())
+        &u32::try_from(python_path.len())
             .expect("file path should be smaller than 4GB")
             .to_le_bytes(),
     );
@@ -323,7 +324,7 @@ mod test {
 
     use which::which;
 
-    use super::{windows_python_launcher, windows_script_launcher, Launcher, LauncherKind};
+    use super::{Launcher, LauncherKind, windows_python_launcher, windows_script_launcher};
 
     #[test]
     #[cfg(all(windows, target_arch = "x86", feature = "production"))]
@@ -377,7 +378,7 @@ mod test {
     fn get_script_launcher(shebang: &str, is_gui: bool) -> String {
         if is_gui {
             format!(
-                r##"{shebang}
+                r#"{shebang}
 # -*- coding: utf-8 -*-
 import re
 import sys
@@ -394,11 +395,11 @@ def make_gui() -> None:
 if __name__ == "__main__":
     sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
     sys.exit(make_gui())
-"##
+"#
             )
         } else {
             format!(
-                r##"{shebang}
+                r#"{shebang}
 # -*- coding: utf-8 -*-
 import re
 import sys
@@ -412,7 +413,7 @@ def main_console() -> None:
 if __name__ == "__main__":
     sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])
     sys.exit(main_console())
-"##
+"#
             )
         }
     }

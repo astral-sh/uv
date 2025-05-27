@@ -1,41 +1,48 @@
 mod trusted_publishing;
 
-use crate::trusted_publishing::TrustedPublishingError;
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
+use std::{env, fmt, io};
+
 use fs_err::tokio::File;
 use futures::TryStreamExt;
-use glob::{glob, GlobError, PatternError};
+use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
 use reqwest::header::AUTHORIZATION;
 use reqwest::multipart::Part;
 use reqwest::{Body, Response, StatusCode};
 use reqwest_middleware::RequestBuilder;
+use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{RetryPolicy, Retryable, RetryableStrategy};
 use rustc_hash::FxHashSet;
 use serde::Deserialize;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-use std::{env, fmt, io};
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, BufReader};
+use tokio::sync::Semaphore;
 use tokio_util::io::ReaderStream;
-use tracing::{debug, enabled, trace, warn, Level};
+use tracing::{Level, debug, enabled, trace, warn};
+use trusted_publishing::TrustedPublishingToken;
 use url::Url;
-use uv_client::{BaseClient, OwnedArchive, RegistryClientBuilder, UvRetryableStrategy};
+
+use uv_auth::Credentials;
+use uv_cache::{Cache, Refresh};
+use uv_client::{
+    BaseClient, DEFAULT_RETRIES, MetadataFormat, OwnedArchive, RegistryClientBuilder,
+    UvRetryableStrategy,
+};
 use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
+use uv_distribution_types::{IndexCapabilities, IndexUrl};
+use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_metadata_async_seek;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_warnings::{warn_user, warn_user_once};
 
-pub use trusted_publishing::TrustedPublishingToken;
-use uv_cache::{Cache, Refresh};
-use uv_distribution_types::{IndexCapabilities, IndexUrl};
-use uv_extract::hash::{HashReader, Hasher};
+use crate::trusted_publishing::TrustedPublishingError;
 
 #[derive(Error, Debug)]
 pub enum PublishError {
@@ -53,7 +60,7 @@ pub enum PublishError {
     #[error("Failed to publish: `{}`", _0.user_display())]
     PublishPrepare(PathBuf, #[source] Box<PublishPrepareError>),
     #[error("Failed to publish `{}` to {}", _0.user_display(), _1)]
-    PublishSend(PathBuf, Url, #[source] PublishSendError),
+    PublishSend(PathBuf, DisplaySafeUrl, #[source] PublishSendError),
     #[error("Failed to obtain token for trusted publishing")]
     TrustedPublishing(#[from] TrustedPublishingError),
     #[error("{0} are not allowed when using trusted publishing")]
@@ -67,8 +74,8 @@ pub enum PublishError {
     HashMismatch {
         filename: Box<DistFilename>,
         hash_algorithm: HashAlgorithm,
-        local: Box<str>,
-        remote: Box<str>,
+        local: String,
+        remote: String,
     },
     #[error("Hash is missing in index for {0}")]
     MissingHash(Box<DistFilename>),
@@ -102,23 +109,29 @@ pub enum PublishSendError {
     StatusNoBody(StatusCode, #[source] reqwest::Error),
     #[error("Upload failed with status code {0}. Server says: {1}")]
     Status(StatusCode, String),
-    #[error("POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?")]
+    #[error(
+        "POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL?"
+    )]
     MethodNotAllowedNoBody,
-    #[error("POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL? Server says: {0}")]
+    #[error(
+        "POST requests are not supported by the endpoint, are you using the simple index URL instead of the upload URL? Server says: {0}"
+    )]
     MethodNotAllowed(String),
     /// The registry returned a "403 Forbidden".
     #[error("Permission denied (status code {0}): {1}")]
     PermissionDenied(StatusCode, String),
     /// See inline comment.
-    #[error("The request was redirected, but redirects are not allowed when publishing, please use the canonical URL: `{0}`")]
+    #[error(
+        "The request was redirected, but redirects are not allowed when publishing, please use the canonical URL: `{0}`"
+    )]
     RedirectError(Url),
 }
 
 pub trait Reporter: Send + Sync + 'static {
     fn on_progress(&self, name: &str, id: usize);
-    fn on_download_start(&self, name: &str, size: Option<u64>) -> usize;
-    fn on_download_progress(&self, id: usize, inc: u64);
-    fn on_download_complete(&self, id: usize);
+    fn on_upload_start(&self, name: &str, size: Option<u64>) -> usize;
+    fn on_upload_progress(&self, id: usize, inc: u64);
+    fn on_upload_complete(&self, id: usize);
 }
 
 /// Context for using a fresh registry client for check URL requests.
@@ -231,6 +244,7 @@ impl PublishSendError {
 /// <https://github.com/astral-sh/uv/issues/8030> caused by
 /// <https://github.com/pypa/setuptools/issues/3777> in combination with
 /// <https://github.com/pypi/warehouse/blob/50a58f3081e693a3772c0283050a275e350004bf/warehouse/forklift/legacy.py#L1133-L1155>
+#[allow(clippy::result_large_err)]
 pub fn files_for_publishing(
     paths: Vec<String>,
 ) -> Result<Vec<(PathBuf, String, DistFilename)>, PublishError> {
@@ -295,7 +309,7 @@ pub async fn check_trusted_publishing(
     password: Option<&str>,
     keyring_provider: KeyringProviderType,
     trusted_publishing: TrustedPublishing,
-    registry: &Url,
+    registry: &DisplaySafeUrl,
     client: &BaseClient,
 ) -> Result<TrustedPublishResult, PublishError> {
     match trusted_publishing {
@@ -313,7 +327,9 @@ pub async fn check_trusted_publishing(
             }
             // We could check for credentials from the keyring or netrc the auth middleware first, but
             // given that we are in GitHub Actions we check for trusted publishing first.
-            debug!("Running on GitHub Actions without explicit credentials, checking for trusted publishing");
+            debug!(
+                "Running on GitHub Actions without explicit credentials, checking for trusted publishing"
+            );
             match trusted_publishing::get_token(registry, client.for_host(registry)).await {
                 Ok(token) => Ok(TrustedPublishResult::Configured(token)),
                 Err(err) => {
@@ -364,11 +380,11 @@ pub async fn upload(
     file: &Path,
     raw_filename: &str,
     filename: &DistFilename,
-    registry: &Url,
+    registry: &DisplaySafeUrl,
     client: &BaseClient,
-    username: Option<&str>,
-    password: Option<&str>,
+    credentials: &Credentials,
     check_url_client: Option<&CheckUrlClient<'_>>,
+    download_concurrency: &Semaphore,
     reporter: Arc<impl Reporter>,
 ) -> Result<bool, PublishError> {
     let form_metadata = form_metadata(file, filename)
@@ -377,7 +393,8 @@ pub async fn upload(
 
     let mut n_past_retries = 0;
     let start_time = SystemTime::now();
-    let retry_policy = client.retry_policy();
+    // N.B. We cannot use the client policy here because it is set to zero retries
+    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(DEFAULT_RETRIES);
     loop {
         let (request, idx) = build_request(
             file,
@@ -385,8 +402,7 @@ pub async fn upload(
             filename,
             registry,
             client,
-            username,
-            password,
+            credentials,
             &form_metadata,
             reporter.clone(),
         )
@@ -397,8 +413,8 @@ pub async fn upload(
         if UvRetryableStrategy.handle(&result) == Some(Retryable::Transient) {
             let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
             if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
-                warn_user!("Transient failure while handling response for {registry}; retrying...",);
-                reporter.on_download_complete(idx);
+                warn_user!("Transient failure while handling response for {registry}; retrying...");
+                reporter.on_upload_complete(idx);
                 let duration = execute_after
                     .duration_since(SystemTime::now())
                     .unwrap_or_else(|_| Duration::default());
@@ -428,7 +444,8 @@ pub async fn upload(
                     PublishSendError::Status(..) | PublishSendError::StatusNoBody(..)
                 ) {
                     if let Some(check_url_client) = &check_url_client {
-                        if check_url(check_url_client, file, filename).await? {
+                        if check_url(check_url_client, file, filename, download_concurrency).await?
+                        {
                             // There was a raced upload of the same file, so even though our upload failed,
                             // the right file now exists in the registry.
                             return Ok(false);
@@ -450,6 +467,7 @@ pub async fn check_url(
     check_url_client: &CheckUrlClient<'_>,
     file: &Path,
     filename: &DistFilename,
+    download_concurrency: &Semaphore,
 ) -> Result<bool, PublishError> {
     let CheckUrlClient {
         index_url,
@@ -470,7 +488,12 @@ pub async fn check_url(
 
     debug!("Checking for {filename} in the registry");
     let response = match registry_client
-        .simple(filename.name(), Some(index_url), index_capabilities)
+        .package_metadata(
+            filename.name(),
+            Some(index_url.into()),
+            index_capabilities,
+            download_concurrency,
+        )
         .await
     {
         Ok(response) => response,
@@ -487,7 +510,7 @@ pub async fn check_url(
             };
         }
     };
-    let [(_, simple_metadata)] = response.as_slice() else {
+    let [(_, MetadataFormat::Simple(simple_metadata))] = response.as_slice() else {
         unreachable!("We queried a single index, we must get a single response");
     };
     let simple_metadata = OwnedArchive::deserialize(simple_metadata);
@@ -538,8 +561,8 @@ pub async fn check_url(
             Err(PublishError::HashMismatch {
                 filename: Box::new(filename.clone()),
                 hash_algorithm: remote_hash.algorithm,
-                local: local_hash.digest,
-                remote: remote_hash.digest.clone(),
+                local: local_hash.digest.to_string(),
+                remote: remote_hash.digest.to_string(),
             })
         }
     } else {
@@ -564,7 +587,7 @@ async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareErro
     let mut pkg_infos: Vec<(PathBuf, Vec<u8>)> = archive
         .entries()?
         .map_err(PublishPrepareError::from)
-        .try_filter_map(|mut entry| async move {
+        .try_filter_map(async |mut entry| {
             let path = entry
                 .path()
                 .map_err(PublishPrepareError::from)?
@@ -674,7 +697,7 @@ async fn form_metadata(
     ];
 
     if let DistFilename::WheelFilename(wheel) = filename {
-        form_metadata.push(("pyversion", wheel.python_tag.join(".")));
+        form_metadata.push(("pyversion", wheel.python_tags().iter().join(".")));
     } else {
         form_metadata.push(("pyversion", "source".to_string()));
     }
@@ -729,10 +752,9 @@ async fn build_request(
     file: &Path,
     raw_filename: &str,
     filename: &DistFilename,
-    registry: &Url,
+    registry: &DisplaySafeUrl,
     client: &BaseClient,
-    username: Option<&str>,
-    password: Option<&str>,
+    credentials: &Credentials,
     form_metadata: &[(&'static str, String)],
     reporter: Arc<impl Reporter>,
 ) -> Result<(RequestBuilder, usize), PublishPrepareError> {
@@ -742,35 +764,34 @@ async fn build_request(
     }
 
     let file = File::open(file).await?;
-    let idx = reporter.on_download_start(&filename.to_string(), Some(file.metadata().await?.len()));
+    let file_size = file.metadata().await?.len();
+    let idx = reporter.on_upload_start(&filename.to_string(), Some(file_size));
     let reader = ProgressReader::new(file, move |read| {
-        reporter.on_download_progress(idx, read as u64);
+        reporter.on_upload_progress(idx, read as u64);
     });
     // Stream wrapping puts a static lifetime requirement on the reader (so the request doesn't have
     // a lifetime) -> callback needs to be static -> reporter reference needs to be Arc'd.
     let file_reader = Body::wrap_stream(ReaderStream::new(reader));
     // See [`files_for_publishing`] on `raw_filename`
-    let part = Part::stream(file_reader).file_name(raw_filename.to_string());
+    let part = Part::stream_with_length(file_reader, file_size).file_name(raw_filename.to_string());
     form = form.part("content", part);
 
-    let url = if let Some(username) = username {
-        if password.is_none() {
-            // Attach the username to the URL so the authentication middleware can find the matching
-            // password.
-            let mut url = registry.clone();
-            let _ = url.set_username(username);
-            url
-        } else {
-            // We set the authorization header below.
-            registry.clone()
-        }
+    // If we have a username but no password, attach the username to the URL so the authentication
+    // middleware can find the matching password.
+    let url = if let Some(username) = credentials
+        .username()
+        .filter(|_| credentials.password().is_none())
+    {
+        let mut url = registry.clone();
+        let _ = url.set_username(username);
+        url
     } else {
         registry.clone()
     };
 
     let mut request = client
         .for_host(&url)
-        .post(url)
+        .post(Url::from(url))
         .multipart(form)
         // Ask PyPI for a structured error messages instead of HTML-markup error messages.
         // For other registries, we ask them to return plain text over HTML. See
@@ -779,11 +800,20 @@ async fn build_request(
             reqwest::header::ACCEPT,
             "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
         );
-    if let (Some(username), Some(password)) = (username, password) {
-        debug!("Using username/password basic auth");
-        let credentials = BASE64_STANDARD.encode(format!("{username}:{password}"));
-        request = request.header(AUTHORIZATION, format!("Basic {credentials}"));
+
+    match credentials {
+        Credentials::Basic { password, .. } => {
+            if password.is_some() {
+                debug!("Using HTTP Basic authentication");
+                request = request.header(AUTHORIZATION, credentials.to_header_value());
+            }
+        }
+        Credentials::Bearer { .. } => {
+            debug!("Using Bearer token authentication");
+            request = request.header(AUTHORIZATION, credentials.to_header_value());
+        }
     }
+
     Ok((request, idx))
 }
 
@@ -855,24 +885,25 @@ async fn handle_response(registry: &Url, response: Response) -> Result<(), Publi
 
 #[cfg(test)]
 mod tests {
-    use crate::{build_request, form_metadata, Reporter};
+    use crate::{Reporter, build_request, form_metadata};
     use insta::{assert_debug_snapshot, assert_snapshot};
     use itertools::Itertools;
     use std::path::PathBuf;
     use std::sync::Arc;
-    use url::Url;
+    use uv_auth::Credentials;
     use uv_client::BaseClientBuilder;
     use uv_distribution_filename::DistFilename;
+    use uv_redacted::DisplaySafeUrl;
 
     struct DummyReporter;
 
     impl Reporter for DummyReporter {
         fn on_progress(&self, _name: &str, _id: usize) {}
-        fn on_download_start(&self, _name: &str, _size: Option<u64>) -> usize {
+        fn on_upload_start(&self, _name: &str, _size: Option<u64>) -> usize {
             0
         }
-        fn on_download_progress(&self, _id: usize, _inc: u64) {}
-        fn on_download_complete(&self, _id: usize) {}
+        fn on_upload_progress(&self, _id: usize, _inc: u64) {}
+        fn on_upload_complete(&self, _id: usize) {}
     }
 
     /// Snapshot the data we send for an upload request for a source distribution.
@@ -942,10 +973,9 @@ mod tests {
             &file,
             raw_filename,
             &filename,
-            &Url::parse("https://example.org/upload").unwrap(),
+            &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
             &BaseClientBuilder::new().build(),
-            Some("ferris"),
-            Some("F3RR!S"),
+            &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
             &form_metadata,
             Arc::new(DummyReporter),
         )
@@ -955,42 +985,42 @@ mod tests {
         insta::with_settings!({
             filters => [("boundary=[0-9a-f-]+", "boundary=[...]")],
         }, {
-            assert_debug_snapshot!(&request, @r###"
-        RequestBuilder {
-            inner: RequestBuilder {
-                method: POST,
-                url: Url {
-                    scheme: "https",
-                    cannot_be_a_base: false,
-                    username: "",
-                    password: None,
-                    host: Some(
-                        Domain(
-                            "example.org",
+            assert_debug_snapshot!(&request, @r#"
+            RequestBuilder {
+                inner: RequestBuilder {
+                    method: POST,
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "example.org",
+                            ),
                         ),
-                    ),
-                    port: None,
-                    path: "/upload",
-                    query: None,
-                    fragment: None,
+                        port: None,
+                        path: "/upload",
+                        query: None,
+                        fragment: None,
+                    },
+                    headers: {
+                        "content-type": "multipart/form-data; boundary=[...]",
+                        "content-length": "6803",
+                        "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
+                        "authorization": Sensitive,
+                    },
                 },
-                headers: {
-                    "content-type": "multipart/form-data; boundary=[...]",
-                    "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
-                    "authorization": "Basic ZmVycmlzOkYzUlIhUw==",
-                },
-            },
-            ..
-        }
-        "###);
+                ..
+            }
+            "#);
         });
     }
 
     /// Snapshot the data we send for an upload request for a wheel.
     #[tokio::test]
     async fn upload_request_wheel() {
-        let raw_filename =
-            "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
+        let raw_filename = "tqdm-4.66.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl";
         let file = PathBuf::from("../../scripts/links/").join(raw_filename);
         let filename = DistFilename::try_from_normalized_filename(raw_filename).unwrap();
 
@@ -1092,10 +1122,9 @@ mod tests {
             &file,
             raw_filename,
             &filename,
-            &Url::parse("https://example.org/upload").unwrap(),
+            &DisplaySafeUrl::parse("https://example.org/upload").unwrap(),
             &BaseClientBuilder::new().build(),
-            Some("ferris"),
-            Some("F3RR!S"),
+            &Credentials::basic(Some("ferris".to_string()), Some("F3RR!S".to_string())),
             &form_metadata,
             Arc::new(DummyReporter),
         )
@@ -1105,34 +1134,35 @@ mod tests {
         insta::with_settings!({
             filters => [("boundary=[0-9a-f-]+", "boundary=[...]")],
         }, {
-            assert_debug_snapshot!(&request, @r###"
-        RequestBuilder {
-            inner: RequestBuilder {
-                method: POST,
-                url: Url {
-                    scheme: "https",
-                    cannot_be_a_base: false,
-                    username: "",
-                    password: None,
-                    host: Some(
-                        Domain(
-                            "example.org",
+            assert_debug_snapshot!(&request, @r#"
+            RequestBuilder {
+                inner: RequestBuilder {
+                    method: POST,
+                    url: Url {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "example.org",
+                            ),
                         ),
-                    ),
-                    port: None,
-                    path: "/upload",
-                    query: None,
-                    fragment: None,
+                        port: None,
+                        path: "/upload",
+                        query: None,
+                        fragment: None,
+                    },
+                    headers: {
+                        "content-type": "multipart/form-data; boundary=[...]",
+                        "content-length": "19330",
+                        "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
+                        "authorization": Sensitive,
+                    },
                 },
-                headers: {
-                    "content-type": "multipart/form-data; boundary=[...]",
-                    "accept": "application/json;q=0.9, text/plain;q=0.8, text/html;q=0.7",
-                    "authorization": "Basic ZmVycmlzOkYzUlIhUw==",
-                },
-            },
-            ..
-        }
-        "###);
+                ..
+            }
+            "#);
         });
     }
 }

@@ -26,14 +26,15 @@ uv-distribution-types = { workspace = true }
 uv-extract = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio"] }
 uv-git = { workspace = true }
+uv-git-types = { workspace = true }
 uv-metadata = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-redacted = { workspace = true }
 uv-types = { workspace = true }
-uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
@@ -51,6 +52,7 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
+toml = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 walkdir = { workspace = true }
@@ -62,4 +64,4 @@ insta = { version = "1.40.0", features = ["filters", "json", "redactions"] }
 
 [features]
 default = []
-performance = ["uv-extract/performance"]
+static = ["uv-extract/static"]

@@ -48,19 +48,19 @@
 use std::cmp::Ordering;
 use std::fmt;
 use std::ops::Bound;
-use std::sync::Mutex;
-use std::sync::MutexGuard;
+use std::sync::{LazyLock, Mutex, MutexGuard};
 
+use arcstr::ArcStr;
 use itertools::{Either, Itertools};
 use rustc_hash::FxHashMap;
-use std::sync::LazyLock;
-use uv_pep440::{release_specifier_to_range, Operator, Version, VersionSpecifier};
 use version_ranges::Ranges;
 
+use uv_pep440::{Operator, Version, VersionSpecifier, release_specifier_to_range};
+
+use crate::marker::MarkerValueExtra;
 use crate::marker::lowering::{
     CanonicalMarkerValueExtra, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
 };
-use crate::marker::MarkerValueExtra;
 use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerValueString, MarkerValueVersion,
 };
@@ -153,11 +153,7 @@ impl InternerGuard<'_> {
             .entry(node.clone())
             .or_insert_with(|| NodeId::new(self.shared.nodes.push(node), false));
 
-        if flipped {
-            id.not()
-        } else {
-            *id
-        }
+        if flipped { id.not() } else { *id }
     }
 
     /// Returns a decision node for a single marker expression.
@@ -287,28 +283,31 @@ impl InternerGuard<'_> {
                 // values in `exclusions`.
                 //
                 // See: https://discuss.python.org/t/clarify-usage-of-platform-system/70900
-                let (key, value) = match (key, value.as_str()) {
-                    (MarkerValueString::PlatformSystem, "Windows") => {
-                        (CanonicalMarkerValueString::SysPlatform, "win32".to_string())
-                    }
+                let (key, value) = match (key, value.as_ref()) {
+                    (MarkerValueString::PlatformSystem, "Windows") => (
+                        CanonicalMarkerValueString::SysPlatform,
+                        arcstr::literal!("win32"),
+                    ),
                     (MarkerValueString::PlatformSystem, "Darwin") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        "darwin".to_string(),
+                        arcstr::literal!("darwin"),
                     ),
-                    (MarkerValueString::PlatformSystem, "Linux") => {
-                        (CanonicalMarkerValueString::SysPlatform, "linux".to_string())
-                    }
-                    (MarkerValueString::PlatformSystem, "AIX") => {
-                        (CanonicalMarkerValueString::SysPlatform, "aix".to_string())
-                    }
+                    (MarkerValueString::PlatformSystem, "Linux") => (
+                        CanonicalMarkerValueString::SysPlatform,
+                        arcstr::literal!("linux"),
+                    ),
+                    (MarkerValueString::PlatformSystem, "AIX") => (
+                        CanonicalMarkerValueString::SysPlatform,
+                        arcstr::literal!("aix"),
+                    ),
                     (MarkerValueString::PlatformSystem, "Emscripten") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        "emscripten".to_string(),
+                        arcstr::literal!("emscripten"),
                     ),
                     // See: https://peps.python.org/pep-0738/#sys
                     (MarkerValueString::PlatformSystem, "Android") => (
                         CanonicalMarkerValueString::SysPlatform,
-                        "android".to_string(),
+                        arcstr::literal!("android"),
                     ),
                     _ => (key.into(), value),
                 };
@@ -467,7 +466,7 @@ impl InternerGuard<'_> {
                 .children
                 .nodes()
                 .all(|y| self.disjointness(y.negate(yi), xi)),
-            // X and Y represent the same variable, their merged edges must be unsatisifiable.
+            // X and Y represent the same variable, their merged edges must be unsatisfiable.
             Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
         }
     }
@@ -511,7 +510,7 @@ impl InternerGuard<'_> {
                 .children
                 .nodes()
                 .all(|y| self.disjointness(y.negate(yi), xi)),
-            // X and Y represent the same variable, their merged edges must be unsatisifiable.
+            // X and Y represent the same variable, their merged edges must be unsatisfiable.
             Ordering::Equal => x.children.is_disjoint(xi, &y.children, yi, self),
         }
     }
@@ -628,7 +627,7 @@ impl InternerGuard<'_> {
         // we recursively simplify.
         let Node {
             var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-            children: Edges::Version { ref edges },
+            children: Edges::Version { edges },
         } = node
         else {
             // Simplify all nodes recursively.
@@ -710,7 +709,7 @@ impl InternerGuard<'_> {
         let node = self.shared.node(i);
         let Node {
             var: Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-            children: Edges::Version { ref edges },
+            children: Edges::Version { edges },
         } = node
         else {
             // Complexify all nodes recursively.
@@ -829,6 +828,11 @@ impl InternerGuard<'_> {
                 return NodeId::FALSE;
             }
 
+            // The operation was memoized.
+            if let Some(result) = guard.state.cache.get(&(xi, yi)) {
+                return *result;
+            }
+
             let (x, y) = (guard.shared.node(xi), guard.shared.node(yi));
 
             // Perform Shannon Expansion of the higher order variable.
@@ -853,7 +857,12 @@ impl InternerGuard<'_> {
             };
 
             // Create the output node.
-            guard.create_node(func, children)
+            let node = guard.create_node(func, children);
+
+            // Memoize the result of this operation.
+            guard.state.cache.insert((xi, yi), node);
+
+            node
         }
 
         if let Some(exclusions) = self.state.exclusions {
@@ -861,109 +870,137 @@ impl InternerGuard<'_> {
         }
         let mut tree = NodeId::FALSE;
 
+        // Create all nodes upfront.
+        let os_name_nt = self.expression(MarkerExpression::String {
+            key: MarkerValueString::OsName,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("nt"),
+        });
+        let os_name_posix = self.expression(MarkerExpression::String {
+            key: MarkerValueString::OsName,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("posix"),
+        });
+        let sys_platform_linux = self.expression(MarkerExpression::String {
+            key: MarkerValueString::SysPlatform,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("linux"),
+        });
+        let sys_platform_darwin = self.expression(MarkerExpression::String {
+            key: MarkerValueString::SysPlatform,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("darwin"),
+        });
+        let sys_platform_ios = self.expression(MarkerExpression::String {
+            key: MarkerValueString::SysPlatform,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("ios"),
+        });
+        let sys_platform_win32 = self.expression(MarkerExpression::String {
+            key: MarkerValueString::SysPlatform,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("win32"),
+        });
+        let platform_system_freebsd = self.expression(MarkerExpression::String {
+            key: MarkerValueString::PlatformSystem,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("FreeBSD"),
+        });
+        let platform_system_netbsd = self.expression(MarkerExpression::String {
+            key: MarkerValueString::PlatformSystem,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("NetBSD"),
+        });
+        let platform_system_openbsd = self.expression(MarkerExpression::String {
+            key: MarkerValueString::PlatformSystem,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("OpenBSD"),
+        });
+        let platform_system_sunos = self.expression(MarkerExpression::String {
+            key: MarkerValueString::PlatformSystem,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("SunOS"),
+        });
+        let platform_system_ios = self.expression(MarkerExpression::String {
+            key: MarkerValueString::PlatformSystem,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("iOS"),
+        });
+        let platform_system_ipados = self.expression(MarkerExpression::String {
+            key: MarkerValueString::PlatformSystem,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("iPadOS"),
+        });
+        let sys_platform_aix = self.expression(MarkerExpression::String {
+            key: MarkerValueString::SysPlatform,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("aix"),
+        });
+        let sys_platform_android = self.expression(MarkerExpression::String {
+            key: MarkerValueString::SysPlatform,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("android"),
+        });
+        let sys_platform_emscripten = self.expression(MarkerExpression::String {
+            key: MarkerValueString::SysPlatform,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("emscripten"),
+        });
+        let sys_platform_cygwin = self.expression(MarkerExpression::String {
+            key: MarkerValueString::SysPlatform,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("cygwin"),
+        });
+        let sys_platform_wasi = self.expression(MarkerExpression::String {
+            key: MarkerValueString::SysPlatform,
+            operator: MarkerOperator::Equal,
+            value: arcstr::literal!("wasi"),
+        });
+
         // Pairs of `os_name` and `sys_platform` that are known to be incompatible.
         //
         // For example: `os_name == 'nt' and sys_platform == 'darwin'`
         let mut pairs = vec![
-            (
-                MarkerExpression::String {
-                    key: MarkerValueString::OsName,
-                    operator: MarkerOperator::Equal,
-                    value: "nt".to_string(),
-                },
-                MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: "linux".to_string(),
-                },
-            ),
-            (
-                MarkerExpression::String {
-                    key: MarkerValueString::OsName,
-                    operator: MarkerOperator::Equal,
-                    value: "nt".to_string(),
-                },
-                MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: "darwin".to_string(),
-                },
-            ),
-            (
-                MarkerExpression::String {
-                    key: MarkerValueString::OsName,
-                    operator: MarkerOperator::Equal,
-                    value: "nt".to_string(),
-                },
-                MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: "ios".to_string(),
-                },
-            ),
-            (
-                MarkerExpression::String {
-                    key: MarkerValueString::OsName,
-                    operator: MarkerOperator::Equal,
-                    value: "posix".to_string(),
-                },
-                MarkerExpression::String {
-                    key: MarkerValueString::SysPlatform,
-                    operator: MarkerOperator::Equal,
-                    value: "win32".to_string(),
-                },
-            ),
+            (os_name_nt, sys_platform_linux),
+            (os_name_nt, sys_platform_darwin),
+            (os_name_nt, sys_platform_ios),
+            (os_name_posix, sys_platform_win32),
         ];
 
         // Pairs of `platform_system` and `sys_platform` that are known to be incompatible.
         //
-        // For example: `platform_system == 'FreeBSD' and sys_platform == 'darwin'`
-        //
-        // Any `platform_system` values that we normalize away (like `Windows` to `win32`) are
-        // omitted, since we never expect them to be present in the tree.
-        //
-        // Unfortunately, we can't include Cygwin here, since Cygwin appears to use a
-        // `platform_system` value with versions encoded (e.g., `CYGWIN_NT-10.0-22631).
-        //
-        for platform_system in ["FreeBSD", "NetBSD", "OpenBSD", "SunOS", "iOS", "iPadOS"] {
-            // An enumeration of known values, excluding FreeBSD, SunOS, and other Unix systems,
-            // which use the lowercased `uname -s`, which typically includes a version (e.g.,
-            // `freebsd8`).
-            //
-            // See: https://docs.python.org/3/library/sys.html#sys.platform
+        // For example: `platform_system == 'FreeBSD' and sys_platform == 'aix'`
+        for platform_system in [
+            platform_system_freebsd,
+            platform_system_netbsd,
+            platform_system_openbsd,
+            platform_system_sunos,
+            platform_system_ios,
+            platform_system_ipados,
+        ] {
             for sys_platform in [
-                "aix",
-                "android",
-                "emscripten",
-                "ios",
-                "linux",
-                "darwin",
-                "win32",
-                "cygwin",
-                "wasi",
+                sys_platform_aix,
+                sys_platform_android,
+                sys_platform_emscripten,
+                sys_platform_ios,
+                sys_platform_linux,
+                sys_platform_darwin,
+                sys_platform_win32,
+                sys_platform_cygwin,
+                sys_platform_wasi,
             ] {
                 // Some of the above pairs are actually compatible.
-                if matches!((platform_system, sys_platform), ("iOS" | "iPadOS", "ios")) {
+                if sys_platform == sys_platform_ios
+                    && (platform_system == platform_system_ios
+                        || platform_system == platform_system_ipados)
+                {
                     continue;
                 }
-                pairs.push((
-                    MarkerExpression::String {
-                        key: MarkerValueString::PlatformSystem,
-                        operator: MarkerOperator::Equal,
-                        value: platform_system.to_string(),
-                    },
-                    MarkerExpression::String {
-                        key: MarkerValueString::SysPlatform,
-                        operator: MarkerOperator::Equal,
-                        value: sys_platform.to_string(),
-                    },
-                ));
+                pairs.push((platform_system, sys_platform));
             }
         }
 
         for (a, b) in pairs {
-            let a = self.expression(a);
-            let b = self.expression(b);
             let a_and_b = conjunction(self, a, b);
             tree = disjunction(self, tree, a_and_b);
         }
@@ -996,13 +1033,13 @@ pub(crate) enum Variable {
     /// string marker and value.
     In {
         key: CanonicalMarkerValueString,
-        value: String,
+        value: ArcStr,
     },
     /// A variable representing a `<value> in <key>` expression for a particular
     /// string marker and value.
     Contains {
         key: CanonicalMarkerValueString,
-        value: String,
+        value: ArcStr,
     },
     /// A variable representing the existence or absence of a given extra.
     ///
@@ -1128,7 +1165,7 @@ pub(crate) enum Edges {
     // Invariant: All ranges are simple, meaning they can be represented by a bounded
     // interval without gaps. Additionally, there are at least two edges in the set.
     String {
-        edges: SmallVec<(Ranges<String>, NodeId)>,
+        edges: SmallVec<(Ranges<ArcStr>, NodeId)>,
     },
     // The edges of a boolean variable, representing the values `true` (the `high` child)
     // and `false` (the `low` child).
@@ -1158,8 +1195,8 @@ impl Edges {
     ///
     /// This function will panic for the `In` and `Contains` marker operators, which
     /// should be represented as separate boolean variables.
-    fn from_string(operator: MarkerOperator, value: String) -> Edges {
-        let range: Ranges<String> = match operator {
+    fn from_string(operator: MarkerOperator, value: ArcStr) -> Edges {
+        let range: Ranges<ArcStr> = match operator {
             MarkerOperator::Equal => Ranges::singleton(value),
             MarkerOperator::NotEqual => Ranges::singleton(value).complement(),
             MarkerOperator::GreaterThan => Ranges::strictly_higher_than(value),
@@ -1412,8 +1449,7 @@ impl Edges {
         // not the resulting edges.
         for (left_range, left_child) in left_edges {
             for (right_range, right_child) in right_edges {
-                let intersection = right_range.intersection(left_range);
-                if intersection.is_empty() {
+                if right_range.is_disjoint(left_range) {
                     continue;
                 }
 
@@ -1508,7 +1544,7 @@ fn normalize_specifier(specifier: VersionSpecifier) -> VersionSpecifier {
     // for `python_version` to fully simplify any ranges, such as `python_version > '3.9' or python_version <= '3.9'`,
     // which is always `true` for `python_version`. For `python_full_version` however, this decision
     // is a semantic change.
-    let mut release = version.release();
+    let mut release = &*version.release();
 
     // Strip any trailing `0`s.
     //
@@ -1553,7 +1589,7 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
     // version segments. For example, a python version of `3.7.0`, `3.7.1`, and so on, would all
     // result in a `python_version` marker of `3.7`. For this reason, we must consider the range
     // of values that would satisfy a `python_version` specifier when truncated in order to transform
-    // the the specifier into its `python_full_version` equivalent.
+    // the specifier into its `python_full_version` equivalent.
     if let Some((major, minor)) = major_minor {
         let version = Version::new([major, minor]);
 
@@ -1583,14 +1619,14 @@ fn python_version_to_full_version(specifier: VersionSpecifier) -> Result<Version
             Operator::EqualStar | Operator::NotEqualStar | Operator::TildeEqual => specifier,
         })
     } else {
-        let &[major, minor, ..] = specifier.version().release() else {
+        let [major, minor, ..] = *specifier.version().release() else {
             unreachable!()
         };
 
         Ok(match specifier.operator() {
             // `python_version` cannot have more than two release segments, so equality is impossible.
             Operator::Equal | Operator::ExactEqual | Operator::EqualStar | Operator::TildeEqual => {
-                return Err(NodeId::FALSE)
+                return Err(NodeId::FALSE);
             }
 
             // Similarly, inequalities are always `true`.
@@ -1668,7 +1704,7 @@ impl fmt::Debug for NodeId {
 
 #[cfg(test)]
 mod tests {
-    use super::{NodeId, INTERNER};
+    use super::{INTERNER, NodeId};
     use crate::MarkerExpression;
 
     fn expr(s: &str) -> NodeId {

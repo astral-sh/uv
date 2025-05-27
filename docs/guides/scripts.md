@@ -1,3 +1,10 @@
+---
+title: Running scripts
+description:
+  A guide to using uv to run Python scripts, including support for inline dependency metadata,
+  reproducible scripts, and more.
+---
+
 # Running scripts
 
 A Python script is a file intended for standalone execution, e.g., with `python <script>.py`. Using
@@ -69,12 +76,12 @@ print("hello world!")
 EOF
 ```
 
-Note that if you use `uv run` in a _project_, i.e. a directory with a `pyproject.toml`, it will
+Note that if you use `uv run` in a _project_, i.e., a directory with a `pyproject.toml`, it will
 install the current project before running the script. If your script does not depend on the
 project, use the `--no-project` flag to skip this:
 
 ```console
-$ # Note, it is important that the flag comes _before_ the script
+$ # Note: the `--no-project` flag must be provided _before_ the script name.
 $ uv run --no-project example.py
 ```
 
@@ -210,11 +217,82 @@ print(Point)
 is not installed — see the documentation on [Python versions](../concepts/python-versions.md) for
 more details.
 
+## Using a shebang to create an executable file
+
+A shebang can be added to make a script executable without using `uv run` — this makes it easy to
+run scripts that are on your `PATH` or in the current folder.
+
+For example, create a file called `greet` with the following contents
+
+```python title="greet"
+#!/usr/bin/env -S uv run --script
+
+print("Hello, world!")
+```
+
+Ensure that your script is executable, e.g., with `chmod +x greet`, then run the script:
+
+```console
+$ ./greet
+Hello, world!
+```
+
+Declaration of dependencies is also supported in this context, for example:
+
+```python title="example"
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["httpx"]
+# ///
+import httpx
+
+print(httpx.get("https://example.com"))
+```
+
+## Using alternative package indexes
+
+If you wish to use an alternative [package index](../configuration/indexes.md) to resolve
+dependencies, you can provide the index with the `--index` option:
+
+```console
+$ uv add --index "https://example.com/simple" --script example.py 'requests<3' 'rich'
+```
+
+This will include the package data in the inline metadata:
+
+```python
+# [[tool.uv.index]]
+# url = "https://example.com/simple"
+```
+
+If you require authentication to access the package index, then please refer to the
+[package index](../configuration/indexes.md) documentation.
+
+## Locking dependencies
+
+uv supports locking dependencies for PEP 723 scripts using the `uv.lock` file format. Unlike with
+projects, scripts must be explicitly locked using `uv lock`:
+
+```console
+$ uv lock --script example.py
+```
+
+Running `uv lock --script` will create a `.lock` file adjacent to the script (e.g.,
+`example.py.lock`).
+
+Once locked, subsequent operations like `uv run --script`, `uv add --script`, `uv export --script`,
+and `uv tree --script` will reuse the locked dependencies, updating the lockfile if necessary.
+
+If no such lockfile is present, commands like `uv export --script` will still function as expected,
+but will not create a lockfile.
+
 ## Improving reproducibility
 
-uv supports an `exclude-newer` field in the `tool.uv` section of inline script metadata to limit uv
-to only considering distributions released before a specific date. This is useful for improving the
-reproducibility of your script when run at a later point in time.
+In addition to locking dependencies, uv supports an `exclude-newer` field in the `tool.uv` section
+of inline script metadata to limit uv to only considering distributions released before a specific
+date. This is useful for improving the reproducibility of your script when run at a later point in
+time.
 
 The date must be specified as an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamp
 (e.g., `2006-12-02T02:07:43Z`).

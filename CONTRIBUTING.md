@@ -8,30 +8,13 @@ which are good opportunities for new contributors.
 
 ## Setup
 
-[Rust](https://rustup.rs/), a C compiler, and CMake are required to build uv.
+[Rust](https://rustup.rs/) (and a C compiler) are required to build uv.
 
-### Linux
-
-On Ubuntu and other Debian-based distributions, you can install the C compiler and CMake with:
+On Ubuntu and other Debian-based distributions, you can install a C compiler with:
 
 ```shell
-sudo apt install build-essential cmake
+sudo apt install build-essential
 ```
-
-### macOS
-
-You can install CMake with Homebrew:
-
-```shell
-brew install cmake
-```
-
-See the [Python](#python) section for instructions on installing the Python versions.
-
-### Windows
-
-You can install CMake from the [installers](https://cmake.org/download/) or with
-`pipx install cmake`.
 
 ## Testing
 
@@ -47,7 +30,7 @@ Testing uv requires multiple specific Python versions; they can be installed wit
 cargo run python install
 ```
 
-The storage directory can be configured with `UV_PYTHON_INSTALL_DIR`.
+The storage directory can be configured with `UV_PYTHON_INSTALL_DIR`. (It must be an absolute path.)
 
 ### Snapshot testing
 
@@ -80,18 +63,6 @@ You can invoke your development version of uv with `cargo run -- <args>`. For ex
 ```shell
 cargo run -- venv
 cargo run -- pip install requests
-```
-
-### Testing on Windows
-
-When testing debug builds on Windows, the stack can overflow resulting in a `STATUS_STACK_OVERFLOW`
-error code. This is due to a small stack size limit on Windows that we encounter when running
-unoptimized builds — the release builds do not have this problem. We
-[added a `UV_STACK_SIZE` variable](https://github.com/astral-sh/uv/pull/941) to bypass this problem
-during testing. We recommend bumping the stack size from the default of 1MB to 3MB, for example:
-
-```powershell
-$Env:UV_STACK_SIZE = '3000000'
 ```
 
 ## Running inside a Docker container
@@ -206,7 +177,7 @@ Changelog entries and version bumps are automated. First, run:
 
 Then, editorialize the `CHANGELOG.md` file to ensure entries are consistently styled.
 
-Then, open a pull request e.g. `Bump version to ...`.
+Then, open a pull request, e.g., `Bump version to ...`.
 
 Binary builds will automatically be tested for the release.
 

@@ -1,9 +1,12 @@
-use pubgrub::Range;
+use std::collections::Bound;
 use std::collections::btree_map::{BTreeMap, Entry};
+use std::ops::RangeBounds;
 use std::sync::OnceLock;
+
+use pubgrub::Ranges;
 use tracing::instrument;
 
-use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
+use uv_client::{FlatIndexEntry, OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
@@ -18,7 +21,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{yanks::AllowedYanks, ExcludeNewer, RequiresPython};
+use crate::{ExcludeNewer, RequiresPython, yanks::AllowedYanks};
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -38,7 +41,7 @@ impl VersionMap {
     ///
     /// PEP 592: <https://peps.python.org/pep-0592/#warehouse-pypi-implementation-notes>
     #[instrument(skip_all, fields(package_name))]
-    pub(crate) fn from_metadata(
+    pub(crate) fn from_simple_metadata(
         simple_metadata: OwnedArchive<SimpleMetadata>,
         package_name: &PackageName,
         index: &IndexUrl,
@@ -51,6 +54,7 @@ impl VersionMap {
         build_options: &BuildOptions,
     ) -> Self {
         let mut stable = false;
+        let mut local = false;
         let mut map = BTreeMap::new();
         // Create stubs for each entry in simple metadata. The full conversion
         // from a `VersionFiles` to a PrioritizedDist for each version
@@ -59,6 +63,7 @@ impl VersionMap {
             let version = rkyv::deserialize::<Version, rkyv::rancor::Error>(&datum.version)
                 .expect("archived version always deserializes");
             stable |= version.is_stable();
+            local |= version.is_local();
             map.insert(
                 version,
                 LazyPrioritizedDist::OnlySimple(SimplePrioritizedDist {
@@ -97,6 +102,7 @@ impl VersionMap {
             inner: VersionMapInner::Lazy(VersionMapLazy {
                 map,
                 stable,
+                local,
                 simple_metadata,
                 no_binary: build_options.no_binary_package(package_name),
                 no_build: build_options.no_build_package(package_name),
@@ -110,30 +116,40 @@ impl VersionMap {
         }
     }
 
-    /// Return the [`DistFile`] for the given version, if any.
-    pub(crate) fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
-        self.get_with_version(version).map(|(_version, dist)| dist)
+    #[instrument(skip_all, fields(package_name))]
+    pub(crate) fn from_flat_metadata(
+        flat_metadata: Vec<FlatIndexEntry>,
+        tags: Option<&Tags>,
+        hasher: &HashStrategy,
+        build_options: &BuildOptions,
+    ) -> Self {
+        let mut stable = false;
+        let mut local = false;
+        let mut map = BTreeMap::new();
+
+        for (version, prioritized_dist) in
+            FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options)
+        {
+            stable |= version.is_stable();
+            local |= version.is_local();
+            map.insert(version, prioritized_dist);
+        }
+
+        Self {
+            inner: VersionMapInner::Eager(VersionMapEager { map, stable, local }),
+        }
     }
 
-    /// Return the [`DistFile`] and the `Version` from the map for the given
-    /// version, if any.
-    ///
-    /// This is useful when you depend on access to the specific `Version`
-    /// stored in this map. For example, the versions `1.2.0` and `1.2` are
-    /// semantically equivalent, but when converted to strings, they are
-    /// distinct.
-    pub(crate) fn get_with_version(
-        &self,
-        version: &Version,
-    ) -> Option<(&Version, &PrioritizedDist)> {
+    /// Return the [`DistFile`] for the given version, if any.
+    pub(crate) fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
         match self.inner {
-            VersionMapInner::Eager(ref eager) => eager.map.get_key_value(version),
-            VersionMapInner::Lazy(ref lazy) => lazy.get_with_version(version),
+            VersionMapInner::Eager(ref eager) => eager.map.get(version),
+            VersionMapInner::Lazy(ref lazy) => lazy.get(version),
         }
     }
 
     /// Return an iterator over the versions in this map.
-    pub(crate) fn versions(&self) -> impl Iterator<Item = &Version> {
+    pub(crate) fn versions(&self) -> impl DoubleEndedIterator<Item = &Version> {
         match &self.inner {
             VersionMapInner::Eager(eager) => either::Either::Left(eager.map.keys()),
             VersionMapInner::Lazy(lazy) => either::Either::Right(lazy.map.keys()),
@@ -156,8 +172,8 @@ impl VersionMap {
     /// for each version.
     pub(crate) fn iter(
         &self,
-        range: &Range<Version>,
-    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> + ExactSizeIterator {
+        range: &Ranges<Version>,
+    ) -> impl DoubleEndedIterator<Item = (&Version, VersionMapDistHandle)> {
         // Performance optimization: If we only have a single version, return that version directly.
         if let Some(version) = range.as_singleton() {
             either::Either::Left(match self.inner {
@@ -185,32 +201,36 @@ impl VersionMap {
         } else {
             either::Either::Right(match self.inner {
                 VersionMapInner::Eager(ref eager) => {
-                    either::Either::Left(eager.map.iter().map(|(version, dist)| {
-                        let version_map_dist = VersionMapDistHandle {
-                            inner: VersionMapDistHandleInner::Eager(dist),
-                        };
-                        (version, version_map_dist)
-                    }))
+                    either::Either::Left(eager.map.range(BoundingRange::from(range)).map(
+                        |(version, dist)| {
+                            let version_map_dist = VersionMapDistHandle {
+                                inner: VersionMapDistHandleInner::Eager(dist),
+                            };
+                            (version, version_map_dist)
+                        },
+                    ))
                 }
                 VersionMapInner::Lazy(ref lazy) => {
-                    either::Either::Right(lazy.map.iter().map(|(version, dist)| {
-                        let version_map_dist = VersionMapDistHandle {
-                            inner: VersionMapDistHandleInner::Lazy { lazy, dist },
-                        };
-                        (version, version_map_dist)
-                    }))
+                    either::Either::Right(lazy.map.range(BoundingRange::from(range)).map(
+                        |(version, dist)| {
+                            let version_map_dist = VersionMapDistHandle {
+                                inner: VersionMapDistHandleInner::Lazy { lazy, dist },
+                            };
+                            (version, version_map_dist)
+                        },
+                    ))
                 }
             })
         }
     }
 
     /// Return the [`Hashes`] for the given version, if any.
-    pub(crate) fn hashes(&self, version: &Version) -> Option<Vec<HashDigest>> {
+    pub(crate) fn hashes(&self, version: &Version) -> Option<&[HashDigest]> {
         match self.inner {
             VersionMapInner::Eager(ref eager) => {
-                eager.map.get(version).map(|file| file.hashes().to_vec())
+                eager.map.get(version).map(PrioritizedDist::hashes)
             }
-            VersionMapInner::Lazy(ref lazy) => lazy.get(version).map(|file| file.hashes().to_vec()),
+            VersionMapInner::Lazy(ref lazy) => lazy.get(version).map(PrioritizedDist::hashes),
         }
     }
 
@@ -232,14 +252,23 @@ impl VersionMap {
             VersionMapInner::Lazy(ref map) => map.stable,
         }
     }
+
+    /// Returns `true` if the map contains at least one local version (e.g., `2.6.0+cpu`).
+    pub(crate) fn local(&self) -> bool {
+        match self.inner {
+            VersionMapInner::Eager(ref map) => map.local,
+            VersionMapInner::Lazy(ref map) => map.local,
+        }
+    }
 }
 
 impl From<FlatDistributions> for VersionMap {
     fn from(flat_index: FlatDistributions) -> Self {
         let stable = flat_index.iter().any(|(version, _)| version.is_stable());
+        let local = flat_index.iter().any(|(version, _)| version.is_local());
         let map = flat_index.into();
         Self {
-            inner: VersionMapInner::Eager(VersionMapEager { map, stable }),
+            inner: VersionMapInner::Eager(VersionMapEager { map, stable, local }),
         }
     }
 }
@@ -280,6 +309,7 @@ impl<'a> VersionMapDistHandle<'a> {
 
 /// The kind of internal version map we have.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum VersionMapInner {
     /// All distributions are fully materialized in memory.
     ///
@@ -301,6 +331,8 @@ struct VersionMapEager {
     map: BTreeMap<Version, PrioritizedDist>,
     /// Whether the version map contains at least one stable (non-pre-release) version.
     stable: bool,
+    /// Whether the version map contains at least one local version.
+    local: bool,
 }
 
 /// A map that lazily materializes some prioritized distributions upon access.
@@ -312,11 +344,14 @@ struct VersionMapEager {
 /// avoiding another conversion step into a fully filled out `VersionMap` can
 /// provide substantial savings in some cases.
 #[derive(Debug)]
+#[allow(clippy::struct_excessive_bools)]
 struct VersionMapLazy {
     /// A map from version to possibly-initialized distribution.
     map: BTreeMap<Version, LazyPrioritizedDist>,
     /// Whether the version map contains at least one stable (non-pre-release) version.
     stable: bool,
+    /// Whether the version map contains at least one local version.
+    local: bool,
     /// The raw simple metadata from which `PrioritizedDist`s should
     /// be constructed.
     simple_metadata: OwnedArchive<SimpleMetadata>,
@@ -342,16 +377,9 @@ struct VersionMapLazy {
 impl VersionMapLazy {
     /// Returns the distribution for the given version, if it exists.
     fn get(&self, version: &Version) -> Option<&PrioritizedDist> {
-        self.get_with_version(version)
-            .map(|(_, prioritized_dist)| prioritized_dist)
-    }
-
-    /// Returns the distribution for the given version along with the version
-    /// in this map, if it exists.
-    fn get_with_version(&self, version: &Version) -> Option<(&Version, &PrioritizedDist)> {
-        let (version, lazy_dist) = self.map.get_key_value(version)?;
+        let lazy_dist = self.map.get(version)?;
         let priority_dist = self.get_lazy(lazy_dist)?;
-        Some((version, priority_dist))
+        Some(priority_dist)
     }
 
     /// Given a reference to a possibly-initialized distribution that is in
@@ -411,7 +439,7 @@ impl VersionMapLazy {
                 };
 
                 // Prioritize amongst all available files.
-                let yanked = file.yanked.clone();
+                let yanked = file.yanked.as_deref();
                 let hashes = file.hashes.clone();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
@@ -419,7 +447,7 @@ impl VersionMapLazy {
                             &filename,
                             &filename.name,
                             &filename.version,
-                            &hashes,
+                            hashes.as_slice(),
                             yanked,
                             excluded,
                             upload_time,
@@ -435,7 +463,7 @@ impl VersionMapLazy {
                         let compatibility = self.source_dist_compatibility(
                             &filename.name,
                             &filename.version,
-                            &hashes,
+                            hashes.as_slice(),
                             yanked,
                             excluded,
                             upload_time,
@@ -466,7 +494,7 @@ impl VersionMapLazy {
         name: &PackageName,
         version: &Version,
         hashes: &[HashDigest],
-        yanked: Option<Yanked>,
+        yanked: Option<&Yanked>,
         excluded: bool,
         upload_time: Option<i64>,
     ) -> SourceDistCompatibility {
@@ -485,7 +513,9 @@ impl VersionMapLazy {
         // Check if yanked
         if let Some(yanked) = yanked {
             if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
-                return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(yanked));
+                return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(
+                    yanked.clone(),
+                ));
             }
         }
 
@@ -513,7 +543,7 @@ impl VersionMapLazy {
         name: &PackageName,
         version: &Version,
         hashes: &[HashDigest],
-        yanked: Option<Yanked>,
+        yanked: Option<&Yanked>,
         excluded: bool,
         upload_time: Option<i64>,
     ) -> WheelCompatibility {
@@ -530,19 +560,27 @@ impl VersionMapLazy {
         // Check if yanked
         if let Some(yanked) = yanked {
             if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
-                return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked));
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked.clone()));
             }
         }
 
         // Determine a compatibility for the wheel based on tags.
-        let priority = match &self.tags {
-            Some(tags) => match filename.compatibility(tags) {
+        let priority = if let Some(tags) = &self.tags {
+            match filename.compatibility(tags) {
                 TagCompatibility::Incompatible(tag) => {
-                    return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag))
+                    return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(tag));
                 }
                 TagCompatibility::Compatible(priority) => Some(priority),
-            },
-            None => None,
+            }
+        } else {
+            // Check if the wheel is compatible with the `requires-python` (i.e., the Python
+            // ABI tag is not less than the `requires-python` minimum version).
+            if !self.requires_python.matches_wheel_tag(filename) {
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
+                    IncompatibleTag::AbiPythonVersion,
+                ));
+            }
+            None
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
@@ -560,16 +598,8 @@ impl VersionMapLazy {
             }
         };
 
-        // Check if the wheel is compatible with the `requires-python` (i.e., the Python ABI tag
-        // is not less than the `requires-python` minimum version).
-        if !self.requires_python.matches_wheel_tag(filename) {
-            return WheelCompatibility::Incompatible(IncompatibleWheel::Tag(
-                IncompatibleTag::AbiPythonVersion,
-            ));
-        }
-
         // Break ties with the build tag.
-        let build_tag = filename.build_tag.clone();
+        let build_tag = filename.build_tag().cloned();
 
         WheelCompatibility::Compatible(hash, priority, build_tag)
     }
@@ -579,7 +609,7 @@ impl VersionMapLazy {
 /// a single version of a package.
 #[derive(Debug)]
 enum LazyPrioritizedDist {
-    /// Represents a eagerly constructed distribution from a
+    /// Represents an eagerly constructed distribution from a
     /// `FlatDistributions`.
     OnlyFlat(PrioritizedDist),
     /// Represents a lazily constructed distribution from an index into a
@@ -608,4 +638,30 @@ struct SimplePrioritizedDist {
     /// construct a distribution. (One easy way to effect this, at the time
     /// of writing, is to use `--exclude-newer 1900-01-01`.)
     dist: OnceLock<Option<PrioritizedDist>>,
+}
+
+/// A range that can be used to iterate over a subset of a [`BTreeMap`].
+#[derive(Debug)]
+struct BoundingRange<'a> {
+    min: Bound<&'a Version>,
+    max: Bound<&'a Version>,
+}
+
+impl<'a> From<&'a Ranges<Version>> for BoundingRange<'a> {
+    fn from(value: &'a Ranges<Version>) -> Self {
+        let (min, max) = value
+            .bounding_range()
+            .unwrap_or((Bound::Unbounded, Bound::Unbounded));
+        Self { min, max }
+    }
+}
+
+impl<'a> RangeBounds<Version> for BoundingRange<'a> {
+    fn start_bound(&self) -> Bound<&'a Version> {
+        self.min
+    }
+
+    fn end_bound(&self) -> Bound<&'a Version> {
+        self.max
+    }
 }

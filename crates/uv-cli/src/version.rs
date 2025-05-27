@@ -3,6 +3,7 @@
 use std::fmt;
 
 use serde::Serialize;
+use uv_pep508::{PackageName, uv_pep440::Version};
 
 /// Information about the git repository where uv was built from.
 #[derive(Serialize)]
@@ -17,7 +18,9 @@ pub(crate) struct CommitInfo {
 /// uv's version.
 #[derive(Serialize)]
 pub struct VersionInfo {
-    /// uv's version, such as "0.5.1"
+    /// Name of the package (or "uv" if printing uv's own version)
+    pub package_name: Option<String>,
+    /// version, such as "0.5.1"
     version: String,
     /// Information about the git commit we may have been built from.
     ///
@@ -25,18 +28,36 @@ pub struct VersionInfo {
     commit_info: Option<CommitInfo>,
 }
 
+impl VersionInfo {
+    pub fn new(package_name: Option<&PackageName>, version: &Version) -> Self {
+        Self {
+            package_name: package_name.map(ToString::to_string),
+            version: version.to_string(),
+            commit_info: None,
+        }
+    }
+}
+
 impl fmt::Display for VersionInfo {
     /// Formatted version information: "<version>[+<commits>] (<commit> <date>)"
+    ///
+    /// This is intended for consumption by `clap` to provide `uv --version`,
+    /// and intentionally omits the name of the package
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.version)?;
-
-        if let Some(ref ci) = self.commit_info {
-            if ci.commits_since_last_tag > 0 {
-                write!(f, "+{}", ci.commits_since_last_tag)?;
-            }
-            write!(f, " ({} {})", ci.short_commit_hash, ci.commit_date)?;
+        if let Some(ci) = &self.commit_info {
+            write!(f, "{ci}")?;
         }
+        Ok(())
+    }
+}
 
+impl fmt::Display for CommitInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.commits_since_last_tag > 0 {
+            write!(f, "+{}", self.commits_since_last_tag)?;
+        }
+        write!(f, " ({} {})", self.short_commit_hash, self.commit_date)?;
         Ok(())
     }
 }
@@ -48,7 +69,7 @@ impl From<VersionInfo> for clap::builder::Str {
 }
 
 /// Returns information about uv's version.
-pub fn version() -> VersionInfo {
+pub fn uv_self_version() -> VersionInfo {
     // Environment variables are only read at compile-time
     macro_rules! option_env_str {
         ($name:expr) => {
@@ -71,6 +92,7 @@ pub fn version() -> VersionInfo {
     });
 
     VersionInfo {
+        package_name: Some("uv".to_owned()),
         version,
         commit_info,
     }
@@ -85,6 +107,7 @@ mod tests {
     #[test]
     fn version_formatting() {
         let version = VersionInfo {
+            package_name: Some("uv".to_string()),
             version: "0.0.0".to_string(),
             commit_info: None,
         };
@@ -94,6 +117,7 @@ mod tests {
     #[test]
     fn version_formatting_with_commit_info() {
         let version = VersionInfo {
+            package_name: Some("uv".to_string()),
             version: "0.0.0".to_string(),
             commit_info: Some(CommitInfo {
                 short_commit_hash: "53b0f5d92".to_string(),
@@ -109,6 +133,7 @@ mod tests {
     #[test]
     fn version_formatting_with_commits_since_last_tag() {
         let version = VersionInfo {
+            package_name: Some("uv".to_string()),
             version: "0.0.0".to_string(),
             commit_info: Some(CommitInfo {
                 short_commit_hash: "53b0f5d92".to_string(),
@@ -124,6 +149,7 @@ mod tests {
     #[test]
     fn version_serializable() {
         let version = VersionInfo {
+            package_name: Some("uv".to_string()),
             version: "0.0.0".to_string(),
             commit_info: Some(CommitInfo {
                 short_commit_hash: "53b0f5d92".to_string(),
@@ -135,6 +161,7 @@ mod tests {
         };
         assert_json_snapshot!(version, @r#"
     {
+      "package_name": "uv",
       "version": "0.0.0",
       "commit_info": {
         "short_commit_hash": "53b0f5d92",

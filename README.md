@@ -26,16 +26,16 @@ An extremely fast Python package and project manager, written in Rust.
 - 🚀 A single tool to replace `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `twine`, `virtualenv`,
   and more.
 - ⚡️ [10-100x faster](https://github.com/astral-sh/uv/blob/main/BENCHMARKS.md) than `pip`.
-- 🐍 [Installs and manages](#python-management) Python versions.
-- 🛠️ [Runs and installs](#tool-management) Python applications.
-- ❇️ [Runs single-file scripts](#script-support), with support for
+- 🗂️ Provides [comprehensive project management](#projects), with a
+  [universal lockfile](https://docs.astral.sh/uv/concepts/projects/layout#the-lockfile).
+- ❇️ [Runs scripts](#scripts), with support for
   [inline dependency metadata](https://docs.astral.sh/uv/guides/scripts#declaring-script-dependencies).
-- 🗂️ Provides [comprehensive project management](#project-management), with a
-  [universal lockfile](https://docs.astral.sh/uv/concepts/projects#project-lockfile).
-- 🔩 Includes a [pip-compatible interface](#a-pip-compatible-interface) for a performance boost with
-  a familiar CLI.
-- 🏢 Supports Cargo-style [workspaces](https://docs.astral.sh/uv/concepts/workspaces) for scalable
-  projects.
+- 🐍 [Installs and manages](#python-versions) Python versions.
+- 🛠️ [Runs and installs](#tools) tools published as Python packages.
+- 🔩 Includes a [pip-compatible interface](#the-pip-interface) for a performance boost with a
+  familiar CLI.
+- 🏢 Supports Cargo-style [workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces) for
+  scalable projects.
 - 💾 Disk-space efficient, with a [global cache](https://docs.astral.sh/uv/concepts/cache) for
   dependency deduplication.
 - ⏬ Installable without Rust or Python via `curl` or `pip`.
@@ -87,7 +87,7 @@ Additionally, the command line reference documentation can be viewed with `uv he
 
 ## Features
 
-### Project management
+### Projects
 
 uv manages project dependencies and environments, with support for lockfiles, workspaces, and more,
 similar to `rye` or `poetry`:
@@ -109,6 +109,13 @@ Installed 2 packages in 1ms
 
 $ uv run ruff check
 All checks passed!
+
+$ uv lock
+Resolved 2 packages in 0.33ms
+
+$ uv sync
+Resolved 2 packages in 0.70ms
+Audited 1 package in 0.02ms
 ```
 
 See the [project documentation](https://docs.astral.sh/uv/guides/projects/) to get started.
@@ -116,7 +123,31 @@ See the [project documentation](https://docs.astral.sh/uv/guides/projects/) to g
 uv also supports building and publishing projects, even if they're not managed with uv. See the
 [publish guide](https://docs.astral.sh/uv/guides/publish/) to learn more.
 
-### Tool management
+### Scripts
+
+uv manages dependencies and environments for single-file scripts.
+
+Create a new script and add inline metadata declaring its dependencies:
+
+```console
+$ echo 'import requests; print(requests.get("https://astral.sh"))' > example.py
+
+$ uv add --script example.py requests
+Updated `example.py`
+```
+
+Then, run the script in an isolated virtual environment:
+
+```console
+$ uv run example.py
+Reading inline script metadata from: example.py
+Installed 5 packages in 12ms
+<Response [200]>
+```
+
+See the [scripts documentation](https://docs.astral.sh/uv/guides/scripts/) to get started.
+
+### Tools
 
 uv executes and installs command-line tools provided by Python packages, similar to `pipx`.
 
@@ -154,7 +185,7 @@ ruff 0.5.0
 
 See the [tools documentation](https://docs.astral.sh/uv/guides/tools/) to get started.
 
-### Python management
+### Python versions
 
 uv installs Python and allows quickly switching between versions.
 
@@ -196,31 +227,7 @@ Pinned `.python-version` to `3.11`
 See the [Python installation documentation](https://docs.astral.sh/uv/guides/install-python/) to get
 started.
 
-### Script support
-
-uv manages dependencies and environments for single-file scripts.
-
-Create a new script and add inline metadata declaring its dependencies:
-
-```console
-$ echo 'import requests; print(requests.get("https://astral.sh"))' > example.py
-
-$ uv add --script example.py requests
-Updated `example.py`
-```
-
-Then, run the script in an isolated virtual environment:
-
-```console
-$ uv run example.py
-Reading inline script metadata from: example.py
-Installed 5 packages in 12ms
-<Response [200]>
-```
-
-See the [scripts documentation](https://docs.astral.sh/uv/guides/scripts/) to get started.
-
-### A pip-compatible interface
+### The pip interface
 
 uv provides a drop-in replacement for common `pip`, `pip-tools`, and `virtualenv` commands.
 
@@ -276,6 +283,16 @@ See uv's [versioning policy](https://docs.astral.sh/uv/reference/versioning/) do
 We are passionate about supporting contributors of all levels of experience and would love to see
 you get involved in the project. See the
 [contributing guide](https://github.com/astral-sh/uv/blob/main/CONTRIBUTING.md) to get started.
+
+## FAQ
+
+#### How do you pronounce uv?
+
+It's pronounced as "you - vee" ([`/juː viː/`](https://en.wikipedia.org/wiki/Help:IPA/English#Key))
+
+#### How should I stylize uv?
+
+Just "uv", please. See the [style guide](./STYLE.md#styling-uv) for details.
 
 ## Acknowledgements
 

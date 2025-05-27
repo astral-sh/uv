@@ -2,28 +2,31 @@ use std::path::{Path, PathBuf};
 
 use futures::{FutureExt, StreamExt};
 use reqwest::Response;
-use tracing::{debug, info_span, warn, Instrument};
+use tracing::{Instrument, debug, info_span, warn};
 use url::Url;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::cache_digest;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{File, FileLocation, IndexUrl, UrlString};
+use uv_pypi_types::HashDigests;
+use uv_redacted::DisplaySafeUrl;
+use uv_small_str::SmallString;
 
 use crate::cached_client::{CacheControl, CachedClientError};
 use crate::html::SimpleHtml;
-use crate::{Connectivity, Error, ErrorKind, OwnedArchive, RegistryClient};
+use crate::{CachedClient, Connectivity, Error, ErrorKind, OwnedArchive};
 
 #[derive(Debug, thiserror::Error)]
 pub enum FlatIndexError {
     #[error("Expected a file URL, but received: {0}")]
-    NonFileUrl(Url),
+    NonFileUrl(DisplaySafeUrl),
 
     #[error("Failed to read `--find-links` directory: {0}")]
     FindLinksDirectory(PathBuf, #[source] FindLinksDirectoryError),
 
     #[error("Failed to read `--find-links` URL: {0}")]
-    FindLinksUrl(Url, #[source] Error),
+    FindLinksUrl(DisplaySafeUrl, #[source] Error),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -89,37 +92,29 @@ impl FlatIndexEntries {
 /// remote HTML indexes).
 #[derive(Debug, Clone)]
 pub struct FlatIndexClient<'a> {
-    client: &'a RegistryClient,
+    client: &'a CachedClient,
+    connectivity: Connectivity,
     cache: &'a Cache,
 }
 
 impl<'a> FlatIndexClient<'a> {
     /// Create a new [`FlatIndexClient`].
-    pub fn new(client: &'a RegistryClient, cache: &'a Cache) -> Self {
-        Self { client, cache }
+    pub fn new(client: &'a CachedClient, connectivity: Connectivity, cache: &'a Cache) -> Self {
+        Self {
+            client,
+            connectivity,
+            cache,
+        }
     }
 
     /// Read the directories and flat remote indexes from `--find-links`.
-    #[allow(clippy::result_large_err)]
-    pub async fn fetch(
+    pub async fn fetch_all(
         &self,
         indexes: impl Iterator<Item = &IndexUrl>,
     ) -> Result<FlatIndexEntries, FlatIndexError> {
         let mut fetches = futures::stream::iter(indexes)
-            .map(|index| async move {
-                let entries = match index {
-                    IndexUrl::Path(url) => {
-                        let path = url
-                            .to_file_path()
-                            .map_err(|()| FlatIndexError::NonFileUrl(url.to_url()))?;
-                        Self::read_from_directory(&path, index)
-                            .map_err(|err| FlatIndexError::FindLinksDirectory(path.clone(), err))?
-                    }
-                    IndexUrl::Pypi(url) | IndexUrl::Url(url) => self
-                        .read_from_url(url, index)
-                        .await
-                        .map_err(|err| FlatIndexError::FindLinksUrl(url.to_url(), err))?,
-                };
+            .map(async |index| {
+                let entries = self.fetch_index(index).await?;
                 if entries.is_empty() {
                     warn!("No packages found in `--find-links` entry: {}", index);
                 } else {
@@ -144,10 +139,27 @@ impl<'a> FlatIndexClient<'a> {
         Ok(results)
     }
 
+    /// Fetch a flat remote index from a `--find-links` URL.
+    pub async fn fetch_index(&self, index: &IndexUrl) -> Result<FlatIndexEntries, FlatIndexError> {
+        match index {
+            IndexUrl::Path(url) => {
+                let path = url
+                    .to_file_path()
+                    .map_err(|()| FlatIndexError::NonFileUrl(url.to_url()))?;
+                Self::read_from_directory(&path, index)
+                    .map_err(|err| FlatIndexError::FindLinksDirectory(path.clone(), err))
+            }
+            IndexUrl::Pypi(url) | IndexUrl::Url(url) => self
+                .read_from_url(url, index)
+                .await
+                .map_err(|err| FlatIndexError::FindLinksUrl(url.to_url(), err)),
+        }
+    }
+
     /// Read a flat remote index from a `--find-links` URL.
     async fn read_from_url(
         &self,
-        url: &Url,
+        url: &DisplaySafeUrl,
         flat_index: &IndexUrl,
     ) -> Result<FlatIndexEntries, Error> {
         let cache_entry = self.cache.entry(
@@ -155,10 +167,10 @@ impl<'a> FlatIndexClient<'a> {
             "html",
             format!("{}.msgpack", cache_digest(&url.to_string())),
         );
-        let cache_control = match self.client.connectivity() {
+        let cache_control = match self.connectivity {
             Connectivity::Online => CacheControl::from(
                 self.cache
-                    .freshness(&cache_entry, None)
+                    .freshness(&cache_entry, None, None)
                     .map_err(ErrorKind::Io)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,
@@ -166,8 +178,9 @@ impl<'a> FlatIndexClient<'a> {
 
         let flat_index_request = self
             .client
-            .uncached_client(url)
-            .get(url.clone())
+            .uncached()
+            .for_host(url)
+            .get(Url::from(url.clone()))
             .header("Accept-Encoding", "gzip")
             .header("Accept", "text/html")
             .build()
@@ -176,7 +189,7 @@ impl<'a> FlatIndexClient<'a> {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = response.url().clone();
+                let url = DisplaySafeUrl::from(response.url().clone());
 
                 let text = response
                     .text()
@@ -185,14 +198,17 @@ impl<'a> FlatIndexClient<'a> {
                 let SimpleHtml { base, files } = SimpleHtml::parse(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;
 
+                // Convert to a reference-counted string.
+                let base = SmallString::from(base.as_str());
+
                 let unarchived: Vec<File> = files
                     .into_iter()
                     .filter_map(|file| {
-                        match File::try_from(file, base.as_url()) {
+                        match File::try_from(file, &base) {
                             Ok(file) => Some(file),
                             Err(err) => {
                                 // Ignore files with unparsable version specifiers.
-                                warn!("Skipping file in {url}: {err}");
+                                warn!("Skipping file in {}: {err}", &url);
                                 None
                             }
                         }
@@ -205,7 +221,6 @@ impl<'a> FlatIndexClient<'a> {
         };
         let response = self
             .client
-            .cached_client()
             .get_cacheable_with_retry(
                 flat_index_request,
                 &cache_entry,
@@ -269,21 +284,22 @@ impl<'a> FlatIndexClient<'a> {
                 }
             }
 
-            let Ok(filename) = entry.file_name().into_string() else {
+            let filename = entry.file_name();
+            let Some(filename) = filename.to_str() else {
                 warn!(
                     "Skipping non-UTF-8 filename in `--find-links` directory: {}",
-                    entry.file_name().to_string_lossy()
+                    filename.to_string_lossy()
                 );
                 continue;
             };
 
             // SAFETY: The index path is itself constructed from a URL.
-            let url = Url::from_file_path(entry.path()).unwrap();
+            let url = DisplaySafeUrl::from_file_path(entry.path()).unwrap();
 
             let file = File {
                 dist_info_metadata: false,
-                filename: filename.to_string(),
-                hashes: Vec::new(),
+                filename: filename.into(),
+                hashes: HashDigests::empty(),
                 requires_python: None,
                 size: None,
                 upload_time_utc_ms: None,
@@ -291,7 +307,7 @@ impl<'a> FlatIndexClient<'a> {
                 yanked: None,
             };
 
-            let Some(filename) = DistFilename::try_from_normalized_filename(&filename) else {
+            let Some(filename) = DistFilename::try_from_normalized_filename(filename) else {
                 debug!(
                     "Ignoring `--find-links` entry (expected a wheel or source distribution filename): {}",
                     entry.path().display()

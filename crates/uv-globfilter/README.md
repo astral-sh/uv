@@ -16,7 +16,7 @@ When traversing the directory, you can use
 ## Syntax
 
 This crate supports the cross-language, restricted glob syntax from
-[PEP 639](https://peps.python.org/pep-0639/#add-license-FILES-key):
+[PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/):
 
 - Alphanumeric characters, underscores (`_`), hyphens (`-`) and dots (`.`) are matched verbatim.
 - The special glob characters are:
@@ -24,8 +24,8 @@ This crate supports the cross-language, restricted glob syntax from
   - `?`: Matches a single character except the path separator
   - `**`: Matches any number of characters including path separators
   - `[]`, containing only the verbatim matched characters: Matches a single of the characters
-    contained. Within `[...]`, the hyphen indicates a locale-agnostic range (e.g. `a-z`, order based
-    on Unicode code points). Hyphens at the start or end are matched literally.
+    contained. Within `[...]`, the hyphen indicates a locale-agnostic range (e.g., `a-z`, order
+    based on Unicode code points). Hyphens at the start or end are matched literally.
 - The path separator is the forward slash character (`/`). Patterns are relative to the given
   directory, a leading slash character for absolute paths is not supported.
 - Parent directory indicators (`..`) are not allowed.

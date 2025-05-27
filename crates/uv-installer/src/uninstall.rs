@@ -8,9 +8,11 @@ pub async fn uninstall(
         let dist = dist.clone();
         move || match dist {
             InstalledDist::Registry(_) | InstalledDist::Url(_) => {
-                Ok(uv_install_wheel::uninstall_wheel(dist.path())?)
+                Ok(uv_install_wheel::uninstall_wheel(dist.install_path())?)
             }
-            InstalledDist::EggInfoDirectory(_) => Ok(uv_install_wheel::uninstall_egg(dist.path())?),
+            InstalledDist::EggInfoDirectory(_) => {
+                Ok(uv_install_wheel::uninstall_egg(dist.install_path())?)
+            }
             InstalledDist::LegacyEditable(dist) => {
                 Ok(uv_install_wheel::uninstall_legacy_editable(&dist.egg_link)?)
             }
@@ -24,7 +26,9 @@ pub async fn uninstall(
 
 #[derive(thiserror::Error, Debug)]
 pub enum UninstallError {
-    #[error("Unable to uninstall `{0}`. distutils-installed distributions do not include the metadata required to uninstall safely.")]
+    #[error(
+        "Unable to uninstall `{0}`. distutils-installed distributions do not include the metadata required to uninstall safely."
+    )]
     Distutils(InstalledEggInfoFile),
     #[error(transparent)]
     Uninstall(#[from] uv_install_wheel::Error),

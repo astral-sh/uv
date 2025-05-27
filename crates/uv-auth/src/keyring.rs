@@ -1,7 +1,8 @@
-use std::process::Stdio;
+use std::{io::Write, process::Stdio};
 use tokio::process::Command;
 use tracing::{instrument, trace, warn};
-use url::Url;
+use uv_redacted::DisplaySafeUrlRef;
+use uv_warnings::warn_user_once;
 
 use crate::credentials::Credentials;
 
@@ -19,7 +20,7 @@ pub(crate) enum KeyringProviderBackend {
     /// Use the `keyring` command to fetch credentials.
     Subprocess,
     #[cfg(test)]
-    Dummy(std::collections::HashMap<(String, &'static str), &'static str>),
+    Dummy(Vec<(String, &'static str, &'static str)>),
 }
 
 impl KeyringProvider {
@@ -35,7 +36,11 @@ impl KeyringProvider {
     /// Returns [`None`] if no password was found for the username or if any errors
     /// are encountered in the keyring backend.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
-    pub async fn fetch(&self, url: &Url, username: &str) -> Option<Credentials> {
+    pub async fn fetch(
+        &self,
+        url: &DisplaySafeUrlRef<'_>,
+        username: Option<&str>,
+    ) -> Option<Credentials> {
         // Validate the request
         debug_assert!(
             url.host_str().is_some(),
@@ -46,14 +51,14 @@ impl KeyringProvider {
             "Should only use keyring for urls without a password"
         );
         debug_assert!(
-            !username.is_empty(),
-            "Should only use keyring with a username"
+            !username.map(str::is_empty).unwrap_or(false),
+            "Should only use keyring with a non-empty username"
         );
 
         // Check the full URL first
         // <https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/network/auth.py#L376C1-L379C14>
         trace!("Checking keyring for URL {url}");
-        let mut password = match self.backend {
+        let mut credentials = match self.backend {
             KeyringProviderBackend::Subprocess => {
                 self.fetch_subprocess(url.as_str(), username).await
             }
@@ -63,14 +68,14 @@ impl KeyringProvider {
             }
         };
         // And fallback to a check for the host
-        if password.is_none() {
+        if credentials.is_none() {
             let host = if let Some(port) = url.port() {
                 format!("{}:{}", url.host_str()?, port)
             } else {
                 url.host_str()?.to_string()
             };
             trace!("Checking keyring for host {host}");
-            password = match self.backend {
+            credentials = match self.backend {
                 KeyringProviderBackend::Subprocess => self.fetch_subprocess(&host, username).await,
                 #[cfg(test)]
                 KeyringProviderBackend::Dummy(ref store) => {
@@ -79,19 +84,36 @@ impl KeyringProvider {
             };
         }
 
-        password.map(|password| Credentials::new(Some(username.to_string()), Some(password)))
+        credentials.map(|(username, password)| Credentials::basic(Some(username), Some(password)))
     }
 
     #[instrument(skip(self))]
-    async fn fetch_subprocess(&self, service_name: &str, username: &str) -> Option<String> {
+    async fn fetch_subprocess(
+        &self,
+        service_name: &str,
+        username: Option<&str>,
+    ) -> Option<(String, String)> {
         // https://github.com/pypa/pip/blob/24.0/src/pip/_internal/network/auth.py#L136-L141
-        let child = Command::new("keyring")
-            .arg("get")
-            .arg(service_name)
-            .arg(username)
+        let mut command = Command::new("keyring");
+        command.arg("get").arg(service_name);
+
+        if let Some(username) = username {
+            command.arg(username);
+        } else {
+            command.arg("--mode").arg("creds");
+        }
+
+        let child = command
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            // If we're using `--mode creds`, we need to capture the output in order to avoid
+            // showing users an "unrecognized arguments: --mode" error; otherwise, we stream stderr
+            // so the user has visibility into keyring's behavior if it's doing something slow
+            .stderr(if username.is_some() {
+                Stdio::inherit()
+            } else {
+                Stdio::piped()
+            })
             .spawn()
             .inspect_err(|err| warn!("Failure running `keyring` command: {err}"))
             .ok()?;
@@ -103,37 +125,84 @@ impl KeyringProvider {
             .ok()?;
 
         if output.status.success() {
-            // On success, parse the newline terminated password
-            String::from_utf8(output.stdout)
+            // If we captured stderr, display it in case it's helpful to the user
+            // TODO(zanieb): This was done when we added `--mode creds` support for parity with the
+            // existing behavior, but it might be a better UX to hide this on success? It also
+            // might be problematic that we're not streaming it. We could change this given some
+            // user feedback.
+            std::io::stderr().write_all(&output.stderr).ok();
+
+            // On success, parse the newline terminated credentials
+            let output = String::from_utf8(output.stdout)
                 .inspect_err(|err| warn!("Failed to parse response from `keyring` command: {err}"))
-                .ok()
-                .map(|password| password.trim_end().to_string())
+                .ok()?;
+
+            let (username, password) = if let Some(username) = username {
+                // We're only expecting a password
+                let password = output.trim_end();
+                (username, password)
+            } else {
+                // We're expecting a username and password
+                let mut lines = output.lines();
+                let username = lines.next()?;
+                let Some(password) = lines.next() else {
+                    warn!(
+                        "Got username without password for `{service_name}` from `keyring` command"
+                    );
+                    return None;
+                };
+                (username, password)
+            };
+
+            if password.is_empty() {
+                // We allow this for backwards compatibility, but it might be better to return
+                // `None` instead if there's confusion from users — we haven't seen this in practice
+                // yet.
+                warn!("Got empty password for `{username}@{service_name}` from `keyring` command");
+            }
+
+            Some((username.to_string(), password.to_string()))
         } else {
             // On failure, no password was available
+            let stderr = std::str::from_utf8(&output.stderr).ok()?;
+            if stderr.contains("unrecognized arguments: --mode") {
+                // N.B. We do not show the `service_name` here because we'll show the warning twice
+                //      otherwise, once for the URL and once for the realm.
+                warn_user_once!(
+                    "Attempted to fetch credentials using the `keyring` command, but it does not support `--mode creds`; upgrade to `keyring>=v25.2.1` for support or provide a username"
+                );
+            } else if username.is_none() {
+                // If we captured stderr, display it in case it's helpful to the user
+                std::io::stderr().write_all(&output.stderr).ok();
+            }
             None
         }
     }
 
     #[cfg(test)]
     fn fetch_dummy(
-        store: &std::collections::HashMap<(String, &'static str), &'static str>,
+        store: &Vec<(String, &'static str, &'static str)>,
         service_name: &str,
-        username: &str,
-    ) -> Option<String> {
-        store
-            .get(&(service_name.to_string(), username))
-            .map(|password| (*password).to_string())
+        username: Option<&str>,
+    ) -> Option<(String, String)> {
+        store.iter().find_map(|(service, user, password)| {
+            if service == service_name && username.is_none_or(|username| username == *user) {
+                Some(((*user).to_string(), (*password).to_string()))
+            } else {
+                None
+            }
+        })
     }
 
     /// Create a new provider with [`KeyringProviderBackend::Dummy`].
     #[cfg(test)]
-    pub fn dummy<S: Into<String>, T: IntoIterator<Item = ((S, &'static str), &'static str)>>(
+    pub fn dummy<S: Into<String>, T: IntoIterator<Item = (S, &'static str, &'static str)>>(
         iter: T,
     ) -> Self {
         Self {
             backend: KeyringProviderBackend::Dummy(
                 iter.into_iter()
-                    .map(|((service, username), password)| ((service.into(), username), password))
+                    .map(|(service, username, password)| (service.into(), username, password))
                     .collect(),
             ),
         }
@@ -142,10 +211,8 @@ impl KeyringProvider {
     /// Create a new provider with no credentials available.
     #[cfg(test)]
     pub fn empty() -> Self {
-        use std::collections::HashMap;
-
         Self {
-            backend: KeyringProviderBackend::Dummy(HashMap::new()),
+            backend: KeyringProviderBackend::Dummy(Vec::new()),
         }
     }
 }
@@ -154,15 +221,18 @@ impl KeyringProvider {
 mod tests {
     use super::*;
     use futures::FutureExt;
+    use url::Url;
 
     #[tokio::test]
     async fn fetch_url_no_host() {
         let url = Url::parse("file:/etc/bin/").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::AssertUnwindSafe(keyring.fetch(&url, "user"))
-            .catch_unwind()
-            .await;
+        let result = std::panic::AssertUnwindSafe(
+            keyring.fetch(&DisplaySafeUrlRef::from(&url), Some("user")),
+        )
+        .catch_unwind()
+        .await;
         assert!(result.is_err());
     }
 
@@ -171,45 +241,57 @@ mod tests {
         let url = Url::parse("https://user:password@example.com").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::AssertUnwindSafe(keyring.fetch(&url, url.username()))
-            .catch_unwind()
-            .await;
+        let result = std::panic::AssertUnwindSafe(
+            keyring.fetch(&DisplaySafeUrlRef::from(&url), Some(url.username())),
+        )
+        .catch_unwind()
+        .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
-    async fn fetch_url_with_no_username() {
+    async fn fetch_url_with_empty_username() {
         let url = Url::parse("https://example.com").unwrap();
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
-        let result = std::panic::AssertUnwindSafe(keyring.fetch(&url, url.username()))
-            .catch_unwind()
-            .await;
+        let result = std::panic::AssertUnwindSafe(
+            keyring.fetch(&DisplaySafeUrlRef::from(&url), Some(url.username())),
+        )
+        .catch_unwind()
+        .await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn fetch_url_no_auth() {
         let url = Url::parse("https://example.com").unwrap();
+        let url = DisplaySafeUrlRef::from(&url);
         let keyring = KeyringProvider::empty();
-        let credentials = keyring.fetch(&url, "user");
+        let credentials = keyring.fetch(&url, Some("user"));
         assert!(credentials.await.is_none());
     }
 
     #[tokio::test]
     async fn fetch_url() {
         let url = Url::parse("https://example.com").unwrap();
-        let keyring = KeyringProvider::dummy([((url.host_str().unwrap(), "user"), "password")]);
+        let keyring = KeyringProvider::dummy([(url.host_str().unwrap(), "user", "password")]);
         assert_eq!(
-            keyring.fetch(&url, "user").await,
-            Some(Credentials::new(
+            keyring
+                .fetch(&DisplaySafeUrlRef::from(&url), Some("user"))
+                .await,
+            Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("password".to_string())
             ))
         );
         assert_eq!(
-            keyring.fetch(&url.join("test").unwrap(), "user").await,
-            Some(Credentials::new(
+            keyring
+                .fetch(
+                    &DisplaySafeUrlRef::from(&url.join("test").unwrap()),
+                    Some("user")
+                )
+                .await,
+            Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("password".to_string())
             ))
@@ -219,8 +301,10 @@ mod tests {
     #[tokio::test]
     async fn fetch_url_no_match() {
         let url = Url::parse("https://example.com").unwrap();
-        let keyring = KeyringProvider::dummy([(("other.com", "user"), "password")]);
-        let credentials = keyring.fetch(&url, "user").await;
+        let keyring = KeyringProvider::dummy([("other.com", "user", "password")]);
+        let credentials = keyring
+            .fetch(&DisplaySafeUrlRef::from(&url), Some("user"))
+            .await;
         assert_eq!(credentials, None);
     }
 
@@ -228,26 +312,38 @@ mod tests {
     async fn fetch_url_prefers_url_to_host() {
         let url = Url::parse("https://example.com/").unwrap();
         let keyring = KeyringProvider::dummy([
-            ((url.join("foo").unwrap().as_str(), "user"), "password"),
-            ((url.host_str().unwrap(), "user"), "other-password"),
+            (url.join("foo").unwrap().as_str(), "user", "password"),
+            (url.host_str().unwrap(), "user", "other-password"),
         ]);
         assert_eq!(
-            keyring.fetch(&url.join("foo").unwrap(), "user").await,
-            Some(Credentials::new(
+            keyring
+                .fetch(
+                    &DisplaySafeUrlRef::from(&url.join("foo").unwrap()),
+                    Some("user")
+                )
+                .await,
+            Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("password".to_string())
             ))
         );
         assert_eq!(
-            keyring.fetch(&url, "user").await,
-            Some(Credentials::new(
+            keyring
+                .fetch(&DisplaySafeUrlRef::from(&url), Some("user"))
+                .await,
+            Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("other-password".to_string())
             ))
         );
         assert_eq!(
-            keyring.fetch(&url.join("bar").unwrap(), "user").await,
-            Some(Credentials::new(
+            keyring
+                .fetch(
+                    &DisplaySafeUrlRef::from(&url.join("bar").unwrap()),
+                    Some("user")
+                )
+                .await,
+            Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("other-password".to_string())
             ))
@@ -257,11 +353,27 @@ mod tests {
     #[tokio::test]
     async fn fetch_url_username() {
         let url = Url::parse("https://example.com").unwrap();
-        let keyring = KeyringProvider::dummy([((url.host_str().unwrap(), "user"), "password")]);
-        let credentials = keyring.fetch(&url, "user").await;
+        let keyring = KeyringProvider::dummy([(url.host_str().unwrap(), "user", "password")]);
+        let credentials = keyring
+            .fetch(&DisplaySafeUrlRef::from(&url), Some("user"))
+            .await;
         assert_eq!(
             credentials,
-            Some(Credentials::new(
+            Some(Credentials::basic(
+                Some("user".to_string()),
+                Some("password".to_string())
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn fetch_url_no_username() {
+        let url = Url::parse("https://example.com").unwrap();
+        let keyring = KeyringProvider::dummy([(url.host_str().unwrap(), "user", "password")]);
+        let credentials = keyring.fetch(&DisplaySafeUrlRef::from(&url), None).await;
+        assert_eq!(
+            credentials,
+            Some(Credentials::basic(
                 Some("user".to_string()),
                 Some("password".to_string())
             ))
@@ -271,13 +383,17 @@ mod tests {
     #[tokio::test]
     async fn fetch_url_username_no_match() {
         let url = Url::parse("https://example.com").unwrap();
-        let keyring = KeyringProvider::dummy([((url.host_str().unwrap(), "foo"), "password")]);
-        let credentials = keyring.fetch(&url, "bar").await;
+        let keyring = KeyringProvider::dummy([(url.host_str().unwrap(), "foo", "password")]);
+        let credentials = keyring
+            .fetch(&DisplaySafeUrlRef::from(&url), Some("bar"))
+            .await;
         assert_eq!(credentials, None);
 
         // Still fails if we have `foo` in the URL itself
         let url = Url::parse("https://foo@example.com").unwrap();
-        let credentials = keyring.fetch(&url, "bar").await;
+        let credentials = keyring
+            .fetch(&DisplaySafeUrlRef::from(&url), Some("bar"))
+            .await;
         assert_eq!(credentials, None);
     }
 }

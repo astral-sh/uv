@@ -21,11 +21,10 @@ workspace = true
 
 [dependencies]
 uv-fs = { workspace = true }
-uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
-uv-version = { workspace = true }
 uv-shell = { workspace = true }
+uv-version = { workspace = true }
 
 fs-err = { workspace = true }
 itertools = { workspace = true }

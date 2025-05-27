@@ -1,5 +1,3 @@
-use crate::metadata::{BuildBackendSettings, DEFAULT_EXCLUDES};
-use crate::{DirectoryWriter, Error, FileList, ListWriter, PyProjectToml};
 use fs_err::File;
 use globset::{GlobSet, GlobSetBuilder};
 use itertools::Itertools;
@@ -8,12 +6,20 @@ use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::{io, mem};
 use tracing::{debug, trace};
-use uv_distribution_filename::WheelFilename;
-use uv_fs::Simplified;
-use uv_globfilter::{parse_portable_glob, GlobDirFilter};
-use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 use zip::{CompressionMethod, ZipWriter};
+
+use uv_distribution_filename::WheelFilename;
+use uv_fs::Simplified;
+use uv_globfilter::{GlobDirFilter, PortableGlobParser};
+use uv_platform_tags::{AbiTag, LanguageTag, PlatformTag};
+use uv_warnings::warn_user_once;
+
+use crate::metadata::DEFAULT_EXCLUDES;
+use crate::{
+    BuildBackendSettings, DirectoryWriter, Error, FileList, ListWriter, PyProjectToml,
+    find_module_root, find_roots,
+};
 
 /// Build a wheel from the source tree and place it in the output directory.
 pub fn build_wheel(
@@ -29,14 +35,16 @@ pub fn build_wheel(
     }
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
-    let filename = WheelFilename {
-        name: pyproject_toml.name().clone(),
-        version: pyproject_toml.version().clone(),
-        build_tag: None,
-        python_tag: vec!["py3".to_string()],
-        abi_tag: vec!["none".to_string()],
-        platform_tag: vec!["any".to_string()],
-    };
+    let filename = WheelFilename::new(
+        pyproject_toml.name().clone(),
+        pyproject_toml.version().clone(),
+        LanguageTag::Python {
+            major: 3,
+            minor: None,
+        },
+        AbiTag::None,
+        PlatformTag::Any,
+    );
 
     let wheel_path = wheel_dir.join(filename.to_string());
     debug!("Writing wheel at {}", wheel_path.user_display());
@@ -64,20 +72,20 @@ pub fn list_wheel(
         warn_user_once!("{warning}");
     }
 
-    let filename = WheelFilename {
-        name: pyproject_toml.name().clone(),
-        version: pyproject_toml.version().clone(),
-        build_tag: None,
-        python_tag: vec!["py3".to_string()],
-        abi_tag: vec!["none".to_string()],
-        platform_tag: vec!["any".to_string()],
-    };
+    let filename = WheelFilename::new(
+        pyproject_toml.name().clone(),
+        pyproject_toml.version().clone(),
+        LanguageTag::Python {
+            major: 3,
+            minor: None,
+        },
+        AbiTag::None,
+        PlatformTag::Any,
+    );
 
     let mut files = FileList::new();
     let writer = ListWriter::new(&mut files);
     write_wheel(source_tree, &pyproject_toml, &filename, uv_version, writer)?;
-    // Ensure a deterministic order even when file walking changes
-    files.sort_unstable();
     Ok((filename, files))
 }
 
@@ -106,26 +114,26 @@ fn write_wheel(
     }
     // The wheel must not include any files excluded by the source distribution (at least until we
     // have files generated in the source dist -> wheel build step).
-    for exclude in settings.source_exclude {
+    for exclude in &settings.source_exclude {
         // Avoid duplicate entries.
-        if !excludes.contains(&exclude) {
-            excludes.push(exclude);
+        if !excludes.contains(exclude) {
+            excludes.push(exclude.clone());
         }
     }
     debug!("Wheel excludes: {:?}", excludes);
     let exclude_matcher = build_exclude_matcher(excludes)?;
 
     debug!("Adding content files to wheel");
-    if settings.module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
-    }
-    let strip_root = source_tree.join(settings.module_root);
-    let module_root = strip_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
-    if !module_root.join("__init__.py").is_file() {
-        return Err(Error::MissingModule(module_root));
-    }
+    let (src_root, module_root) = find_roots(
+        source_tree,
+        pyproject_toml,
+        &settings.module_root,
+        settings.module_name.as_ref(),
+    )?;
+
     let mut files_visited = 0;
     for entry in WalkDir::new(module_root)
+        .sort_by_file_name()
         .into_iter()
         .filter_entry(|entry| !exclude_matcher.is_match(entry.path()))
     {
@@ -150,7 +158,7 @@ fn write_wheel(
             .expect("walkdir starts with root");
         let wheel_path = entry
             .path()
-            .strip_prefix(&strip_root)
+            .strip_prefix(&src_root)
             .expect("walkdir starts with root");
         if exclude_matcher.is_match(match_path) {
             trace!("Excluding from module: `{}`", match_path.user_display());
@@ -243,28 +251,34 @@ pub fn build_editable(
 
     crate::check_metadata_directory(source_tree, metadata_directory, &pyproject_toml)?;
 
-    let filename = WheelFilename {
-        name: pyproject_toml.name().clone(),
-        version: pyproject_toml.version().clone(),
-        build_tag: None,
-        python_tag: vec!["py3".to_string()],
-        abi_tag: vec!["none".to_string()],
-        platform_tag: vec!["any".to_string()],
-    };
+    let filename = WheelFilename::new(
+        pyproject_toml.name().clone(),
+        pyproject_toml.version().clone(),
+        LanguageTag::Python {
+            major: 3,
+            minor: None,
+        },
+        AbiTag::None,
+        PlatformTag::Any,
+    );
 
     let wheel_path = wheel_dir.join(filename.to_string());
     debug!("Writing wheel at {}", wheel_path.user_display());
     let mut wheel_writer = ZipDirectoryWriter::new_wheel(File::create(&wheel_path)?);
 
     debug!("Adding pth file to {}", wheel_path.user_display());
-    if settings.module_root.is_absolute() {
-        return Err(Error::AbsoluteModuleRoot(settings.module_root.clone()));
+    let src_root = source_tree.join(&settings.module_root);
+    if !src_root.starts_with(source_tree) {
+        return Err(Error::InvalidModuleRoot(settings.module_root.clone()));
     }
-    let src_root = source_tree.join(settings.module_root);
-    let module_root = src_root.join(pyproject_toml.name().as_dist_info_name().as_ref());
-    if !module_root.join("__init__.py").is_file() {
-        return Err(Error::MissingModule(module_root));
-    }
+
+    // Check that a module root exists in the directory we're linking from the `.pth` file
+    find_module_root(
+        &src_root,
+        settings.module_name.as_ref(),
+        pyproject_toml.name(),
+    )?;
+
     wheel_writer.write_bytes(
         &format!("{}.pth", pyproject_toml.name().as_dist_info_name()),
         src_root.as_os_str().as_encoded_bytes(),
@@ -295,14 +309,16 @@ pub fn metadata(
         warn_user_once!("{warning}");
     }
 
-    let filename = WheelFilename {
-        name: pyproject_toml.name().clone(),
-        version: pyproject_toml.version().clone(),
-        build_tag: None,
-        python_tag: vec!["py3".to_string()],
-        abi_tag: vec!["none".to_string()],
-        platform_tag: vec!["any".to_string()],
-    };
+    let filename = WheelFilename::new(
+        pyproject_toml.name().clone(),
+        pyproject_toml.version().clone(),
+        LanguageTag::Python {
+            major: 3,
+            minor: None,
+        },
+        AbiTag::None,
+        PlatformTag::Any,
+    );
 
     debug!(
         "Writing metadata files to {}",
@@ -409,10 +425,12 @@ pub(crate) fn build_exclude_matcher(
         } else {
             format!("**/{exclude}").to_string()
         };
-        let glob = parse_portable_glob(&exclude).map_err(|err| Error::PortableGlob {
-            field: "tool.uv.build-backend.*-exclude".to_string(),
-            source: err,
-        })?;
+        let glob = PortableGlobParser::Uv
+            .parse(&exclude)
+            .map_err(|err| Error::PortableGlob {
+                field: "tool.uv.build-backend.*-exclude".to_string(),
+                source: err,
+            })?;
         exclude_builder.add(glob);
     }
     let exclude_matcher = exclude_builder
@@ -444,7 +462,7 @@ fn wheel_subdir_from_globs(
                 src.user_display(),
                 license_files
             );
-            parse_portable_glob(license_files)
+            PortableGlobParser::Pep639.parse(license_files)
         })
         .collect::<Result<_, _>>()
         .map_err(|err| Error::PortableGlob {
@@ -459,20 +477,32 @@ fn wheel_subdir_from_globs(
 
     wheel_writer.write_directory(target)?;
 
-    for entry in WalkDir::new(src).into_iter().filter_entry(|entry| {
-        // TODO(konsti): This should be prettier.
-        let relative = entry
-            .path()
-            .strip_prefix(src)
-            .expect("walkdir starts with root");
+    for entry in WalkDir::new(src)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_entry(|entry| {
+            // TODO(konsti): This should be prettier.
+            let relative = entry
+                .path()
+                .strip_prefix(src)
+                .expect("walkdir starts with root");
 
-        // Fast path: Don't descend into a directory that can't be included.
-        matcher.match_directory(relative)
-    }) {
+            // Fast path: Don't descend into a directory that can't be included.
+            matcher.match_directory(relative)
+        })
+    {
         let entry = entry.map_err(|err| Error::WalkDir {
             root: src.to_path_buf(),
             err,
         })?;
+
+        // Skip the root path, which is already included as `target` prior to the loop.
+        // (If `entry.path() == src`, then `relative` is empty, and `relative_licenses` is
+        // `target`.)
+        if entry.path() == src {
+            continue;
+        }
+
         // TODO(konsti): This should be prettier.
         let relative = entry
             .path()
@@ -482,7 +512,7 @@ fn wheel_subdir_from_globs(
         if !matcher.match_path(relative) {
             trace!("Excluding {}: `{}`", globs_field, relative.user_display());
             continue;
-        };
+        }
 
         let relative_licenses = Path::new(target)
             .join(relative)
@@ -552,9 +582,9 @@ fn wheel_info(filename: &WheelFilename, uv_version: &str) -> String {
         ("Generator", format!("uv {uv_version}")),
         ("Root-Is-Purelib", "true".to_string()),
     ];
-    for python_tag in &filename.python_tag {
-        for abi_tag in &filename.abi_tag {
-            for platform_tag in &filename.platform_tag {
+    for python_tag in filename.python_tags() {
+        for abi_tag in filename.abi_tags() {
+            for platform_tag in filename.platform_tags() {
                 wheel_info.push(("Tag", format!("{python_tag}-{abi_tag}-{platform_tag}")));
             }
         }
@@ -603,7 +633,7 @@ impl ZipDirectoryWriter {
     ) -> Result<Box<dyn Write + 'slf>, Error> {
         // 644 is the default of the zip crate.
         let permissions = if executable_bit { 775 } else { 664 };
-        let options = zip::write::FileOptions::default()
+        let options = zip::write::SimpleFileOptions::default()
             .unix_permissions(permissions)
             .compression_method(self.compression);
         self.writer.start_file(path, options)?;
@@ -614,7 +644,7 @@ impl ZipDirectoryWriter {
 impl DirectoryWriter for ZipDirectoryWriter {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         trace!("Adding {}", path);
-        let options = zip::write::FileOptions::default().compression_method(self.compression);
+        let options = zip::write::SimpleFileOptions::default().compression_method(self.compression);
         self.writer.start_file(path, options)?;
         self.writer.write_all(bytes)?;
 
@@ -649,7 +679,7 @@ impl DirectoryWriter for ZipDirectoryWriter {
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
         trace!("Adding directory {}", directory);
-        let options = zip::write::FileOptions::default().compression_method(self.compression);
+        let options = zip::write::SimpleFileOptions::default().compression_method(self.compression);
         Ok(self.writer.add_directory(directory, options)?)
     }
 
@@ -744,24 +774,26 @@ mod test {
     use uv_fs::Simplified;
     use uv_normalize::PackageName;
     use uv_pep440::Version;
+    use uv_platform_tags::{AbiTag, PlatformTag};
     use walkdir::WalkDir;
 
     #[test]
     fn test_wheel() {
-        let filename = WheelFilename {
-            name: PackageName::from_str("foo").unwrap(),
-            version: Version::from_str("1.2.3").unwrap(),
-            build_tag: None,
-            python_tag: vec!["py2".to_string(), "py3".to_string()],
-            abi_tag: vec!["none".to_string()],
-            platform_tag: vec!["any".to_string()],
-        };
+        let filename = WheelFilename::new(
+            PackageName::from_str("foo").unwrap(),
+            Version::from_str("1.2.3").unwrap(),
+            LanguageTag::Python {
+                major: 3,
+                minor: None,
+            },
+            AbiTag::None,
+            PlatformTag::Any,
+        );
 
         assert_snapshot!(wheel_info(&filename, "1.0.0+test"), @r"
         Wheel-Version: 1.0
         Generator: uv 1.0.0+test
         Root-Is-Purelib: true
-        Tag: py2-none-any
         Tag: py3-none-any
     ");
     }
@@ -790,6 +822,7 @@ mod test {
         metadata(built_by_uv, metadata_dir.path(), "1.0.0+test").unwrap();
 
         let mut files: Vec<_> = WalkDir::new(metadata_dir.path())
+            .sort_by_file_name()
             .into_iter()
             .map(|entry| {
                 entry

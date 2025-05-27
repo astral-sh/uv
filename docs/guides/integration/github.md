@@ -1,3 +1,10 @@
+---
+title: Using uv in GitHub Actions
+description:
+  A guide to using uv in GitHub Actions, including installation, setting up Python, installing
+  dependencies, and more.
+---
+
 # Using uv in GitHub Actions
 
 ## Installation
@@ -40,7 +47,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           # Install a specific version of uv.
-          version: "0.5.13"
+          version: "0.7.8"
 ```
 
 ## Setting up Python
@@ -119,7 +126,7 @@ jobs:
 
 ## Multiple Python versions
 
-When using a matrix test test multiple Python versions, set the Python version using
+When using a matrix to test multiple Python versions, set the Python version using
 `astral-sh/setup-uv`, which will override the Python version specification in the `pyproject.toml`
 or `.python-version` files:
 
@@ -182,11 +189,8 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Set up Python
-        run: uv python install
-
       - name: Install the project
-        run: uv sync --all-extras --dev
+        run: uv sync --locked --all-extras --dev
 
       - name: Run tests
         # For example, using `pytest`

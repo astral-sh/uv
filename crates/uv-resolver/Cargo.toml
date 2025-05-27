@@ -24,6 +24,7 @@ uv-distribution-filename = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["serde"] }
 uv-git = { workspace = true }
+uv-git-types = { workspace = true }
 uv-metadata = { workspace = true }
 uv-normalize = { workspace = true }
 uv-once-map = { workspace = true }
@@ -32,13 +33,16 @@ uv-pep508 = { workspace = true }
 uv-platform-tags = { workspace = true }
 uv-pypi-types = { workspace = true }
 uv-python = { workspace = true }
+uv-redacted = { workspace = true }
 uv-requirements-txt = { workspace = true }
+uv-small-str = { workspace = true }
 uv-static = { workspace = true }
+uv-torch = { workspace = true }
 uv-types = { workspace = true }
 uv-warnings = { workspace = true }
 uv-workspace = { workspace = true }
 
-anyhow = { workspace = true }
+arcstr = { workspace = true }
 clap = { workspace = true, features = ["derive"], optional = true }
 dashmap = { workspace = true }
 either = { workspace = true }
@@ -55,6 +59,7 @@ rustc-hash = { workspace = true }
 same-file = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
+smallvec = { workspace = true }
 textwrap = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
@@ -67,3 +72,6 @@ url = { workspace = true }
 [dev-dependencies]
 insta = { version = "1.40.0" }
 toml = { workspace = true }
+
+[features]
+tracing-durations-export = []

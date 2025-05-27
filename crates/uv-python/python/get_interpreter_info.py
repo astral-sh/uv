@@ -34,8 +34,18 @@ if sys.version_info[0] < 3:
     sys.exit(0)
 
 if hasattr(sys, "implementation"):
-    implementation_version = format_full_version(sys.implementation.version)
     implementation_name = sys.implementation.name
+    if implementation_name == "graalpy":
+        # GraalPy reports the CPython version as sys.implementation.version,
+        # so we need to discover the GraalPy version from the cache_tag
+        import re
+        implementation_version = re.sub(
+            r"graalpy(\d)(\d+)-\d+",
+            r"\1.\2",
+            sys.implementation.cache_tag
+        )
+    else:
+        implementation_version = format_full_version(sys.implementation.version)
 else:
     implementation_version = "0"
     implementation_name = ""
@@ -176,6 +186,9 @@ def get_virtualenv():
             "data": expand_path(sysconfig_paths["data"]),
         }
     else:
+        # Use distutils primarily because that's what pip does.
+        # https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/locations/__init__.py#L249
+
         # Disable the use of the setuptools shim, if it's injected. Per pip:
         #
         # > If pip's going to use distutils, it should not be using the copy that setuptools
@@ -189,8 +202,6 @@ def get_virtualenv():
         except (ImportError, AttributeError):
             pass
 
-        # Use distutils primarily because that's what pip does.
-        # https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/locations/__init__.py#L249
         import warnings
 
         with warnings.catch_warnings():  # disable warning for PEP-632
@@ -224,7 +235,7 @@ def get_virtualenv():
         }
 
 
-def get_scheme():
+def get_scheme(use_sysconfig_scheme: bool):
     """Return the Scheme for the current interpreter.
 
     The paths returned should be absolute.
@@ -337,19 +348,6 @@ def get_scheme():
         Based on (with default arguments):
             https://github.com/pypa/pip/blob/ae5fff36b0aad6e5e0037884927eaa29163c0611/src/pip/_internal/locations/_distutils.py#L115
         """
-        # Disable the use of the setuptools shim, if it's injected. Per pip:
-        #
-        # > If pip's going to use distutils, it should not be using the copy that setuptools
-        # > might have injected into the environment. This is done by removing the injected
-        # > shim, if it's injected.
-        #
-        # > See https://github.com/pypa/pip/issues/8761 for the original discussion and
-        # > rationale for why this is done within pip.
-        try:
-            __import__("_distutils_hack").remove_shim()
-        except (ImportError, AttributeError):
-            pass
-
         import warnings
 
         with warnings.catch_warnings():  # disable warning for PEP-632
@@ -401,15 +399,7 @@ def get_scheme():
             "data": scheme["data"],
         }
 
-    # By default, pip uses sysconfig on Python 3.10+.
-    # But Python distributors can override this decision by setting:
-    #     sysconfig._PIP_USE_SYSCONFIG = True / False
-    # Rationale in https://github.com/pypa/pip/issues/10647
-    use_sysconfig = bool(
-        getattr(sysconfig, "_PIP_USE_SYSCONFIG", sys.version_info >= (3, 10))
-    )
-
-    if use_sysconfig:
+    if use_sysconfig_scheme:
         return get_sysconfig_scheme()
     else:
         return get_distutils_scheme()
@@ -502,6 +492,10 @@ def get_operating_system_and_architecture():
         # https://github.com/astral-sh/uv/issues/2450
         version, _, architecture = platform.mac_ver()
 
+        if not version or not architecture:
+            print(json.dumps({"result": "error", "kind": "broken_mac_ver"}))
+            sys.exit(0)
+
         # https://github.com/pypa/packaging/blob/cc938f984bbbe43c5734b9656c9837ab3a28191f/src/packaging/tags.py#L356-L363
         is_32bit = struct.calcsize("P") == 4
         if is_32bit:
@@ -571,6 +565,48 @@ def main() -> None:
     elif os_and_arch["os"]["name"] == "musllinux":
         manylinux_compatible = True
 
+
+    # By default, pip uses sysconfig on Python 3.10+.
+    # But Python distributors can override this decision by setting:
+    #     sysconfig._PIP_USE_SYSCONFIG = True / False
+    # Rationale in https://github.com/pypa/pip/issues/10647
+    use_sysconfig_scheme = bool(
+        getattr(sysconfig, "_PIP_USE_SYSCONFIG", sys.version_info >= (3, 10))
+    )
+
+    # If we're not using sysconfig, make sure distutils is available.
+    if not use_sysconfig_scheme:
+        try:
+            # Disable the use of the setuptools shim, if it's injected. Per pip:
+            #
+            # > If pip's going to use distutils, it should not be using the copy that setuptools
+            # > might have injected into the environment. This is done by removing the injected
+            # > shim, if it's injected.
+            #
+            # > See https://github.com/pypa/pip/issues/8761 for the original discussion and
+            # > rationale for why this is done within pip.
+            try:
+                __import__("_distutils_hack").remove_shim()
+            except (ImportError, AttributeError):
+                pass
+
+            import distutils.dist
+        except ImportError:
+            # We require distutils, but it's not installed; this is fairly
+            # common in, e.g., deadsnakes where distutils is packaged
+            # separately from Python.
+            print(
+                json.dumps(
+                    {
+                        "result": "error",
+                        "kind": "missing_required_distutils",
+                        "python_major": sys.version_info[0],
+                        "python_minor": sys.version_info[1],
+                    }
+                )
+            )
+            sys.exit(0)
+
     interpreter_info = {
         "result": "success",
         "markers": markers,
@@ -579,13 +615,16 @@ def main() -> None:
         "sys_prefix": sys.prefix,
         "sys_base_executable": getattr(sys, "_base_executable", None),
         "sys_executable": sys.executable,
-        "sys_path": sys.path,
+        # We prepend the location with the interpreter discovery script copied to a
+        # temporary path to `sys.path` so we can import it, which we have to strip later
+        # to avoid having this now-deleted path around.
+        "sys_path": sys.path[1:],
         "stdlib": sysconfig.get_path("stdlib"),
         # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
         # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation
         # location. So in newer versions, we also write a dedicated flag to indicate standalone builds.
         "standalone": sysconfig.get_config_var("prefix") == "/install" or bool(sysconfig.get_config_var("PYTHON_BUILD_STANDALONE")),
-        "scheme": get_scheme(),
+        "scheme": get_scheme(use_sysconfig_scheme),
         "virtualenv": get_virtualenv(),
         "platform": os_and_arch,
         "manylinux_compatible": manylinux_compatible,

@@ -5,8 +5,9 @@ pub use exclusions::Exclusions;
 pub use flat_index::{FlatDistributions, FlatIndex};
 pub use fork_strategy::ForkStrategy;
 pub use lock::{
-    Installable, Lock, LockError, LockVersion, Package, PackageMap, RequirementsTxtExport,
-    ResolverManifest, SatisfiesResult, TreeDisplay, VERSION,
+    Installable, Lock, LockError, LockVersion, Package, PackageMap, PylockToml,
+    PylockTomlErrorKind, RequirementsTxtExport, ResolverManifest, SatisfiesResult, TreeDisplay,
+    VERSION,
 };
 pub use manifest::Manifest;
 pub use options::{Flexibility, Options, OptionsBuilder};
@@ -33,6 +34,8 @@ pub use yanks::AllowedYanks;
 /// trait. This lets use store things like `ConflictItem`, but refer to it via
 /// `ConflictItemRef`. i.e., We can avoid allocs on lookups.
 type FxHashbrownSet<T> = hashbrown::HashSet<T, rustc_hash::FxBuildHasher>;
+
+type FxHashbrownMap<K, V> = hashbrown::HashMap<K, V, rustc_hash::FxBuildHasher>;
 
 mod candidate_selector;
 mod dependency_mode;

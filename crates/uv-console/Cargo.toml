@@ -1,7 +1,7 @@
 [package]
 name = "uv-console"
 version = "0.0.1"
-edition = "2021"
+edition = { workspace = true }
 description = "Utilities for interacting with the terminal"
 
 [lib]
@@ -11,5 +11,4 @@ doctest = false
 workspace = true
 
 [dependencies]
-ctrlc = { workspace = true }
 console = { workspace = true }

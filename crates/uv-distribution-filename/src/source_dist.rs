@@ -38,14 +38,14 @@ impl SourceDistFilename {
         package_name: &PackageName,
     ) -> Result<Self, SourceDistFilenameError> {
         // Drop the extension (e.g., given `tar.gz`, drop `.tar.gz`).
-        if filename.len() <= extension.to_string().len() + 1 {
+        if filename.len() <= extension.name().len() + 1 {
             return Err(SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::Extension,
             });
         }
 
-        let stem = &filename[..(filename.len() - (extension.to_string().len() + 1))];
+        let stem = &filename[..(filename.len() - (extension.name().len() + 1))];
 
         if stem.len() <= package_name.as_ref().len() + "-".len() {
             return Err(SourceDistFilenameError {
@@ -58,7 +58,7 @@ impl SourceDistFilename {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::PackageName(err),
             })?;
-        if &actual_package_name != package_name {
+        if actual_package_name != *package_name {
             return Err(SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::Filename(package_name.clone()),
@@ -94,14 +94,14 @@ impl SourceDistFilename {
         };
 
         // Drop the extension (e.g., given `tar.gz`, drop `.tar.gz`).
-        if filename.len() <= extension.to_string().len() + 1 {
+        if filename.len() <= extension.name().len() + 1 {
             return Err(SourceDistFilenameError {
                 filename: filename.to_string(),
                 kind: SourceDistFilenameErrorKind::Extension,
             });
         }
 
-        let stem = &filename[..(filename.len() - (extension.to_string().len() + 1))];
+        let stem = &filename[..(filename.len() - (extension.name().len() + 1))];
 
         let Some((package_name, version)) = stem.rsplit_once('-') else {
             return Err(SourceDistFilenameError {
@@ -191,6 +191,13 @@ mod tests {
             "foo_lib-1.2.3.tar.gz",
             "foo_lib-1.2.3.tar.bz2",
             "foo_lib-1.2.3.tar.zst",
+            "foo_lib-1.2.3.tar.xz",
+            "foo_lib-1.2.3.tar.lz",
+            "foo_lib-1.2.3.tar.lzma",
+            "foo_lib-1.2.3.tgz",
+            "foo_lib-1.2.3.tbz",
+            "foo_lib-1.2.3.tlz",
+            "foo_lib-1.2.3.txz",
         ] {
             let ext = SourceDistExtension::from_path(normalized).unwrap();
             assert_eq!(
@@ -219,11 +226,13 @@ mod tests {
 
     #[test]
     fn name_too_long() {
-        assert!(SourceDistFilename::parse(
-            "foo.zip",
-            SourceDistExtension::Zip,
-            &PackageName::from_str("foo-lib").unwrap()
-        )
-        .is_err());
+        assert!(
+            SourceDistFilename::parse(
+                "foo.zip",
+                SourceDistExtension::Zip,
+                &PackageName::from_str("foo-lib").unwrap()
+            )
+            .is_err()
+        );
     }
 }

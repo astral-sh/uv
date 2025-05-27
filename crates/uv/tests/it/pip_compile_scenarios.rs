@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.42/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/HEAD/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi", unix))]
 
@@ -16,8 +16,8 @@ use predicates::prelude::predicate;
 use uv_static::EnvVars;
 
 use crate::common::{
-    build_vendor_links_url, get_bin, packse_index_url, python_path_with_versions, uv_snapshot,
-    TestContext,
+    TestContext, build_vendor_links_url, get_bin, packse_index_url, python_path_with_versions,
+    uv_snapshot,
 };
 
 /// Provision python binaries and return a `pip compile` command with options shared across all scenarios.
@@ -33,7 +33,7 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg(packse_index_url())
         .arg("--find-links")
         .arg(build_vendor_links_url());
-    context.add_shared_args(&mut command, true);
+    context.add_shared_options(&mut command, true);
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command.env(EnvVars::UV_TEST_PYTHON_PATH, python_path);
 

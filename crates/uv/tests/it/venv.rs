@@ -3,10 +3,10 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use predicates::prelude::*;
-use uv_python::{PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME};
+use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn create_venv() {
@@ -535,7 +535,13 @@ fn create_venv_warns_user_on_requires_python_discovery_error() -> Result<()> {
         |         ^
       expected `.`, `=`
 
-    warning: Failed to parse: `pyproject.toml`
+    warning: Failed to parse `pyproject.toml` during environment creation:
+      TOML parse error at line 1, column 9
+        |
+      1 | invalid toml
+        |         ^
+      expected `.`, `=`
+
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
@@ -699,21 +705,21 @@ fn create_venv_unknown_python_patch() {
 #[cfg(feature = "python-patch")]
 #[test]
 fn create_venv_python_patch() {
-    let context = TestContext::new_with_versions(&["3.12.6"]);
+    let context = TestContext::new_with_versions(&["3.12.9"]);
 
     uv_snapshot!(context.filters(), context.venv()
         .arg(context.venv.as_os_str())
         .arg("--python")
-        .arg("3.12.6"), @r###"
+        .arg("3.12.9"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.12.6 interpreter at: [PYTHON-3.12.6]
+    Using CPython 3.12.9 interpreter at: [PYTHON-3.12.9]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     context.venv.assert(predicates::path::is_dir());

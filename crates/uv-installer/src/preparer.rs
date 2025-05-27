@@ -1,9 +1,8 @@
 use std::cmp::Reverse;
 use std::sync::Arc;
 
-use futures::{stream::FuturesUnordered, FutureExt, Stream, TryFutureExt, TryStreamExt};
+use futures::{FutureExt, Stream, TryFutureExt, TryStreamExt, stream::FuturesUnordered};
 use tracing::{debug, instrument};
-use url::Url;
 
 use uv_cache::Cache;
 use uv_configuration::BuildOptions;
@@ -14,6 +13,7 @@ use uv_distribution_types::{
 };
 use uv_pep508::PackageName;
 use uv_platform_tags::Tags;
+use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, HashStrategy, InFlight};
 
 /// Prepare distributions for installation.
@@ -48,30 +48,31 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
 
     /// Set the [`Reporter`] to use for operations.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
-        let reporter: Arc<dyn Reporter> = Arc::new(reporter);
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             tags: self.tags,
             cache: self.cache,
             hashes: self.hashes,
             build_options: self.build_options,
-            database: self.database.with_reporter(Facade::from(reporter.clone())),
-            reporter: Some(reporter.clone()),
+            database: self
+                .database
+                .with_reporter(reporter.clone().into_distribution_reporter()),
+            reporter: Some(reporter),
         }
     }
 
     /// Fetch, build, and unzip the distributions in parallel.
     pub fn prepare_stream<'stream>(
         &'stream self,
-        distributions: Vec<Dist>,
+        distributions: Vec<Arc<Dist>>,
         in_flight: &'stream InFlight,
         resolution: &'stream Resolution,
     ) -> impl Stream<Item = Result<CachedDist, Error>> + 'stream {
         distributions
             .into_iter()
-            .map(|dist| async {
+            .map(async |dist| {
                 let wheel = self
-                    .get_wheel(dist, in_flight, resolution)
+                    .get_wheel((*dist).clone(), in_flight, resolution)
                     .boxed_local()
                     .await?;
                 if let Some(reporter) = self.reporter.as_ref() {
@@ -86,7 +87,7 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
     #[instrument(skip_all, fields(total = distributions.len()))]
     pub async fn prepare(
         &self,
-        mut distributions: Vec<Dist>,
+        mut distributions: Vec<Arc<Dist>>,
         in_flight: &InFlight,
         resolution: &Resolution,
     ) -> Result<Vec<CachedDist>, Error> {
@@ -191,7 +192,9 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                         return Err(Error::from_dist(dist, err, resolution));
                     }
                     if let Some(version) = dist.version() {
-                        if *version != cached.filename().version {
+                        if *version != cached.filename().version
+                            && *version != cached.filename().version.clone().without_local()
+                        {
                             let err = uv_distribution::Error::WheelMetadataVersionMismatch {
                                 given: version.clone(),
                                 metadata: cached.filename().version.clone(),
@@ -220,6 +223,8 @@ pub enum Error {
         DerivationChain,
         #[source] uv_distribution::Error,
     ),
+    #[error("Cyclic build dependency detected for `{0}`")]
+    CyclicBuildDependency(PackageName),
     #[error("Unzip failed in another thread: {0}")]
     Thread(String),
 }
@@ -263,21 +268,26 @@ pub trait Reporter: Send + Sync {
     fn on_build_complete(&self, source: &BuildableSource, id: usize);
 
     /// Callback to invoke when a repository checkout begins.
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
+    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize;
 
     /// Callback to invoke when a repository checkout completes.
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
+    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, index: usize);
 }
 
-/// A facade for converting from [`Reporter`] to [`uv_git::Reporter`].
+impl dyn Reporter {
+    /// Converts this reporter to a [`uv_distribution::Reporter`].
+    pub(crate) fn into_distribution_reporter(
+        self: Arc<dyn Reporter>,
+    ) -> Arc<dyn uv_distribution::Reporter> {
+        Arc::new(Facade {
+            reporter: self.clone(),
+        })
+    }
+}
+
+/// A facade for converting from [`Reporter`] to [`uv_distribution::Reporter`].
 struct Facade {
     reporter: Arc<dyn Reporter>,
-}
-
-impl From<Arc<dyn Reporter>> for Facade {
-    fn from(reporter: Arc<dyn Reporter>) -> Self {
-        Self { reporter }
-    }
 }
 
 impl uv_distribution::Reporter for Facade {
@@ -289,11 +299,11 @@ impl uv_distribution::Reporter for Facade {
         self.reporter.on_build_complete(source, id);
     }
 
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize {
+    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize {
         self.reporter.on_checkout_start(url, rev)
     }
 
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize) {
+    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, index: usize) {
         self.reporter.on_checkout_complete(url, rev, index);
     }
 

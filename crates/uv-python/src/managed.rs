@@ -11,12 +11,12 @@ use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
 
-use uv_fs::{symlink_or_copy_file, LockedFile, Simplified};
+use uv_fs::{LockedFile, Simplified, symlink_or_copy_file};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_trampoline_builder::{windows_python_launcher, Launcher};
+use uv_trampoline_builder::{Launcher, windows_python_launcher};
 
-use crate::downloads::Error as DownloadError;
+use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
 use crate::implementation::{
     Error as ImplementationError, ImplementationName, LenientImplementationName,
 };
@@ -25,7 +25,8 @@ use crate::libc::LibcDetectionError;
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
-use crate::{sysconfig, PythonRequest, PythonVariant};
+use crate::{PythonRequest, PythonVariant, macos_dylib, sysconfig};
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -88,6 +89,8 @@ pub enum Error {
     NameParseError(#[from] installation::PythonInstallationKeyError),
     #[error(transparent)]
     LibcDetection(#[from] LibcDetectionError),
+    #[error(transparent)]
+    MacOsDylib(#[from] macos_dylib::Error),
 }
 /// A collection of uv-managed Python installations installed on the current system.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -117,7 +120,9 @@ impl ManagedPythonInstallations {
     pub fn from_settings(install_dir: Option<PathBuf>) -> Result<Self, Error> {
         if let Some(install_dir) = install_dir {
             Ok(Self::from_path(install_dir))
-        } else if let Some(install_dir) = std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR) {
+        } else if let Some(install_dir) =
+            std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR).filter(|s| !s.is_empty())
+        {
             Ok(Self::from_path(install_dir))
         } else {
             Ok(Self::from_path(
@@ -186,7 +191,7 @@ impl ManagedPythonInstallations {
     /// This ensures a consistent ordering across all platforms.
     pub fn find_all(
         &self,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
         let dirs = match fs_err::read_dir(&self.root) {
             Ok(installation_dirs) => {
                 // Collect sorted directory paths; `read_dir` is not stable across platforms
@@ -210,7 +215,7 @@ impl ManagedPythonInstallations {
                 return Err(Error::ReadError {
                     dir: self.root.clone(),
                     err,
-                })
+                });
             }
         };
         let scratch = self.scratch();
@@ -226,7 +231,7 @@ impl ManagedPythonInstallations {
                     .unwrap_or(true)
             })
             .filter_map(|path| {
-                ManagedPythonInstallation::new(path)
+                ManagedPythonInstallation::from_path(path)
                     .inspect_err(|err| {
                         warn!("Ignoring malformed managed Python entry:\n    {err}");
                     })
@@ -238,17 +243,20 @@ impl ManagedPythonInstallations {
     /// Iterate over Python installations that support the current platform.
     pub fn find_matching_current_platform(
         &self,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
-        let platform_key = platform_key_from_env()?;
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
+        let os = Os::from_env();
+        let arch = Arch::from_env();
+        let libc = Libc::from_env()?;
 
         let iter = ManagedPythonInstallations::from_settings(None)?
             .find_all()?
             .filter(move |installation| {
-                installation
-                    .path
-                    .file_name()
-                    .map(OsStr::to_string_lossy)
-                    .is_some_and(|filename| filename.ends_with(&platform_key))
+                installation.key.os == os
+                    && (arch.supports(installation.key.arch)
+                        // TODO(zanieb): Allow inequal variants, as `Arch::supports` does not
+                        // implement this yet. See https://github.com/astral-sh/uv/pull/9788
+                        || arch.family == installation.key.arch.family)
+                    && installation.key.libc == libc
             });
 
         Ok(iter)
@@ -261,7 +269,7 @@ impl ManagedPythonInstallations {
     /// - The platform metadata cannot be read
     /// - A directory for the installation cannot be read
     pub fn find_version<'a>(
-        &self,
+        &'a self,
         version: &'a PythonVersion,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
         Ok(self
@@ -291,10 +299,27 @@ pub struct ManagedPythonInstallation {
     path: PathBuf,
     /// An install key for the Python version.
     key: PythonInstallationKey,
+    /// The URL with the Python archive.
+    ///
+    /// Empty when self was constructed from a path.
+    url: Option<&'static str>,
+    /// The SHA256 of the Python archive at the URL.
+    ///
+    /// Empty when self was constructed from a path.
+    sha256: Option<&'static str>,
 }
 
 impl ManagedPythonInstallation {
-    pub fn new(path: PathBuf) -> Result<Self, Error> {
+    pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Self {
+        Self {
+            path,
+            key: download.key().clone(),
+            url: Some(download.url()),
+            sha256: download.sha256(),
+        }
+    }
+
+    pub(crate) fn from_path(path: PathBuf) -> Result<Self, Error> {
         let key = PythonInstallationKey::from_str(
             path.file_name()
                 .ok_or(Error::NameError("name is empty".to_string()))?
@@ -304,7 +329,12 @@ impl ManagedPythonInstallation {
 
         let path = std::path::absolute(&path).map_err(|err| Error::AbsolutePath(path, err))?;
 
-        Ok(Self { path, key })
+        Ok(Self {
+            path,
+            key,
+            url: None,
+            sha256: None,
+        })
     }
 
     /// The path to this managed installation's Python executable.
@@ -312,13 +342,14 @@ impl ManagedPythonInstallation {
     /// If the installation has multiple execututables i.e., `python`, `python3`, etc., this will
     /// return the _canonical_ executable name which the other names link to. On Unix, this is
     /// `python{major}.{minor}{variant}` and on Windows, this is `python{exe}`.
-    pub fn executable(&self) -> PathBuf {
+    ///
+    /// If windowed is true, `pythonw.exe` is selected over `python.exe` on windows, with no changes
+    /// on non-windows.
+    pub fn executable(&self, windowed: bool) -> PathBuf {
         let implementation = match self.implementation() {
             ImplementationName::CPython => "python",
             ImplementationName::PyPy => "pypy",
-            ImplementationName::GraalPy => {
-                unreachable!("Managed installations of GraalPy are not supported")
-            }
+            ImplementationName::GraalPy => "graalpy",
         };
 
         let version = match self.implementation() {
@@ -331,14 +362,18 @@ impl ManagedPythonInstallation {
             }
             // PyPy uses a full version number, even on Windows.
             ImplementationName::PyPy => format!("{}.{}", self.key.major, self.key.minor),
-            ImplementationName::GraalPy => {
-                unreachable!("Managed installations of GraalPy are not supported")
-            }
+            ImplementationName::GraalPy => String::new(),
         };
 
         // On Windows, the executable is just `python.exe` even for alternative variants
-        let variant = if cfg!(unix) {
+        // GraalPy always uses `graalpy.exe` as the main executable
+        let variant = if *self.implementation() == ImplementationName::GraalPy {
+            ""
+        } else if cfg!(unix) {
             self.key.variant.suffix()
+        } else if cfg!(windows) && windowed {
+            // Use windowed Python that doesn't open a terminal.
+            "w"
         } else {
             ""
         };
@@ -348,10 +383,10 @@ impl ManagedPythonInstallation {
             exe = std::env::consts::EXE_SUFFIX
         );
 
-        let executable = if cfg!(windows) {
-            self.python_dir().join(name)
-        } else if cfg!(unix) {
+        let executable = if cfg!(unix) || *self.implementation() == ImplementationName::GraalPy {
             self.python_dir().join("bin").join(name)
+        } else if cfg!(windows) {
+            self.python_dir().join(name)
         } else {
             unimplemented!("Only Windows and Unix systems are supported.")
         };
@@ -409,11 +444,11 @@ impl ManagedPythonInstallation {
 
     pub fn satisfies(&self, request: &PythonRequest) -> bool {
         match request {
-            PythonRequest::File(path) => self.executable() == *path,
+            PythonRequest::File(path) => self.executable(false) == *path,
             PythonRequest::Default | PythonRequest::Any => true,
             PythonRequest::Directory(path) => self.path() == *path,
             PythonRequest::ExecutableName(name) => self
-                .executable()
+                .executable(false)
                 .file_name()
                 .is_some_and(|filename| filename.to_string_lossy() == *name),
             PythonRequest::Implementation(implementation) => {
@@ -429,7 +464,7 @@ impl ManagedPythonInstallation {
 
     /// Ensure the environment contains the canonical Python executable names.
     pub fn ensure_canonical_executables(&self) -> Result<(), Error> {
-        let python = self.executable();
+        let python = self.executable(false);
 
         let canonical_names = &["python"];
 
@@ -452,7 +487,7 @@ impl ManagedPythonInstallation {
                     );
                 }
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    return Err(Error::MissingExecutable(python.clone()))
+                    return Err(Error::MissingExecutable(python.clone()));
                 }
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(err) => {
@@ -460,9 +495,9 @@ impl ManagedPythonInstallation {
                         from: executable,
                         to: python,
                         err,
-                    })
+                    });
                 }
-            };
+            }
         }
 
         Ok(())
@@ -508,11 +543,35 @@ impl ManagedPythonInstallation {
         Ok(())
     }
 
+    /// On macOS, ensure that the `install_name` for the Python dylib is set
+    /// correctly, rather than pointing at `/install/lib/libpython{version}.dylib`.
+    /// This is necessary to ensure that native extensions written in Rust
+    /// link to the correct location for the Python library.
+    ///
+    /// See <https://github.com/astral-sh/uv/issues/10598> for more information.
+    pub fn ensure_dylib_patched(&self) -> Result<(), macos_dylib::Error> {
+        if cfg!(target_os = "macos") {
+            if self.key().os.is_like_darwin() {
+                if *self.implementation() == ImplementationName::CPython {
+                    let dylib_path = self.python_dir().join("lib").join(format!(
+                        "{}python{}{}{}",
+                        std::env::consts::DLL_PREFIX,
+                        self.key.version().python_version(),
+                        self.key.variant().suffix(),
+                        std::env::consts::DLL_SUFFIX
+                    ));
+                    macos_dylib::patch_dylib_install_name(dylib_path)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Create a link to the managed Python executable.
     ///
     /// If the file already exists at the target path, an error will be returned.
     pub fn create_bin_link(&self, target: &Path) -> Result<(), Error> {
-        let python = self.executable();
+        let python = self.executable(false);
 
         let bin = target.parent().ok_or(Error::NoExecutableDirectory)?;
         fs_err::create_dir_all(bin).map_err(|err| Error::ExecutableDirectory {
@@ -558,7 +617,7 @@ impl ManagedPythonInstallation {
     /// [`ManagedPythonInstallation::create_bin_link`].
     pub fn is_bin_link(&self, path: &Path) -> bool {
         if cfg!(unix) {
-            is_same_file(path, self.executable()).unwrap_or_default()
+            is_same_file(path, self.executable(false)).unwrap_or_default()
         } else if cfg!(windows) {
             let Some(launcher) = Launcher::try_from_path(path).unwrap_or_default() else {
                 return false;
@@ -566,7 +625,7 @@ impl ManagedPythonInstallation {
             if !matches!(launcher.kind, uv_trampoline_builder::LauncherKind::Python) {
                 return false;
             }
-            launcher.python_path == self.executable()
+            launcher.python_path == self.executable(false)
         } else {
             unreachable!("Only Windows and Unix are supported")
         }
@@ -600,10 +659,19 @@ impl ManagedPythonInstallation {
         // Do not upgrade if the patch versions are the same
         self.key.patch != other.key.patch
     }
+
+    pub fn url(&self) -> Option<&'static str> {
+        self.url
+    }
+
+    pub fn sha256(&self) -> Option<&'static str> {
+        self.sha256
+    }
 }
 
+// TODO(zanieb): Only used in tests now.
 /// Generate a platform portion of a key from the environment.
-fn platform_key_from_env() -> Result<String, Error> {
+pub fn platform_key_from_env() -> Result<String, Error> {
     let os = Os::from_env();
     let arch = Arch::from_env();
     let libc = Libc::from_env()?;

@@ -5,11 +5,13 @@ expression: result
 Ok(
     Lock {
         version: 1,
+        revision: 0,
         fork_markers: [],
         conflicts: Conflicts(
             [],
         ),
         supported_environments: [],
+        required_environments: [],
         requires_python: RequiresPython {
             specifiers: VersionSpecifiers(
                 [
@@ -42,7 +44,9 @@ Ok(
                     name: PackageName(
                         "anyio",
                     ),
-                    version: "4.3.0",
+                    version: Some(
+                        "4.3.0",
+                    ),
                     source: Path(
                         "file:///foo/bar",
                     ),
@@ -64,21 +68,22 @@ Ok(
                             ),
                         ),
                         size: None,
+                        upload_time: None,
                         filename: WheelFilename {
                             name: PackageName(
                                 "anyio",
                             ),
                             version: "4.3.0",
-                            build_tag: None,
-                            python_tag: [
-                                "py3",
-                            ],
-                            abi_tag: [
-                                "none",
-                            ],
-                            platform_tag: [
-                                "any",
-                            ],
+                            tags: Small {
+                                small: WheelTagSmall {
+                                    python_tag: Python {
+                                        major: 3,
+                                        minor: None,
+                                    },
+                                    abi_tag: None,
+                                    platform_tag: Any,
+                                },
+                            },
                         },
                     },
                 ],
@@ -88,6 +93,7 @@ Ok(
                 dependency_groups: {},
                 metadata: PackageMetadata {
                     requires_dist: {},
+                    provides_extras: [],
                     dependency_groups: {},
                 },
             },
@@ -97,7 +103,9 @@ Ok(
                 name: PackageName(
                     "anyio",
                 ),
-                version: "4.3.0",
+                version: Some(
+                    "4.3.0",
+                ),
                 source: Path(
                     "file:///foo/bar",
                 ),
@@ -109,6 +117,7 @@ Ok(
             dependency_groups: {},
             constraints: {},
             overrides: {},
+            build_constraints: {},
             dependency_metadata: {},
         },
     },

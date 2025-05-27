@@ -1,13 +1,12 @@
+use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 
 use serde::Deserialize;
-use toml_edit::value;
-use toml_edit::Table;
-use toml_edit::Value;
-use toml_edit::{Array, Item};
+use toml_edit::{Array, Item, Table, Value, value};
 
-use uv_fs::PortablePath;
-use uv_pypi_types::{Requirement, VerbatimParsedUrl};
+use uv_distribution_types::Requirement;
+use uv_fs::{PortablePath, Simplified};
+use uv_pypi_types::VerbatimParsedUrl;
 use uv_settings::ToolOptions;
 
 /// A tool entry.
@@ -20,6 +19,8 @@ pub struct Tool {
     constraints: Vec<Requirement>,
     /// The overrides requested by the user during installation.
     overrides: Vec<Requirement>,
+    /// The build constraints requested by the user during installation.
+    build_constraints: Vec<Requirement>,
     /// The Python requested by the user during installation.
     python: Option<String>,
     /// A mapping of entry point names to their metadata.
@@ -29,6 +30,7 @@ pub struct Tool {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct ToolWire {
     #[serde(default)]
     requirements: Vec<RequirementWire>,
@@ -36,6 +38,8 @@ struct ToolWire {
     constraints: Vec<Requirement>,
     #[serde(default)]
     overrides: Vec<Requirement>,
+    #[serde(default)]
+    build_constraint_dependencies: Vec<Requirement>,
     python: Option<String>,
     entrypoints: Vec<ToolEntrypoint>,
     #[serde(default)]
@@ -62,6 +66,7 @@ impl From<Tool> for ToolWire {
                 .collect(),
             constraints: tool.constraints,
             overrides: tool.overrides,
+            build_constraint_dependencies: tool.build_constraints,
             python: tool.python,
             entrypoints: tool.entrypoints,
             options: tool.options,
@@ -84,6 +89,7 @@ impl TryFrom<ToolWire> for Tool {
                 .collect(),
             constraints: tool.constraints,
             overrides: tool.overrides,
+            build_constraints: tool.build_constraint_dependencies,
             python: tool.python,
             entrypoints: tool.entrypoints,
             options: tool.options,
@@ -96,6 +102,32 @@ impl TryFrom<ToolWire> for Tool {
 pub struct ToolEntrypoint {
     pub name: String,
     pub install_path: PathBuf,
+}
+
+impl Display for ToolEntrypoint {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        #[cfg(windows)]
+        {
+            write!(
+                f,
+                "{} ({})",
+                self.name,
+                self.install_path
+                    .simplified_display()
+                    .to_string()
+                    .replace('/', "\\")
+            )
+        }
+        #[cfg(unix)]
+        {
+            write!(
+                f,
+                "{} ({})",
+                self.name,
+                self.install_path.simplified_display()
+            )
+        }
+    }
 }
 
 /// Format an array so that each element is on its own line and has a trailing comma.
@@ -131,6 +163,7 @@ impl Tool {
         requirements: Vec<Requirement>,
         constraints: Vec<Requirement>,
         overrides: Vec<Requirement>,
+        build_constraints: Vec<Requirement>,
         python: Option<String>,
         entrypoints: impl Iterator<Item = ToolEntrypoint>,
         options: ToolOptions,
@@ -141,6 +174,7 @@ impl Tool {
             requirements,
             constraints,
             overrides,
+            build_constraints,
             python,
             entrypoints,
             options,
@@ -223,6 +257,28 @@ impl Tool {
             });
         }
 
+        if !self.build_constraints.is_empty() {
+            table.insert("build-constraint-dependencies", {
+                let build_constraints = self
+                    .build_constraints
+                    .iter()
+                    .map(|r#build_constraint| {
+                        serde::Serialize::serialize(
+                            &r#build_constraint,
+                            toml_edit::ser::ValueSerializer::new(),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let build_constraints = match build_constraints.as_slice() {
+                    [] => Array::new(),
+                    [r#build_constraint] => Array::from_iter([r#build_constraint]),
+                    build_constraints => each_element_on_its_line_array(build_constraints.iter()),
+                };
+                value(build_constraints)
+            });
+        }
+
         if let Some(ref python) = self.python {
             table.insert("python", value(python));
         }
@@ -265,6 +321,10 @@ impl Tool {
 
     pub fn overrides(&self) -> &[Requirement] {
         &self.overrides
+    }
+
+    pub fn build_constraints(&self) -> &[Requirement] {
+        &self.build_constraints
     }
 
     pub fn python(&self) -> &Option<String> {

@@ -64,10 +64,10 @@ pub enum Error {
     InvalidSourceDist(PathBuf),
     #[error("Invalid `pyproject.toml`")]
     InvalidPyprojectTomlSyntax(#[from] toml_edit::TomlError),
-    #[error("`pyproject.toml` does not match the required schema. When the `[project]` table is present, `project.name` must be present and non-empty.")]
+    #[error(
+        "`pyproject.toml` does not match the required schema. When the `[project]` table is present, `project.name` must be present and non-empty."
+    )]
     InvalidPyprojectTomlSchema(#[from] toml_edit::de::Error),
-    #[error("Editable installs with setup.py legacy builds are unsupported, please specify a build backend in pyproject.toml")]
-    EditableSetupPy,
     #[error("Failed to resolve requirements from {0}")]
     RequirementsResolve(&'static str, #[source] AnyErrorBuild),
     #[error("Failed to install requirements from {0}")]
@@ -84,10 +84,12 @@ pub enum Error {
     #[error("Failed to build PATH for build script")]
     BuildScriptPath(#[source] env::JoinPathsError),
     // For the convenience of typing `setup_build` properly.
-    #[error("Building source distributions for {0} is disabled")]
+    #[error("Building source distributions for `{0}` is disabled")]
     NoSourceDistBuild(PackageName),
     #[error("Building source distributions is disabled")]
     NoSourceDistBuilds,
+    #[error("Cyclic build dependency detected for `{0}`")]
+    CyclicBuildDependency(PackageName),
 }
 
 impl IsBuildBackendError for Error {
@@ -98,12 +100,12 @@ impl IsBuildBackendError for Error {
             | Self::InvalidSourceDist(_)
             | Self::InvalidPyprojectTomlSyntax(_)
             | Self::InvalidPyprojectTomlSchema(_)
-            | Self::EditableSetupPy
             | Self::RequirementsResolve(_, _)
             | Self::RequirementsInstall(_, _)
             | Self::Virtualenv(_)
             | Self::NoSourceDistBuild(_)
-            | Self::NoSourceDistBuilds => false,
+            | Self::NoSourceDistBuilds
+            | Self::CyclicBuildDependency(_) => false,
             Self::CommandFailed(_, _)
             | Self::BuildBackend(_)
             | Self::MissingHeader(_)

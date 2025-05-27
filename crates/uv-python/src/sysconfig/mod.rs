@@ -68,69 +68,85 @@ impl ReplacementEntry {
 }
 
 /// Mapping for sysconfig keys to lookup and replace with the appropriate entry.
-static DEFAULT_VARIABLE_UPDATES: LazyLock<BTreeMap<String, ReplacementEntry>> =
+static DEFAULT_VARIABLE_UPDATES: LazyLock<BTreeMap<String, Vec<ReplacementEntry>>> =
     LazyLock::new(|| {
         BTreeMap::from_iter([
             (
                 "CC".to_string(),
-                ReplacementEntry {
-                    mode: ReplacementMode::Partial {
-                        from: "clang".to_string(),
+                vec![
+                    ReplacementEntry {
+                        mode: ReplacementMode::Partial {
+                            from: "clang".to_string(),
+                        },
+                        to: "cc".to_string(),
                     },
-                    to: "cc".to_string(),
-                },
+                    ReplacementEntry {
+                        mode: ReplacementMode::Partial {
+                            from: "/usr/bin/aarch64-linux-gnu-gcc".to_string(),
+                        },
+                        to: "cc".to_string(),
+                    },
+                ],
             ),
             (
                 "CXX".to_string(),
-                ReplacementEntry {
-                    mode: ReplacementMode::Partial {
-                        from: "clang++".to_string(),
+                vec![
+                    ReplacementEntry {
+                        mode: ReplacementMode::Partial {
+                            from: "clang++".to_string(),
+                        },
+                        to: "c++".to_string(),
                     },
-                    to: "c++".to_string(),
-                },
+                    ReplacementEntry {
+                        mode: ReplacementMode::Partial {
+                            from: "/usr/bin/x86_64-linux-gnu-g++".to_string(),
+                        },
+                        to: "c++".to_string(),
+                    },
+                ],
             ),
             (
                 "BLDSHARED".to_string(),
-                ReplacementEntry {
+                vec![ReplacementEntry {
                     mode: ReplacementMode::Partial {
                         from: "clang".to_string(),
                     },
                     to: "cc".to_string(),
-                },
+                }],
             ),
             (
                 "LDSHARED".to_string(),
-                ReplacementEntry {
+                vec![ReplacementEntry {
                     mode: ReplacementMode::Partial {
                         from: "clang".to_string(),
                     },
                     to: "cc".to_string(),
-                },
+                }],
             ),
             (
                 "LDCXXSHARED".to_string(),
-                ReplacementEntry {
+                vec![ReplacementEntry {
                     mode: ReplacementMode::Partial {
                         from: "clang++".to_string(),
                     },
                     to: "c++".to_string(),
-                },
+                }],
             ),
             (
                 "LINKCC".to_string(),
-                ReplacementEntry {
+                vec![ReplacementEntry {
                     mode: ReplacementMode::Partial {
                         from: "clang".to_string(),
                     },
                     to: "cc".to_string(),
-                },
+                }],
             ),
             (
                 "AR".to_string(),
-                ReplacementEntry {
+                vec![ReplacementEntry {
                     mode: ReplacementMode::Full,
                     to: "ar".to_string(),
-                },
+                }],
             ),
         ])
     });
@@ -172,16 +188,16 @@ pub(crate) fn update_sysconfig(
 
         // Update the `pkgconfig` file in-memory.
         let contents = fs_err::read_to_string(&pkgconfig)?;
-        let contents = patch_pkgconfig(&contents, &real_prefix);
-
-        // Write the updated `pkgconfig` file.
-        let mut file = fs_err::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(&pkgconfig)?;
-        file.write_all(contents.as_bytes())?;
-        file.sync_data()?;
+        if let Some(new_contents) = patch_pkgconfig(&contents) {
+            // Write the updated `pkgconfig` file.
+            let mut file = fs_err::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .create(true)
+                .open(&pkgconfig)?;
+            file.write_all(new_contents.as_bytes())?;
+            file.sync_data()?;
+        }
     }
 
     Ok(())
@@ -224,7 +240,7 @@ fn find_sysconfigdata(
         let metadata = entry.metadata()?;
         if metadata.is_symlink() {
             continue;
-        };
+        }
 
         if metadata.is_file() {
             return Ok(entry.path());
@@ -278,8 +294,10 @@ fn patch_sysconfigdata(mut data: SysconfigData, real_prefix: &Path) -> Sysconfig
         let patched = update_prefix(value, real_prefix);
         let mut patched = remove_isysroot(&patched);
 
-        if let Some(replacement_entry) = DEFAULT_VARIABLE_UPDATES.get(key) {
-            patched = replacement_entry.patch(&patched);
+        if let Some(replacement_entries) = DEFAULT_VARIABLE_UPDATES.get(key) {
+            for replacement_entry in replacement_entries {
+                patched = replacement_entry.patch(&patched);
+            }
         }
 
         if *value != patched {
@@ -327,12 +345,17 @@ fn find_pkgconfigs(
 
 /// Patch the given `pkgconfig` contents.
 ///
-/// Returns the updated contents.
-fn patch_pkgconfig(contents: &str, real_prefix: &Path) -> String {
-    contents
+/// Returns the updated contents, if an update is needed.
+fn patch_pkgconfig(contents: &str) -> Option<String> {
+    let mut changed = false;
+    let new_contents = contents
         .lines()
         .map(|line| {
-            // Given, e.g., `prefix=/install`, replace with `prefix=/real/prefix`.
+            // python-build-standalone is compiled with a prefix of
+            // /install. Replace lines like `prefix=/install` with
+            // `prefix=${pcfiledir}/../..` (since the .pc file is in
+            // lib/pkgconfig/). Newer versions of python-build-standalone
+            // already have this change.
             let Some((prefix, suffix)) = line.split_once('=') else {
                 return Cow::Borrowed(line);
             };
@@ -347,9 +370,11 @@ fn patch_pkgconfig(contents: &str, real_prefix: &Path) -> String {
                 return Cow::Borrowed(line);
             }
 
-            Cow::Owned(format!("{}={}", prefix, real_prefix.display()))
+            changed = true;
+            Cow::Owned(format!("{prefix}=${{pcfiledir}}/../.."))
         })
-        .join("\n")
+        .join("\n");
+    if changed { Some(new_contents) } else { None }
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -423,7 +448,7 @@ mod tests {
         let real_prefix = Path::new("/real/prefix");
         let data = patch_sysconfigdata(sysconfigdata, real_prefix);
 
-        insta::assert_snapshot!(data.to_string_pretty()?, @r###"
+        insta::assert_snapshot!(data.to_string_pretty()?, @r##"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "AR": "ar",
@@ -431,7 +456,28 @@ mod tests {
             "CXX": "c++ -pthread",
             "PYTHON_BUILD_STANDALONE": 1
         }
-        "###);
+        "##);
+
+        // Cross-compiles use GNU
+        let sysconfigdata = [
+            ("CC", "/usr/bin/aarch64-linux-gnu-gcc"),
+            ("CXX", "/usr/bin/x86_64-linux-gnu-g++"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), Value::String(v.to_string())))
+        .collect::<SysconfigData>();
+
+        let real_prefix = Path::new("/real/prefix");
+        let data = patch_sysconfigdata(sysconfigdata, real_prefix);
+
+        insta::assert_snapshot!(data.to_string_pretty()?, @r##"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "CC": "cc",
+            "CXX": "c++",
+            "PYTHON_BUILD_STANDALONE": 1
+        }
+        "##);
 
         Ok(())
     }
@@ -479,12 +525,11 @@ mod tests {
             "
         };
 
-        let real_prefix = Path::new("/real/prefix");
-        let pkgconfig = patch_pkgconfig(pkgconfig, real_prefix);
+        let pkgconfig = patch_pkgconfig(pkgconfig).unwrap();
 
         insta::assert_snapshot!(pkgconfig, @r###"
         # See: man pkg-config
-        prefix=/real/prefix
+        prefix=${pcfiledir}/../..
         exec_prefix=${prefix}
         libdir=${exec_prefix}/lib
         includedir=${prefix}/include

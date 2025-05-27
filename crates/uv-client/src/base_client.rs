@@ -1,31 +1,35 @@
+use std::error::Error;
+use std::fmt::Debug;
+use std::fmt::Write;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
+use std::{env, io, iter};
+
 use itertools::Itertools;
-use reqwest::{Client, ClientBuilder, Response};
+use reqwest::{Client, ClientBuilder, Proxy, Response};
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::{
     DefaultRetryableStrategy, RetryTransientMiddleware, Retryable, RetryableStrategy,
 };
-use std::error::Error;
-use std::fmt::Debug;
-use std::path::Path;
-use std::sync::Arc;
-use std::time::Duration;
-use std::{env, iter};
 use tracing::{debug, trace};
 use url::Url;
-use uv_auth::AuthMiddleware;
+
+use uv_auth::{AuthMiddleware, Indexes};
 use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
+use crate::Connectivity;
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
-use crate::Connectivity;
 
 pub const DEFAULT_RETRIES: u32 = 3;
 
@@ -50,12 +54,13 @@ pub struct BaseClientBuilder<'a> {
     native_tls: bool,
     retries: u32,
     pub connectivity: Connectivity,
-    client: Option<Client>,
     markers: Option<&'a MarkerEnvironment>,
     platform: Option<&'a Platform>,
     auth_integration: AuthIntegration,
+    indexes: Indexes,
     default_timeout: Duration,
     extra_middleware: Option<ExtraMiddleware>,
+    proxies: Vec<Proxy>,
 }
 
 /// A list of user-defined middlewares to be applied to the client.
@@ -84,12 +89,13 @@ impl BaseClientBuilder<'_> {
             native_tls: false,
             connectivity: Connectivity::Online,
             retries: DEFAULT_RETRIES,
-            client: None,
             markers: None,
             platform: None,
             auth_integration: AuthIntegration::default(),
+            indexes: Indexes::new(),
             default_timeout: Duration::from_secs(30),
             extra_middleware: None,
+            proxies: vec![],
         }
     }
 }
@@ -126,12 +132,6 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn client(mut self, client: Client) -> Self {
-        self.client = Some(client);
-        self
-    }
-
-    #[must_use]
     pub fn markers(mut self, markers: &'a MarkerEnvironment) -> Self {
         self.markers = Some(markers);
         self
@@ -150,6 +150,12 @@ impl<'a> BaseClientBuilder<'a> {
     }
 
     #[must_use]
+    pub fn indexes(mut self, indexes: Indexes) -> Self {
+        self.indexes = indexes;
+        self
+    }
+
+    #[must_use]
     pub fn default_timeout(mut self, default_timeout: Duration) -> Self {
         self.default_timeout = default_timeout;
         self
@@ -158,6 +164,12 @@ impl<'a> BaseClientBuilder<'a> {
     #[must_use]
     pub fn extra_middleware(mut self, middleware: ExtraMiddleware) -> Self {
         self.extra_middleware = Some(middleware);
+        self
+    }
+
+    #[must_use]
+    pub fn proxy(mut self, proxy: Proxy) -> Self {
+        self.proxies.push(proxy);
         self
     }
 
@@ -178,7 +190,7 @@ impl<'a> BaseClientBuilder<'a> {
         if let Some(markers) = self.markers {
             let linehaul = LineHaul::new(markers, self.platform);
             if let Ok(output) = serde_json::to_string(&linehaul) {
-                user_agent_string += &format!(" {output}");
+                let _ = write!(user_agent_string, " {output}");
             }
         }
 
@@ -301,6 +313,13 @@ impl<'a> BaseClientBuilder<'a> {
             client_builder
         };
 
+        // apply proxies
+        let mut client_builder = client_builder;
+        for p in &self.proxies {
+            client_builder = client_builder.proxy(p.clone());
+        }
+        let client_builder = client_builder;
+
         client_builder
             .build()
             .expect("Failed to build HTTP client.")
@@ -324,15 +343,18 @@ impl<'a> BaseClientBuilder<'a> {
                 // Initialize the authentication middleware to set headers.
                 match self.auth_integration {
                     AuthIntegration::Default => {
-                        client = client
-                            .with(AuthMiddleware::new().with_keyring(self.keyring.to_provider()));
+                        let auth_middleware = AuthMiddleware::new()
+                            .with_indexes(self.indexes.clone())
+                            .with_keyring(self.keyring.to_provider());
+                        client = client.with(auth_middleware);
                     }
                     AuthIntegration::OnlyAuthenticated => {
-                        client = client.with(
-                            AuthMiddleware::new()
-                                .with_keyring(self.keyring.to_provider())
-                                .with_only_authenticated(true),
-                        );
+                        let auth_middleware = AuthMiddleware::new()
+                            .with_indexes(self.indexes.clone())
+                            .with_keyring(self.keyring.to_provider())
+                            .with_only_authenticated(true);
+
+                        client = client.with(auth_middleware);
                     }
                     AuthIntegration::NoAuthMiddleware => {
                         // The downstream code uses custom auth logic.
@@ -386,16 +408,19 @@ enum Security {
 
 impl BaseClient {
     /// Selects the appropriate client based on the host's trustworthiness.
-    pub fn for_host(&self, url: &Url) -> &ClientWithMiddleware {
-        if self
-            .allow_insecure_host
-            .iter()
-            .any(|allow_insecure_host| allow_insecure_host.matches(url))
-        {
+    pub fn for_host(&self, url: &DisplaySafeUrl) -> &ClientWithMiddleware {
+        if self.disable_ssl(url) {
             &self.dangerous_client
         } else {
             &self.client
         }
+    }
+
+    /// Returns `true` if the host is trusted to use the insecure client.
+    pub fn disable_ssl(&self, url: &DisplaySafeUrl) -> bool {
+        self.allow_insecure_host
+            .iter()
+            .any(|allow_insecure_host| allow_insecure_host.matches(url))
     }
 
     /// The configured client timeout, in seconds.
@@ -456,20 +481,28 @@ impl RetryableStrategy for UvRetryableStrategy {
 ///
 /// These cases should be safe to retry with [`Retryable::Transient`].
 pub fn is_extended_transient_error(err: &dyn Error) -> bool {
-    trace!("Attempting to retry error: {err:?}");
+    // First, try to show a nice trace log
+    if let Some((Some(status), Some(url))) = find_source::<crate::WrappedReqwestError>(&err)
+        .map(|request_err| (request_err.status(), request_err.url()))
+    {
+        trace!("Considering retry of response HTTP {status} for {url}");
+    } else {
+        trace!("Considering retry of error: {err:?}");
+    }
 
-    if let Some(io) = find_source::<std::io::Error>(&err) {
-        if io.kind() == std::io::ErrorKind::ConnectionReset
-            || io.kind() == std::io::ErrorKind::UnexpectedEof
+    // IO Errors may be nested through custom IO errors.
+    for io_err in find_sources::<io::Error>(&err) {
+        if io_err.kind() == io::ErrorKind::ConnectionReset
+            || io_err.kind() == io::ErrorKind::UnexpectedEof
+            || io_err.kind() == io::ErrorKind::BrokenPipe
         {
             trace!("Retrying error: `ConnectionReset` or `UnexpectedEof`");
             return true;
         }
-        trace!("Cannot retry error: not one of `ConnectionReset` or `UnexpectedEof`");
-    } else {
-        trace!("Cannot retry error: not an IO error");
+        trace!("Cannot retry IO error: not one of `ConnectionReset` or `UnexpectedEof`");
     }
 
+    trace!("Cannot retry error: not an IO error");
     false
 }
 
@@ -485,4 +518,13 @@ fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
         cause = err.source();
     }
     None
+}
+
+/// Return all errors in the chain of a specific type.
+///
+/// This handles cases such as nested `io::Error`s.
+///
+/// See <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
+fn find_sources<E: Error + 'static>(orig: &dyn Error) -> impl Iterator<Item = &E> {
+    iter::successors(find_source::<E>(orig), |&err| find_source(err))
 }

@@ -5,20 +5,21 @@ use thiserror::Error;
 use uv_static::EnvVars;
 
 pub use crate::discovery::{
-    find_python_installations, EnvironmentPreference, Error as DiscoveryError, PythonDownloads,
-    PythonNotFound, PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
+    EnvironmentPreference, Error as DiscoveryError, PythonDownloads, PythonNotFound,
+    PythonPreference, PythonRequest, PythonSource, PythonVariant, VersionRequest,
+    find_python_installations,
 };
 pub use crate::environment::{InvalidEnvironmentKind, PythonEnvironment};
 pub use crate::implementation::ImplementationName;
 pub use crate::installation::{PythonInstallation, PythonInstallationKey};
-pub use crate::interpreter::{Error as InterpreterError, Interpreter};
+pub use crate::interpreter::{BrokenSymlink, Error as InterpreterError, Interpreter};
 pub use crate::pointer_size::PointerSize;
 pub use crate::prefix::Prefix;
 pub use crate::python_version::PythonVersion;
 pub use crate::target::Target;
 pub use crate::version_files::{
     DiscoveryOptions as VersionFileDiscoveryOptions, FilePreference as VersionFilePreference,
-    PythonVersionFile, PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME,
+    PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME, PythonVersionFile,
 };
 pub use crate::virtualenv::{Error as VirtualEnvError, PyVenvConfiguration, VirtualEnvironment};
 
@@ -30,19 +31,25 @@ mod implementation;
 mod installation;
 mod interpreter;
 mod libc;
+pub mod macos_dylib;
 pub mod managed;
 #[cfg(windows)]
 mod microsoft_store;
 pub mod platform;
 mod pointer_size;
 mod prefix;
-#[cfg(windows)]
-mod py_launcher;
 mod python_version;
 mod sysconfig;
 mod target;
 mod version_files;
 mod virtualenv;
+#[cfg(windows)]
+pub mod windows_registry;
+
+#[cfg(windows)]
+pub(crate) const COMPANY_KEY: &str = "Astral";
+#[cfg(windows)]
+pub(crate) const COMPANY_DISPLAY_NAME: &str = "Astral Software Inc.";
 
 #[cfg(not(test))]
 pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
@@ -59,6 +66,9 @@ pub(crate) fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
     #[error(transparent)]
     VirtualEnv(#[from] virtualenv::Error),
 
@@ -100,7 +110,7 @@ mod tests {
     };
 
     use anyhow::Result;
-    use assert_fs::{fixture::ChildPath, prelude::*, TempDir};
+    use assert_fs::{TempDir, fixture::ChildPath, prelude::*};
     use indoc::{formatdoc, indoc};
     use temp_env::with_vars;
     use test_log::test;
@@ -109,15 +119,15 @@ mod tests {
     use uv_cache::Cache;
 
     use crate::{
-        discovery::{
-            find_best_python_installation, find_python_installation, EnvironmentPreference,
-        },
-        PythonPreference,
-    };
-    use crate::{
+        PythonNotFound, PythonRequest, PythonSource, PythonVersion,
         implementation::ImplementationName, installation::PythonInstallation,
         managed::ManagedPythonInstallations, virtualenv::virtualenv_python_executable,
-        PythonNotFound, PythonRequest, PythonSource, PythonVersion,
+    };
+    use crate::{
+        PythonPreference,
+        discovery::{
+            self, EnvironmentPreference, find_best_python_installation, find_python_installation,
+        },
     };
 
     struct TestContext {
@@ -153,7 +163,7 @@ mod tests {
             match self.search_path.as_mut() {
                 Some(paths) => paths.push(path),
                 None => self.search_path = Some(vec![path]),
-            };
+            }
         }
 
         /// Create a new directory and add it to the search path.
@@ -282,10 +292,10 @@ mod tests {
             fs_err::create_dir_all(path.parent().unwrap())?;
             fs_err::write(
                 path,
-                formatdoc! {r##"
-                #!/bin/bash
+                formatdoc! {r"
+                #!/bin/sh
                 echo '{json}'
-                "##},
+                "},
             )?;
 
             fs_err::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o770))?;
@@ -304,10 +314,10 @@ mod tests {
 
             fs_err::write(
                 path,
-                formatdoc! {r##"
-                #!/bin/bash
+                formatdoc! {r"
+                #!/bin/sh
                 echo '{output}' 1>&2
-                "##},
+                "},
             )?;
 
             fs_err::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o770))?;
@@ -501,7 +511,7 @@ mod tests {
             matches!(
                 interpreter,
                 PythonInstallation {
-                    source: PythonSource::SearchPath,
+                    source: PythonSource::SearchPathFirst,
                     interpreter: _
                 }
             ),
@@ -525,10 +535,10 @@ mod tests {
         #[cfg(unix)]
         fs_err::write(
             children[0].join(format!("python{}", env::consts::EXE_SUFFIX)),
-            formatdoc! {r##"
-        #!/bin/bash
+            formatdoc! {r"
+        #!/bin/sh
         echo 'foo'
-        "##},
+        "},
         )?;
         fs_err::set_permissions(
             children[0].join(format!("python{}", env::consts::EXE_SUFFIX)),
@@ -588,11 +598,10 @@ mod tests {
                 PythonPreference::default(),
                 &context.cache,
             )
-        })?;
+        });
         assert!(
-            matches!(result, Err(PythonNotFound { .. })),
-            // TODO(zanieb): We could improve the error handling to hint this to the user
-            "If only Python 2 is available, we should not find a python; got {result:?}"
+            matches!(result, Err(discovery::Error::Query(..))),
+            "If only Python 2 is available, we should report the interpreter query error; got {result:?}"
         );
 
         Ok(())
@@ -628,12 +637,12 @@ mod tests {
         })??;
         assert!(
             matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPath,
-                interpreter: _
-            }
-        ),
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPath,
+                    interpreter: _
+                }
+            ),
             "We should skip the Python 2 installation and find the Python 3 interpreter; got {python:?}"
         );
         assert_eq!(python.interpreter().sys_executable(), python3.path());
@@ -929,12 +938,12 @@ mod tests {
             })??;
         assert!(
             matches!(
-            python,
-            PythonInstallation {
-                source: PythonSource::SearchPath,
-                interpreter: _
-            }
-        ),
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPathFirst,
+                    interpreter: _
+                }
+            ),
             "We should skip the active environment in favor of the requested version; got {python:?}"
         );
 
@@ -2422,7 +2431,7 @@ mod tests {
             matches!(
                 python,
                 PythonInstallation {
-                    source: PythonSource::SearchPath,
+                    source: PythonSource::SearchPathFirst,
                     interpreter: _
                 }
             ),
@@ -2474,7 +2483,7 @@ mod tests {
             matches!(
                 python,
                 PythonInstallation {
-                    source: PythonSource::SearchPath,
+                    source: PythonSource::SearchPathFirst,
                     interpreter: _
                 }
             ),

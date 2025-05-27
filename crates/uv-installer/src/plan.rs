@@ -1,24 +1,25 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
+use std::sync::Arc;
 use tracing::{debug, warn};
 
 use uv_cache::{Cache, CacheBucket, WheelCache};
-use uv_cache_info::{CacheInfo, Timestamp};
+use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, ConfigSettings, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, LocalArchivePointer, RegistryWheelIndex,
 };
 use uv_distribution_types::{
     BuiltDist, CachedDirectUrlDist, CachedDist, Dist, Error, Hashed, IndexLocations, InstalledDist,
-    Name, Resolution, ResolvedDist, SourceDist,
+    Name, RequirementSource, Resolution, ResolvedDist, SourceDist,
 };
 use uv_fs::Simplified;
 use uv_platform_tags::Tags;
-use uv_pypi_types::RequirementSource;
+use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::PythonEnvironment;
 use uv_types::HashStrategy;
 
-use crate::satisfies::RequirementSatisfaction;
 use crate::SitePackages;
+use crate::satisfies::RequirementSatisfaction;
 
 /// A planner to generate an [`Plan`] based on a set of requirements.
 #[derive(Debug)]
@@ -56,7 +57,8 @@ impl<'a> Planner<'a> {
         tags: &Tags,
     ) -> Result<Plan> {
         // Index all the already-downloaded wheels in the cache.
-        let mut registry_index = RegistryWheelIndex::new(cache, tags, index_locations, hasher);
+        let mut registry_index =
+            RegistryWheelIndex::new(cache, tags, index_locations, hasher, config_settings);
         let built_index = BuiltWheelIndex::new(cache, tags, hasher, config_settings);
 
         let mut cached = vec![];
@@ -64,13 +66,23 @@ impl<'a> Planner<'a> {
         let mut reinstalls = vec![];
         let mut extraneous = vec![];
 
+        // TODO(charlie): There are a few assumptions here that are hard to spot:
+        //
+        // 1. Apparently, we never return direct URL distributions as [`ResolvedDist::Installed`].
+        //    If you trace the resolver, we only ever return [`ResolvedDist::Installed`] if you go
+        //    through the [`CandidateSelector`], and we only go through the [`CandidateSelector`]
+        //    for registry distributions.
+        //
+        // 2. We expect any distribution returned as [`ResolvedDist::Installed`] to hit the
+        //    "Requirement already installed" path (hence the `unreachable!`) a few lines below it.
+        //    So, e.g., if a package is marked as `--reinstall`, we _expect_ that it's not passed in
+        //    as [`ResolvedDist::Installed`] here.
         for dist in self.resolution.distributions() {
             // Check if the package should be reinstalled.
-            let reinstall = match reinstall {
-                Reinstall::None => false,
-                Reinstall::All => true,
-                Reinstall::Packages(packages) => packages.contains(dist.name()),
-            };
+            let reinstall = reinstall.contains_package(dist.name())
+                || dist
+                    .source_tree()
+                    .is_some_and(|source_tree| reinstall.contains_path(source_tree));
 
             // Check if installation of a binary version of the package should be allowed.
             let no_binary = build_options.no_binary_package(dist.name());
@@ -85,9 +97,11 @@ impl<'a> Planner<'a> {
                     [] => {}
                     [installed] => {
                         let source = RequirementSource::from(dist);
-                        match RequirementSatisfaction::check(installed, &source)? {
+                        match RequirementSatisfaction::check(installed, &source) {
                             RequirementSatisfaction::Mismatch => {
-                                debug!("Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}");
+                                debug!(
+                                    "Requirement installed, but mismatched:\n  Installed: {installed:?}\n  Requested: {source:?}"
+                                );
                             }
                             RequirementSatisfaction::Satisfied => {
                                 debug!("Requirement already installed: {installed}");
@@ -95,6 +109,9 @@ impl<'a> Planner<'a> {
                             }
                             RequirementSatisfaction::OutOfDate => {
                                 debug!("Requirement installed, but not fresh: {installed}");
+                            }
+                            RequirementSatisfaction::CacheInvalid => {
+                                // Already logged
                             }
                         }
                         reinstalls.push(installed.clone());
@@ -110,22 +127,26 @@ impl<'a> Planner<'a> {
                 unreachable!("Installed distribution could not be found in site-packages: {dist}");
             };
 
-            if cache.must_revalidate(dist.name()) {
+            if cache.must_revalidate_package(dist.name())
+                || dist
+                    .source_tree()
+                    .is_some_and(|source_tree| cache.must_revalidate_path(source_tree))
+            {
                 debug!("Must revalidate requirement: {}", dist.name());
                 remote.push(dist.clone());
                 continue;
             }
 
             // Identify any cached distributions that satisfy the requirement.
-            match dist {
+            match dist.as_ref() {
                 Dist::Built(BuiltDist::Registry(wheel)) => {
                     if let Some(distribution) = registry_index.get(wheel.name()).find_map(|entry| {
                         if *entry.index.url() != wheel.best_wheel().index {
                             return None;
                         }
-                        if entry.dist.filename.version != wheel.best_wheel().filename.version {
+                        if entry.dist.filename != wheel.best_wheel().filename {
                             return None;
-                        };
+                        }
                         if entry.built && no_build {
                             return None;
                         }
@@ -134,8 +155,7 @@ impl<'a> Planner<'a> {
                         }
                         Some(&entry.dist)
                     }) {
-                        debug!("Requirement already cached: {distribution}");
-                        // STOPSHIP(charlie): If these are mismatched, skip and warn.
+                        debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
                     }
@@ -162,24 +182,38 @@ impl<'a> Planner<'a> {
                             CacheBucket::Wheels,
                             WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                         )
-                        .entry(format!("{}.http", wheel.filename.stem()));
+                        .entry(format!("{}.http", wheel.filename.cache_key()));
 
                     // Read the HTTP pointer.
-                    if let Some(pointer) = HttpArchivePointer::read_from(&cache_entry)? {
-                        let archive = pointer.into_archive();
-                        if archive.satisfies(hasher.get(dist)) {
-                            let cached_dist = CachedDirectUrlDist::from_url(
-                                wheel.filename.clone(),
-                                wheel.url.clone(),
-                                archive.hashes,
-                                CacheInfo::default(),
-                                cache.archive(&archive.id),
-                            );
+                    match HttpArchivePointer::read_from(&cache_entry) {
+                        Ok(Some(pointer)) => {
+                            let cache_info = pointer.to_cache_info();
+                            let archive = pointer.into_archive();
+                            if archive.satisfies(hasher.get(dist.as_ref())) {
+                                let cached_dist = CachedDirectUrlDist {
+                                    filename: wheel.filename.clone(),
+                                    url: VerbatimParsedUrl {
+                                        parsed_url: wheel.parsed_url(),
+                                        verbatim: wheel.url.clone(),
+                                    },
+                                    hashes: archive.hashes,
+                                    cache_info,
+                                    path: cache.archive(&archive.id).into_boxed_path(),
+                                };
 
-                            debug!("URL wheel requirement already cached: {cached_dist}");
-                            // STOPSHIP(charlie): If these are mismatched, skip and warn.
-                            cached.push(CachedDist::Url(cached_dist));
-                            continue;
+                                debug!("URL wheel requirement already cached: {cached_dist}");
+                                cached.push(CachedDist::Url(cached_dist));
+                                continue;
+                            }
+                            debug!(
+                                "Cached URL wheel requirement does not match expected hash policy for: {wheel}"
+                            );
+                        }
+                        Ok(None) => {}
+                        Err(err) => {
+                            debug!(
+                                "Failed to deserialize cached URL wheel requirement for: {wheel} ({err})"
+                            );
                         }
                     }
                 }
@@ -210,26 +244,46 @@ impl<'a> Planner<'a> {
                             CacheBucket::Wheels,
                             WheelCache::Url(&wheel.url).wheel_dir(wheel.name().as_ref()),
                         )
-                        .entry(format!("{}.rev", wheel.filename.stem()));
+                        .entry(format!("{}.rev", wheel.filename.cache_key()));
 
-                    if let Some(pointer) = LocalArchivePointer::read_from(&cache_entry)? {
-                        let timestamp = Timestamp::from_path(&wheel.install_path)?;
-                        if pointer.is_up_to_date(timestamp) {
-                            let cache_info = pointer.to_cache_info();
-                            let archive = pointer.into_archive();
-                            if archive.satisfies(hasher.get(dist)) {
-                                let cached_dist = CachedDirectUrlDist::from_url(
-                                    wheel.filename.clone(),
-                                    wheel.url.clone(),
-                                    archive.hashes,
-                                    cache_info,
-                                    cache.archive(&archive.id),
-                                );
+                    match LocalArchivePointer::read_from(&cache_entry) {
+                        Ok(Some(pointer)) => match Timestamp::from_path(&wheel.install_path) {
+                            Ok(timestamp) => {
+                                if pointer.is_up_to_date(timestamp) {
+                                    let cache_info = pointer.to_cache_info();
+                                    let archive = pointer.into_archive();
+                                    if archive.satisfies(hasher.get(dist.as_ref())) {
+                                        let cached_dist = CachedDirectUrlDist {
+                                            filename: wheel.filename.clone(),
+                                            url: VerbatimParsedUrl {
+                                                parsed_url: wheel.parsed_url(),
+                                                verbatim: wheel.url.clone(),
+                                            },
+                                            hashes: archive.hashes,
+                                            cache_info,
+                                            path: cache.archive(&archive.id).into_boxed_path(),
+                                        };
 
-                                debug!("Path wheel requirement already cached: {cached_dist}");
-                                cached.push(CachedDist::Url(cached_dist));
-                                continue;
+                                        debug!(
+                                            "Path wheel requirement already cached: {cached_dist}"
+                                        );
+                                        cached.push(CachedDist::Url(cached_dist));
+                                        continue;
+                                    }
+                                    debug!(
+                                        "Cached path wheel requirement does not match expected hash policy for: {wheel}"
+                                    );
+                                }
                             }
+                            Err(err) => {
+                                debug!("Failed to get timestamp for wheel {wheel} ({err})");
+                            }
+                        },
+                        Ok(None) => {}
+                        Err(err) => {
+                            debug!(
+                                "Failed to deserialize cached path wheel requirement for: {wheel} ({err})"
+                            );
                         }
                     }
                 }
@@ -243,7 +297,7 @@ impl<'a> Planner<'a> {
                         }
                         if entry.dist.filename.version != sdist.version {
                             return None;
-                        };
+                        }
                         if entry.built && no_build {
                             return None;
                         }
@@ -252,7 +306,7 @@ impl<'a> Planner<'a> {
                         }
                         Some(&entry.dist)
                     }) {
-                        debug!("Requirement already cached: {distribution}");
+                        debug!("Registry requirement already cached: {distribution}");
                         cached.push(CachedDist::Registry(distribution.clone()));
                         continue;
                     }
@@ -260,19 +314,26 @@ impl<'a> Planner<'a> {
                 Dist::Source(SourceDist::DirectUrl(sdist)) => {
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
-                    if let Some(wheel) = built_index.url(sdist)? {
-                        if wheel.filename.name == sdist.name {
-                            let cached_dist = wheel.into_url_dist(sdist.url.clone());
-                            debug!("URL source requirement already cached: {cached_dist}");
-                            cached.push(CachedDist::Url(cached_dist));
-                            continue;
-                        }
+                    match built_index.url(sdist) {
+                        Ok(Some(wheel)) => {
+                            if wheel.filename.name == sdist.name {
+                                let cached_dist = wheel.into_url_dist(sdist);
+                                debug!("URL source requirement already cached: {cached_dist}");
+                                cached.push(CachedDist::Url(cached_dist));
+                                continue;
+                            }
 
-                        warn!(
-                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                            sdist,
-                            wheel.filename
-                        );
+                            warn!(
+                                "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                                sdist, wheel.filename
+                            );
+                        }
+                        Ok(None) => {}
+                        Err(err) => {
+                            debug!(
+                                "Failed to deserialize cached wheel filename for: {sdist} ({err})"
+                            );
+                        }
                     }
                 }
                 Dist::Source(SourceDist::Git(sdist)) => {
@@ -280,7 +341,7 @@ impl<'a> Planner<'a> {
                     // the filename in advance.
                     if let Some(wheel) = built_index.git(sdist) {
                         if wheel.filename.name == sdist.name {
-                            let cached_dist = wheel.into_url_dist(sdist.url.clone());
+                            let cached_dist = wheel.into_git_dist(sdist);
                             debug!("Git source requirement already cached: {cached_dist}");
                             cached.push(CachedDist::Url(cached_dist));
                             continue;
@@ -288,8 +349,7 @@ impl<'a> Planner<'a> {
 
                         warn!(
                             "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                            sdist,
-                            wheel.filename
+                            sdist, wheel.filename
                         );
                     }
                 }
@@ -301,19 +361,26 @@ impl<'a> Planner<'a> {
 
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
-                    if let Some(wheel) = built_index.path(sdist)? {
-                        if wheel.filename.name == sdist.name {
-                            let cached_dist = wheel.into_url_dist(sdist.url.clone());
-                            debug!("Path source requirement already cached: {cached_dist}");
-                            cached.push(CachedDist::Url(cached_dist));
-                            continue;
-                        }
+                    match built_index.path(sdist) {
+                        Ok(Some(wheel)) => {
+                            if wheel.filename.name == sdist.name {
+                                let cached_dist = wheel.into_path_dist(sdist);
+                                debug!("Path source requirement already cached: {cached_dist}");
+                                cached.push(CachedDist::Url(cached_dist));
+                                continue;
+                            }
 
-                        warn!(
-                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                            sdist,
-                            wheel.filename
-                        );
+                            warn!(
+                                "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                                sdist, wheel.filename
+                            );
+                        }
+                        Ok(None) => {}
+                        Err(err) => {
+                            debug!(
+                                "Failed to deserialize cached wheel filename for: {sdist} ({err})"
+                            );
+                        }
                     }
                 }
                 Dist::Source(SourceDist::Directory(sdist)) => {
@@ -324,23 +391,28 @@ impl<'a> Planner<'a> {
 
                     // Find the most-compatible wheel from the cache, since we don't know
                     // the filename in advance.
-                    if let Some(wheel) = built_index.directory(sdist)? {
-                        if wheel.filename.name == sdist.name {
-                            let cached_dist = if sdist.editable {
-                                wheel.into_editable(sdist.url.clone())
-                            } else {
-                                wheel.into_url_dist(sdist.url.clone())
-                            };
-                            debug!("Directory source requirement already cached: {cached_dist}");
-                            cached.push(CachedDist::Url(cached_dist));
-                            continue;
-                        }
+                    match built_index.directory(sdist) {
+                        Ok(Some(wheel)) => {
+                            if wheel.filename.name == sdist.name {
+                                let cached_dist = wheel.into_directory_dist(sdist);
+                                debug!(
+                                    "Directory source requirement already cached: {cached_dist}"
+                                );
+                                cached.push(CachedDist::Url(cached_dist));
+                                continue;
+                            }
 
-                        warn!(
-                            "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
-                            sdist,
-                            wheel.filename
-                        );
+                            warn!(
+                                "Cached wheel filename does not match requested distribution for: `{}` (found: `{}`)",
+                                sdist, wheel.filename
+                            );
+                        }
+                        Ok(None) => {}
+                        Err(err) => {
+                            debug!(
+                                "Failed to deserialize cached wheel filename for: {sdist} ({err})"
+                            );
+                        }
                     }
                 }
             }
@@ -355,12 +427,7 @@ impl<'a> Planner<'a> {
             // (2) the `--seed` argument was not passed to `uv venv`.
             let seed_packages = !venv.cfg().is_ok_and(|cfg| cfg.is_uv() && !cfg.is_seed());
             for dist_info in site_packages {
-                if seed_packages
-                    && matches!(
-                        dist_info.name().as_ref(),
-                        "pip" | "setuptools" | "wheel" | "uv"
-                    )
-                {
+                if seed_packages && is_seed_package(&dist_info, venv) {
                     debug!("Preserving seed package: {dist_info}");
                     continue;
                 }
@@ -379,6 +446,19 @@ impl<'a> Planner<'a> {
     }
 }
 
+/// Returns `true` if the given distribution is a seed package.
+fn is_seed_package(dist_info: &InstalledDist, venv: &PythonEnvironment) -> bool {
+    if venv.interpreter().python_tuple() >= (3, 12) {
+        matches!(dist_info.name().as_ref(), "uv" | "pip")
+    } else {
+        // Include `setuptools` and `wheel` on Python <3.12.
+        matches!(
+            dist_info.name().as_ref(),
+            "pip" | "setuptools" | "wheel" | "uv"
+        )
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Plan {
     /// The distributions that are not already installed in the current environment, but are
@@ -387,7 +467,7 @@ pub struct Plan {
 
     /// The distributions that are not already installed in the current environment, and are
     /// not available in the local cache.
-    pub remote: Vec<Dist>,
+    pub remote: Vec<Arc<Dist>>,
 
     /// Any distributions that are already installed in the current environment, but will be
     /// re-installed (including upgraded) to satisfy the requirements.

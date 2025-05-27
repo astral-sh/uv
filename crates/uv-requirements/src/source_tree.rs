@@ -1,35 +1,33 @@
-use std::borrow::Cow;
-use std::collections::VecDeque;
-use std::path::Path;
-use std::slice;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::{borrow::Cow, collections::BTreeMap};
 
 use anyhow::{Context, Result};
-use futures::stream::FuturesOrdered;
 use futures::TryStreamExt;
-use rustc_hash::FxHashSet;
+use futures::stream::FuturesOrdered;
 use url::Url;
 
-use uv_configuration::ExtrasSpecification;
-use uv_distribution::{DistributionDatabase, Reporter, RequiresDist};
+use uv_configuration::{DependencyGroups, ExtrasSpecification};
+use uv_distribution::{DistributionDatabase, FlatRequiresDist, Reporter, RequiresDist};
+use uv_distribution_types::Requirement;
 use uv_distribution_types::{
-    BuildableSource, DirectorySourceUrl, HashPolicy, SourceUrl, VersionId,
+    BuildableSource, DirectorySourceUrl, HashGeneration, HashPolicy, SourceUrl, VersionId,
 };
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
-use uv_pep508::{MarkerTree, RequirementOrigin};
-use uv_pypi_types::Requirement;
+use uv_pep508::RequirementOrigin;
+use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
 #[derive(Debug, Clone)]
 pub struct SourceTreeResolution {
     /// The requirements sourced from the source trees.
-    pub requirements: Vec<Requirement>,
+    pub requirements: Box<[Requirement]>,
     /// The names of the projects that were resolved.
     pub project: PackageName,
     /// The extras used when resolving the requirements.
-    pub extras: Vec<ExtraName>,
+    pub extras: Box<[ExtraName]>,
 }
 
 /// A resolver for requirements specified via source trees.
@@ -39,6 +37,8 @@ pub struct SourceTreeResolution {
 pub struct SourceTreeResolver<'a, Context: BuildContext> {
     /// The extras to include when resolving requirements.
     extras: &'a ExtrasSpecification,
+    /// The groups to include when resolving requirements.
+    groups: &'a BTreeMap<PathBuf, DependencyGroups>,
     /// The hash policy to enforce.
     hasher: &'a HashStrategy,
     /// The in-memory index for resolving dependencies.
@@ -51,12 +51,14 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// Instantiate a new [`SourceTreeResolver`] for a given set of `source_trees`.
     pub fn new(
         extras: &'a ExtrasSpecification,
+        groups: &'a BTreeMap<PathBuf, DependencyGroups>,
         hasher: &'a HashStrategy,
         index: &'a InMemoryIndex,
         database: DistributionDatabase<'a, Context>,
     ) -> Self {
         Self {
             extras,
+            groups,
             hasher,
             index,
             database,
@@ -65,7 +67,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
 
     /// Set the [`Reporter`] to use for this resolver.
     #[must_use]
-    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+    pub fn with_reporter(self, reporter: Arc<dyn Reporter>) -> Self {
         Self {
             database: self.database.with_reporter(reporter),
             ..self
@@ -78,7 +80,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         source_trees: impl Iterator<Item = &Path>,
     ) -> Result<Vec<SourceTreeResolution>> {
         let resolutions: Vec<_> = source_trees
-            .map(|source_tree| async { self.resolve_source_tree(source_tree).await })
+            .map(async |source_tree| self.resolve_source_tree(source_tree).await)
             .collect::<FuturesOrdered<_>>()
             .try_collect()
             .await?;
@@ -88,7 +90,6 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
     /// Infer the dependencies for a directory dependency.
     async fn resolve_source_tree(&self, path: &Path) -> Result<SourceTreeResolution> {
         let metadata = self.resolve_requires_dist(path).await?;
-
         let origin = RequirementOrigin::Project(path.to_path_buf(), metadata.name.clone());
 
         // Determine the extras to include when resolving the requirements.
@@ -98,70 +99,50 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             .cloned()
             .collect::<Vec<_>>();
 
-        let dependencies = metadata
-            .requires_dist
-            .into_iter()
-            .map(|requirement| Requirement {
-                origin: Some(origin.clone()),
-                marker: requirement.marker.simplify_extras(&extras),
-                ..requirement
-            })
-            .collect::<Vec<_>>();
+        let mut requirements = Vec::new();
 
-        // Transitively process all extras that are recursively included, starting with the current
-        // extra.
-        let mut requirements = dependencies.clone();
-        let mut seen = FxHashSet::<(ExtraName, MarkerTree)>::default();
-        let mut queue: VecDeque<_> = requirements
-            .iter()
-            .filter(|req| req.name == metadata.name)
-            .flat_map(|req| {
-                req.extras
-                    .iter()
-                    .cloned()
-                    .map(|extra| (extra, req.marker.simplify_extras(&extras)))
-            })
-            .collect();
-        while let Some((extra, marker)) = queue.pop_front() {
-            if !seen.insert((extra.clone(), marker)) {
-                continue;
+        // Resolve any groups associated with this path
+        let default_groups = DependencyGroups::default();
+        let groups = self.groups.get(path).unwrap_or(&default_groups);
+
+        // Flatten any transitive extras and include dependencies
+        // (unless something like --only-group was passed)
+        if groups.prod() {
+            requirements.extend(
+                FlatRequiresDist::from_requirements(metadata.requires_dist, &metadata.name)
+                    .into_iter()
+                    .map(|requirement| Requirement {
+                        origin: Some(origin.clone()),
+                        marker: requirement.marker.simplify_extras(&extras),
+                        ..requirement
+                    }),
+            );
+        }
+
+        // Apply dependency-groups
+        for (group_name, group) in &metadata.dependency_groups {
+            if groups.contains(group_name) {
+                requirements.extend(group.iter().cloned().map(|group| Requirement {
+                    origin: Some(RequirementOrigin::Group(
+                        path.to_path_buf(),
+                        metadata.name.clone(),
+                        group_name.clone(),
+                    )),
+                    ..group
+                }));
             }
-
-            // Find the requirements for the extra.
-            for requirement in &dependencies {
-                if requirement.marker.top_level_extra_name().as_ref() == Some(&extra) {
-                    let requirement = {
-                        let mut marker = marker;
-                        marker.and(requirement.marker);
-                        Requirement {
-                            name: requirement.name.clone(),
-                            extras: requirement.extras.clone(),
-                            groups: requirement.groups.clone(),
-                            source: requirement.source.clone(),
-                            origin: requirement.origin.clone(),
-                            marker: marker.simplify_extras(slice::from_ref(&extra)),
-                        }
-                    };
-                    if requirement.name == metadata.name {
-                        // Add each transitively included extra.
-                        queue.extend(
-                            requirement
-                                .extras
-                                .iter()
-                                .cloned()
-                                .map(|extra| (extra, requirement.marker)),
-                        );
-                    } else {
-                        // Add the requirements for that extra.
-                        requirements.push(requirement);
-                    }
-                }
+        }
+        // Complain if dependency groups are named that don't appear.
+        for name in groups.explicit_names() {
+            if !metadata.dependency_groups.contains_key(name) {
+                return Err(anyhow::anyhow!(
+                    "The dependency group '{name}' was not found in the project: {}",
+                    path.user_display()
+                ));
             }
         }
 
-        // Drop all the self-requirements now that we flattened them out.
-        requirements.retain(|req| req.name != metadata.name);
-
+        let requirements = requirements.into_boxed_slice();
         let project = metadata.name;
         let extras = metadata.provides_extras;
 
@@ -200,7 +181,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             return Ok(metadata);
         }
 
-        let Ok(url) = Url::from_directory_path(source_tree) else {
+        let Ok(url) = Url::from_directory_path(source_tree).map(DisplaySafeUrl::from) else {
             return Err(anyhow::anyhow!("Failed to convert path to URL"));
         };
         let source = SourceUrl::Directory(DirectorySourceUrl {
@@ -213,8 +194,8 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // manual match.
         let hashes = match self.hasher {
             HashStrategy::None => HashPolicy::None,
-            HashStrategy::Generate => HashPolicy::Generate,
-            HashStrategy::Verify(_) => HashPolicy::Generate,
+            HashStrategy::Generate(mode) => HashPolicy::Generate(*mode),
+            HashStrategy::Verify(_) => HashPolicy::Generate(HashGeneration::All),
             HashStrategy::Require(_) => {
                 return Err(anyhow::anyhow!(
                     "Hash-checking is not supported for local directories: {}",
@@ -226,32 +207,30 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         // Fetch the metadata for the distribution.
         let metadata = {
             let id = VersionId::from_url(source.url());
-            if let Some(archive) =
-                self.index
-                    .distributions()
-                    .get(&id)
-                    .as_deref()
-                    .and_then(|response| {
-                        if let MetadataResponse::Found(archive) = response {
-                            Some(archive)
-                        } else {
-                            None
-                        }
-                    })
-            {
-                // If the metadata is already in the index, return it.
-                archive.metadata.clone()
-            } else {
+            if self.index.distributions().register(id.clone()) {
                 // Run the PEP 517 build process to extract metadata from the source distribution.
                 let source = BuildableSource::Url(source);
                 let archive = self.database.build_wheel_metadata(&source, hashes).await?;
 
+                let metadata = archive.metadata.clone();
+
                 // Insert the metadata into the index.
                 self.index
                     .distributions()
-                    .done(id, Arc::new(MetadataResponse::Found(archive.clone())));
+                    .done(id, Arc::new(MetadataResponse::Found(archive)));
 
-                archive.metadata
+                metadata
+            } else {
+                let response = self
+                    .index
+                    .distributions()
+                    .wait(&id)
+                    .await
+                    .expect("missing value for registered task");
+                let MetadataResponse::Found(archive) = &*response else {
+                    panic!("Failed to find metadata for: {}", path.user_display());
+                };
+                archive.metadata.clone()
             }
         };
 
