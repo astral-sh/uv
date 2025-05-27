@@ -508,7 +508,7 @@ impl AuthMiddleware {
             debug!("Checking netrc for credentials for {url}");
             Credentials::from_netrc(
                 netrc,
-                &url,
+                url,
                 credentials
                     .as_ref()
                     .and_then(|credentials| credentials.username()),
@@ -529,17 +529,17 @@ impl AuthMiddleware {
                 if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
                     if let Some(index_url) = maybe_index_url {
                         debug!("Checking keyring for credentials for index URL {}@{}", username, index_url);
-                        keyring.fetch(&DisplaySafeUrlRef::from(index_url), Some(username)).await
+                        keyring.fetch(DisplaySafeUrlRef::from(index_url), Some(username)).await
                     } else {
                         debug!("Checking keyring for credentials for full URL {}@{}", username, url);
-                        keyring.fetch(&url, Some(username)).await
+                        keyring.fetch(url, Some(username)).await
                     }
                 } else if matches!(auth_policy, AuthPolicy::Always) {
                     if let Some(index_url) = maybe_index_url {
                         debug!(
                             "Checking keyring for credentials for index URL {index_url} without username due to `authenticate = always`"
                         );
-                        keyring.fetch(&DisplaySafeUrlRef::from(index_url), None).await
+                        keyring.fetch(DisplaySafeUrlRef::from(index_url), None).await
                     } else {
                         None
                     }

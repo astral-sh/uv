@@ -279,7 +279,21 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://download.pytorch.org/whl/jinja2/,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [
                 File {
@@ -322,7 +336,21 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://download.pytorch.org/whl/jinja2/,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [
                 File {
@@ -368,7 +396,21 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://index.python.org/,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "index.python.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [
                 File {
@@ -411,7 +453,21 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://download.pytorch.org/whl/jinja2/,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [
                 File {
@@ -454,7 +510,21 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://download.pytorch.org/whl/jinja2/,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [
                 File {
@@ -497,7 +567,21 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://download.pytorch.org/whl/jinja2/,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [
                 File {
@@ -538,7 +622,21 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://download.pytorch.org/whl/jinja2/,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [
                 File {
@@ -576,14 +674,28 @@ mod tests {
     ";
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://download.pytorch.org/whl/jinja2/,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [],
         }
-        ");
+        "#);
     }
 
     #[test]
@@ -600,14 +712,28 @@ mod tests {
     "#;
         let base = Url::parse("https://download.pytorch.org/whl/jinja2/").unwrap();
         let result = SimpleHtml::parse(text, &base).unwrap();
-        insta::assert_debug_snapshot!(result, @r"
+        insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://download.pytorch.org/whl/jinja2/,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [],
         }
-        ");
+        "#);
     }
 
     #[test]
@@ -627,7 +753,21 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://download.pytorch.org/whl/jinja2/,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [
                 File {
@@ -668,7 +808,21 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://download.pytorch.org/whl/jinja2/,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [
                 File {
@@ -710,7 +864,21 @@ mod tests {
         Ok(
             SimpleHtml {
                 base: BaseUrl(
-                    https://download.pytorch.org/whl/jinja2/,
+                    DisplaySafeUrl {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "download.pytorch.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/whl/jinja2/",
+                        query: None,
+                        fragment: None,
+                    },
                 ),
                 files: [
                     File {
@@ -753,7 +921,21 @@ mod tests {
         Ok(
             SimpleHtml {
                 base: BaseUrl(
-                    https://download.pytorch.org/whl/jinja2/,
+                    DisplaySafeUrl {
+                        scheme: "https",
+                        cannot_be_a_base: false,
+                        username: "",
+                        password: None,
+                        host: Some(
+                            Domain(
+                                "download.pytorch.org",
+                            ),
+                        ),
+                        port: None,
+                        path: "/whl/jinja2/",
+                        query: None,
+                        fragment: None,
+                    },
                 ),
                 files: [
                     File {
@@ -813,7 +995,21 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://storage.googleapis.com/jax-releases/jax_cuda_releases.html,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "storage.googleapis.com",
+                        ),
+                    ),
+                    port: None,
+                    path: "/jax-releases/jax_cuda_releases.html",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [
                 File {
@@ -881,7 +1077,21 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "account.d.codeartifact.us-west-2.amazonaws.com",
+                        ),
+                    ),
+                    port: None,
+                    path: "/pypi/shared-packages-pypi/simple/flask/",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [
                 File {
@@ -970,7 +1180,21 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://download.pytorch.org/whl/jinja2/,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "download.pytorch.org",
+                        ),
+                    ),
+                    port: None,
+                    path: "/whl/jinja2/",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [
                 File {
@@ -1029,7 +1253,21 @@ mod tests {
         insta::assert_debug_snapshot!(result, @r#"
         SimpleHtml {
             base: BaseUrl(
-                https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask/,
+                DisplaySafeUrl {
+                    scheme: "https",
+                    cannot_be_a_base: false,
+                    username: "",
+                    password: None,
+                    host: Some(
+                        Domain(
+                            "account.d.codeartifact.us-west-2.amazonaws.com",
+                        ),
+                    ),
+                    port: None,
+                    path: "/pypi/shared-packages-pypi/simple/flask/",
+                    query: None,
+                    fragment: None,
+                },
             ),
             files: [
                 File {
