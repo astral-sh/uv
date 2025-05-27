@@ -1943,7 +1943,7 @@ fn tool_run_python_at_version() {
       ╰─▶ Because cp311 was not found in the package registry and you require cp311, we can conclude that your requirements are unsatisfiable.
     ");
 
-    // Bare names don't work either. Again we interpret them as package names.
+    // Bare versions don't work either. Again we interpret them as package names.
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("311")
         .arg("--version"), @r"
