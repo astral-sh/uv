@@ -1,9 +1,12 @@
+use std::path::Path;
+
 use tracing::debug;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
 use uv_configuration::{Concurrency, Constraints, PreviewMode};
 use uv_distribution_types::{Name, Resolution};
+use uv_fs::PythonExt;
 use uv_python::{Interpreter, PythonEnvironment};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
@@ -165,6 +168,30 @@ impl CachedEnvironment {
     pub(crate) fn clear_system_site_packages(&self) -> Result<(), ProjectError> {
         self.0
             .set_pyvenv_cfg("include-system-site-packages", "false")?;
+        Ok(())
+    }
+
+    /// Set the `extends-environment` key in the `pyvenv.cfg` file to the given path.
+    ///
+    /// Ephemeral environments created by `uv run --with` extend a parent (virtual or system)
+    /// environment by adding a `.pth` file to the ephemeral environment's `site-packages`
+    /// directory. The `pth` file contains Python code to dynamically add the parent
+    /// environment's `site-packages` directory to Python's import search paths in addition to
+    /// the ephemeral environment's `site-packages` directory. This works well at runtime, but
+    /// is too dynamic for static analysis tools like ty to understand. As such, we
+    /// additionally write the `sys.prefix` of the parent environment to to the
+    /// `extends-environment` key of the ephemeral environment's `pyvenv.cfg` file, making it
+    /// easier for these tools to statically and reliably understand the relationship between
+    /// the two environments.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn set_parent_environment(
+        &self,
+        parent_environment_sys_prefix: &Path,
+    ) -> Result<(), ProjectError> {
+        self.0.set_pyvenv_cfg(
+            "extends-environment",
+            &parent_environment_sys_prefix.escape_for_python(),
+        )?;
         Ok(())
     }
 
