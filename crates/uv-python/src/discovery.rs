@@ -1479,6 +1479,7 @@ impl PythonRequest {
     /// value is unambiguously a Python version. This alternate constructor is intended for `uvx`,
     /// where the executable might be a Python version or a package name. There are several
     /// differences in behavior:
+    ///
     /// - This only supports long names, including e.g. `pypy39` but **not** `pp39` or `39`.
     /// - On Windows only, this allows `pythonw` as an alias for `python`.
     /// - This allows `python` by itself (and on Windows, `pythonw`) as an alias for `default`.
