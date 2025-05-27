@@ -267,6 +267,105 @@ fn package() -> Result<()> {
     Ok(())
 }
 
+/// Test json output
+#[test]
+fn sync_json() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running `uv sync` should generate a lockfile.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--format").arg("json"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "project_dir": "[TEMP_DIR]/",
+      "sync": {
+        "env_path": "[VENV]/",
+        "kind": "project",
+        "dry": false,
+        "action": "already_exist",
+        "python_executable": "[VENV]/bin/python3",
+        "python_version": "3.12.[X]"
+      },
+      "lock": null
+    }
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "#);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
+/// Test --dry json output
+#[test]
+fn sync_dry_json() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+        "#,
+    )?;
+
+    // Running `uv sync` should generate a lockfile.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--format").arg("json")
+        .arg("--dry-run"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "project_dir": "[TEMP_DIR]/",
+      "sync": {
+        "env_path": "[VENV]/",
+        "kind": "project",
+        "dry": true,
+        "action": "already_exist",
+        "python_executable": "[VENV]/bin/python3",
+        "python_version": "3.12.[X]"
+      },
+      "lock": {
+        "lock_path": "[TEMP_DIR]/uv.lock",
+        "action": "create",
+        "dry": true
+      }
+    }
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Would download 1 package
+    Would install 1 package
+     + iniconfig==2.0.0
+    "#);
+
+    assert!(context.temp_dir.child("uv.lock").exists());
+
+    Ok(())
+}
+
 /// Ensure that we use the maximum Python version when a workspace contains mixed requirements.
 #[test]
 fn mixed_requires_python() -> Result<()> {
@@ -4340,6 +4439,151 @@ fn sync_active_script_environment() -> Result<()> {
      + idna==3.6
      + sniffio==1.3.1
     "###);
+
+    Ok(())
+}
+
+#[test]
+fn sync_active_script_environment_json() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.11", "3.12"])
+        .with_filtered_virtualenv_bin()
+        .with_filtered_python_names();
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! { r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        # ]
+        # ///
+
+        import anyio
+       "#
+    })?;
+
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain(vec![(
+            r"environments-v2/script-[a-z0-9]+",
+            "environments-v2/script-[HASH]",
+        )])
+        .collect::<Vec<_>>();
+
+    // Running `uv sync --script` with `VIRTUAL_ENV` should warn
+    uv_snapshot!(&filters, context.sync()
+        .arg("--script").arg("script.py")
+        .arg("--format").arg("json")
+        .env(EnvVars::VIRTUAL_ENV, "foo"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "project_dir": "[TEMP_DIR]/",
+      "sync": {
+        "env_path": "[CACHE_DIR]/environments-v2/script-[HASH]",
+        "kind": "script",
+        "dry": false,
+        "action": "create",
+        "python_executable": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/python",
+        "python_version": "3.11.[X]"
+      },
+      "lock": null
+    }
+
+    ----- stderr -----
+    warning: `VIRTUAL_ENV=foo` does not match the script environment path `[CACHE_DIR]/environments-v2/script-[HASH]` and will be ignored; use `--active` to target the active environment instead
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "#);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::missing());
+
+    // Using `--active` should create the environment
+    uv_snapshot!(&filters, context.sync()
+        .arg("--script").arg("script.py")
+        .arg("--format").arg("json")
+        .env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "project_dir": "[TEMP_DIR]/",
+      "sync": {
+        "env_path": "[TEMP_DIR]/foo",
+        "kind": "script",
+        "dry": false,
+        "action": "create",
+        "python_executable": "[TEMP_DIR]/foo/[BIN]/python",
+        "python_version": "3.11.[X]"
+      },
+      "lock": null
+    }
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "#);
+
+    context
+        .temp_dir
+        .child("foo")
+        .assert(predicate::path::is_dir());
+
+    // A subsequent sync will re-use the environment
+    uv_snapshot!(&filters, context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo").arg("--active"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using script environment at: foo
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
+    "###);
+
+    // Requesting another Python version will invalidate the environment
+    uv_snapshot!(&filters, context.sync()
+        .arg("--script").arg("script.py")
+        .arg("--format").arg("json")
+        .env(EnvVars::VIRTUAL_ENV, "foo")
+        .arg("--active")
+        .arg("-p")
+        .arg("3.12"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    {
+      "project_dir": "[TEMP_DIR]/",
+      "sync": {
+        "env_path": "[TEMP_DIR]/foo",
+        "kind": "script",
+        "dry": false,
+        "action": "replace",
+        "python_executable": "[TEMP_DIR]/foo/[BIN]/python",
+        "python_version": "3.12.[X]"
+      },
+      "lock": null
+    }
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "#);
 
     Ok(())
 }

@@ -3203,7 +3203,7 @@ pub struct SyncArgs {
 
     /// Select the output format.
     /// **Note:** This option is only available when `--dry-run` is enabled.
-    #[arg(long, value_enum, requires = "dry_run", default_value_t = SyncFormat::default())]
+    #[arg(long, value_enum, default_value_t = SyncFormat::default())]
     pub format: SyncFormat,
     /// Include all optional dependencies.
     ///
