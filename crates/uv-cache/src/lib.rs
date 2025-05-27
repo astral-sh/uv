@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use rustc_hash::FxHashSet;
+use rustc_hash::FxHashMap;
 use tracing::debug;
 
 pub use archive::ArchiveId;
@@ -375,7 +375,7 @@ impl Cache {
     /// Returns the number of entries removed from the cache.
     pub fn remove(&self, name: &PackageName) -> Result<Removal, io::Error> {
         // Collect the set of referenced archives.
-        let before = self.find_archive_references()?;
+        let references = self.find_archive_references()?;
 
         // Remove any entries for the package from the cache.
         let mut summary = Removal::default();
@@ -383,18 +383,11 @@ impl Cache {
             summary += bucket.remove(self, name)?;
         }
 
-        // Collect the set of referenced archives after the removal.
-        let after = self.find_archive_references()?;
-
-        if before != after {
-            // Remove any archives that are no longer referenced.
-            for entry in fs_err::read_dir(self.bucket(CacheBucket::Archive))? {
-                let entry = entry?;
-                let path = fs_err::canonicalize(entry.path())?;
-                if !after.contains(&path) && before.contains(&path) {
-                    debug!("Removing dangling cache entry: {}", path.display());
-                    summary += rm_rf(path)?;
-                }
+        // Remove any archives that are no longer referenced.
+        for (target, references) in references {
+            if references.iter().all(|path| !path.exists()) {
+                debug!("Removing dangling cache entry: {}", target.display());
+                summary += rm_rf(target)?;
             }
         }
 
@@ -513,7 +506,7 @@ impl Cache {
                 for entry in entries {
                     let entry = entry?;
                     let path = fs_err::canonicalize(entry.path())?;
-                    if !references.contains(&path) {
+                    if !references.contains_key(&path) {
                         debug!("Removing dangling cache archive: {}", path.display());
                         summary += rm_rf(path)?;
                     }
@@ -530,33 +523,52 @@ impl Cache {
     ///
     /// Archive entries are often referenced by symlinks in other cache buckets. This method
     /// searches for all such references.
-    fn find_archive_references(&self) -> Result<FxHashSet<PathBuf>, io::Error> {
-        let mut references = FxHashSet::default();
-        for bucket in CacheBucket::iter() {
-            // As an optimization, skip the archive bucket itself.
-            if matches!(bucket, CacheBucket::Archive) {
-                continue;
-            }
-
+    ///
+    /// Returns a map from archive path to paths that reference it.
+    fn find_archive_references(&self) -> Result<FxHashMap<PathBuf, Vec<PathBuf>>, io::Error> {
+        let mut references = FxHashMap::<PathBuf, Vec<PathBuf>>::default();
+        for bucket in [CacheBucket::SourceDistributions, CacheBucket::Wheels] {
             let bucket_path = self.bucket(bucket);
             if bucket_path.is_dir() {
-                for entry in walkdir::WalkDir::new(bucket_path) {
+                let walker = walkdir::WalkDir::new(&bucket_path).into_iter();
+                for entry in walker.filter_entry(|entry| {
+                    !(
+                        // As an optimization, ignore any `.lock`, `.whl`, `.msgpack`, `.rev`, or
+                        // `.http` files, along with the `src` directory, which represents the
+                        // unpacked source distribution.
+                        entry.file_name() == "src"
+                            || entry.file_name() == ".lock"
+                            || entry.file_name() == ".gitignore"
+                            || entry.path().extension().is_some_and(|ext| {
+                                ext.eq_ignore_ascii_case("lock")
+                                    || ext.eq_ignore_ascii_case("whl")
+                                    || ext.eq_ignore_ascii_case("http")
+                                    || ext.eq_ignore_ascii_case("rev")
+                                    || ext.eq_ignore_ascii_case("msgpack")
+                            })
+                    )
+                }) {
                     let entry = entry?;
 
-                    // As an optimization, ignore any `.lock`, `.whl`, `.msgpack`, `.rev`, or
-                    // `.http` files.
-                    if entry.path().extension().is_some_and(|ext| {
-                        ext.eq_ignore_ascii_case("lock")
-                            || ext.eq_ignore_ascii_case("whl")
-                            || ext.eq_ignore_ascii_case("http")
-                            || ext.eq_ignore_ascii_case("rev")
-                            || ext.eq_ignore_ascii_case("msgpack")
-                    }) {
-                        continue;
+                    // On Unix, archive references use symlinks.
+                    if cfg!(unix) {
+                        if !entry.file_type().is_symlink() {
+                            continue;
+                        }
+                    }
+
+                    // On Windows, archive references are files containing structured data.
+                    if cfg!(windows) {
+                        if !entry.file_type().is_file() {
+                            continue;
+                        }
                     }
 
                     if let Ok(target) = self.resolve_link(entry.path()) {
-                        references.insert(target);
+                        references
+                            .entry(target)
+                            .or_default()
+                            .push(entry.path().to_path_buf());
                     }
                 }
             }
