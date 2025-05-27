@@ -48,13 +48,12 @@ fn test_self_update_offline_error() {
     let context = TestContext::new("3.12");
 
     uv_snapshot!(context.self_update().arg("--offline"),
-    @r#"
+    @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    error: Self-update exited because network is disabled.
-
-    Hint: Remove --offline to continue self update."#);
+    error: Self-update is not possible because network connectivity is disabled (i.e., with `--offline`)
+    ");
 }
