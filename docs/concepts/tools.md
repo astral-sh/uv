@@ -202,7 +202,7 @@ will fail and the command will error.
 Each tool environment is linked to a specific Python version. This uses the same Python version
 [discovery logic](./python-versions.md#discovery-of-python-versions) as other virtual environments
 created by uv, but will ignore non-global Python version requests like `.python-version` files and
-`requires-python` from a `pyproject.toml`.
+the `requires-python` value from a `pyproject.toml`.
 
 The `--python` option can be used to request a specific version. See the
 [Python version](./python-versions.md) documentation for more details.
