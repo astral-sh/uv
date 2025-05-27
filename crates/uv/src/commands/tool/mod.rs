@@ -19,7 +19,12 @@ pub(crate) mod upgrade;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ToolRequest<'a> {
     // Running the interpreter directly e.g. `uvx python` or `uvx pypy@3.8`
-    Python(PythonRequest),
+    Python {
+        /// The executable name (e.g., `bash`), if the interpreter was given via --from.
+        executable: Option<&'a str>,
+        // The interpreter to install or run (e.g., `python@3.8` or `pypy311`.
+        request: PythonRequest,
+    },
     // Running a Python package
     Package {
         /// The executable name (e.g., `ruff`), if the target was given via --from.
@@ -32,30 +37,27 @@ pub(crate) enum ToolRequest<'a> {
 impl<'a> ToolRequest<'a> {
     /// Parse a tool request into an executable name and a target.
     pub(crate) fn parse(command: &'a str, from: Option<&'a str>) -> anyhow::Result<Self> {
-        // If --from is not used, then first try parsing the command as a PythonRequest and see
-        // what we get.
-        if from.is_none() {
-            // A Python interpreter, like `python`, `python39`, or `pypy@39`. `pythonw` is also
-            // allowed on Windows. This overlaps with how `--python` flag values are parsed, but
-            // see `PythonRequest::parse` vs `PythonRequest::parse_tool_executable` for the
-            // differences.
-            if let Some(python_request) = PythonRequest::try_parse_tool_executable(command)? {
-                return Ok(Self::Python(python_request));
-            }
-        }
+        // If --from is used, the command could be an arbitrary binary in the PATH (e.g. `bash`),
+        // and we don't try to parse it.
+        let (component_to_parse, executable) = match from {
+            Some(from) => (from, Some(command)),
+            None => (command, None),
+        };
 
-        // A regular tool, like `ruff` or `ruff@0.6.0`.
-        if let Some(from) = from {
-            let target = Target::parse(from);
-            Ok(Self::Package {
-                executable: Some(command),
-                target,
+        // First try parsing the command as a Python interpreter, like `python`, `python39`, or
+        // `pypy@39`. `pythonw` is also allowed on Windows. This overlaps with how `--python` flag
+        // values are parsed, but see `PythonRequest::parse` vs `PythonRequest::try_parse_tool` for
+        // the differences.
+        if let Some(python_request) = PythonRequest::try_parse_tool(component_to_parse)? {
+            Ok(Self::Python {
+                request: python_request,
+                executable,
             })
         } else {
-            let target = Target::parse(command);
+            // Otherwise the command is a Python package, like `ruff` or `ruff@0.6.0`.
             Ok(Self::Package {
-                executable: None,
-                target,
+                target: Target::parse(component_to_parse),
+                executable,
             })
         }
     }

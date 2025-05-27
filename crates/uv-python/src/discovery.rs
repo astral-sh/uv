@@ -1476,17 +1476,17 @@ impl PythonRequest {
     /// Try to parse a tool executable as a Python version, e.g. `uvx [executable]`.
     ///
     /// The `PythonRequest::parse` constructor above is intended for the `--python` flag, where the
-    /// value is unambiguously a Python version. This alternate constructor is intended for `uvx`,
-    /// where the executable might be a Python version or a package name. There are several
-    /// differences in behavior:
+    /// value is unambiguously a Python version. This alternate constructor is intended for `uvx`
+    /// or `uvx --from`, where the executable could be either a Python version or a package name.
+    /// There are several differences in behavior:
     ///
     /// - This only supports long names, including e.g. `pypy39` but **not** `pp39` or `39`.
     /// - On Windows only, this allows `pythonw` as an alias for `python`.
     /// - This allows `python` by itself (and on Windows, `pythonw`) as an alias for `default`.
     ///
-    /// This can only return `Err` if `@` is used, see try_parse_tool_executable. Otherwise, if no
-    /// match is found, it returns `Ok(None)`.
-    pub fn try_parse_tool_executable(value: &str) -> Result<Option<PythonRequest>, Error> {
+    /// This can only return `Err` if `@` is used. Otherwise, if no match is found, it returns
+    /// `Ok(None)`.
+    pub fn try_parse_tool(value: &str) -> Result<Option<PythonRequest>, Error> {
         let lowercase_value = &value.to_ascii_lowercase();
         // Omitting the empty string from these lists excludes bare versions like "39".
         let abstract_version_prefixes = if cfg!(windows) {

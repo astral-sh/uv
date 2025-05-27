@@ -29,9 +29,9 @@ use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
-use uv_python::PythonRequest;
 use uv_python::{
-    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation, PythonPreference,
+    EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
+    PythonPreference, PythonRequest, VersionRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -321,7 +321,7 @@ pub(crate) async fn run(
     // Check if the provided command is not part of the executables for the `from` package,
     // and if it's provided by another package in the environment.
     let provider_hints = match &from {
-        ToolRequirement::Python => None,
+        ToolRequirement::Python { .. } => None,
         ToolRequirement::Package { requirement, .. } => Some(ExecutableProviderHints::new(
             executable,
             requirement,
@@ -636,7 +636,9 @@ impl std::fmt::Display for ExecutableProviderHints<'_> {
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum ToolRequirement {
-    Python,
+    Python {
+        executable: String,
+    },
     Package {
         executable: String,
         requirement: Requirement,
@@ -646,7 +648,7 @@ pub(crate) enum ToolRequirement {
 impl ToolRequirement {
     fn executable(&self) -> &str {
         match self {
-            ToolRequirement::Python => "python",
+            ToolRequirement::Python { executable, .. } => executable,
             ToolRequirement::Package { executable, .. } => executable,
         }
     }
@@ -655,7 +657,7 @@ impl ToolRequirement {
 impl std::fmt::Display for ToolRequirement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ToolRequirement::Python => write!(f, "python"),
+            ToolRequirement::Python { .. } => write!(f, "python"),
             ToolRequirement::Package { requirement, .. } => write!(f, "{requirement}"),
         }
     }
@@ -697,7 +699,10 @@ async fn get_or_create_environment(
     // Figure out what Python we're targeting, either explicitly like `uvx python@3`, or via the
     // -p/--python flag.
     let python_request = match request {
-        ToolRequest::Python(tool_python_request) => {
+        ToolRequest::Python {
+            request: tool_python_request,
+            ..
+        } => {
             match python {
                 None => Some(tool_python_request.clone()),
 
@@ -713,7 +718,7 @@ async fn get_or_create_environment(
                 //
                 // Note that a command like `uvx default` doesn't bring us here. ToolRequest::parse
                 // returns ToolRequest::Package rather than ToolRequest::Python in that case. See
-                // PythonRequest::try_parse_tool_executable.
+                // PythonRequest::try_parse_tool.
                 Some(python_flag) => {
                     if tool_python_request != &PythonRequest::Default {
                         return Err(anyhow::anyhow!(
@@ -751,7 +756,23 @@ async fn get_or_create_environment(
     let workspace_cache = WorkspaceCache::default();
 
     let from = match request {
-        ToolRequest::Python(_) => ToolRequirement::Python,
+        ToolRequest::Python {
+            executable: request_executable,
+            request,
+        } => {
+            if matches!(request, PythonRequest::Version(VersionRequest::Range(..))) {
+                return Err(anyhow::anyhow!(
+                    "Using `{}` is not supported. Use `{}` or `{}` instead.",
+                    "--from python<range>".cyan(),
+                    "python<version>".cyan(),
+                    "python@<version>".cyan(),
+                )
+                .into());
+            }
+            ToolRequirement::Python {
+                executable: request_executable.unwrap_or("python").to_string(),
+            }
+        }
         ToolRequest::Package {
             executable: request_executable,
             target,
@@ -775,17 +796,6 @@ async fn get_or_create_environment(
                         }
                         UnresolvedRequirement::Unnamed(..) => None,
                     };
-
-                    if let UnresolvedRequirement::Named(requirement) = &spec.requirement {
-                        if requirement.name.as_str() == "python" {
-                            return Err(anyhow::anyhow!(
-                                "Using `{}` is not supported. Use `{}` instead.",
-                                "--from python<specifier>".cyan(),
-                                "python@<version>".cyan(),
-                            )
-                            .into());
-                        }
-                    }
 
                     let requirement = resolve_names(
                         vec![spec],
@@ -879,7 +889,7 @@ async fn get_or_create_environment(
     let requirements = {
         let mut requirements = Vec::with_capacity(1 + with.len());
         match &from {
-            ToolRequirement::Python => {}
+            ToolRequirement::Python { .. } => {}
             ToolRequirement::Package { requirement, .. } => requirements.push(requirement.clone()),
         }
         requirements.extend(

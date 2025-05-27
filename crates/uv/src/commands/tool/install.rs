@@ -214,7 +214,7 @@ pub(crate) async fn install(
             }
         }
         // Ex) `python`
-        ToolRequest::Python(..) => {
+        ToolRequest::Python { .. } => {
             return Err(anyhow::anyhow!(
                 "Cannot install Python with `{}`. Did you mean to use `{}`?",
                 "uv tool install".cyan(),

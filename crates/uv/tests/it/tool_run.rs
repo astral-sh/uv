@@ -2087,16 +2087,46 @@ fn tool_run_python_from() {
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
+        .arg("python311")
+        .arg("python")
+        .arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
         .arg("python>=3.12")
         .arg("python")
-        .arg("--version"), @r###"
+        .arg("--version"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Using `--from python<specifier>` is not supported. Use `python@<version>` instead.
-    "###);
+    error: Using `--from python<range>` is not supported. Use `python<version>` or `python@<version>` instead.
+    ");
+
+    // The executed command isn't necessarily Python, but Python is in the PATH.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python@3.11")
+        .arg("bash")
+        .arg("-c")
+        .arg("python --version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
 }
 
 #[test]
