@@ -199,13 +199,16 @@ will fail and the command will error.
 
 ## Python versions
 
-Each tool's virtual environment will be linked to a particular Python version. This uses the same
-Python version [discovery logic](./python-versions.md#discovery-of-python-versions) as other virtual
-environments created by uv.
+Each tool environment is linked to a specific Python version. This uses the same Python version
+[discovery logic](./python-versions.md#discovery-of-python-versions) as other virtual environments
+created by uv, but will ignore non-global Python version requests like `.python-version` files and
+`requires-python` from a `pyproject.toml`.
 
-If more control is needed, you can use the `--python` option to specify a version and
-`--python-preference` option to set a preference for system or managed versions. See the
-[Python Versions concept](./python-versions.md) page for further information.
+The `--python` option can be used to request a specific version. See the
+[Python version](./python-versions.md) documentation for more details.
+
+If a Python version is _uninstalled_, the tool environment will be broken and the tool may be
+unusable.
 
 ## Tool executables
 
