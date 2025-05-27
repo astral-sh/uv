@@ -638,7 +638,11 @@ adhere to [Semantic Versioning](https://semver.org/).
 
 ### How do you pronounce uv?
 
-[`/juː viː/`](https://en.wikipedia.org/wiki/Help:IPA/English#Key)
+[/juː viː/](https://en.wikipedia.org/wiki/Help:IPA/English#Key)
+
+### How should I stylize uv?
+
+Please see the [style guide](./STYLE.md#styling-uv).
 
 ## Acknowledgements
 
