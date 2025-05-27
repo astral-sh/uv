@@ -718,7 +718,7 @@ async fn get_or_create_environment(
                 //
                 // Note that a command like `uvx default` doesn't bring us here. ToolRequest::parse
                 // returns ToolRequest::Package rather than ToolRequest::Python in that case. See
-                // PythonRequest::try_parse_tool.
+                // PythonRequest::try_from_tool_name.
                 Some(python_flag) => {
                     if tool_python_request != &PythonRequest::Default {
                         return Err(anyhow::anyhow!(

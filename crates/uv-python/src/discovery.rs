@@ -1392,7 +1392,7 @@ impl PythonRequest {
     /// [`PythonRequest::ExecutableName`].
     ///
     /// This is intended for parsing the argument to the `--python` flag. See also
-    /// `parse_tool_executable` below.
+    /// [`try_from_tool_name`][Self::try_from_tool_name] below.
     pub fn parse(value: &str) -> Self {
         let lowercase_value = &value.to_ascii_lowercase();
 
@@ -1486,7 +1486,7 @@ impl PythonRequest {
     ///
     /// This can only return `Err` if `@` is used. Otherwise, if no match is found, it returns
     /// `Ok(None)`.
-    pub fn try_parse_tool(value: &str) -> Result<Option<PythonRequest>, Error> {
+    pub fn try_from_tool_name(value: &str) -> Result<Option<PythonRequest>, Error> {
         let lowercase_value = &value.to_ascii_lowercase();
         // Omitting the empty string from these lists excludes bare versions like "39".
         let abstract_version_prefixes = if cfg!(windows) {
@@ -1505,8 +1505,14 @@ impl PythonRequest {
         )
     }
 
-    // This can only return Err() if @ is used, see try_split_prefix_and_version below. Otherwise,
-    // if no match is found, it returns Ok(None).
+    /// Take a value like `"python3.11"`, check whether it matches a set of abstract python
+    /// prefixes (e.g. `"python"`, `"pythonw"`, or even `""`) or a set of specific Python
+    /// implementations (e.g. `"cpython"` or `"pypy"`, possibly with abbreviations), and if so try
+    /// to parse its version.
+    ///
+    /// This can only return `Err` if `@` is used, see
+    /// [`try_split_prefix_and_version`][Self::try_split_prefix_and_version] below. Otherwise, if
+    /// no match is found, it returns `Ok(None)`.
     fn parse_versions_and_implementations<'a>(
         // typically "python", possibly also "pythonw" or "" (for bare versions)
         abstract_version_prefixes: impl IntoIterator<Item = &'a str>,
@@ -1547,9 +1553,16 @@ impl PythonRequest {
         Ok(None)
     }
 
-    // This can only returns Err() if @ is used. There are two error cases:
-    // - The value starts with @ (e.g. `@3.11`).
-    // - The prefix is a match, but the version is invalid (e.g. `python@3.not.a.version`).
+    /// Take a value like `"python3.11"`, check whether it matches a target prefix (e.g.
+    /// `"python"`, `"pypy"`, or even `""`), and if so try to parse its version.
+    ///
+    /// Failing to match the prefix (e.g. `"notpython3.11"`) or failing to parse a version (e.g.
+    /// `"python3notaversion"`) is not an error, and those cases return `Ok(None)`. The `@`
+    /// separator is optional, and this function can only return `Err` if `@` is used. There are
+    /// two error cases:
+    ///
+    /// - The value starts with `@` (e.g. `@3.11`).
+    /// - The prefix is a match, but the version is invalid (e.g. `python@3.not.a.version`).
     fn try_split_prefix_and_version(
         prefix: &str,
         lowercase_value: &str,

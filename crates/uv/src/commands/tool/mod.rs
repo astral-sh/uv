@@ -46,9 +46,9 @@ impl<'a> ToolRequest<'a> {
 
         // First try parsing the command as a Python interpreter, like `python`, `python39`, or
         // `pypy@39`. `pythonw` is also allowed on Windows. This overlaps with how `--python` flag
-        // values are parsed, but see `PythonRequest::parse` vs `PythonRequest::try_parse_tool` for
-        // the differences.
-        if let Some(python_request) = PythonRequest::try_parse_tool(component_to_parse)? {
+        // values are parsed, but see `PythonRequest::parse` vs `PythonRequest::try_from_tool_name`
+        // for the differences.
+        if let Some(python_request) = PythonRequest::try_from_tool_name(component_to_parse)? {
             Ok(Self::Python {
                 request: python_request,
                 executable,
