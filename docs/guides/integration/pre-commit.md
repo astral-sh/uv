@@ -3,8 +3,10 @@
 An official pre-commit hook is provided at
 [`astral-sh/uv-pre-commit`](https://github.com/astral-sh/uv-pre-commit).
 
-To make sure your `uv.lock` file is up to date even if your `pyproject.toml` file was changed via
-pre-commit, append the following to the `repos` list in the `.pre-commit-config.yaml`:
+To use uv with pre-commit, add one of the following examples to the `repos` list in the
+`.pre-commit-config.yaml`.
+
+To make sure your `uv.lock` file is up to date even if your `pyproject.toml` file was changed:
 
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
@@ -14,7 +16,7 @@ pre-commit, append the following to the `repos` list in the `.pre-commit-config.
     - id: uv-lock
 ```
 
-To keep your `requirements.txt` file updated using pre-commit append to the `repos` list:
+To keep a `requirements.txt` file in sync with your `uv.lock` file:
 
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
@@ -24,8 +26,7 @@ To keep your `requirements.txt` file updated using pre-commit append to the `rep
     - id: uv-export
 ```
 
-To compile requirements via pre-commit, add the following to the `repos` list in the
-`.pre-commit-config.yaml`:
+To compile requirements files:
 
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
@@ -37,7 +38,7 @@ To compile requirements via pre-commit, add the following to the `repos` list in
       args: [requirements.in, -o, requirements.txt]
 ```
 
-To compile alternative files, modify `args` and `files` append to the `repos` list:
+To compile alternative requirements files, modify `args` and `files`:
 
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
@@ -50,7 +51,7 @@ To compile alternative files, modify `args` and `files` append to the `repos` li
       files: ^requirements-dev\.(in|txt)$
 ```
 
-To run the hook over multiple files at the same time append to the `repos` list:
+To run the hook over multiple files at the same time, add additional entries:
 
 ```yaml title=".pre-commit-config.yaml"
 - repo: https://github.com/astral-sh/uv-pre-commit
