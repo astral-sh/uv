@@ -513,6 +513,9 @@ jobs:
           manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --locked --out dist --features self-update
+          # Until the llvm updates hit stable
+          # https://github.com/rust-lang/rust/issues/141287
+          rust-toolchain: nightly-2025-05-25
       - uses: uraimo/run-on-arch-action@d94c13912ea685de38fccc1109385b83fd79427d # v3.0.1
         if: matrix.platform.arch != 'ppc64'
         name: "Test wheel"
