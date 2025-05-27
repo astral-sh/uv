@@ -274,7 +274,7 @@ pub(crate) async fn sync(
 
     // If we're printing human, eagerly report these partial results
     if !format.is_json() {
-        report.print_sync_text(printer);
+        report.print_sync_text(printer)?;
     }
 
     // Special-case: we're syncing a script that doesn't have an associated lockfile. In that case,
@@ -943,10 +943,8 @@ struct LockReport {
 enum SyncAction {
     /// No changes are needed.
     AlreadyExist,
-    /// The environment would be replaced, Equivalent to `Update` but more expressive.
+    /// The environment would be replaced.
     Replace,
-    /// The environment would be updated.
-    Update,
     /// Create a new environment.
     Create,
 }
@@ -1007,8 +1005,8 @@ impl ProjectReport {
             kind,
             dry,
             action,
-            python_executable,
-            python_version,
+            python_executable: _,
+            python_version: _,
         }) = &self.sync
         else {
             return Ok(());
@@ -1026,7 +1024,9 @@ impl ProjectReport {
                     .dimmed()
                 )?;
             }
-
+            (EnvKind::Project, SyncAction::AlreadyExist, false) => {
+                // Currently intentionally silent
+            }
             (EnvKind::Project, SyncAction::Replace, true) => {
                 writeln!(
                     printer.stderr(),
@@ -1038,7 +1038,9 @@ impl ProjectReport {
                     .dimmed()
                 )?;
             }
-
+            (EnvKind::Project, SyncAction::Replace, false) => {
+                // Currently intentionally silent
+            }
             (EnvKind::Project, SyncAction::Create, true) => {
                 writeln!(
                     printer.stderr(),
@@ -1050,7 +1052,9 @@ impl ProjectReport {
                     .dimmed()
                 )?;
             }
-
+            (EnvKind::Project, SyncAction::Create, false) => {
+                // Currently intentionally silent
+            }
             (EnvKind::Script, SyncAction::AlreadyExist, true) => {
                 writeln!(
                     printer.stderr(),
@@ -1062,7 +1066,6 @@ impl ProjectReport {
                     .dimmed()
                 )?;
             }
-
             (EnvKind::Script, SyncAction::AlreadyExist, false) => {
                 writeln!(
                     printer.stderr(),
@@ -1070,7 +1073,6 @@ impl ProjectReport {
                     path.user_display().cyan()
                 )?;
             }
-
             (EnvKind::Script, SyncAction::Replace, false) => {
                 writeln!(
                     printer.stderr(),
@@ -1078,7 +1080,6 @@ impl ProjectReport {
                     path.user_display().cyan()
                 )?;
             }
-
             (EnvKind::Script, SyncAction::Create, false) => {
                 writeln!(
                     printer.stderr(),
@@ -1086,7 +1087,6 @@ impl ProjectReport {
                     path.user_display().cyan()
                 )?;
             }
-
             (EnvKind::Script, SyncAction::Replace, true) => {
                 writeln!(
                     printer.stderr(),
@@ -1098,7 +1098,6 @@ impl ProjectReport {
                     .dimmed()
                 )?;
             }
-
             (EnvKind::Script, SyncAction::Create, true) => {
                 writeln!(
                     printer.stderr(),
@@ -1138,6 +1137,9 @@ impl ProjectReport {
                     .dimmed()
                 )?;
             }
+            (LockAction::AlreadyExist, false) => {
+                // Currently intentionally silent
+            }
             (LockAction::Update, true) => {
                 writeln!(
                     printer.stderr(),
@@ -1145,12 +1147,18 @@ impl ProjectReport {
                     format!("Would update lockfile at: {}", path.user_display().bold()).dimmed()
                 )?;
             }
+            (LockAction::Update, false) => {
+                // Currently intentionally silent
+            }
             (LockAction::Create, true) => {
                 writeln!(
                     printer.stderr(),
                     "{}",
                     format!("Would create lockfile at: {}", path.user_display().bold()).dimmed()
                 )?;
+            }
+            (LockAction::Create, false) => {
+                // Currently intentionally silent
             }
         }
 
