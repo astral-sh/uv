@@ -60,5 +60,5 @@ need to be explicitly defined using
 
 ## Dependabot
 
-Support for uv is not yet available. Progress can be tracked at
-[dependabot/dependabot-core#10478](https://github.com/dependabot/dependabot-core/issues/10478).
+Dependabot has partial support for uv. See
+[astral-sh/uv#2512](https://github.com/astral-sh/uv/issues/2512) for updates.
