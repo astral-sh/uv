@@ -369,16 +369,15 @@ impl NoSolutionError {
 
         // TODO(konsti): This is a crude approximation to telling the user the difference
         // between their Python version and the relevant Python version range from the marker.
-        let current_python_version = MarkerTree::expression(MarkerExpression::Version {
+        let current_python_version = self.current_environment.python_version().version.clone();
+        let current_python_marker = MarkerTree::expression(MarkerExpression::Version {
             key: MarkerValueVersion::PythonVersion,
-            specifier: VersionSpecifier::equals_version(
-                self.current_environment.python_version().version.clone(),
-            ),
+            specifier: VersionSpecifier::equals_version(current_python_version.clone()),
         });
-        if markers.is_disjoint(current_python_version) {
+        if markers.is_disjoint(current_python_marker) {
             write!(
                 f,
-                "\n\n{}{} The resolution failed for a Python version range outside the current Python version, \
+                "\n\n{}{} The resolution failed for a Python version range excluding the current Python version ({current_python_version}), \
                 consider limiting the Python version range using `requires-python`.",
                 "hint".bold().cyan(),
                 ":".bold(),
