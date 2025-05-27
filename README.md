@@ -7,7 +7,7 @@
 [![Actions status](https://github.com/astral-sh/uv/actions/workflows/ci.yml/badge.svg)](https://github.com/astral-sh/uv/actions)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/astral-sh)
 
-[`/juː viː/`](https://en.wikipedia.org/wiki/Help:IPA/English#Key) -  An extremely fast Python package installer and resolver, written in Rust. Designed as a drop-in
+An extremely fast Python package installer and resolver, written in Rust. Designed as a drop-in
 replacement for common `pip` and `pip-tools` workflows.
 
 <p align="center">
@@ -633,6 +633,12 @@ and the patch version number is bumped for bug fixes, enhancements, and other no
 
 uv does not yet have a stable API; once uv's API is stable (v1.0.0), the versioning scheme will
 adhere to [Semantic Versioning](https://semver.org/).
+
+## FAQ
+
+### How do you pronounce uv?
+
+[`/juː viː/`](https://en.wikipedia.org/wiki/Help:IPA/English#Key)
 
 ## Acknowledgements
 
