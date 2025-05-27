@@ -91,7 +91,8 @@ pub trait Installable<'lock> {
             }
         }
 
-        // Add the workspace packages to the queue.
+        // Initialize the workspace roots.
+        let mut roots = vec![];
         for root_name in self.roots() {
             let dist = self
                 .lock()
@@ -114,6 +115,12 @@ pub trait Installable<'lock> {
             // Add an edge from the root.
             petgraph.add_edge(root, index, Edge::Prod(MarkerTree::TRUE));
 
+            // Push the package onto the queue.
+            roots.push((dist, index));
+        }
+
+        // Add the workspace dependencies to the queue.
+        for (dist, index) in roots {
             if dev.prod() {
                 // Push its dependencies onto the queue.
                 queue.push_back((dist, None));

@@ -9483,3 +9483,92 @@ fn sync_upload_time() -> Result<()> {
 
     Ok(())
 }
+
+/// Ensure that workspace members that are also development dependencies are not duplicated with
+/// `--all-packages`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/13673#issuecomment-2912196406>
+#[test]
+fn repeated_dev_member_all_packages() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "first"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["second"]
+
+        [tool.uv.sources]
+        second = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["second"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("first");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    let child = context.temp_dir.child("second");
+    fs_err::create_dir_all(&child)?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "second"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    let src = child.child("src").child("second");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + first==0.1.0 (from file://[TEMP_DIR]/)
+     + iniconfig==2.0.0
+     + second==0.1.0 (from file://[TEMP_DIR]/second)
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
