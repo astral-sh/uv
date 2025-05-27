@@ -15,6 +15,10 @@ uv supports creating virtual environments, e.g., to create a virtual environment
 $ uv venv
 ```
 
+!!! note
+  
+    Running `uv venv` will overwrite any existing `.venv` directory.
+
 A specific name or path can be specified, e.g., to create a virtual environment at `my-name`:
 
 ```console
