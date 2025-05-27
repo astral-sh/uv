@@ -7,7 +7,13 @@ use std::time::Duration;
 use std::{env, io, iter};
 
 use anyhow::anyhow;
-use http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+use http::{
+    HeaderMap, HeaderName, HeaderValue, Method, StatusCode,
+    header::{
+        AUTHORIZATION, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, COOKIE, LOCATION,
+        PROXY_AUTHORIZATION, REFERER, TRANSFER_ENCODING, WWW_AUTHENTICATE,
+    },
+};
 use itertools::Itertools;
 use reqwest::{Client, ClientBuilder, IntoUrl, Proxy, Request, Response, multipart};
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
@@ -35,6 +41,10 @@ use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
 
 pub const DEFAULT_RETRIES: u32 = 3;
+/// Maximum number of redirects to follow before giving up.
+///
+/// This is the default used by [`reqwest`].
+const DEFAULT_MAX_REDIRECTS: u32 = 10;
 
 /// Selectively skip parts or the entire auth middleware.
 #[derive(Debug, Clone, Copy, Default)]
@@ -65,13 +75,20 @@ pub struct BaseClientBuilder<'a> {
     extra_middleware: Option<ExtraMiddleware>,
     proxies: Vec<Proxy>,
     redirect_policy: RedirectPolicy,
+    /// Whether credentials should be propagated during cross-origin redirects.
+    ///
+    /// A policy allowing propagation is insecure and should only be available for test code.
+    cross_origin_credential_policy: CrossOriginCredentialsPolicy,
 }
 
-/// The policy for handling redirects.
+/// The policy for handling HTTP redirects.
 #[derive(Debug, Default, Clone, Copy)]
 pub enum RedirectPolicy {
+    /// Use reqwest's built-in redirect handling. This bypasses our custom middleware
+    /// on redirect.
     #[default]
     BypassMiddleware,
+    /// Handle redirects manually, re-triggering our custom middleware for each request.
     RetriggerMiddleware,
 }
 
@@ -118,6 +135,7 @@ impl BaseClientBuilder<'_> {
             extra_middleware: None,
             proxies: vec![],
             redirect_policy: RedirectPolicy::default(),
+            cross_origin_credential_policy: CrossOriginCredentialsPolicy::Secure,
         }
     }
 }
@@ -201,6 +219,18 @@ impl<'a> BaseClientBuilder<'a> {
         self
     }
 
+    /// Allows credentials to be propagated on cross-origin redirects.
+    ///
+    /// WARNING: This should only be available for tests. In production code, propagating credentials
+    /// during cross-origin redirects can lead to security vulnerabilities including credential
+    /// leakage to untrusted domains.
+    #[cfg(test)]
+    #[must_use]
+    pub fn allow_cross_origin_credentials(mut self) -> Self {
+        self.cross_origin_credential_policy = CrossOriginCredentialsPolicy::Insecure;
+        self
+    }
+
     pub fn is_offline(&self) -> bool {
         matches!(self.connectivity, Connectivity::Offline)
     }
@@ -273,10 +303,12 @@ impl<'a> BaseClientBuilder<'a> {
         let client = RedirectClientWithMiddleware {
             client: self.apply_middleware(raw_client.clone()),
             redirect_policy: self.redirect_policy,
+            cross_origin_credentials_policy: self.cross_origin_credential_policy,
         };
         let dangerous_client = RedirectClientWithMiddleware {
             client: self.apply_middleware(raw_dangerous_client.clone()),
             redirect_policy: self.redirect_policy,
+            cross_origin_credentials_policy: self.cross_origin_credential_policy,
         };
 
         BaseClient {
@@ -297,10 +329,12 @@ impl<'a> BaseClientBuilder<'a> {
         let client = RedirectClientWithMiddleware {
             client: self.apply_middleware(existing.raw_client.clone()),
             redirect_policy: self.redirect_policy,
+            cross_origin_credentials_policy: self.cross_origin_credential_policy,
         };
         let dangerous_client = RedirectClientWithMiddleware {
             client: self.apply_middleware(existing.raw_dangerous_client.clone()),
             redirect_policy: self.redirect_policy,
+            cross_origin_credentials_policy: self.cross_origin_credential_policy,
         };
 
         BaseClient {
@@ -494,6 +528,12 @@ impl BaseClient {
 pub struct RedirectClientWithMiddleware {
     client: ClientWithMiddleware,
     redirect_policy: RedirectPolicy,
+    /// Whether credentials should be preserved during cross-origin redirects.
+    ///
+    /// WARNING: This should only be available for tests. In production code, preserving credentials
+    /// during cross-origin redirects can lead to security vulnerabilities including credential
+    /// leakage to untrusted domains.
+    cross_origin_credentials_policy: CrossOriginCredentialsPolicy,
 }
 
 impl RedirectClientWithMiddleware {
@@ -535,79 +575,29 @@ impl RedirectClientWithMiddleware {
     ) -> reqwest_middleware::Result<Response> {
         let mut request = req;
         let mut redirects = 0;
-        // This is the default used by reqwest.
-        let max_redirects = 10;
+        let max_redirects = DEFAULT_MAX_REDIRECTS;
 
         loop {
-            let request_url = request.url().clone();
             let result = self
                 .client
                 .execute(request.try_clone().expect("HTTP request must be cloneable"))
                 .await;
-            if redirects == max_redirects {
-                return result;
-            }
             let Ok(response) = result else {
                 return result;
             };
 
-            // Handle redirect if we receive a 301, 302, 303, 307, or 308.
-            let status = response.status();
-            if matches!(
-                status,
-                StatusCode::MOVED_PERMANENTLY
-                    | StatusCode::FOUND
-                    | StatusCode::SEE_OTHER
-                    | StatusCode::TEMPORARY_REDIRECT
-                    | StatusCode::PERMANENT_REDIRECT
-            ) {
-                let location = response
-                    .headers()
-                    .get("location")
-                    .ok_or(reqwest_middleware::Error::Middleware(anyhow!(
-                        "Missing expected HTTP {status} 'Location' header"
-                    )))?
-                    .to_str()
-                    .map_err(|_| {
-                        reqwest_middleware::Error::Middleware(anyhow!(
-                            "Invalid HTTP {status} 'Location' value: must only contain visible ascii characters"
-                        ))
-                    })?;
-
-                let mut redirect_url = match Url::parse(location) {
-                    Ok(url) => url,
-                    // Per RFC 7231, URLs should be resolved against the request URL.
-                    Err(ParseError::RelativeUrlWithoutBase) => request_url.join(location).map_err(|err| {
-                        reqwest_middleware::Error::Middleware(anyhow!(
-                            "Invalid HTTP {status} 'Location' value `{location}` relative to `{request_url}`: {err}"
-                        ))
-                    })?,
-                    Err(err) => {
-                        return Err(reqwest_middleware::Error::Middleware(anyhow!(
-                            "Invalid HTTP {status} 'Location' value `{location}`: {err}"
-                        )));
-                    }
-                };
-
-                // Ensure the URL is a valid HTTP URI.
-                if let Err(err) = redirect_url.as_str().parse::<http::Uri>() {
-                    return Err(reqwest_middleware::Error::Middleware(anyhow!(
-                        "Invalid HTTP {status} 'Location' value `{location}`: {err}"
-                    )));
-                }
-
-                // Per RFC 7231, fragments must be propagated
-                if let Some(fragment) = request_url.fragment() {
-                    redirect_url.set_fragment(Some(fragment));
-                }
-
-                debug!("Received HTTP {status} to {redirect_url}");
-                *request.url_mut() = redirect_url;
-                redirects += 1;
-                continue;
+            if redirects >= max_redirects {
+                return Ok(response);
             }
 
-            return Ok(response);
+            let Some(redirect_request) =
+                request_into_redirect(request, &response, self.cross_origin_credentials_policy)?
+            else {
+                return Ok(response);
+            };
+
+            redirects += 1;
+            request = redirect_request;
         }
     }
 
@@ -620,6 +610,160 @@ impl From<RedirectClientWithMiddleware> for ClientWithMiddleware {
     fn from(item: RedirectClientWithMiddleware) -> ClientWithMiddleware {
         item.client
     }
+}
+
+/// Check if this is should be a redirect and, if so, return a new redirect request.
+///
+/// This implementation is based on the [`reqwest`] crate redirect implementation.
+/// It takes ownership of the original [`Request`] and mutates it to create the new
+/// redirect [`Request`].
+fn request_into_redirect(
+    mut req: Request,
+    res: &Response,
+    cross_origin_credentials_policy: CrossOriginCredentialsPolicy,
+) -> reqwest_middleware::Result<Option<Request>> {
+    let original_req_url = DisplaySafeUrl::from(req.url().clone());
+    let status = res.status();
+    let should_redirect = match status {
+        StatusCode::MOVED_PERMANENTLY
+        | StatusCode::FOUND
+        | StatusCode::TEMPORARY_REDIRECT
+        | StatusCode::PERMANENT_REDIRECT => true,
+        StatusCode::SEE_OTHER => {
+            // Per RFC 7231, HTTP 303 is intended for the user agent
+            // to perform a GET or HEAD request to the redirect target.
+            // Historically, some browsers also changed method from POST
+            // to GET on 301 or 302, but this is not required by RFC 7231
+            // and was not intended by the HTTP spec.
+            *req.body_mut() = None;
+            for header in &[
+                TRANSFER_ENCODING,
+                CONTENT_ENCODING,
+                CONTENT_TYPE,
+                CONTENT_LENGTH,
+            ] {
+                req.headers_mut().remove(header);
+            }
+
+            match *req.method() {
+                Method::GET | Method::HEAD => {}
+                _ => {
+                    *req.method_mut() = Method::GET;
+                }
+            }
+            true
+        }
+        _ => false,
+    };
+    if !should_redirect {
+        return Ok(None);
+    }
+
+    let location = res
+        .headers()
+        .get(LOCATION)
+        .ok_or(reqwest_middleware::Error::Middleware(anyhow!(
+            "Server returned redirect (HTTP {status}) without destination URL. This may indicate a server configuration issue"
+        )))?
+        .to_str()
+        .map_err(|_| {
+            reqwest_middleware::Error::Middleware(anyhow!(
+                "Invalid HTTP {status} 'Location' value: must only contain visible ascii characters"
+            ))
+        })?;
+
+    let mut redirect_url = match DisplaySafeUrl::parse(location) {
+        Ok(url) => url,
+        // Per RFC 7231, URLs should be resolved against the request URL.
+        Err(ParseError::RelativeUrlWithoutBase) => original_req_url.join(location).map_err(|err| {
+            reqwest_middleware::Error::Middleware(anyhow!(
+                "Invalid HTTP {status} 'Location' value `{location}` relative to `{original_req_url}`: {err}"
+            ))
+        })?,
+        Err(err) => {
+            return Err(reqwest_middleware::Error::Middleware(anyhow!(
+                "Invalid HTTP {status} 'Location' value `{location}`: {err}"
+            )));
+        }
+    };
+    // Per RFC 7231, fragments must be propagated
+    if let Some(fragment) = original_req_url.fragment() {
+        redirect_url.set_fragment(Some(fragment));
+    }
+
+    // Ensure the URL is a valid HTTP URI.
+    if let Err(err) = redirect_url.as_str().parse::<http::Uri>() {
+        return Err(reqwest_middleware::Error::Middleware(anyhow!(
+            "HTTP {status} 'Location' value `{location}` is not a valid HTTP URI: {err}"
+        )));
+    }
+
+    if redirect_url.scheme() != "http" && redirect_url.scheme() != "https" {
+        return Err(reqwest_middleware::Error::Middleware(anyhow!(
+            "Invalid HTTP {status} 'Location' value `{location}`: scheme needs to be https or http"
+        )));
+    }
+
+    let mut headers = HeaderMap::new();
+    std::mem::swap(req.headers_mut(), &mut headers);
+
+    let cross_host = redirect_url.host_str() != original_req_url.host_str()
+        || redirect_url.port_or_known_default() != original_req_url.port_or_known_default();
+    if cross_host {
+        if cross_origin_credentials_policy == CrossOriginCredentialsPolicy::Secure {
+            debug!("Received a cross-origin redirect. Removing sensitive headers.");
+            headers.remove(AUTHORIZATION);
+            headers.remove(COOKIE);
+            headers.remove(PROXY_AUTHORIZATION);
+            headers.remove(WWW_AUTHENTICATE);
+        }
+    // If the redirect request is not a cross-origin request and the original request already
+    // had a Referer header, attempt to set the Referer header for the redirect request.
+    } else if headers.contains_key(REFERER) {
+        if let Some(referer) = make_referer(&redirect_url, &original_req_url) {
+            headers.insert(REFERER, referer);
+        }
+    }
+
+    std::mem::swap(req.headers_mut(), &mut headers);
+    *req.url_mut() = Url::from(redirect_url);
+    debug!(
+        "Received HTTP {status} with Location {location}. Redirecting to {}",
+        DisplaySafeUrl::ref_cast(req.url())
+    );
+    Ok(Some(req))
+}
+
+/// Return a Referer [`HeaderValue`] according to RFC 7231.
+///
+/// Return [`None`] if https has been downgraded in the redirect location.
+fn make_referer(
+    redirect_url: &DisplaySafeUrl,
+    original_url: &DisplaySafeUrl,
+) -> Option<HeaderValue> {
+    if redirect_url.scheme() == "http" && original_url.scheme() == "https" {
+        return None;
+    }
+
+    let mut referer = original_url.clone();
+    referer.remove_credentials();
+    referer.set_fragment(None);
+    referer.as_str().parse().ok()
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub(crate) enum CrossOriginCredentialsPolicy {
+    /// Do not propagate credentials on cross-origin requests.
+    #[default]
+    Secure,
+
+    /// Propagate credentials on cross-origin requests.
+    ///
+    /// WARNING: This should only be available for tests. In production code, preserving credentials
+    /// during cross-origin redirects can lead to security vulnerabilities including credential
+    /// leakage to untrusted domains.
+    #[cfg(test)]
+    Insecure,
 }
 
 /// A builder to construct the properties of a `Request`.
@@ -777,4 +921,166 @@ fn find_source<E: Error + 'static>(orig: &dyn Error) -> Option<&E> {
 /// See <https://github.com/seanmonstar/reqwest/issues/1602#issuecomment-1220996681>
 fn find_sources<E: Error + 'static>(orig: &dyn Error) -> impl Iterator<Item = &E> {
     iter::successors(find_source::<E>(orig), |&err| find_source(err))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::Result;
+
+    use reqwest::{Client, Method};
+    use wiremock::matchers::method;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use crate::base_client::request_into_redirect;
+
+    #[tokio::test]
+    async fn test_redirect_preserves_authorization_header_on_same_origin() -> Result<()> {
+        for status in &[301, 302, 303, 307, 308] {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .respond_with(
+                    ResponseTemplate::new(*status)
+                        .insert_header("location", format!("{}/redirect", server.uri())),
+                )
+                .mount(&server)
+                .await;
+
+            let request = Client::new()
+                .get(server.uri())
+                .basic_auth("username", Some("password"))
+                .build()
+                .unwrap();
+
+            assert!(request.headers().contains_key(AUTHORIZATION));
+
+            let response = Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap()
+                .execute(request.try_clone().unwrap())
+                .await
+                .unwrap();
+
+            let redirect_request =
+                request_into_redirect(request, &response, CrossOriginCredentialsPolicy::Secure)?
+                    .unwrap();
+            assert!(redirect_request.headers().contains_key(AUTHORIZATION));
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_redirect_removes_authorization_header_on_cross_origin() -> Result<()> {
+        for status in &[301, 302, 303, 307, 308] {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .respond_with(
+                    ResponseTemplate::new(*status)
+                        .insert_header("location", "https://cross-origin.com/simple"),
+                )
+                .mount(&server)
+                .await;
+
+            let request = Client::new()
+                .get(server.uri())
+                .basic_auth("username", Some("password"))
+                .build()
+                .unwrap();
+
+            assert!(request.headers().contains_key(AUTHORIZATION));
+
+            let response = Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap()
+                .execute(request.try_clone().unwrap())
+                .await
+                .unwrap();
+
+            let redirect_request =
+                request_into_redirect(request, &response, CrossOriginCredentialsPolicy::Secure)?
+                    .unwrap();
+            assert!(!redirect_request.headers().contains_key(AUTHORIZATION));
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_redirect_303_changes_post_to_get() -> Result<()> {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(
+                ResponseTemplate::new(303)
+                    .insert_header("location", format!("{}/redirect", server.uri())),
+            )
+            .mount(&server)
+            .await;
+
+        let request = Client::new()
+            .post(server.uri())
+            .basic_auth("username", Some("password"))
+            .build()
+            .unwrap();
+
+        assert_eq!(request.method(), Method::POST);
+
+        let response = Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap()
+            .execute(request.try_clone().unwrap())
+            .await
+            .unwrap();
+
+        let redirect_request =
+            request_into_redirect(request, &response, CrossOriginCredentialsPolicy::Secure)?
+                .unwrap();
+        assert_eq!(redirect_request.method(), Method::GET);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_redirect_no_referer_if_disabled() -> Result<()> {
+        for status in &[301, 302, 303, 307, 308] {
+            let server = MockServer::start().await;
+            Mock::given(method("GET"))
+                .respond_with(
+                    ResponseTemplate::new(*status)
+                        .insert_header("location", format!("{}/redirect", server.uri())),
+                )
+                .mount(&server)
+                .await;
+
+            let request = Client::builder()
+                .referer(false)
+                .build()
+                .unwrap()
+                .get(server.uri())
+                .basic_auth("username", Some("password"))
+                .build()
+                .unwrap();
+
+            assert!(!request.headers().contains_key(REFERER));
+
+            let response = Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap()
+                .execute(request.try_clone().unwrap())
+                .await
+                .unwrap();
+
+            let redirect_request =
+                request_into_redirect(request, &response, CrossOriginCredentialsPolicy::Secure)?
+                    .unwrap();
+
+            assert!(!redirect_request.headers().contains_key(REFERER));
+        }
+
+        Ok(())
+    }
 }

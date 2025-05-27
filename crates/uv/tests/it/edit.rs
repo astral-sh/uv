@@ -11807,11 +11807,17 @@ fn add_auth_policy_never_without_credentials() -> Result<()> {
     Ok(())
 }
 
-/// If uv receives a 302 redirect, it should use supplied credentials for the
-/// new location.
+/// If uv receives a 302 redirect to a cross-origin server, it should not forward
+/// credentials. In the absence of a netrc entry for the new location,
+/// it should fail.
 #[tokio::test]
-async fn add_redirect() -> Result<()> {
+async fn add_redirect_cross_origin() -> Result<()> {
     let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"127\.0\.0\.1:\d*", "[LOCALHOST]")])
+        .collect::<Vec<_>>();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
@@ -11837,29 +11843,26 @@ async fn add_redirect() -> Result<()> {
     let _ = redirect_url.set_username("public");
     let _ = redirect_url.set_password(Some("heron"));
 
-    uv_snapshot!(context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @r"
-    success: true
-    exit_code: 0
+    uv_snapshot!(filters, context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @r"
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
 
-    context.assert_command("import anyio").success();
     Ok(())
 }
 
-/// If uv receives a 302 redirect, it should use credentials from the keyring
-/// for the new location.
+/// uv currently fails to look up keyring credentials on a cross-origin redirect.
 #[tokio::test]
-async fn add_redirect_with_keyring() -> Result<()> {
+async fn add_redirect_with_keyring_cross_origin() -> Result<()> {
     let keyring_context = TestContext::new("3.12");
 
     // Install our keyring plugin
@@ -11879,7 +11882,7 @@ async fn add_redirect_with_keyring() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"127\.0\.0\.1[^\r\n]*", "[LOCALHOST]")])
+        .chain([(r"127\.0\.0\.1:\d*", "[LOCALHOST]")])
         .collect::<Vec<_>>();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -11913,37 +11916,33 @@ async fn add_redirect_with_keyring() -> Result<()> {
         .arg("anyio")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
         .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
-    success: true
-    exit_code: 0
+    success: false
+    exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Keyring request for public@http://[LOCALHOST]
+    Keyring request for public@http://[LOCALHOST]/
     Keyring request for public@[LOCALHOST]
-    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
-    Keyring request for public@pypi-proxy.fly.dev
-    Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (http://[LOCALHOST]/) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
     "
     );
 
-    context.assert_command("import anyio").success();
     Ok(())
 }
 
-/// If uv receives a 302 redirect, it should use credentials from netrc
+/// If uv receives a cross-origin 302 redirect, it should use credentials from netrc
 /// for the new location.
 #[tokio::test]
-async fn add_redirect_with_netrc() -> Result<()> {
+async fn pip_install_redirect_with_netrc_cross_origin() -> Result<()> {
     let context = TestContext::new("3.12");
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"127\.0\.0\.1[^\r\n]*", "[LOCALHOST]")])
+        .chain([(r"127\.0\.0\.1:\d*", "[LOCALHOST]")])
         .collect::<Vec<_>>();
 
     let netrc = context.temp_dir.child(".netrc");
