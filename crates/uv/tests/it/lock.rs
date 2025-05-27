@@ -2220,6 +2220,7 @@ fn lock_dependency_extra() -> Result<()> {
 }
 
 /// Lock a project with a dependency that has a conditional extra.
+#[cfg(feature = "python-eol")]
 #[test]
 fn lock_conditional_dependency_extra() -> Result<()> {
     let context = TestContext::new("3.12");

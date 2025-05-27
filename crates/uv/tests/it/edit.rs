@@ -10982,7 +10982,7 @@ fn repeated_index_cli_reversed() -> Result<()> {
 
 #[test]
 fn add_with_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
