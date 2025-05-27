@@ -204,7 +204,11 @@ impl PythonDownloadRequest {
                     .with_version(version.clone()),
             ),
             PythonRequest::Key(request) => Some(request.clone()),
-            PythonRequest::Default | PythonRequest::Any => Some(Self::default()),
+            PythonRequest::Any => Some(Self {
+                prereleases: Some(true), // Explicitly allow pre-releases for PythonRequest::Any
+                ..Self::default()
+            }),
+            PythonRequest::Default => Some(Self::default()),
             // We can't download a managed installation for these request kinds
             PythonRequest::Directory(_)
             | PythonRequest::ExecutableName(_)
