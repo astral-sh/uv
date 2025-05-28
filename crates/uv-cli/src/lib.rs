@@ -3202,9 +3202,9 @@ pub struct SyncArgs {
     pub extra: Option<Vec<ExtraName>>,
 
     /// Select the output format.
-    /// **Note:** This option is only available when `--dry-run` is enabled.
     #[arg(long, value_enum, default_value_t = SyncFormat::default())]
     pub format: SyncFormat,
+
     /// Include all optional dependencies.
     ///
     /// When two or more extras are declared as conflicting in `tool.uv.conflicts`, using this flag

@@ -1,6 +1,6 @@
 use std::fmt::Write;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -20,7 +20,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
     DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
 };
-use uv_fs::Simplified;
+use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::SitePackages;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
@@ -171,18 +171,18 @@ pub(crate) async fn sync(
 
     // Notify the user of any environment changes.
     let mut report = ProjectReport {
-        project_dir: project_dir.to_owned(),
+        project_dir: project_dir.into(),
         workspace_dir: match &target {
-            SyncTarget::Project(project) => Some(project.root().to_owned()),
+            SyncTarget::Project(project) => Some(project.root().into()),
             SyncTarget::Script(_) => None,
         },
         sync: None,
         lock: None,
     };
     report.sync = Some(SyncReport {
-        env_path: environment.root().to_owned(),
+        env_path: environment.root().into(),
         dry_run: dry_run.enabled(),
-        python_executable: environment.python_executable().to_owned(),
+        python_executable: environment.python_executable().into(),
         python_version: environment.interpreter().python_full_version().to_string(),
         env_kind: match &environment {
             SyncEnvironment::Project(..) => EnvKind::Project,
@@ -321,7 +321,7 @@ pub(crate) async fn sync(
     {
         Ok(result) => {
             report.lock = Some(LockReport {
-                lock_path: lock_target.lock_path(),
+                lock_path: lock_target.lock_path().deref().into(),
                 dry_run: dry_run.enabled(),
                 action: match &result {
                     LockResult::Unchanged(..) => LockAction::AlreadyExist,
@@ -816,9 +816,9 @@ fn store_credentials_from_target(target: InstallTarget<'_>) {
 #[derive(Debug, Serialize)]
 struct ProjectReport {
     /// The project directory path.
-    project_dir: PathBuf,
+    project_dir: PortablePathBuf,
     /// The workspace root
-    workspace_dir: Option<PathBuf>,
+    workspace_dir: Option<PortablePathBuf>,
     /// The environment details, including path and action.
     sync: Option<SyncReport>,
     // Lockfile details, including path and actions taken
@@ -842,7 +842,7 @@ enum EnvKind {
 #[derive(Debug, Serialize)]
 struct LockReport {
     /// The path to the lockfile
-    lock_path: PathBuf,
+    lock_path: PortablePathBuf,
     /// Whether the lockfile was preserved, created, or updated.
     action: LockAction,
     /// Whether this is a dry run
@@ -877,7 +877,7 @@ enum LockAction {
 #[derive(Serialize, Debug)]
 struct SyncReport {
     /// The path to the environment.
-    env_path: PathBuf,
+    env_path: PortablePathBuf,
     /// Whether a project or a script environment is used.
     env_kind: EnvKind,
     /// Whether this is a dry run.
@@ -885,7 +885,7 @@ struct SyncReport {
     /// Whether the environment was preserved, created, or updated.
     action: SyncAction,
     // Python executable path.
-    python_executable: PathBuf,
+    python_executable: PortablePathBuf,
     // Python full version.
     python_version: String,
 }
