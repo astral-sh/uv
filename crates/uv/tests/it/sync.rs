@@ -291,15 +291,20 @@ fn sync_json() -> Result<()> {
     ----- stdout -----
     {
       "project_dir": "[TEMP_DIR]/",
+      "workspace_dir": "[TEMP_DIR]/",
       "sync": {
         "env_path": "[VENV]/",
-        "kind": "project",
-        "dry": false,
+        "env_kind": "project",
+        "dry_run": false,
         "action": "already_exist",
         "python_executable": "[VENV]/bin/python3",
         "python_version": "3.12.[X]"
       },
-      "lock": null
+      "lock": {
+        "lock_path": "[TEMP_DIR]/uv.lock",
+        "action": "create",
+        "dry_run": false
+      }
     }
 
     ----- stderr -----
@@ -339,10 +344,11 @@ fn sync_dry_json() -> Result<()> {
     ----- stdout -----
     {
       "project_dir": "[TEMP_DIR]/",
+      "workspace_dir": "[TEMP_DIR]/",
       "sync": {
         "env_path": "[VENV]/",
-        "kind": "project",
-        "dry": true,
+        "env_kind": "project",
+        "dry_run": true,
         "action": "already_exist",
         "python_executable": "[VENV]/bin/python3",
         "python_version": "3.12.[X]"
@@ -350,7 +356,7 @@ fn sync_dry_json() -> Result<()> {
       "lock": {
         "lock_path": "[TEMP_DIR]/uv.lock",
         "action": "create",
-        "dry": true
+        "dry_run": true
       }
     }
 
@@ -4479,10 +4485,11 @@ fn sync_active_script_environment_json() -> Result<()> {
     ----- stdout -----
     {
       "project_dir": "[TEMP_DIR]/",
+      "workspace_dir": null,
       "sync": {
         "env_path": "[CACHE_DIR]/environments-v2/script-[HASH]",
-        "kind": "script",
-        "dry": false,
+        "env_kind": "script",
+        "dry_run": false,
         "action": "create",
         "python_executable": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/python",
         "python_version": "3.11.[X]"
@@ -4515,10 +4522,11 @@ fn sync_active_script_environment_json() -> Result<()> {
     ----- stdout -----
     {
       "project_dir": "[TEMP_DIR]/",
+      "workspace_dir": null,
       "sync": {
         "env_path": "[TEMP_DIR]/foo",
-        "kind": "script",
-        "dry": false,
+        "env_kind": "script",
+        "dry_run": false,
         "action": "create",
         "python_executable": "[TEMP_DIR]/foo/[BIN]/python",
         "python_version": "3.11.[X]"
@@ -4564,11 +4572,12 @@ fn sync_active_script_environment_json() -> Result<()> {
     ----- stdout -----
     {
       "project_dir": "[TEMP_DIR]/",
+      "workspace_dir": null,
       "sync": {
         "env_path": "[TEMP_DIR]/foo",
-        "kind": "script",
-        "dry": false,
-        "action": "replace",
+        "env_kind": "script",
+        "dry_run": false,
+        "action": "update",
         "python_executable": "[TEMP_DIR]/foo/[BIN]/python",
         "python_version": "3.12.[X]"
       },

@@ -169,111 +169,38 @@ pub(crate) async fn sync(
         ),
     };
 
-    let mut report = ProjectReport::new(project_dir);
     // Notify the user of any environment changes.
-    match &environment {
-        SyncEnvironment::Project(ProjectEnvironment::Existing(environment)) => {
-            report.sync = Some(SyncReport {
-                env_path: environment.root().to_owned(),
-                action: SyncAction::AlreadyExist,
-                kind: EnvKind::Project,
-                dry: dry_run.enabled(),
-                python_executable: environment.python_executable().to_owned(),
-                python_version: environment.interpreter().python_full_version().to_string(),
-            });
-        }
-        SyncEnvironment::Project(ProjectEnvironment::WouldReplace(root, ..)) => {
-            report.sync = Some(SyncReport {
-                env_path: root.to_owned(),
-                action: SyncAction::Replace,
-                kind: EnvKind::Project,
-                dry: dry_run.enabled(),
-                python_executable: environment.python_executable().to_owned(),
-                python_version: environment.interpreter().python_full_version().to_string(),
-            });
-        }
-        SyncEnvironment::Project(ProjectEnvironment::WouldCreate(root, ..)) => {
-            report.sync = Some(SyncReport {
-                env_path: root.to_owned(),
-                action: SyncAction::Create,
-                kind: EnvKind::Project,
-                dry: dry_run.enabled(),
-                python_executable: environment.python_executable().to_owned(),
-                python_version: environment.interpreter().python_full_version().to_string(),
-            });
-        }
-        SyncEnvironment::Project(ProjectEnvironment::Replaced(environment)) => {
-            report.sync = Some(SyncReport {
-                env_path: environment.root().to_owned(),
-                action: SyncAction::Replace,
-                kind: EnvKind::Project,
-                dry: dry_run.enabled(),
-                python_executable: environment.python_executable().to_owned(),
-                python_version: environment.interpreter().python_full_version().to_string(),
-            });
-        }
-        SyncEnvironment::Project(ProjectEnvironment::Created(environment)) => {
-            report.sync = Some(SyncReport {
-                env_path: environment.root().to_owned(),
-                action: SyncAction::Create,
-                kind: EnvKind::Project,
-                dry: dry_run.enabled(),
-                python_executable: environment.python_executable().to_owned(),
-                python_version: environment.interpreter().python_full_version().to_string(),
-            });
-        }
-        SyncEnvironment::Script(ScriptEnvironment::Existing(environment)) => {
-            report.sync = Some(SyncReport {
-                env_path: environment.root().to_owned(),
-                action: SyncAction::AlreadyExist,
-                kind: EnvKind::Script,
-                dry: dry_run.enabled(),
-                python_executable: environment.python_executable().to_owned(),
-                python_version: environment.interpreter().python_full_version().to_string(),
-            });
-        }
-        SyncEnvironment::Script(ScriptEnvironment::Replaced(environment)) => {
-            report.sync = Some(SyncReport {
-                env_path: environment.root().to_owned(),
-                action: SyncAction::Replace,
-                kind: EnvKind::Script,
-                dry: dry_run.enabled(),
-                python_executable: environment.python_executable().to_owned(),
-                python_version: environment.interpreter().python_full_version().to_string(),
-            });
-        }
-        SyncEnvironment::Script(ScriptEnvironment::Created(environment)) => {
-            report.sync = Some(SyncReport {
-                env_path: environment.root().to_owned(),
-                action: SyncAction::Create,
-                kind: EnvKind::Script,
-                dry: dry_run.enabled(),
-                python_executable: environment.python_executable().to_owned(),
-                python_version: environment.interpreter().python_full_version().to_string(),
-            });
-        }
-        SyncEnvironment::Script(ScriptEnvironment::WouldReplace(root, ..)) => {
-            report.sync = Some(SyncReport {
-                env_path: root.to_owned(),
-                action: SyncAction::Replace,
-                kind: EnvKind::Script,
-                dry: dry_run.enabled(),
-                python_executable: environment.python_executable().to_owned(),
-                python_version: environment.interpreter().python_full_version().to_string(),
-            });
-        }
-        SyncEnvironment::Script(ScriptEnvironment::WouldCreate(root, ..)) => {
-            report.sync = Some(SyncReport {
-                env_path: root.to_owned(),
-                action: SyncAction::Create,
-                kind: EnvKind::Script,
-                dry: dry_run.enabled(),
-                python_executable: environment.python_executable().to_owned(),
-                python_version: environment.interpreter().python_full_version().to_string(),
-            });
-        }
-    }
-
+    let mut report = ProjectReport {
+        project_dir: project_dir.to_owned(),
+        workspace_dir: match &target {
+            SyncTarget::Project(project) => Some(project.root().to_owned()),
+            SyncTarget::Script(_) => None,
+        },
+        sync: None,
+        lock: None,
+    };
+    report.sync = Some(SyncReport {
+        env_path: environment.root().to_owned(),
+        dry_run: dry_run.enabled(),
+        python_executable: environment.python_executable().to_owned(),
+        python_version: environment.interpreter().python_full_version().to_string(),
+        env_kind: match &environment {
+            SyncEnvironment::Project(..) => EnvKind::Project,
+            SyncEnvironment::Script(..) => EnvKind::Script,
+        },
+        action: match &environment {
+            SyncEnvironment::Project(ProjectEnvironment::Existing(..)) => SyncAction::AlreadyExist,
+            SyncEnvironment::Project(ProjectEnvironment::Created(..)) => SyncAction::Create,
+            SyncEnvironment::Project(ProjectEnvironment::WouldCreate(..)) => SyncAction::Create,
+            SyncEnvironment::Project(ProjectEnvironment::WouldReplace(..)) => SyncAction::Update,
+            SyncEnvironment::Project(ProjectEnvironment::Replaced(..)) => SyncAction::Update,
+            SyncEnvironment::Script(ScriptEnvironment::Existing(..)) => SyncAction::AlreadyExist,
+            SyncEnvironment::Script(ScriptEnvironment::Created(..)) => SyncAction::Create,
+            SyncEnvironment::Script(ScriptEnvironment::WouldCreate(..)) => SyncAction::Create,
+            SyncEnvironment::Script(ScriptEnvironment::WouldReplace(..)) => SyncAction::Update,
+            SyncEnvironment::Script(ScriptEnvironment::Replaced(..)) => SyncAction::Update,
+        },
+    });
     // If we're printing human, eagerly report these partial results
     if !format.is_json() {
         report.print_sync_text(printer)?;
@@ -393,31 +320,15 @@ pub(crate) async fn sync(
     .await
     {
         Ok(result) => {
-            if dry_run.enabled() {
-                match result {
-                    LockResult::Unchanged(..) => {
-                        report.lock = Some(LockReport {
-                            action: LockAction::AlreadyExist,
-                            dry: dry_run.enabled(),
-                            lock_path: lock_target.lock_path(),
-                        });
-                    }
-                    LockResult::Changed(None, ..) => {
-                        report.lock = Some(LockReport {
-                            action: LockAction::Create,
-                            dry: dry_run.enabled(),
-                            lock_path: lock_target.lock_path(),
-                        });
-                    }
-                    LockResult::Changed(Some(..), ..) => {
-                        report.lock = Some(LockReport {
-                            action: LockAction::Update,
-                            dry: dry_run.enabled(),
-                            lock_path: lock_target.lock_path(),
-                        });
-                    }
-                }
-            }
+            report.lock = Some(LockReport {
+                lock_path: lock_target.lock_path(),
+                dry_run: dry_run.enabled(),
+                action: match &result {
+                    LockResult::Unchanged(..) => LockAction::AlreadyExist,
+                    LockResult::Changed(None, ..) => LockAction::Create,
+                    LockResult::Changed(Some(_), ..) => LockAction::Update,
+                },
+            });
             Outcome::Success(result.into_lock())
         }
         Err(ProjectError::Operation(err)) => {
@@ -906,6 +817,8 @@ fn store_credentials_from_target(target: InstallTarget<'_>) {
 struct ProjectReport {
     /// The project directory path.
     project_dir: PathBuf,
+    /// The workspace root
+    workspace_dir: Option<PathBuf>,
     /// The environment details, including path and action.
     sync: Option<SyncReport>,
     // Lockfile details, including path and actions taken
@@ -930,31 +843,25 @@ enum EnvKind {
 struct LockReport {
     /// The path to the lockfile
     lock_path: PathBuf,
-    /// The action to perform on the lockfile
+    /// Whether the lockfile was preserved, created, or updated.
     action: LockAction,
     /// Whether this is a dry run
-    dry: bool,
+    dry_run: bool,
 }
 
-/// Represents the action taken during a dry run.
-///
-/// this struct describe the simulated action applied to a
-/// resource (environment, lockfile, package)
+/// Represents the action taken during a sync.
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
 enum SyncAction {
     /// No changes are needed.
     AlreadyExist,
-    /// The environment would be replaced.
-    Replace,
+    /// The environment would be updated.
+    Update,
     /// Create a new environment.
     Create,
 }
 
-/// Represents the action taken during a dry run.
-///
-/// this struct describe the simulated action applied to a
-/// resource (environment, lockfile, package)
+/// Represents the action taken during a lock.
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
 enum LockAction {
@@ -966,16 +873,16 @@ enum LockAction {
     Create,
 }
 
-/// The dry run environment details, including path, action, and Python configuration.
+/// The synced environment details, including path, action, and Python configuration.
 #[derive(Serialize, Debug)]
 struct SyncReport {
     /// The path to the environment.
     env_path: PathBuf,
-    /// The kind of environment this is.
-    kind: EnvKind,
+    /// Whether a project or a script environment is used.
+    env_kind: EnvKind,
     /// Whether this is a dry run.
-    dry: bool,
-    /// The action taken for the environment.
+    dry_run: bool,
+    /// Whether the environment was preserved, created, or updated.
     action: SyncAction,
     // Python executable path.
     python_executable: PathBuf,
@@ -984,15 +891,6 @@ struct SyncReport {
 }
 
 impl ProjectReport {
-    /// Creates a new `SyncEntry` with the given project directory.
-    fn new(project_dir: &Path) -> Self {
-        Self {
-            project_dir: project_dir.to_owned(),
-            sync: None,
-            lock: None,
-        }
-    }
-
     /// Prints the entire report as JSON
     fn print_json(&self, printer: Printer) -> Result<()> {
         let output = serde_json::to_string_pretty(self)?;
@@ -1004,8 +902,8 @@ impl ProjectReport {
     fn print_sync_text(&self, printer: Printer) -> Result<()> {
         let Some(SyncReport {
             env_path: path,
-            kind,
-            dry,
+            env_kind: kind,
+            dry_run: dry,
             action,
             python_executable: _,
             python_version: _,
@@ -1029,7 +927,7 @@ impl ProjectReport {
             (EnvKind::Project, SyncAction::AlreadyExist, false) => {
                 // Currently intentionally silent
             }
-            (EnvKind::Project, SyncAction::Replace, true) => {
+            (EnvKind::Project, SyncAction::Update, true) => {
                 writeln!(
                     printer.stderr(),
                     "{}",
@@ -1040,7 +938,7 @@ impl ProjectReport {
                     .dimmed()
                 )?;
             }
-            (EnvKind::Project, SyncAction::Replace, false) => {
+            (EnvKind::Project, SyncAction::Update, false) => {
                 // Currently intentionally silent
             }
             (EnvKind::Project, SyncAction::Create, true) => {
@@ -1075,7 +973,7 @@ impl ProjectReport {
                     path.user_display().cyan()
                 )?;
             }
-            (EnvKind::Script, SyncAction::Replace, false) => {
+            (EnvKind::Script, SyncAction::Update, false) => {
                 writeln!(
                     printer.stderr(),
                     "Recreating script environment at: {}",
@@ -1089,7 +987,7 @@ impl ProjectReport {
                     path.user_display().cyan()
                 )?;
             }
-            (EnvKind::Script, SyncAction::Replace, true) => {
+            (EnvKind::Script, SyncAction::Update, true) => {
                 writeln!(
                     printer.stderr(),
                     "{}",
@@ -1121,7 +1019,7 @@ impl ProjectReport {
         let Some(LockReport {
             lock_path: path,
             action,
-            dry,
+            dry_run: dry,
         }) = &self.lock
         else {
             return Ok(());
