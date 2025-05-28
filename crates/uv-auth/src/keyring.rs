@@ -1,7 +1,7 @@
 use std::{io::Write, process::Stdio};
 use tokio::process::Command;
 use tracing::{instrument, trace, warn};
-use uv_redacted::DisplaySafeUrlRef;
+use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user_once;
 
 use crate::credentials::Credentials;
@@ -36,11 +36,7 @@ impl KeyringProvider {
     /// Returns [`None`] if no password was found for the username or if any errors
     /// are encountered in the keyring backend.
     #[instrument(skip_all, fields(url = % url.to_string(), username))]
-    pub async fn fetch(
-        &self,
-        url: DisplaySafeUrlRef<'_>,
-        username: Option<&str>,
-    ) -> Option<Credentials> {
+    pub async fn fetch(&self, url: &DisplaySafeUrl, username: Option<&str>) -> Option<Credentials> {
         // Validate the request
         debug_assert!(
             url.host_str().is_some(),
@@ -229,7 +225,7 @@ mod tests {
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
         let result = std::panic::AssertUnwindSafe(
-            keyring.fetch(DisplaySafeUrlRef::from(&url), Some("user")),
+            keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some("user")),
         )
         .catch_unwind()
         .await;
@@ -242,7 +238,7 @@ mod tests {
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
         let result = std::panic::AssertUnwindSafe(
-            keyring.fetch(DisplaySafeUrlRef::from(&url), Some(url.username())),
+            keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username())),
         )
         .catch_unwind()
         .await;
@@ -255,7 +251,7 @@ mod tests {
         let keyring = KeyringProvider::empty();
         // Panics due to debug assertion; returns `None` in production
         let result = std::panic::AssertUnwindSafe(
-            keyring.fetch(DisplaySafeUrlRef::from(&url), Some(url.username())),
+            keyring.fetch(DisplaySafeUrl::ref_cast(&url), Some(url.username())),
         )
         .catch_unwind()
         .await;
@@ -265,7 +261,7 @@ mod tests {
     #[tokio::test]
     async fn fetch_url_no_auth() {
         let url = Url::parse("https://example.com").unwrap();
-        let url = DisplaySafeUrlRef::from(&url);
+        let url = DisplaySafeUrl::ref_cast(&url);
         let keyring = KeyringProvider::empty();
         let credentials = keyring.fetch(url, Some("user"));
         assert!(credentials.await.is_none());
@@ -277,7 +273,7 @@ mod tests {
         let keyring = KeyringProvider::dummy([(url.host_str().unwrap(), "user", "password")]);
         assert_eq!(
             keyring
-                .fetch(DisplaySafeUrlRef::from(&url), Some("user"))
+                .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
                 .await,
             Some(Credentials::basic(
                 Some("user".to_string()),
@@ -287,7 +283,7 @@ mod tests {
         assert_eq!(
             keyring
                 .fetch(
-                    DisplaySafeUrlRef::from(&url.join("test").unwrap()),
+                    DisplaySafeUrl::ref_cast(&url.join("test").unwrap()),
                     Some("user")
                 )
                 .await,
@@ -303,7 +299,7 @@ mod tests {
         let url = Url::parse("https://example.com").unwrap();
         let keyring = KeyringProvider::dummy([("other.com", "user", "password")]);
         let credentials = keyring
-            .fetch(DisplaySafeUrlRef::from(&url), Some("user"))
+            .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
             .await;
         assert_eq!(credentials, None);
     }
@@ -318,7 +314,7 @@ mod tests {
         assert_eq!(
             keyring
                 .fetch(
-                    DisplaySafeUrlRef::from(&url.join("foo").unwrap()),
+                    DisplaySafeUrl::ref_cast(&url.join("foo").unwrap()),
                     Some("user")
                 )
                 .await,
@@ -329,7 +325,7 @@ mod tests {
         );
         assert_eq!(
             keyring
-                .fetch(DisplaySafeUrlRef::from(&url), Some("user"))
+                .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
                 .await,
             Some(Credentials::basic(
                 Some("user".to_string()),
@@ -339,7 +335,7 @@ mod tests {
         assert_eq!(
             keyring
                 .fetch(
-                    DisplaySafeUrlRef::from(&url.join("bar").unwrap()),
+                    DisplaySafeUrl::ref_cast(&url.join("bar").unwrap()),
                     Some("user")
                 )
                 .await,
@@ -355,7 +351,7 @@ mod tests {
         let url = Url::parse("https://example.com").unwrap();
         let keyring = KeyringProvider::dummy([(url.host_str().unwrap(), "user", "password")]);
         let credentials = keyring
-            .fetch(DisplaySafeUrlRef::from(&url), Some("user"))
+            .fetch(DisplaySafeUrl::ref_cast(&url), Some("user"))
             .await;
         assert_eq!(
             credentials,
@@ -370,7 +366,7 @@ mod tests {
     async fn fetch_url_no_username() {
         let url = Url::parse("https://example.com").unwrap();
         let keyring = KeyringProvider::dummy([(url.host_str().unwrap(), "user", "password")]);
-        let credentials = keyring.fetch(DisplaySafeUrlRef::from(&url), None).await;
+        let credentials = keyring.fetch(DisplaySafeUrl::ref_cast(&url), None).await;
         assert_eq!(
             credentials,
             Some(Credentials::basic(
@@ -385,14 +381,14 @@ mod tests {
         let url = Url::parse("https://example.com").unwrap();
         let keyring = KeyringProvider::dummy([(url.host_str().unwrap(), "foo", "password")]);
         let credentials = keyring
-            .fetch(DisplaySafeUrlRef::from(&url), Some("bar"))
+            .fetch(DisplaySafeUrl::ref_cast(&url), Some("bar"))
             .await;
         assert_eq!(credentials, None);
 
         // Still fails if we have `foo` in the URL itself
         let url = Url::parse("https://foo@example.com").unwrap();
         let credentials = keyring
-            .fetch(DisplaySafeUrlRef::from(&url), Some("bar"))
+            .fetch(DisplaySafeUrl::ref_cast(&url), Some("bar"))
             .await;
         assert_eq!(credentials, None);
     }

@@ -138,6 +138,7 @@ procfs = { version = "0.17.0", default-features = false, features = ["flate2"] }
 pubgrub = { git = "https://github.com/astral-sh/pubgrub", rev = "06ec5a5f59ffaeb6cf5079c6cb184467da06c9db" }
 quote = { version = "1.0.37" }
 rayon = { version = "1.10.0" }
+ref-cast = { version = "1.0.24" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
 regex-automata = { version = "0.4.8", default-features = false, features = ["dfa-build", "dfa-search", "perf", "std", "syntax"] }

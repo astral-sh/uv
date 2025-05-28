@@ -1,3 +1,4 @@
+use ref_cast::RefCast;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
@@ -37,15 +38,22 @@ use url::Url;
 /// assert_eq!(url.username(), "");
 /// assert_eq!(url.password(), None);
 /// ```
-#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Serialize, Deserialize, RefCast)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(transparent))]
+#[repr(transparent)]
 pub struct DisplaySafeUrl(Url);
 
 impl DisplaySafeUrl {
     #[inline]
     pub fn parse(input: &str) -> Result<Self, url::ParseError> {
         Ok(Self(Url::parse(input)?))
+    }
+
+    /// Cast a `&Url` to a `&DisplaySafeUrl` using ref-cast.
+    #[inline]
+    pub fn ref_cast(url: &Url) -> &Self {
+        RefCast::ref_cast(url)
     }
 
     /// Parse a string as an URL, with this URL as the base URL.
@@ -119,7 +127,28 @@ impl Display for DisplaySafeUrl {
 
 impl Debug for DisplaySafeUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        debug_with_redacted_credentials(&self.0, f)
+        let url = &self.0;
+        let (username, password) = if url.username() != "" && url.password().is_some() {
+            (url.username(), Some("****"))
+        } else if url.username() != "" {
+            ("****", None)
+        } else if url.password().is_some() {
+            ("", Some("****"))
+        } else {
+            ("", None)
+        };
+
+        f.debug_struct("DisplaySafeUrl")
+            .field("scheme", &url.scheme())
+            .field("cannot_be_a_base", &url.cannot_be_a_base())
+            .field("username", &username)
+            .field("password", &password)
+            .field("host", &url.host())
+            .field("port", &url.port())
+            .field("path", &url.path())
+            .field("query", &url.query())
+            .field("fragment", &url.fragment())
+            .finish()
     }
 }
 
@@ -177,93 +206,6 @@ fn display_with_redacted_credentials(
     }
 
     Ok(())
-}
-
-fn debug_with_redacted_credentials(url: &Url, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let (username, password) = if url.username() != "" && url.password().is_some() {
-        (url.username(), Some("****"))
-    } else if url.username() != "" {
-        ("****", None)
-    } else if url.password().is_some() {
-        ("", Some("****"))
-    } else {
-        ("", None)
-    };
-
-    f.debug_struct("DisplaySafeUrl")
-        .field("scheme", &url.scheme())
-        .field("cannot_be_a_base", &url.cannot_be_a_base())
-        .field("username", &username)
-        .field("password", &password)
-        .field("host", &url.host())
-        .field("port", &url.port())
-        .field("path", &url.path())
-        .field("query", &url.query())
-        .field("fragment", &url.fragment())
-        .finish()
-}
-
-/// A wrapper around a [`url::Url`] ref that safely handles credentials for
-/// logging purposes.
-///
-/// Uses the same underlying [`Display`] implementation as [`DisplaySafeUrl`].
-///
-/// # Examples
-///
-/// ```
-/// use uv_redacted::DisplaySafeUrl;
-/// use std::str::FromStr;
-///
-/// // Create from a `url::Url` ref
-/// let url = Url::parse("https://user:password@example.com").unwrap();
-/// let log_safe_url = DisplaySafeUrlRef::from(&url);
-///
-/// // Display will mask secrets
-/// assert_eq!(url.to_string(), "https://user:****@example.com/");
-///
-/// // Since `DisplaySafeUrlRef` provides full access to the underlying `Url` through a
-/// // `Deref` implementation, you can still access the username and password
-/// assert_eq!(url.username(), "user");
-/// assert_eq!(url.password(), Some("password"));
-#[derive(Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct DisplaySafeUrlRef<'a>(&'a Url);
-
-impl<'a> Deref for DisplaySafeUrlRef<'a> {
-    type Target = Url;
-
-    fn deref(&self) -> &'a Self::Target {
-        self.0
-    }
-}
-
-impl Display for DisplaySafeUrlRef<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        display_with_redacted_credentials(self.0, f)
-    }
-}
-
-impl Debug for DisplaySafeUrlRef<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        debug_with_redacted_credentials(self.0, f)
-    }
-}
-
-impl<'a> From<&'a Url> for DisplaySafeUrlRef<'a> {
-    fn from(url: &'a Url) -> Self {
-        DisplaySafeUrlRef(url)
-    }
-}
-
-impl<'a> From<&'a DisplaySafeUrl> for DisplaySafeUrlRef<'a> {
-    fn from(url: &'a DisplaySafeUrl) -> Self {
-        DisplaySafeUrlRef(url)
-    }
-}
-
-impl<'a> From<DisplaySafeUrlRef<'a>> for DisplaySafeUrl {
-    fn from(url: DisplaySafeUrlRef<'a>) -> Self {
-        DisplaySafeUrl(url.0.clone())
-    }
 }
 
 #[cfg(test)]
@@ -366,7 +308,7 @@ mod tests {
     fn log_safe_url_ref() {
         let url_str = "https://user:pass@pypi-proxy.fly.dev/basic-auth/simple";
         let url = Url::parse(url_str).unwrap();
-        let log_safe_url = DisplaySafeUrlRef::from(&url);
+        let log_safe_url = DisplaySafeUrl::ref_cast(&url);
         assert_eq!(log_safe_url.username(), "user");
         assert!(log_safe_url.password().is_some_and(|p| p == "pass"));
         assert_eq!(
