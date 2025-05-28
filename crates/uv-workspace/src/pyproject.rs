@@ -815,7 +815,7 @@ impl<'de> serde::Deserialize<'de> for SerdePattern {
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SerdePattern {
     fn schema_name() -> Cow<'static, str> {
-        <String as schemars::JsonSchema>::schema_name()
+        Cow::Borrowed("SerdePattern")
     }
 
     fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
