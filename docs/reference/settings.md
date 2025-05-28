@@ -960,11 +960,11 @@ standard, though only the following fields are respected:
 
 ### [`exclude-newer`](#exclude-newer) {: #exclude-newer }
 
-Limit candidate packages to those that were uploaded prior to the given date.
+Limit candidate packages to those that were uploaded prior to a given point in time.
 
-Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-`2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
-system's configured time zone.
+Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
+`2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
+behave consistently across timezones.
 
 **Default value**: `None`
 
@@ -976,12 +976,12 @@ system's configured time zone.
 
     ```toml
     [tool.uv]
-    exclude-newer = "2006-12-02"
+    exclude-newer = "2006-12-02T02:07:43Z"
     ```
 === "uv.toml"
 
     ```toml
-    exclude-newer = "2006-12-02"
+    exclude-newer = "2006-12-02T02:07:43Z"
     ```
 
 ---
