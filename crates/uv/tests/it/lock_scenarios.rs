@@ -1,7 +1,7 @@
 //! DO NOT EDIT
 //!
 //! Generated with `./scripts/sync_scenarios.sh`
-//! Scenarios from <https://github.com/astral-sh/packse/tree/HEAD/scenarios>
+//! Scenarios from <https://github.com/astral-sh/packse/tree/0.3.47/scenarios>
 //!
 #![cfg(all(feature = "python", feature = "pypi"))]
 #![allow(clippy::needless_raw_string_hashes)]
@@ -24,7 +24,7 @@ use crate::common::{TestContext, packse_index_url, uv_snapshot};
 /// ```text
 /// wrong-backtracking-basic
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a
 /// │   │   ├── satisfied by a-1.0.0
@@ -43,47 +43,61 @@ use crate::common::{TestContext, packse_index_url, uv_snapshot};
 /// │       └── satisfied by b-2.0.9
 /// ├── a
 /// │   ├── a-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── a-2.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   ├── b-1.0.0
+/// │   │   ├── requires python>=3.8
 /// │   │   └── requires too-old
 /// │   │       └── satisfied by too-old-1.0.0
 /// │   ├── b-2.0.0
-/// │   │   └── requires a==1.0.0
-/// │   │       └── satisfied by a-1.0.0
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   ├── b-2.0.1
-/// │   │   └── requires a==1.0.0
-/// │   │       └── satisfied by a-1.0.0
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   ├── b-2.0.2
-/// │   │   └── requires a==1.0.0
-/// │   │       └── satisfied by a-1.0.0
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   ├── b-2.0.3
-/// │   │   └── requires a==1.0.0
-/// │   │       └── satisfied by a-1.0.0
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   ├── b-2.0.4
-/// │   │   └── requires a==1.0.0
-/// │   │       └── satisfied by a-1.0.0
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   ├── b-2.0.5
-/// │   │   └── requires a==1.0.0
-/// │   │       └── satisfied by a-1.0.0
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   ├── b-2.0.6
-/// │   │   └── requires a==1.0.0
-/// │   │       └── satisfied by a-1.0.0
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   ├── b-2.0.7
-/// │   │   └── requires a==1.0.0
-/// │   │       └── satisfied by a-1.0.0
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   ├── b-2.0.8
-/// │   │   └── requires a==1.0.0
-/// │   │       └── satisfied by a-1.0.0
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── b-2.0.9
-/// │       └── requires a==1.0.0
-/// │           └── satisfied by a-1.0.0
+/// │       ├── requires a==1.0.0
+/// │       │   └── satisfied by a-1.0.0
+/// │       └── requires python>=3.8
 /// └── too-old
 ///     └── too-old-1.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn wrong_backtracking_basic() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -106,14 +120,14 @@ fn wrong_backtracking_basic() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -178,6 +192,209 @@ fn wrong_backtracking_basic() -> Result<()> {
     Ok(())
 }
 
+/// There are three packages, `a`, `b` and `b-inner`. Unlike wrong-backtracking-basic, `b` depends on `b-inner` and `a` and `b-inner` conflict, to add a layer of indirection.
+///
+/// We select `a` with `a==2.0.0` first, then `b`, and then `b-inner`, but `a==2.0.0` conflicts with all new versions of `b-inner`, so we backtrack through versions of `b-inner`.
+///
+/// We need to detect this conflict and prioritize `b` and `b-inner` over `a` instead of backtracking down to the too old version of `b-inner==1.0.0` that doesn't depend on `a` anymore.
+///
+/// ```text
+/// wrong-backtracking-indirect
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a
+/// │   │   ├── satisfied by a-1.0.0
+/// │   │   └── satisfied by a-2.0.0
+/// │   └── requires b
+/// │       └── satisfied by b-1.0.0
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   │   └── requires python>=3.8
+/// │   └── a-2.0.0
+/// │       └── requires python>=3.8
+/// ├── b
+/// │   └── b-1.0.0
+/// │       ├── requires b-inner
+/// │       │   ├── satisfied by b-inner-1.0.0
+/// │       │   ├── satisfied by b-inner-2.0.0
+/// │       │   ├── satisfied by b-inner-2.0.1
+/// │       │   ├── satisfied by b-inner-2.0.2
+/// │       │   ├── satisfied by b-inner-2.0.3
+/// │       │   ├── satisfied by b-inner-2.0.4
+/// │       │   ├── satisfied by b-inner-2.0.5
+/// │       │   ├── satisfied by b-inner-2.0.6
+/// │       │   ├── satisfied by b-inner-2.0.7
+/// │       │   ├── satisfied by b-inner-2.0.8
+/// │       │   └── satisfied by b-inner-2.0.9
+/// │       └── requires python>=3.8
+/// ├── b-inner
+/// │   ├── b-inner-1.0.0
+/// │   │   ├── requires python>=3.8
+/// │   │   └── requires too-old
+/// │   │       └── satisfied by too-old-1.0.0
+/// │   ├── b-inner-2.0.0
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
+/// │   ├── b-inner-2.0.1
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
+/// │   ├── b-inner-2.0.2
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
+/// │   ├── b-inner-2.0.3
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
+/// │   ├── b-inner-2.0.4
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
+/// │   ├── b-inner-2.0.5
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
+/// │   ├── b-inner-2.0.6
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
+/// │   ├── b-inner-2.0.7
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
+/// │   ├── b-inner-2.0.8
+/// │   │   ├── requires a==1.0.0
+/// │   │   │   └── satisfied by a-1.0.0
+/// │   │   └── requires python>=3.8
+/// │   └── b-inner-2.0.9
+/// │       ├── requires a==1.0.0
+/// │       │   └── satisfied by a-1.0.0
+/// │       └── requires python>=3.8
+/// └── too-old
+///     └── too-old-1.0.0
+///         └── requires python>=3.8
+/// ```
+#[test]
+fn wrong_backtracking_indirect() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"wrong-backtracking-indirect-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''wrong-backtracking-indirect-a''',
+          '''wrong-backtracking-indirect-b''',
+        ]
+        requires-python = ">=3.8"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.8"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "package-a" },
+            { name = "package-b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a" },
+            { name = "package-b" },
+        ]
+
+        [[package]]
+        name = "package-a"
+        version = "2.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_a-2.0.0.tar.gz", hash = "sha256:5891b5a45aac67b3afb90f66913d7ced2ada7cad1676fe427136b7324935bb1e" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_a-2.0.0-py3-none-any.whl", hash = "sha256:68cb37193f4b2277630ad083522f59ac0449cb1c59e943884d04cc0e2a04cba7" },
+        ]
+
+        [[package]]
+        name = "package-b"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-b-inner" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_b-1.0.0.tar.gz", hash = "sha256:fe434964c4f01b38e86a771d4ba42daed307dc60da472943c3f3e250c0895285" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_b-1.0.0-py3-none-any.whl", hash = "sha256:f35c50d6d2069807a5c25d15aa50842d5a9e27638f2fbb607e8d5ed73d2f6191" },
+        ]
+
+        [[package]]
+        name = "package-b-inner"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-too-old" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_b_inner-1.0.0.tar.gz", hash = "sha256:e47f8b35b48d332d7d1be36b311a3f6ad59033c6e289c26bfd1dcf17c24e06b7" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_b_inner-1.0.0-py3-none-any.whl", hash = "sha256:05152955d9c83408098fd49a01cdb46fec21c8b16b65303971ce0dca7b029925" },
+        ]
+
+        [[package]]
+        name = "package-too-old"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_too_old-1.0.0.tar.gz", hash = "sha256:1b674a931c34e29d20f22e9b92206b648769fa9e35770ab680466dbaa1335090" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/wrong_backtracking_indirect_too_old-1.0.0-py3-none-any.whl", hash = "sha256:15f8fe39323691c883c3088f8873220944428210a74db080f60a61a74c1fc6b0" },
+        ]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(packse_index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// This test ensures that multiple non-conflicting but also
 /// non-overlapping dependency specifications with the same package name
 /// are allowed and supported.
@@ -191,7 +408,7 @@ fn wrong_backtracking_basic() -> Result<()> {
 /// ```text
 /// fork-allows-non-conflicting-non-overlapping-dependencies
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a>=1; sys_platform == "linux"
 /// │   │   ├── satisfied by a-1.0.0
@@ -200,11 +417,13 @@ fn wrong_backtracking_basic() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     ├── a-1.0.0
+///     │   └── requires python>=3.8
 ///     └── a-2.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -230,14 +449,14 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -309,7 +528,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
 /// ```text
 /// fork-allows-non-conflicting-repeated-dependencies
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a>=1
 /// │   │   ├── satisfied by a-1.0.0
@@ -318,11 +537,13 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     ├── a-1.0.0
+///     │   └── requires python>=3.8
 ///     └── a-2.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -348,14 +569,14 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -413,7 +634,7 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
 /// ```text
 /// fork-basic
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a>=2; sys_platform == "linux"
 /// │   │   └── satisfied by a-2.0.0
@@ -421,11 +642,13 @@ fn fork_allows_non_conflicting_repeated_dependencies() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     ├── a-1.0.0
+///     │   └── requires python>=3.8
 ///     └── a-2.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_basic() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -448,14 +671,14 @@ fn fork_basic() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -533,34 +756,40 @@ fn fork_basic() -> Result<()> {
 /// ```text
 /// conflict-in-fork
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
-/// │   ├── requires a>=2; sys_platform == "linux"
+/// │   ├── requires a>=2; sys_platform == "os1"
 /// │   │   └── satisfied by a-2.0.0
-/// │   └── requires a<2; sys_platform == "darwin"
+/// │   └── requires a<2; sys_platform == "os2"
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
 /// │   │   ├── requires b
 /// │   │   │   └── satisfied by b-1.0.0
-/// │   │   └── requires c
-/// │   │       └── satisfied by c-1.0.0
+/// │   │   ├── requires c
+/// │   │   │   └── satisfied by c-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── a-2.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires d==1
-/// │           └── satisfied by d-1.0.0
+/// │       ├── requires d==1
+/// │       │   └── satisfied by d-1.0.0
+/// │       └── requires python>=3.8
 /// ├── c
 /// │   └── c-1.0.0
-/// │       └── requires d==2
-/// │           └── satisfied by d-2.0.0
+/// │       ├── requires d==2
+/// │       │   └── satisfied by d-2.0.0
+/// │       └── requires python>=3.8
 /// └── d
 ///     ├── d-1.0.0
+///     │   └── requires python>=3.8
 ///     └── d-2.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn conflict_in_fork() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -573,8 +802,8 @@ fn conflict_in_fork() -> Result<()> {
         name = "project"
         version = "0.1.0"
         dependencies = [
-          '''conflict-in-fork-a>=2; sys_platform == "linux"''',
-          '''conflict-in-fork-a<2; sys_platform == "darwin"''',
+          '''conflict-in-fork-a>=2; sys_platform == "os1"''',
+          '''conflict-in-fork-a<2; sys_platform == "os2"''',
         ]
         requires-python = ">=3.8"
         "###,
@@ -583,21 +812,21 @@ fn conflict_in_fork() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies for split (sys_platform == 'darwin'):
+      × No solution found when resolving dependencies for split (sys_platform == 'os2'):
       ╰─▶ Because only package-b==1.0.0 is available and package-b==1.0.0 depends on package-d==1, we can conclude that all versions of package-b depend on package-d==1.
           And because package-c==1.0.0 depends on package-d==2 and only package-c==1.0.0 is available, we can conclude that all versions of package-b and all versions of package-c are incompatible.
           And because package-a==1.0.0 depends on package-b and package-c, we can conclude that package-a==1.0.0 cannot be used.
-          And because only the following versions of package-a{sys_platform == 'darwin'} are available:
-              package-a{sys_platform == 'darwin'}==1.0.0
-              package-a{sys_platform == 'darwin'}>2
-          and your project depends on package-a{sys_platform == 'darwin'}<2, we can conclude that your project's requirements are unsatisfiable.
-    "###
+          And because only the following versions of package-a{sys_platform == 'os2'} are available:
+              package-a{sys_platform == 'os2'}==1.0.0
+              package-a{sys_platform == 'os2'}>2
+          and your project depends on package-a{sys_platform == 'os2'}<2, we can conclude that your project's requirements are unsatisfiable.
+    "
     );
 
     Ok(())
@@ -614,7 +843,7 @@ fn conflict_in_fork() -> Result<()> {
 /// ```text
 /// fork-conflict-unsatisfiable
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a>=2
 /// │   │   ├── satisfied by a-2.0.0
@@ -623,12 +852,15 @@ fn conflict_in_fork() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     ├── a-1.0.0
+///     │   └── requires python>=3.8
 ///     ├── a-2.0.0
+///     │   └── requires python>=3.8
 ///     └── a-3.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_conflict_unsatisfiable() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -651,7 +883,7 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -659,7 +891,7 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on package-a>=2 and package-a<2, we can conclude that your project's requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -682,7 +914,7 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
 /// ```text
 /// fork-filter-sibling-dependencies
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a==4.4.0; sys_platform == "linux"
 /// │   │   └── satisfied by a-4.4.0
@@ -694,22 +926,28 @@ fn fork_conflict_unsatisfiable() -> Result<()> {
 /// │       └── satisfied by c-1.0.0
 /// ├── a
 /// │   ├── a-4.3.0
+/// │   │   └── requires python>=3.8
 /// │   └── a-4.4.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires d==1.0.0
-/// │           └── satisfied by d-1.0.0
+/// │       ├── requires d==1.0.0
+/// │       │   └── satisfied by d-1.0.0
+/// │       └── requires python>=3.8
 /// ├── c
 /// │   └── c-1.0.0
-/// │       └── requires d==2.0.0
-/// │           └── satisfied by d-2.0.0
+/// │       ├── requires d==2.0.0
+/// │       │   └── satisfied by d-2.0.0
+/// │       └── requires python>=3.8
 /// └── d
 ///     ├── d-1.0.0
+///     │   └── requires python>=3.8
 ///     └── d-2.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_filter_sibling_dependencies() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -734,14 +972,14 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 7 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -871,27 +1109,31 @@ fn fork_filter_sibling_dependencies() -> Result<()> {
 /// ```text
 /// fork-upgrade
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   └── requires foo
 /// │       ├── satisfied by foo-1.0.0
 /// │       └── satisfied by foo-2.0.0
 /// ├── bar
 /// │   ├── bar-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── bar-2.0.0
+/// │       └── requires python>=3.8
 /// └── foo
 ///     ├── foo-1.0.0
 ///     │   ├── requires bar==1; sys_platform == "linux"
 ///     │   │   └── satisfied by bar-1.0.0
-///     │   └── requires bar==2; sys_platform != "linux"
-///     │       └── satisfied by bar-2.0.0
+///     │   ├── requires bar==2; sys_platform != "linux"
+///     │   │   └── satisfied by bar-2.0.0
+///     │   └── requires python>=3.8
 ///     └── foo-2.0.0
-///         └── requires bar==2
-///             └── satisfied by bar-2.0.0
+///         ├── requires bar==2
+///         │   └── satisfied by bar-2.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_upgrade() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -913,14 +1155,14 @@ fn fork_upgrade() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -990,7 +1232,7 @@ fn fork_upgrade() -> Result<()> {
 /// ```text
 /// fork-incomplete-markers
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a==1; python_version < "3.10"
 /// │   │   └── satisfied by a-1.0.0
@@ -1000,17 +1242,21 @@ fn fork_upgrade() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── a-2.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c; python_version == "3.10"
-/// │           └── satisfied by c-1.0.0
+/// │       ├── requires c; python_version == "3.10"
+/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires python>=3.8
 /// └── c
 ///     └── c-1.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_incomplete_markers() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1034,14 +1280,14 @@ fn fork_incomplete_markers() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1146,7 +1392,7 @@ fn fork_incomplete_markers() -> Result<()> {
 /// ```text
 /// fork-marker-accrue
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a==1.0.0; implementation_name == "cpython"
 /// │   │   └── satisfied by a-1.0.0
@@ -1154,18 +1400,21 @@ fn fork_incomplete_markers() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires c==1.0.0; sys_platform == "linux"
-/// │           └── satisfied by c-1.0.0
+/// │       ├── requires c==1.0.0; sys_platform == "linux"
+/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c==1.0.0; sys_platform == "darwin"
-/// │           └── satisfied by c-1.0.0
+/// │       ├── requires c==1.0.0; sys_platform == "darwin"
+/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires python>=3.8
 /// └── c
 ///     └── c-1.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_marker_accrue() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1188,14 +1437,14 @@ fn fork_marker_accrue() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1287,7 +1536,7 @@ fn fork_marker_accrue() -> Result<()> {
 /// ```text
 /// fork-marker-disjoint
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a>=2; sys_platform == "linux"
 /// │   │   └── satisfied by a-2.0.0
@@ -1295,11 +1544,13 @@ fn fork_marker_accrue() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// └── a
 ///     ├── a-1.0.0
+///     │   └── requires python>=3.8
 ///     └── a-2.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_marker_disjoint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1322,7 +1573,7 @@ fn fork_marker_disjoint() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -1330,7 +1581,7 @@ fn fork_marker_disjoint() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because your project depends on package-a{sys_platform == 'linux'}>=2 and package-a{sys_platform == 'linux'}<2, we can conclude that your project's requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -1346,7 +1597,7 @@ fn fork_marker_disjoint() -> Result<()> {
 /// ```text
 /// fork-marker-inherit-combined-allowed
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a>=2; sys_platform == "linux"
 /// │   │   └── satisfied by a-2.0.0
@@ -1356,20 +1607,25 @@ fn fork_marker_disjoint() -> Result<()> {
 /// │   ├── a-1.0.0
 /// │   │   ├── requires b>=2; implementation_name == "cpython"
 /// │   │   │   └── satisfied by b-2.0.0
-/// │   │   └── requires b<2; implementation_name == "pypy"
-/// │   │       └── satisfied by b-1.0.0
+/// │   │   ├── requires b<2; implementation_name == "pypy"
+/// │   │   │   └── satisfied by b-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── a-2.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   ├── b-1.0.0
-/// │   │   └── requires c; sys_platform == "linux" or implementation_name == "pypy"
-/// │   │       └── satisfied by c-1.0.0
+/// │   │   ├── requires c; sys_platform == "linux" or implementation_name == "pypy"
+/// │   │   │   └── satisfied by c-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── b-2.0.0
+/// │       └── requires python>=3.8
 /// └── c
 ///     └── c-1.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_marker_inherit_combined_allowed() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1392,14 +1648,14 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1527,7 +1783,7 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
 /// ```text
 /// fork-marker-inherit-combined-disallowed
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a>=2; sys_platform == "linux"
 /// │   │   └── satisfied by a-2.0.0
@@ -1537,20 +1793,25 @@ fn fork_marker_inherit_combined_allowed() -> Result<()> {
 /// │   ├── a-1.0.0
 /// │   │   ├── requires b>=2; implementation_name == "cpython"
 /// │   │   │   └── satisfied by b-2.0.0
-/// │   │   └── requires b<2; implementation_name == "pypy"
-/// │   │       └── satisfied by b-1.0.0
+/// │   │   ├── requires b<2; implementation_name == "pypy"
+/// │   │   │   └── satisfied by b-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── a-2.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   ├── b-1.0.0
-/// │   │   └── requires c; sys_platform == "linux" or implementation_name == "cpython"
-/// │   │       └── satisfied by c-1.0.0
+/// │   │   ├── requires c; sys_platform == "linux" or implementation_name == "cpython"
+/// │   │   │   └── satisfied by c-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── b-2.0.0
+/// │       └── requires python>=3.8
 /// └── c
 ///     └── c-1.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_marker_inherit_combined_disallowed() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1573,14 +1834,14 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1697,7 +1958,7 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
 /// ```text
 /// fork-marker-inherit-combined
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a>=2; sys_platform == "linux"
 /// │   │   └── satisfied by a-2.0.0
@@ -1707,20 +1968,25 @@ fn fork_marker_inherit_combined_disallowed() -> Result<()> {
 /// │   ├── a-1.0.0
 /// │   │   ├── requires b>=2; implementation_name == "cpython"
 /// │   │   │   └── satisfied by b-2.0.0
-/// │   │   └── requires b<2; implementation_name == "pypy"
-/// │   │       └── satisfied by b-1.0.0
+/// │   │   ├── requires b<2; implementation_name == "pypy"
+/// │   │   │   └── satisfied by b-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── a-2.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   ├── b-1.0.0
-/// │   │   └── requires c; sys_platform == "linux"
-/// │   │       └── satisfied by c-1.0.0
+/// │   │   ├── requires c; sys_platform == "linux"
+/// │   │   │   └── satisfied by c-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── b-2.0.0
+/// │       └── requires python>=3.8
 /// └── c
 ///     └── c-1.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_marker_inherit_combined() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1743,14 +2009,14 @@ fn fork_marker_inherit_combined() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -1865,7 +2131,7 @@ fn fork_marker_inherit_combined() -> Result<()> {
 /// ```text
 /// fork-marker-inherit-isolated
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a>=2; sys_platform == "linux"
 /// │   │   └── satisfied by a-2.0.0
@@ -1873,17 +2139,20 @@ fn fork_marker_inherit_combined() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   └── requires b; sys_platform == "linux"
-/// │   │       └── satisfied by b-1.0.0
+/// │   │   ├── requires b; sys_platform == "linux"
+/// │   │   │   └── satisfied by b-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── a-2.0.0
-/// │       └── requires b; sys_platform == "linux"
-/// │           └── satisfied by b-1.0.0
+/// │       ├── requires b; sys_platform == "linux"
+/// │       │   └── satisfied by b-1.0.0
+/// │       └── requires python>=3.8
 /// └── b
 ///     └── b-1.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_marker_inherit_isolated() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -1906,14 +2175,14 @@ fn fork_marker_inherit_isolated() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2008,7 +2277,7 @@ fn fork_marker_inherit_isolated() -> Result<()> {
 /// ```text
 /// fork-marker-inherit-transitive
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a>=2; sys_platform == "linux"
 /// │   │   └── satisfied by a-2.0.0
@@ -2016,23 +2285,28 @@ fn fork_marker_inherit_isolated() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   └── requires b
-/// │   │       └── satisfied by b-1.0.0
+/// │   │   ├── requires b
+/// │   │   │   └── satisfied by b-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── a-2.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c
-/// │           └── satisfied by c-1.0.0
+/// │       ├── requires c
+/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires python>=3.8
 /// ├── c
 /// │   └── c-1.0.0
-/// │       └── requires d; sys_platform == "linux"
-/// │           └── satisfied by d-1.0.0
+/// │       ├── requires d; sys_platform == "linux"
+/// │       │   └── satisfied by d-1.0.0
+/// │       └── requires python>=3.8
 /// └── d
 ///     └── d-1.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_marker_inherit_transitive() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2055,14 +2329,14 @@ fn fork_marker_inherit_transitive() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2173,7 +2447,7 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 /// ```text
 /// fork-marker-inherit
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a>=2; sys_platform == "linux"
 /// │   │   └── satisfied by a-2.0.0
@@ -2181,15 +2455,18 @@ fn fork_marker_inherit_transitive() -> Result<()> {
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   └── requires b; sys_platform == "linux"
-/// │   │       └── satisfied by b-1.0.0
+/// │   │   ├── requires b; sys_platform == "linux"
+/// │   │   │   └── satisfied by b-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── a-2.0.0
+/// │       └── requires python>=3.8
 /// └── b
 ///     └── b-1.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_marker_inherit() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2212,14 +2489,14 @@ fn fork_marker_inherit() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2305,7 +2582,7 @@ fn fork_marker_inherit() -> Result<()> {
 /// ```text
 /// fork-marker-limited-inherit
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a>=2; sys_platform == "linux"
 /// │   │   └── satisfied by a-2.0.0
@@ -2315,19 +2592,23 @@ fn fork_marker_inherit() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   ├── a-1.0.0
-/// │   │   └── requires c; sys_platform == "linux"
-/// │   │       └── satisfied by c-1.0.0
+/// │   │   ├── requires c; sys_platform == "linux"
+/// │   │   │   └── satisfied by c-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── a-2.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c; sys_platform == "linux"
-/// │           └── satisfied by c-1.0.0
+/// │       ├── requires c; sys_platform == "linux"
+/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires python>=3.8
 /// └── c
 ///     └── c-1.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_marker_limited_inherit() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2351,14 +2632,14 @@ fn fork_marker_limited_inherit() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2463,7 +2744,7 @@ fn fork_marker_limited_inherit() -> Result<()> {
 /// ```text
 /// fork-marker-selection
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a
 /// │   │   ├── satisfied by a-0.1.0
@@ -2474,16 +2755,20 @@ fn fork_marker_limited_inherit() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   ├── a-0.1.0
+/// │   │   └── requires python>=3.8
 /// │   └── a-0.2.0
-/// │       └── requires b>=2.0.0
-/// │           └── satisfied by b-2.0.0
+/// │       ├── requires b>=2.0.0
+/// │       │   └── satisfied by b-2.0.0
+/// │       └── requires python>=3.8
 /// └── b
 ///     ├── b-1.0.0
+///     │   └── requires python>=3.8
 ///     └── b-2.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_marker_selection() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2507,14 +2792,14 @@ fn fork_marker_selection() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2603,7 +2888,7 @@ fn fork_marker_selection() -> Result<()> {
 /// ```text
 /// fork-marker-track
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a
 /// │   │   ├── satisfied by a-1.3.1
@@ -2616,30 +2901,37 @@ fn fork_marker_selection() -> Result<()> {
 /// │       └── satisfied by b-2.7
 /// ├── a
 /// │   ├── a-1.3.1
-/// │   │   └── requires c; implementation_name == "iron"
-/// │   │       └── satisfied by c-1.10
+/// │   │   ├── requires c; implementation_name == "iron"
+/// │   │   │   └── satisfied by c-1.10
+/// │   │   └── requires python>=3.8
 /// │   ├── a-2.0.0
 /// │   │   ├── requires b>=2.8
 /// │   │   │   └── satisfied by b-2.8
-/// │   │   └── requires c; implementation_name == "cpython"
-/// │   │       └── satisfied by c-1.10
+/// │   │   ├── requires c; implementation_name == "cpython"
+/// │   │   │   └── satisfied by c-1.10
+/// │   │   └── requires python>=3.8
 /// │   ├── a-3.1.0
 /// │   │   ├── requires b>=2.8
 /// │   │   │   └── satisfied by b-2.8
-/// │   │   └── requires c; implementation_name == "pypy"
-/// │   │       └── satisfied by c-1.10
+/// │   │   ├── requires c; implementation_name == "pypy"
+/// │   │   │   └── satisfied by c-1.10
+/// │   │   └── requires python>=3.8
 /// │   └── a-4.3.0
-/// │       └── requires b>=2.8
-/// │           └── satisfied by b-2.8
+/// │       ├── requires b>=2.8
+/// │       │   └── satisfied by b-2.8
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   ├── b-2.7
+/// │   │   └── requires python>=3.8
 /// │   └── b-2.8
+/// │       └── requires python>=3.8
 /// └── c
 ///     └── c-1.10
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_marker_track() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2663,14 +2955,14 @@ fn fork_marker_track() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2773,7 +3065,7 @@ fn fork_marker_track() -> Result<()> {
 /// ```text
 /// fork-non-fork-marker-transitive
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a==1.0.0
 /// │   │   └── satisfied by a-1.0.0
@@ -2781,19 +3073,23 @@ fn fork_marker_track() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires c>=2.0.0; sys_platform == "linux"
-/// │           └── satisfied by c-2.0.0
+/// │       ├── requires c>=2.0.0; sys_platform == "linux"
+/// │       │   └── satisfied by c-2.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c>=2.0.0; sys_platform == "darwin"
-/// │           └── satisfied by c-2.0.0
+/// │       ├── requires c>=2.0.0; sys_platform == "darwin"
+/// │       │   └── satisfied by c-2.0.0
+/// │       └── requires python>=3.8
 /// └── c
 ///     ├── c-1.0.0
+///     │   └── requires python>=3.8
 ///     └── c-2.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_non_fork_marker_transitive() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2816,14 +3112,14 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -2908,7 +3204,7 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
 /// ```text
 /// fork-non-local-fork-marker-direct
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a==1.0.0; sys_platform == "linux"
 /// │   │   └── satisfied by a-1.0.0
@@ -2916,19 +3212,23 @@ fn fork_non_fork_marker_transitive() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires c<2.0.0
-/// │           └── satisfied by c-1.0.0
+/// │       ├── requires c<2.0.0
+/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c>=2.0.0
-/// │           └── satisfied by c-2.0.0
+/// │       ├── requires c>=2.0.0
+/// │       │   └── satisfied by c-2.0.0
+/// │       └── requires python>=3.8
 /// └── c
 ///     ├── c-1.0.0
+///     │   └── requires python>=3.8
 ///     └── c-2.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_non_local_fork_marker_direct() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -2951,7 +3251,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2960,7 +3260,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
       × No solution found when resolving dependencies:
       ╰─▶ Because package-a==1.0.0 depends on package-c<2.0.0 and package-b==1.0.0 depends on package-c>=2.0.0, we can conclude that package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0 are incompatible.
           And because your project depends on package-a{sys_platform == 'linux'}==1.0.0 and package-b{sys_platform == 'darwin'}==1.0.0, we can conclude that your project's requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -2980,7 +3280,7 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
 /// ```text
 /// fork-non-local-fork-marker-transitive
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a==1.0.0
 /// │   │   └── satisfied by a-1.0.0
@@ -2988,19 +3288,23 @@ fn fork_non_local_fork_marker_direct() -> Result<()> {
 /// │       └── satisfied by b-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires c<2.0.0; sys_platform == "linux"
-/// │           └── satisfied by c-1.0.0
+/// │       ├── requires c<2.0.0; sys_platform == "linux"
+/// │       │   └── satisfied by c-1.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   └── b-1.0.0
-/// │       └── requires c>=2.0.0; sys_platform == "darwin"
-/// │           └── satisfied by c-2.0.0
+/// │       ├── requires c>=2.0.0; sys_platform == "darwin"
+/// │       │   └── satisfied by c-2.0.0
+/// │       └── requires python>=3.8
 /// └── c
 ///     ├── c-1.0.0
+///     │   └── requires python>=3.8
 ///     └── c-2.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_non_local_fork_marker_transitive() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3023,7 +3327,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -3036,7 +3340,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
           we can conclude that package-a==1.0.0 depends on package-c{sys_platform == 'linux'}==1.0.0.
           And because only package-c{sys_platform == 'darwin'}<=2.0.0 is available and package-b==1.0.0 depends on package-c{sys_platform == 'darwin'}>=2.0.0, we can conclude that package-a==1.0.0 and package-b==1.0.0 are incompatible.
           And because your project depends on package-a==1.0.0 and package-b==1.0.0, we can conclude that your project's requirements are unsatisfiable.
-    "###
+    "
     );
 
     Ok(())
@@ -3074,7 +3378,7 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
 /// ```text
 /// fork-overlapping-markers-basic
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a>=1.0.0; python_version < "3.10"
 /// │   │   ├── satisfied by a-1.0.0
@@ -3087,12 +3391,15 @@ fn fork_non_local_fork_marker_transitive() -> Result<()> {
 /// │       └── satisfied by a-1.2.0
 /// └── a
 ///     ├── a-1.0.0
+///     │   └── requires python>=3.8
 ///     ├── a-1.1.0
+///     │   └── requires python>=3.8
 ///     └── a-1.2.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_overlapping_markers_basic() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3116,14 +3423,14 @@ fn fork_overlapping_markers_basic() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -3199,7 +3506,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
 /// ```text
 /// preferences-dependent-forking-bistable
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   └── requires cleaver
 /// │       ├── satisfied by cleaver-2.0.0
@@ -3210,6 +3517,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
 /// │   │   │   └── satisfied by fork-sys-platform-1.0.0
 /// │   │   ├── requires fork-sys-platform==2; sys_platform != "linux"
 /// │   │   │   └── satisfied by fork-sys-platform-2.0.0
+/// │   │   ├── requires python>=3.8
 /// │   │   ├── requires reject-cleaver2==1; os_name == "posix"
 /// │   │   │   └── satisfied by reject-cleaver2-1.0.0
 /// │   │   └── requires reject-cleaver2-proxy
@@ -3220,6 +3528,7 @@ fn fork_overlapping_markers_basic() -> Result<()> {
 /// │       │   └── satisfied by fork-if-not-forked-3.0.0
 /// │       ├── requires fork-if-not-forked-proxy; sys_platform != "linux"
 /// │       │   └── satisfied by fork-if-not-forked-proxy-1.0.0
+/// │       ├── requires python>=3.8
 /// │       ├── requires reject-cleaver1==1; sys_platform == "linux"
 /// │       │   └── satisfied by reject-cleaver1-1.0.0
 /// │       └── requires reject-cleaver1-proxy
@@ -3230,39 +3539,53 @@ fn fork_overlapping_markers_basic() -> Result<()> {
 /// │   │   │   └── satisfied by fork-os-name-1.0.0
 /// │   │   ├── requires fork-os-name==2; os_name != "posix"
 /// │   │   │   └── satisfied by fork-os-name-2.0.0
+/// │   │   ├── requires python>=3.8
 /// │   │   └── requires reject-cleaver1-proxy
 /// │   │       └── satisfied by reject-cleaver1-proxy-1.0.0
 /// │   ├── fork-if-not-forked-2.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── fork-if-not-forked-3.0.0
+/// │       └── requires python>=3.8
 /// ├── fork-if-not-forked-proxy
 /// │   └── fork-if-not-forked-proxy-1.0.0
-/// │       └── requires fork-if-not-forked!=3
-/// │           ├── satisfied by fork-if-not-forked-1.0.0
-/// │           └── satisfied by fork-if-not-forked-2.0.0
+/// │       ├── requires fork-if-not-forked!=3
+/// │       │   ├── satisfied by fork-if-not-forked-1.0.0
+/// │       │   └── satisfied by fork-if-not-forked-2.0.0
+/// │       └── requires python>=3.8
 /// ├── fork-os-name
 /// │   ├── fork-os-name-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── fork-os-name-2.0.0
+/// │       └── requires python>=3.8
 /// ├── fork-sys-platform
 /// │   ├── fork-sys-platform-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── fork-sys-platform-2.0.0
+/// │       └── requires python>=3.8
 /// ├── reject-cleaver1
 /// │   ├── reject-cleaver1-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── reject-cleaver1-2.0.0
+/// │       └── requires python>=3.8
 /// ├── reject-cleaver1-proxy
 /// │   └── reject-cleaver1-proxy-1.0.0
+/// │       ├── requires python>=3.8
 /// │       └── requires reject-cleaver1==2; sys_platform != "linux"
 /// │           └── satisfied by reject-cleaver1-2.0.0
 /// ├── reject-cleaver2
 /// │   ├── reject-cleaver2-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── reject-cleaver2-2.0.0
+/// │       └── requires python>=3.8
 /// └── reject-cleaver2-proxy
 ///     └── reject-cleaver2-proxy-1.0.0
+///         ├── requires python>=3.8
 ///         └── requires reject-cleaver2==2; os_name != "posix"
 ///             └── satisfied by reject-cleaver2-2.0.0
 /// ```
 #[test]
 fn preferences_dependent_forking_bistable() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3284,14 +3607,14 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 8 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -3454,7 +3777,7 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
 /// ```text
 /// preferences-dependent-forking-conflicting
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires bar
 /// │   │   ├── satisfied by bar-1.0.0
@@ -3467,9 +3790,12 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
 /// │       └── satisfied by foo-2.0.0
 /// ├── bar
 /// │   ├── bar-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── bar-2.0.0
+/// │       └── requires python>=3.8
 /// ├── cleaver
 /// │   ├── cleaver-2.0.0
+/// │   │   ├── requires python>=3.8
 /// │   │   ├── requires reject-cleaver-2
 /// │   │   │   └── satisfied by reject-cleaver-2-1.0.0
 /// │   │   ├── requires unrelated-dep==1; sys_platform == "linux"
@@ -3479,25 +3805,32 @@ fn preferences_dependent_forking_bistable() -> Result<()> {
 /// │   └── cleaver-1.0.0
 /// │       ├── requires bar==1; sys_platform != "linux"
 /// │       │   └── satisfied by bar-1.0.0
-/// │       └── requires foo==1; sys_platform == "linux"
-/// │           └── satisfied by foo-1.0.0
+/// │       ├── requires foo==1; sys_platform == "linux"
+/// │       │   └── satisfied by foo-1.0.0
+/// │       └── requires python>=3.8
 /// ├── foo
 /// │   ├── foo-1.0.0
-/// │   │   └── requires bar==2
-/// │   │       └── satisfied by bar-2.0.0
+/// │   │   ├── requires bar==2
+/// │   │   │   └── satisfied by bar-2.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── foo-2.0.0
+/// │       └── requires python>=3.8
 /// ├── reject-cleaver-2
 /// │   └── reject-cleaver-2-1.0.0
+/// │       ├── requires python>=3.8
 /// │       └── requires unrelated-dep==3
 /// │           └── satisfied by unrelated-dep-3.0.0
 /// └── unrelated-dep
 ///     ├── unrelated-dep-1.0.0
+///     │   └── requires python>=3.8
 ///     ├── unrelated-dep-2.0.0
+///     │   └── requires python>=3.8
 ///     └── unrelated-dep-3.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn preferences_dependent_forking_conflicting() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3521,14 +3854,14 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -3544,7 +3877,7 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// ```text
 /// preferences-dependent-forking-tristable
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires bar
 /// │   │   ├── satisfied by bar-1.0.0
@@ -3557,10 +3890,12 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// │       └── satisfied by foo-2.0.0
 /// ├── a
 /// │   └── a-1.0.0
+/// │       ├── requires python>=3.8
 /// │       └── requires unrelated-dep3==1; os_name == "posix"
 /// │           └── satisfied by unrelated-dep3-1.0.0
 /// ├── b
 /// │   └── b-1.0.0
+/// │       ├── requires python>=3.8
 /// │       └── requires unrelated-dep3==2; os_name != "posix"
 /// │           └── satisfied by unrelated-dep3-2.0.0
 /// ├── bar
@@ -3570,11 +3905,14 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// │   │   │   └── satisfied by c-2.0.0
 /// │   │   ├── requires d; sys_platform != "linux"
 /// │   │   │   └── satisfied by d-1.0.0
+/// │   │   ├── requires python>=3.8
 /// │   │   └── requires reject-cleaver-1
 /// │   │       └── satisfied by reject-cleaver-1-1.0.0
 /// │   └── bar-2.0.0
+/// │       └── requires python>=3.8
 /// ├── c
 /// │   ├── c-1.0.0
+/// │   │   ├── requires python>=3.8
 /// │   │   ├── requires reject-cleaver-1
 /// │   │   │   └── satisfied by reject-cleaver-1-1.0.0
 /// │   │   ├── requires unrelated-dep2==1; os_name == "posix"
@@ -3582,13 +3920,16 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// │   │   └── requires unrelated-dep2==2; os_name != "posix"
 /// │   │       └── satisfied by unrelated-dep2-2.0.0
 /// │   ├── c-2.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── c-3.0.0
+/// │       └── requires python>=3.8
 /// ├── cleaver
 /// │   ├── cleaver-2.0.0
 /// │   │   ├── requires a
 /// │   │   │   └── satisfied by a-1.0.0
 /// │   │   ├── requires b
 /// │   │   │   └── satisfied by b-1.0.0
+/// │   │   ├── requires python>=3.8
 /// │   │   ├── requires unrelated-dep==1; sys_platform == "linux"
 /// │   │   │   └── satisfied by unrelated-dep-1.0.0
 /// │   │   └── requires unrelated-dep==2; sys_platform != "linux"
@@ -3596,13 +3937,15 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// │   └── cleaver-1.0.0
 /// │       ├── requires bar==1; sys_platform != "linux"
 /// │       │   └── satisfied by bar-1.0.0
-/// │       └── requires foo==1; sys_platform == "linux"
-/// │           └── satisfied by foo-1.0.0
+/// │       ├── requires foo==1; sys_platform == "linux"
+/// │       │   └── satisfied by foo-1.0.0
+/// │       └── requires python>=3.8
 /// ├── d
 /// │   └── d-1.0.0
-/// │       └── requires c!=2
-/// │           ├── satisfied by c-1.0.0
-/// │           └── satisfied by c-3.0.0
+/// │       ├── requires c!=2
+/// │       │   ├── satisfied by c-1.0.0
+/// │       │   └── satisfied by c-3.0.0
+/// │       └── requires python>=3.8
 /// ├── foo
 /// │   ├── foo-1.0.0
 /// │   │   ├── requires c!=3; sys_platform == "linux"
@@ -3611,35 +3954,48 @@ fn preferences_dependent_forking_conflicting() -> Result<()> {
 /// │   │   ├── requires c!=2; sys_platform != "linux"
 /// │   │   │   ├── satisfied by c-1.0.0
 /// │   │   │   └── satisfied by c-3.0.0
+/// │   │   ├── requires python>=3.8
 /// │   │   └── requires reject-cleaver-1
 /// │   │       └── satisfied by reject-cleaver-1-1.0.0
 /// │   └── foo-2.0.0
+/// │       └── requires python>=3.8
 /// ├── reject-cleaver-1
 /// │   └── reject-cleaver-1-1.0.0
+/// │       ├── requires python>=3.8
 /// │       ├── requires unrelated-dep2==1; sys_platform == "linux"
 /// │       │   └── satisfied by unrelated-dep2-1.0.0
 /// │       └── requires unrelated-dep2==2; sys_platform != "linux"
 /// │           └── satisfied by unrelated-dep2-2.0.0
 /// ├── reject-cleaver-2
 /// │   └── reject-cleaver-2-1.0.0
+/// │       ├── requires python>=3.8
 /// │       └── requires unrelated-dep3==3
 /// │           └── satisfied by unrelated-dep3-3.0.0
 /// ├── unrelated-dep
 /// │   ├── unrelated-dep-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   ├── unrelated-dep-2.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── unrelated-dep-3.0.0
+/// │       └── requires python>=3.8
 /// ├── unrelated-dep2
 /// │   ├── unrelated-dep2-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   ├── unrelated-dep2-2.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── unrelated-dep2-3.0.0
+/// │       └── requires python>=3.8
 /// └── unrelated-dep3
 ///     ├── unrelated-dep3-1.0.0
+///     │   └── requires python>=3.8
 ///     ├── unrelated-dep3-2.0.0
+///     │   └── requires python>=3.8
 ///     └── unrelated-dep3-3.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn preferences_dependent_forking_tristable() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3663,14 +4019,14 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 11 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -3882,7 +4238,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
 /// ```text
 /// preferences-dependent-forking
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires bar
 /// │   │   ├── satisfied by bar-1.0.0
@@ -3895,9 +4251,12 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
 /// │       └── satisfied by foo-2.0.0
 /// ├── bar
 /// │   ├── bar-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── bar-2.0.0
+/// │       └── requires python>=3.8
 /// ├── cleaver
 /// │   ├── cleaver-2.0.0
+/// │   │   ├── requires python>=3.8
 /// │   │   ├── requires reject-cleaver-2
 /// │   │   │   └── satisfied by reject-cleaver-2-1.0.0
 /// │   │   ├── requires unrelated-dep==1; sys_platform == "linux"
@@ -3907,23 +4266,30 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
 /// │   └── cleaver-1.0.0
 /// │       ├── requires bar==1; sys_platform != "linux"
 /// │       │   └── satisfied by bar-1.0.0
-/// │       └── requires foo==1; sys_platform == "linux"
-/// │           └── satisfied by foo-1.0.0
+/// │       ├── requires foo==1; sys_platform == "linux"
+/// │       │   └── satisfied by foo-1.0.0
+/// │       └── requires python>=3.8
 /// ├── foo
 /// │   ├── foo-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── foo-2.0.0
+/// │       └── requires python>=3.8
 /// ├── reject-cleaver-2
 /// │   └── reject-cleaver-2-1.0.0
+/// │       ├── requires python>=3.8
 /// │       └── requires unrelated-dep==3
 /// │           └── satisfied by unrelated-dep-3.0.0
 /// └── unrelated-dep
 ///     ├── unrelated-dep-1.0.0
+///     │   └── requires python>=3.8
 ///     ├── unrelated-dep-2.0.0
+///     │   └── requires python>=3.8
 ///     └── unrelated-dep-3.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn preferences_dependent_forking() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -3947,14 +4313,14 @@ fn preferences_dependent_forking() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -4076,7 +4442,7 @@ fn preferences_dependent_forking() -> Result<()> {
 /// ```text
 /// fork-remaining-universe-partitioning
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a>=2; sys_platform == "windows"
 /// │   │   └── satisfied by a-2.0.0
@@ -4088,18 +4454,23 @@ fn preferences_dependent_forking() -> Result<()> {
 /// │   │   │   └── satisfied by b-2.0.0
 /// │   │   ├── requires b<2; os_name == "darwin"
 /// │   │   │   └── satisfied by b-1.0.0
+/// │   │   ├── requires python>=3.8
 /// │   │   └── requires z; sys_platform == "windows"
 /// │   │       └── satisfied by z-1.0.0
 /// │   └── a-2.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   ├── b-1.0.0
+/// │   │   └── requires python>=3.8
 /// │   └── b-2.0.0
+/// │       └── requires python>=3.8
 /// └── z
 ///     └── z-1.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn fork_remaining_universe_partitioning() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4122,14 +4493,14 @@ fn fork_remaining_universe_partitioning() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -4275,14 +4646,14 @@ fn fork_requires_python_full_prerelease() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -4360,14 +4731,14 @@ fn fork_requires_python_full() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -4449,14 +4820,14 @@ fn fork_requires_python_patch_overlap() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -4543,14 +4914,14 @@ fn fork_requires_python() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -4624,14 +4995,14 @@ fn requires_python_wheels() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -4686,20 +5057,22 @@ fn requires_python_wheels() -> Result<()> {
 /// ```text
 /// unreachable-package
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   └── requires a==1.0.0; sys_platform == "win32"
 /// │       └── satisfied by a-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
-/// │       └── requires b==1.0.0; sys_platform == "linux"
-/// │           └── satisfied by b-1.0.0
+/// │       ├── requires b==1.0.0; sys_platform == "linux"
+/// │       │   └── satisfied by b-1.0.0
+/// │       └── requires python>=3.8
 /// └── b
 ///     └── b-1.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn unreachable_package() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4721,14 +5094,14 @@ fn unreachable_package() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -4782,7 +5155,7 @@ fn unreachable_package() -> Result<()> {
 /// ```text
 /// unreachable-wheels
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   ├── requires a==1.0.0; sys_platform == "win32"
 /// │   │   └── satisfied by a-1.0.0
@@ -4792,14 +5165,17 @@ fn unreachable_package() -> Result<()> {
 /// │       └── satisfied by c-1.0.0
 /// ├── a
 /// │   └── a-1.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   └── b-1.0.0
+/// │       └── requires python>=3.8
 /// └── c
 ///     └── c-1.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn unreachable_wheels() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4823,14 +5199,14 @@ fn unreachable_wheels() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");
@@ -4904,12 +5280,279 @@ fn unreachable_wheels() -> Result<()> {
     Ok(())
 }
 
+/// Check the prioritization for virtual extra and marker packages
+///
+/// ```text
+/// marker-variants-have-different-extras
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires psycopg[binary]; platform_python_implementation != "PyPy"
+/// │   │   ├── satisfied by psycopg-1.0.0
+/// │   │   └── satisfied by psycopg-1.0.0[binary]
+/// │   └── requires psycopg; platform_python_implementation == "PyPy"
+/// │       ├── satisfied by psycopg-1.0.0
+/// │       └── satisfied by psycopg-1.0.0[binary]
+/// ├── psycopg
+/// │   ├── psycopg-1.0.0
+/// │   │   ├── requires python>=3.8
+/// │   │   └── requires tzdata; sys_platform == "win32"
+/// │   │       └── satisfied by tzdata-1.0.0
+/// │   └── psycopg-1.0.0[binary]
+/// │       └── requires psycopg-binary; implementation_name != "pypy"
+/// │           └── satisfied by psycopg-binary-1.0.0
+/// ├── psycopg-binary
+/// │   └── psycopg-binary-1.0.0
+/// │       └── requires python>=3.8
+/// └── tzdata
+///     └── tzdata-1.0.0
+///         └── requires python>=3.8
+/// ```
+#[test]
+fn marker_variants_have_different_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"marker-variants-have-different-extras-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''marker-variants-have-different-extras-psycopg[binary]; platform_python_implementation != "PyPy"''',
+          '''marker-variants-have-different-extras-psycopg; platform_python_implementation == "PyPy"''',
+        ]
+        requires-python = ">=3.8"
+        "###
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.8"
+        resolution-markers = [
+            "platform_python_implementation != 'PyPy'",
+            "platform_python_implementation == 'PyPy'",
+        ]
+
+        [[package]]
+        name = "package-psycopg"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-tzdata", marker = "sys_platform == 'win32'" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/marker_variants_have_different_extras_psycopg-1.0.0.tar.gz", hash = "sha256:773b5a6c804e81c10cdad6340e4cb88903442108d7a1e22088d29cf61a02815d" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/marker_variants_have_different_extras_psycopg-1.0.0-py3-none-any.whl", hash = "sha256:50f29a08795f6715ef9ce887be1d2188f91df3139168f2801f0320b61ec00a6c" },
+        ]
+
+        [package.optional-dependencies]
+        binary = [
+            { name = "package-psycopg-binary", marker = "implementation_name != 'pypy' and platform_python_implementation != 'PyPy'" },
+        ]
+
+        [[package]]
+        name = "package-psycopg-binary"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/marker_variants_have_different_extras_psycopg_binary-1.0.0.tar.gz", hash = "sha256:9939771dfe78d76e3583492aaec576719780f744b36198b1f18bb16bb5048995" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/marker_variants_have_different_extras_psycopg_binary-1.0.0-py3-none-any.whl", hash = "sha256:4fb0aef60e76bc7e339d60dc919f3b6e27e49184ffdef9fb2c3f6902b23b6bd2" },
+        ]
+
+        [[package]]
+        name = "package-tzdata"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/marker_variants_have_different_extras_tzdata-1.0.0.tar.gz", hash = "sha256:5aa31d0aec969afbc13584c3209ca2380107bdab68578f881eb2da543ac2ee8e" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/marker_variants_have_different_extras_tzdata-1.0.0-py3-none-any.whl", hash = "sha256:7466eec7ed202434492e7c09a4a7327517aec6d549aaca0436dcc100f9fcb6a5" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "package-psycopg" },
+            { name = "package-psycopg", extra = ["binary"], marker = "platform_python_implementation != 'PyPy'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-psycopg", marker = "platform_python_implementation == 'PyPy'" },
+            { name = "package-psycopg", extras = ["binary"], marker = "platform_python_implementation != 'PyPy'" },
+        ]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(packse_index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
+/// Check the prioritization for virtual marker packages
+///
+/// ```text
+/// virtual-package-extra-priorities
+/// ├── environment
+/// │   └── python3.12
+/// ├── root
+/// │   ├── requires a==1; python_version >= "3.8"
+/// │   │   └── satisfied by a-1.0.0
+/// │   └── requires b; python_version >= "3.9"
+/// │       ├── satisfied by b-1.0.0
+/// │       └── satisfied by b-2.0.0
+/// ├── a
+/// │   ├── a-1.0.0
+/// │   │   ├── requires b==1; python_version >= "3.10"
+/// │   │   │   └── satisfied by b-1.0.0
+/// │   │   └── requires python>=3.8
+/// │   └── a-2.0.0
+/// │       ├── requires b==1; python_version >= "3.10"
+/// │       │   └── satisfied by b-1.0.0
+/// │       └── requires python>=3.8
+/// └── b
+///     ├── b-1.0.0
+///     │   └── requires python>=3.8
+///     └── b-2.0.0
+///         └── requires python>=3.8
+/// ```
+#[test]
+fn virtual_package_extra_priorities() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // In addition to the standard filters, swap out package names for shorter messages
+    let mut filters = context.filters();
+    filters.push((r"virtual-package-extra-priorities-", "package-"));
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        dependencies = [
+          '''virtual-package-extra-priorities-a==1; python_version >= "3.8"''',
+          '''virtual-package-extra-priorities-b; python_version >= "3.9"''',
+        ]
+        requires-python = ">=3.12"
+        "###,
+    )?;
+
+    let mut cmd = context.lock();
+    cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
+    cmd.arg("--index-url").arg(packse_index_url());
+    uv_snapshot!(filters, cmd, @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "
+    );
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => filters,
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "package-a" },
+            { name = "package-b" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "package-a", marker = "python_full_version >= '3.8'", specifier = "==1" },
+            { name = "package-b", marker = "python_full_version >= '3.9'" },
+        ]
+
+        [[package]]
+        name = "package-a"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        dependencies = [
+            { name = "package-b" },
+        ]
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/virtual_package_extra_priorities_a-1.0.0.tar.gz", hash = "sha256:a9f60dfd06d8c7911509013a06d7b8988be53ff8c42aac58224b0f4330089530" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/virtual_package_extra_priorities_a-1.0.0-py3-none-any.whl", hash = "sha256:009943d4a0d4e075bfe87ccccf019667face4562d7774cb17bbc1e976e5db7ff" },
+        ]
+
+        [[package]]
+        name = "package-b"
+        version = "1.0.0"
+        source = { registry = "https://astral-sh.github.io/packse/PACKSE_VERSION/simple-html/" }
+        sdist = { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/virtual_package_extra_priorities_b-1.0.0.tar.gz", hash = "sha256:79a54df14eb28687678447f5270f578f73b325f8234e620d375a87708fd7345c" }
+        wheels = [
+            { url = "https://astral-sh.github.io/packse/PACKSE_VERSION/files/virtual_package_extra_priorities_b-1.0.0-py3-none-any.whl", hash = "sha256:2aab1a3b90f215cb55b9bfde55b3c3617225ca0da726e8c9543c0727734f1df9" },
+        ]
+        "#
+        );
+    });
+
+    // Assert the idempotence of `uv lock` when resolving from the lockfile (`--locked`).
+    context
+        .lock()
+        .arg("--locked")
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--index-url")
+        .arg(packse_index_url())
+        .assert()
+        .success();
+
+    Ok(())
+}
+
 /// When a dependency is only required on a specific platform (like x86_64), omit wheels that target other platforms (like aarch64).
 ///
 /// ```text
 /// specific-architecture
 /// ├── environment
-/// │   └── python3.8
+/// │   └── python3.12
 /// ├── root
 /// │   └── requires a
 /// │       └── satisfied by a-1.0.0
@@ -4919,18 +5562,22 @@ fn unreachable_wheels() -> Result<()> {
 /// │       │   └── satisfied by b-1.0.0
 /// │       ├── requires c; platform_machine == "aarch64"
 /// │       │   └── satisfied by c-1.0.0
-/// │       └── requires d; platform_machine == "i686"
-/// │           └── satisfied by d-1.0.0
+/// │       ├── requires d; platform_machine == "i686"
+/// │       │   └── satisfied by d-1.0.0
+/// │       └── requires python>=3.8
 /// ├── b
 /// │   └── b-1.0.0
+/// │       └── requires python>=3.8
 /// ├── c
 /// │   └── c-1.0.0
+/// │       └── requires python>=3.8
 /// └── d
 ///     └── d-1.0.0
+///         └── requires python>=3.8
 /// ```
 #[test]
 fn specific_architecture() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.12");
 
     // In addition to the standard filters, swap out package names for shorter messages
     let mut filters = context.filters();
@@ -4952,14 +5599,14 @@ fn specific_architecture() -> Result<()> {
     let mut cmd = context.lock();
     cmd.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     cmd.arg("--index-url").arg(packse_index_url());
-    uv_snapshot!(filters, cmd, @r###"
+    uv_snapshot!(filters, cmd, @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###
+    "
     );
 
     let lock = context.read("uv.lock");

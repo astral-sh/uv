@@ -5,7 +5,8 @@
 3.9.21
 3.8.20
 # The following are required for packse scenarios
-3.8.18
-3.8.12
+3.9.20
+3.9.18
+3.9.12
 # The following is needed for `==3.13` request tests
 3.13.0

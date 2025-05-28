@@ -243,7 +243,9 @@ def main(scenarios: list[Path], snapshot_update: bool = True):
                 env=env,
             )
             if exit_code != 0:
-                logging.warning(f"Snapshot update failed (Exit code: {exit_code})")
+                logging.warning(
+                    f"Snapshot update failed with exit code {exit_code} (use -v to show details)"
+                )
         else:
             logging.info("Skipping snapshot update")
 
