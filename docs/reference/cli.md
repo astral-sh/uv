@@ -1005,7 +1005,7 @@ uv sync [OPTIONS]
 <ul>
 <li><code>fewest</code>:  Optimize for selecting the fewest number of versions for each package. Older versions may be preferred if they are compatible with a wider range of supported Python versions or platforms</li>
 <li><code>requires-python</code>:  Optimize for selecting latest supported version of each package, for each supported Python version</li>
-</ul></dd><dt id="uv-sync--format"><a href="#uv-sync--format"><code>--format</code></a> <i>format</i></dt><dd><p>Select the output format. <strong>Note:</strong> This option is only available when <code>--dry-run</code> is enabled</p>
+</ul></dd><dt id="uv-sync--format"><a href="#uv-sync--format"><code>--format</code></a> <i>format</i></dt><dd><p>Select the output format</p>
 <p>[default: text]</p><p>Possible values:</p>
 <ul>
 <li><code>text</code>:  Display the result in a human-readable format</li>
