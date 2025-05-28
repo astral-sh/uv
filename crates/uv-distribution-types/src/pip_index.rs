@@ -54,7 +54,9 @@ macro_rules! impl_index {
                 IndexUrl::schema_name()
             }
 
-            fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+            fn json_schema(
+                generator: &mut schemars::generate::SchemaGenerator,
+            ) -> schemars::Schema {
                 IndexUrl::json_schema(generator)
             }
         }
