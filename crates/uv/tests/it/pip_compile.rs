@@ -3918,6 +3918,45 @@ fn override_dependency_from_pyproject() -> Result<()> {
     Ok(())
 }
 
+/// Check the `tool.uv.exclude-dependencies` in `pyproject.toml` is respected
+/// Check that `tool.uv.exclude-dependencies` in `pyproject.toml` excludes dependencies.
+#[test]
+fn exclude_dependency_from_pyproject() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"[project]
+name = "example"
+version = "0.0.0"
+dependencies = [
+    "flask==3.0.0"
+]
+
+[tool.uv]
+exclude-dependencies = [
+    "werkzeug"
+]
+"#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("pyproject.toml")
+            .current_dir(&context.temp_dir)
+            , @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because flask==3.0.0 depends on Werkzeug>=3.0.0 and example==0.0.0 depends on flask==3.0.0, we can conclude that Werkzeug>=3.0.0 is required.
+          But Werkzeug is excluded.
+    "###
+    );
+
+    Ok(())
+}
+
 /// Check that `tool.uv.constraint-dependencies` in `pyproject.toml` is respected.
 #[test]
 fn constraint_dependency_from_pyproject() -> Result<()> {
