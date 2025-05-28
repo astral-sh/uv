@@ -777,7 +777,7 @@
       "description": "The normalized name of an extra dependency.\n\n Converts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\n For example, `---`, `.`, and `__` are all converted to a single `-`.\n\n See:\n - <https://peps.python.org/pep-0685/#specification/>\n - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "allOf": [
         {
-          "$ref": "#/definitions/string"
+          "$ref": "#/definitions/SmallString"
         }
       ]
     },
@@ -827,7 +827,7 @@
       "description": "The normalized name of a dependency group.\n\n See:\n - <https://peps.python.org/pep-0735/>\n - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "allOf": [
         {
-          "$ref": "#/definitions/string"
+          "$ref": "#/definitions/SmallString"
         }
       ]
     },
@@ -923,7 +923,7 @@
       "description": "The normalized name of an index.\n\n Index names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.",
       "allOf": [
         {
-          "$ref": "#/definitions/string"
+          "$ref": "#/definitions/SmallString"
         }
       ]
     },
@@ -1002,7 +1002,7 @@
       "description": "The normalized name of a package.\n\n Converts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\n For example, `---`, `.`, and `__` are all converted to a single `-`.\n\n See: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
       "allOf": [
         {
-          "$ref": "#/definitions/string"
+          "$ref": "#/definitions/SmallString"
         }
       ]
     },
@@ -1516,6 +1516,9 @@
       },
       "additionalProperties": false
     },
+    "PortablePathBuf": {
+      "type": "string"
+    },
     "PrereleaseMode": {
       "oneOf": [
         {
@@ -1673,6 +1676,12 @@
         "$ref": "#/definitions/SchemaConflictSet"
       }
     },
+    "SerdePattern": {
+      "type": "string"
+    },
+    "SmallString": {
+      "type": "string"
+    },
     "Source": {
       "description": "A `tool.uv.sources` value.",
       "anyOf": [
@@ -1724,7 +1733,7 @@
               "description": "The path to the directory with the `pyproject.toml`, if it's not in the archive root.",
               "anyOf": [
                 {
-                  "$ref": "#/definitions/string"
+                  "$ref": "#/definitions/PortablePathBuf"
                 },
                 {
                   "type": "null"
@@ -1774,7 +1783,7 @@
               "description": "For source distributions, the path to the directory with the `pyproject.toml`, if it's\n not in the archive root.",
               "anyOf": [
                 {
-                  "$ref": "#/definitions/string"
+                  "$ref": "#/definitions/PortablePathBuf"
                 },
                 {
                   "type": "null"
@@ -1833,7 +1842,7 @@
               ]
             },
             "path": {
-              "$ref": "#/definitions/string"
+              "$ref": "#/definitions/PortablePathBuf"
             }
           },
           "additionalProperties": false,
@@ -2184,7 +2193,7 @@
             "null"
           ],
           "items": {
-            "$ref": "#/definitions/string"
+            "$ref": "#/definitions/SerdePattern"
           }
         },
         "members": {
@@ -2194,7 +2203,7 @@
             "null"
           ],
           "items": {
-            "$ref": "#/definitions/string"
+            "$ref": "#/definitions/SerdePattern"
           }
         }
       },
@@ -2396,9 +2405,6 @@
         }
       },
       "additionalProperties": false
-    },
-    "string": {
-      "type": "string"
     }
   }
 }

@@ -148,7 +148,7 @@ impl PartialOrd<SmallString> for rkyv::string::ArchivedString {
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SmallString {
     fn schema_name() -> Cow<'static, str> {
-        String::schema_name()
+        Cow::Borrowed("SmallString")
     }
 
     fn json_schema(generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {

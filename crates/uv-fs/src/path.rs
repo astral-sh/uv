@@ -346,7 +346,7 @@ pub struct PortablePathBuf(Box<Path>);
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for PortablePathBuf {
     fn schema_name() -> Cow<'static, str> {
-        PathBuf::schema_name()
+        Cow::Borrowed("PortablePathBuf")
     }
 
     fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
