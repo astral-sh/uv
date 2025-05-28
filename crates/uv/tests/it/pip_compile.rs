@@ -14508,7 +14508,7 @@ fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
 
           hint: The source distribution for `source-distribution` (v0.0.3) does not include static metadata. Generating metadata for this package requires Python >=3.10, but Python 3.8.[X] is installed.
 
-          hint: The resolution failed for a Python version range excluding the current Python version (3.8), consider limiting the Python version range using `requires-python`.
+          hint: While the active Python version is 3.8, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
     ");
 
     Ok(())
