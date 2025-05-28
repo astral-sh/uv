@@ -37,7 +37,7 @@ pub enum LibcDetectionError {
     InvalidLdSoOutputMusl(PathBuf),
     #[error("Could not read ELF interpreter from any of the following paths: {0}")]
     CoreBinaryParsing(String),
-    #[error("Failed to find any common binaries ({0})")]
+    #[error("Failed to find any common binaries to determine libc from: {0}")]
     NoCommonBinariesFound(String),
     #[error("Failed to determine libc")]
     Io(#[from] io::Error),
