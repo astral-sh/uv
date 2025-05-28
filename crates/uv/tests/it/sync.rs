@@ -4186,6 +4186,19 @@ fn sync_active_project_environment() -> Result<()> {
     Audited 1 package in [TIME]
     "###);
 
+    // UV_USE_ACTIVE_ENVIRONMENT is an alias for --active, so this also doesn't warn.
+    uv_snapshot!(context.filters(), context.sync()
+        .env(EnvVars::VIRTUAL_ENV, "foo")
+        .env(EnvVars::UV_USE_ACTIVE_ENVIRONMENT, "true"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 1 package in [TIME]
+    "###);
+
     // Setting both the `VIRTUAL_ENV` and `UV_PROJECT_ENVIRONMENT` is fine if they agree
     uv_snapshot!(context.filters(), context.sync()
         .arg("--active")

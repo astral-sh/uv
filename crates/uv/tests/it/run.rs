@@ -3825,6 +3825,68 @@ fn run_active_project_environment() -> Result<()> {
      + iniconfig==2.0.0
     "###);
 
+    // UV_USE_ACTIVE_ENVIRONMENT=true is a synonym for --active.
+    context
+        .temp_dir
+        .child("bar")
+        .assert(predicate::path::missing());
+    uv_snapshot!(context.filters(), context.run()
+        .arg("python").arg("--version")
+        .env(EnvVars::VIRTUAL_ENV, "bar")
+        .env(EnvVars::UV_USE_ACTIVE_ENVIRONMENT, "true"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: bar
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "###);
+    context
+        .temp_dir
+        .child("bar")
+        .assert(predicate::path::exists());
+
+    // If you set UV_PROJECT_ENVIRONMENT and UV_USE_ACTIVE_ENVIRONMENT (or --active) at the same
+    // time, active wins, and it does not warn.
+    context
+        .temp_dir
+        .child("baz_project")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("baz_active")
+        .assert(predicate::path::missing());
+    uv_snapshot!(context.filters(), context.run()
+        .arg("python").arg("--version")
+        .env(EnvVars::VIRTUAL_ENV, "baz_active")
+        .env(EnvVars::UV_PROJECT_ENVIRONMENT, "baz_project")
+        .env(EnvVars::UV_USE_ACTIVE_ENVIRONMENT, "true"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: baz_active
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+    context
+        .temp_dir
+        .child("baz_project")
+        .assert(predicate::path::missing());
+    context
+        .temp_dir
+        .child("baz_active")
+        .assert(predicate::path::exists());
+
     Ok(())
 }
 
@@ -3933,6 +3995,31 @@ fn run_active_script_environment() -> Result<()> {
     Installed 1 package in [TIME]
      + iniconfig==2.0.0
     "###);
+
+    // UV_USE_ACTIVE_ENVIRONMENT=true is a synonym for --active.
+    context
+        .temp_dir
+        .child("bar")
+        .assert(predicate::path::missing());
+    uv_snapshot!(&filters, context.run()
+        .arg("--script")
+        .arg("main.py")
+        .env(EnvVars::VIRTUAL_ENV, "bar")
+        .env(EnvVars::UV_USE_ACTIVE_ENVIRONMENT, "true"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Hello, world!
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+    context
+        .temp_dir
+        .child("bar")
+        .assert(predicate::path::exists());
 
     Ok(())
 }

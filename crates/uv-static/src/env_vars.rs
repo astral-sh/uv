@@ -256,6 +256,8 @@ impl EnvVars {
     /// for more details.
     pub const UV_PROJECT_ENVIRONMENT: &'static str = "UV_PROJECT_ENVIRONMENT";
 
+    pub const UV_USE_ACTIVE_ENVIRONMENT: &'static str = "UV_USE_ACTIVE_ENVIRONMENT";
+
     /// Specifies the directory to place links to installed, managed Python executables.
     pub const UV_PYTHON_BIN_DIR: &'static str = "UV_PYTHON_BIN_DIR";
 
