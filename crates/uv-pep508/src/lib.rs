@@ -16,6 +16,7 @@
 
 #![warn(missing_docs)]
 
+use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
@@ -334,22 +335,15 @@ impl Reporter for TracingReporter {
 
 #[cfg(feature = "schemars")]
 impl<T: Pep508Url> schemars::JsonSchema for Requirement<T> {
-    fn schema_name() -> String {
-        "Requirement".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("Requirement")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some(
-                    "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`".to_string(),
-                ),
-                ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_gen: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "description": "A PEP 508 dependency specifier, e.g., `ruff >= 0.6.0`"
+        })
     }
 }
 

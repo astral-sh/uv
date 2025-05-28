@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{borrow::Cow, ops::Deref};
 
 use http::StatusCode;
 use rustc_hash::FxHashSet;
@@ -136,17 +136,17 @@ impl<'de> Deserialize<'de> for SerializableStatusCode {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for SerializableStatusCode {
-    fn schema_name() -> String {
-        "StatusCode".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("StatusCode")
     }
 
-    fn json_schema(r#gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        let mut schema = r#gen.subschema_for::<u16>().into_object();
-        schema.metadata().description = Some("HTTP status code (100-599)".to_string());
-        schema.number().minimum = Some(100.0);
-        schema.number().maximum = Some(599.0);
-
-        schema.into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "number",
+            "minimum": 100,
+            "maximum": 599,
+            "description": "HTTP status code (100-599)"
+        })
     }
 }
 
