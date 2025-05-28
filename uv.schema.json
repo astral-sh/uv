@@ -775,11 +775,7 @@
     },
     "ExtraName": {
       "description": "The normalized name of an extra dependency.\n\n Converts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\n For example, `---`, `.`, and `__` are all converted to a single `-`.\n\n See:\n - <https://peps.python.org/pep-0685/#specification/>\n - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
-      "allOf": [
-        {
-          "$ref": "#/definitions/SmallString"
-        }
-      ]
+      "type": "string"
     },
     "ForkStrategy": {
       "oneOf": [
@@ -825,11 +821,7 @@
     },
     "GroupName": {
       "description": "The normalized name of a dependency group.\n\n See:\n - <https://peps.python.org/pep-0735/>\n - <https://packaging.python.org/en/latest/specifications/name-normalization/>",
-      "allOf": [
-        {
-          "$ref": "#/definitions/SmallString"
-        }
-      ]
+      "type": "string"
     },
     "Index": {
       "type": "object",
@@ -921,11 +913,7 @@
     },
     "IndexName": {
       "description": "The normalized name of an index.\n\n Index names may contain letters, digits, hyphens, underscores, and periods, and must be ASCII.",
-      "allOf": [
-        {
-          "$ref": "#/definitions/SmallString"
-        }
-      ]
+      "type": "string"
     },
     "IndexStrategy": {
       "oneOf": [
@@ -1000,11 +988,7 @@
     },
     "PackageName": {
       "description": "The normalized name of a package.\n\n Converts the name to lowercase and collapses runs of `-`, `_`, and `.` down to a single `-`.\n For example, `---`, `.`, and `__` are all converted to a single `-`.\n\n See: <https://packaging.python.org/en/latest/specifications/name-normalization/>",
-      "allOf": [
-        {
-          "$ref": "#/definitions/SmallString"
-        }
-      ]
+      "type": "string"
     },
     "PackageNameSpecifier": {
       "description": "The name of a package, or `:all:` or `:none:` to select or omit all packages, respectively.",
@@ -1677,9 +1661,6 @@
       }
     },
     "SerdePattern": {
-      "type": "string"
-    },
-    "SmallString": {
       "type": "string"
     },
     "Source": {
