@@ -1006,65 +1006,6 @@ jobs:
         run: |
           ./uv pip install -v anyio
 
-  integration-test-free-threaded-linux:
-    timeout-minutes: 15
-    needs: build-binary-linux-libc
-    name: "integration test | free-threaded on linux"
-    runs-on: ubuntu-latest
-    steps:
-      - name: "Install python3.13-nogil"
-        run: |
-          for i in {1..5}; do
-            sudo add-apt-repository ppa:deadsnakes && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
-            if [ $i -eq 5 ]; then
-              echo "Failed to add repository after 5 attempts"
-              exit 1
-            fi
-          done
-          sudo apt-get update
-          sudo apt-get install python3.13-nogil
-
-      - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: uv-linux-libc-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Create a virtual environment"
-        run: |
-          ./uv venv -p 3.13t --python-preference only-system
-
-      - name: "Check version"
-        run: |
-          .venv/bin/python --version
-
-      - name: "Check is free-threaded"
-        run: |
-          .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
-
-      - name: "Check install"
-        run: |
-          ./uv pip install -v anyio
-
-      - name: "Install free-threaded Python via uv"
-        run: |
-          ./uv python install -v 3.13t
-          ./uv venv -p 3.13t --managed-python
-
-      - name: "Check version"
-        run: |
-          .venv/bin/python --version
-
-      - name: "Check is free-threaded"
-        run: |
-          .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
-
-      - name: "Check install"
-        run: |
-          ./uv pip install -v anyio
-
   integration-test-free-threaded-windows-x86_64:
     timeout-minutes: 10
     needs: build-binary-windows-x86_64
@@ -1441,6 +1382,14 @@ jobs:
       - name: "Install a package with system and free-threaded opt-in"
         run: |
           ./uv pip install anyio --system --python 3.13t
+
+      - name: "Create a virtual environment"
+        run: |
+          ./uv venv -p 3.13t --python-preference only-system
+
+      - name: "Check is free-threaded"
+        run: |
+          .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
 
   integration-test-publish-changed:
     timeout-minutes: 10
