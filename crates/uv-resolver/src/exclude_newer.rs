@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{borrow::Cow, str::FromStr};
 
 use jiff::{Timestamp, ToSpan, tz::TimeZone};
 
@@ -67,25 +67,15 @@ impl std::fmt::Display for ExcludeNewer {
 
 #[cfg(feature = "schemars")]
 impl schemars::JsonSchema for ExcludeNewer {
-    fn schema_name() -> String {
-        "ExcludeNewer".to_string()
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("ExcludeNewer")
     }
 
-    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        schemars::schema::SchemaObject {
-            instance_type: Some(schemars::schema::InstanceType::String.into()),
-            string: Some(Box::new(schemars::schema::StringValidation {
-                pattern: Some(
-                    r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2}))?$".to_string(),
-                ),
-                ..schemars::schema::StringValidation::default()
-            })),
-            metadata: Some(Box::new(schemars::schema::Metadata {
-                description: Some("Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`).".to_string()),
-              ..schemars::schema::Metadata::default()
-            })),
-            ..schemars::schema::SchemaObject::default()
-        }
-        .into()
+    fn json_schema(_generator: &mut schemars::generate::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "pattern": r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2}))?$",
+            "description": "Exclude distributions uploaded after the given timestamp.\n\nAccepts both RFC 3339 timestamps (e.g., `2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`).",
+        })
     }
 }
