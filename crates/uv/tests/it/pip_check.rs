@@ -6,7 +6,6 @@ use crate::common::TestContext;
 use crate::common::uv_snapshot;
 
 #[test]
-#[cfg(feature = "pypi")]
 fn check_compatible_packages() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -51,7 +50,6 @@ fn check_compatible_packages() -> Result<()> {
 // requests 2.31.0 requires idna (<4,>=2.5)
 // this test force-installs idna 2.4 to trigger a failure.
 #[test]
-#[cfg(feature = "pypi")]
 fn check_incompatible_packages() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -121,7 +119,6 @@ fn check_incompatible_packages() -> Result<()> {
 // this test force-installs idna 2.4 and urllib3 1.20 to trigger a failure
 // with multiple incompatible packages.
 #[test]
-#[cfg(feature = "pypi")]
 fn check_multiple_incompatible_packages() -> Result<()> {
     let context = TestContext::new("3.12");
 
