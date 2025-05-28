@@ -2459,7 +2459,7 @@ impl FromStr for VersionRequest {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Stripping the 't' suffix produces awkward error messages if the user tries a version
         // like "latest". HACK: If the version is all letters, don't even try to parse it further.
-        if s.as_bytes().iter().all(u8::is_ascii_alphabetic) {
+        if s.chars().all(char::is_alphabetic) {
             return Err(Error::InvalidVersionRequest(s.to_string()));
         }
 
