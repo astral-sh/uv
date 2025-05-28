@@ -1404,10 +1404,8 @@ impl PythonRequest {
             return Self::Default;
         }
 
-        let abstract_version_prefixes = [
-            "python", // the prefix of e.g. `python312`
-            "",       // the empty prefix of bare versions, e.g. `312`
-        ];
+        // the prefix of e.g. `python312` and the empty prefix of bare versions, e.g. `312`
+        let abstract_version_prefixes = ["python", ""];
         let all_implementation_names =
             ImplementationName::long_names().chain(ImplementationName::short_names());
         // Abstract versions like `python@312`, `python312`, or `312`, plus implementations and
