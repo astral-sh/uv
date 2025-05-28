@@ -93,7 +93,7 @@ pub enum Error {
     Mirror(&'static str, &'static str),
     #[error(transparent)]
     LibcDetection(#[from] LibcDetectionError),
-    #[error("Remote python downloads JSON is not yet supported, please use a local path")]
+    #[error("Remote Python downloads JSON is not yet supported, please use a local path")]
     RemoteJSONNotSupported,
     #[error("The JSON of the python downloads is invalid: {0}")]
     InvalidPythonDownloadsJSON(PathBuf, #[source] serde_json::Error),
