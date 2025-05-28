@@ -188,18 +188,24 @@ pub(crate) async fn sync(
             SyncEnvironment::Script(..) => EnvKind::Script,
         },
         env_path: match &environment {
-            SyncEnvironment::Project(ProjectEnvironment::Existing(env))
-            | SyncEnvironment::Project(ProjectEnvironment::Created(env))
-            | SyncEnvironment::Project(ProjectEnvironment::Replaced(env))
-            | SyncEnvironment::Script(ScriptEnvironment::Existing(env))
-            | SyncEnvironment::Script(ScriptEnvironment::Created(env))
-            | SyncEnvironment::Script(ScriptEnvironment::Replaced(env)) => env.root().into(),
-            SyncEnvironment::Project(ProjectEnvironment::WouldCreate(root, ..))
-            | SyncEnvironment::Project(ProjectEnvironment::WouldReplace(root, ..))
-            | SyncEnvironment::Script(ScriptEnvironment::WouldCreate(root, ..))
-            | SyncEnvironment::Script(ScriptEnvironment::WouldReplace(root, ..)) => {
-                root.as_path().into()
-            }
+            SyncEnvironment::Project(
+                ProjectEnvironment::Existing(env)
+                | ProjectEnvironment::Created(env)
+                | ProjectEnvironment::Replaced(env),
+            )
+            | SyncEnvironment::Script(
+                ScriptEnvironment::Existing(env)
+                | ScriptEnvironment::Created(env)
+                | ScriptEnvironment::Replaced(env),
+            ) => env.root().into(),
+            SyncEnvironment::Project(
+                ProjectEnvironment::WouldCreate(root, ..)
+                | ProjectEnvironment::WouldReplace(root, ..),
+            )
+            | SyncEnvironment::Script(
+                ScriptEnvironment::WouldCreate(root, ..)
+                | ScriptEnvironment::WouldReplace(root, ..),
+            ) => root.as_path().into(),
         },
         action: match &environment {
             SyncEnvironment::Project(ProjectEnvironment::Existing(..)) => SyncAction::AlreadyExist,

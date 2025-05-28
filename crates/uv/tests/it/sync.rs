@@ -284,7 +284,10 @@ fn sync_json() -> Result<()> {
     )?;
 
     // Running `uv sync` should generate a lockfile.
-    uv_snapshot!(context.filters(), context.sync()
+    uv_snapshot!(context.filters().into_iter().chain([
+        ("bin/python3", "[PYTHON]"),
+        ("Scripts/python.exe", "[PYTHON]"),
+    ]).collect::<Vec<_>>(), context.sync()
         .arg("--format").arg("json"), @r#"
     success: true
     exit_code: 0
@@ -297,7 +300,7 @@ fn sync_json() -> Result<()> {
         "env_kind": "project",
         "dry_run": false,
         "action": "already_exist",
-        "python_executable": "[VENV]/bin/python3",
+        "python_executable": "[VENV]/[PYTHON]",
         "python_version": "3.12.[X]"
       },
       "lock": {
@@ -336,7 +339,10 @@ fn sync_dry_json() -> Result<()> {
     )?;
 
     // Running `uv sync` should generate a lockfile.
-    uv_snapshot!(context.filters(), context.sync()
+    uv_snapshot!(context.filters().into_iter().chain([
+        ("bin/python3", "[PYTHON]"),
+        ("Scripts/python.exe", "[PYTHON]"),
+    ]).collect::<Vec<_>>(), context.sync()
         .arg("--format").arg("json")
         .arg("--dry-run"), @r#"
     success: true
@@ -350,7 +356,7 @@ fn sync_dry_json() -> Result<()> {
         "env_kind": "project",
         "dry_run": true,
         "action": "already_exist",
-        "python_executable": "[VENV]/bin/python3",
+        "python_executable": "[VENV]/[PYTHON]",
         "python_version": "3.12.[X]"
       },
       "lock": {
@@ -4469,10 +4475,14 @@ fn sync_active_script_environment_json() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-[a-z0-9]+",
-            "environments-v2/script-[HASH]",
-        )])
+        .chain(vec![
+            (
+                r"environments-v2/script-[a-z0-9]+",
+                "environments-v2/script-[HASH]",
+            ),
+            ("bin/python3", "[PYTHON]"),
+            ("Scripts/python.exe", "[PYTHON]"),
+        ])
         .collect::<Vec<_>>();
 
     // Running `uv sync --script` with `VIRTUAL_ENV` should warn
