@@ -4,7 +4,6 @@ use base64::write::EncoderWriter;
 use std::borrow::Cow;
 use std::fmt;
 use uv_redacted::DisplaySafeUrl;
-use uv_redacted::DisplaySafeUrlRef;
 
 use netrc::Netrc;
 use reqwest::Request;
@@ -145,7 +144,7 @@ impl Credentials {
     /// If a username is provided, it must match the login in the netrc file or [`None`] is returned.
     pub(crate) fn from_netrc(
         netrc: &Netrc,
-        url: DisplaySafeUrlRef<'_>,
+        url: &DisplaySafeUrl,
         username: Option<&str>,
     ) -> Option<Self> {
         let host = url.host_str()?;

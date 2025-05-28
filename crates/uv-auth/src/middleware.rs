@@ -1,7 +1,11 @@
 use std::sync::{Arc, LazyLock};
 
+use anyhow::{anyhow, format_err};
 use http::{Extensions, StatusCode};
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlRef};
+use netrc::Netrc;
+use reqwest::{Request, Response};
+use reqwest_middleware::{Error, Middleware, Next};
+use tracing::{debug, trace, warn};
 
 use crate::{
     CREDENTIALS_CACHE, CredentialsCache, KeyringProvider,
@@ -10,11 +14,7 @@ use crate::{
     index::{AuthPolicy, Indexes},
     realm::Realm,
 };
-use anyhow::{anyhow, format_err};
-use netrc::Netrc;
-use reqwest::{Request, Response};
-use reqwest_middleware::{Error, Middleware, Next};
-use tracing::{debug, trace, warn};
+use uv_redacted::DisplaySafeUrl;
 
 /// Strategy for loading netrc files.
 enum NetrcMode {
@@ -274,7 +274,7 @@ impl Middleware for AuthMiddleware {
             trace!("Checking for credentials for {url}");
             (request, None)
         };
-        let retry_request_url = DisplaySafeUrlRef::from(retry_request.url());
+        let retry_request_url = DisplaySafeUrl::ref_cast(retry_request.url());
 
         let username = credentials
             .as_ref()
@@ -283,13 +283,13 @@ impl Middleware for AuthMiddleware {
         let credentials = if let Some(index_url) = maybe_index_url {
             self.cache().get_url(index_url, &username).or_else(|| {
                 self.cache()
-                    .get_realm(Realm::from(&*retry_request_url), username)
+                    .get_realm(Realm::from(&**retry_request_url), username)
             })
         } else {
             // Since there is no known index for this URL, check if there are credentials in
             // the realm-level cache.
             self.cache()
-                .get_realm(Realm::from(&*retry_request_url), username)
+                .get_realm(Realm::from(&**retry_request_url), username)
         }
         .or(credentials);
 
@@ -433,7 +433,7 @@ impl AuthMiddleware {
         } else if let Some(credentials) = self
             .fetch_credentials(
                 Some(&credentials),
-                DisplaySafeUrlRef::from(request.url()),
+                DisplaySafeUrl::ref_cast(request.url()),
                 index_url,
                 auth_policy,
             )
@@ -468,7 +468,7 @@ impl AuthMiddleware {
     async fn fetch_credentials(
         &self,
         credentials: Option<&Credentials>,
-        url: DisplaySafeUrlRef<'_>,
+        url: &DisplaySafeUrl,
         maybe_index_url: Option<&DisplaySafeUrl>,
         auth_policy: AuthPolicy,
     ) -> Option<Arc<Credentials>> {
@@ -481,7 +481,7 @@ impl AuthMiddleware {
         let key = if let Some(index_url) = maybe_index_url {
             (FetchUrl::Index(index_url.clone()), username)
         } else {
-            (FetchUrl::Realm(Realm::from(&*url)), username)
+            (FetchUrl::Realm(Realm::from(&**url)), username)
         };
         if !self.cache().fetches.register(key.clone()) {
             let credentials = self
@@ -529,7 +529,7 @@ impl AuthMiddleware {
                 if let Some(username) = credentials.and_then(|credentials| credentials.username()) {
                     if let Some(index_url) = maybe_index_url {
                         debug!("Checking keyring for credentials for index URL {}@{}", username, index_url);
-                        keyring.fetch(DisplaySafeUrlRef::from(index_url), Some(username)).await
+                        keyring.fetch(DisplaySafeUrl::ref_cast(index_url), Some(username)).await
                     } else {
                         debug!("Checking keyring for credentials for full URL {}@{}", username, url);
                         keyring.fetch(url, Some(username)).await
@@ -539,7 +539,7 @@ impl AuthMiddleware {
                         debug!(
                             "Checking keyring for credentials for index URL {index_url} without username due to `authenticate = always`"
                         );
-                        keyring.fetch(DisplaySafeUrlRef::from(index_url), None).await
+                        keyring.fetch(DisplaySafeUrl::ref_cast(index_url), None).await
                     } else {
                         None
                     }
