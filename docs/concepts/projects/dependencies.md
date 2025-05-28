@@ -41,7 +41,8 @@ The [`--dev`](#development-dependencies), [`--group`](#dependency-groups), or
 field.
 
 The dependency will include a constraint, e.g., `>=0.27.2`, for the most recent, compatible version
-of the package. An alternative constraint can be provided:
+of the package. The kind of bound can be adjusted with
+[`--bounds`](../../reference/settings.md#bounds), or the constraint can be provided directly:
 
 ```console
 $ uv add "httpx>=0.20"
