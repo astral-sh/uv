@@ -463,6 +463,7 @@ pub(crate) struct ToolRunSettings {
     pub(crate) with_editable: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) isolated: bool,
     pub(crate) show_resolution: bool,
@@ -491,6 +492,7 @@ impl ToolRunSettings {
             with_requirements,
             constraints,
             overrides,
+            excludes,
             build_constraints,
             isolated,
             env_file,
@@ -567,6 +569,10 @@ impl ToolRunSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            excludes: excludes
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -595,6 +601,7 @@ pub(crate) struct ToolInstallSettings {
     pub(crate) with_editable: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) python: Option<String>,
     pub(crate) refresh: Refresh,
@@ -618,6 +625,7 @@ impl ToolInstallSettings {
             with_requirements,
             constraints,
             overrides,
+            excludes,
             build_constraints,
             installer,
             force,
@@ -661,6 +669,10 @@ impl ToolInstallSettings {
                 .filter_map(Maybe::into_option)
                 .collect(),
             overrides: overrides
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
+            excludes: excludes
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
@@ -1760,9 +1772,11 @@ pub(crate) struct PipCompileSettings {
     pub(crate) src_file: Vec<PathBuf>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
+    pub(crate) excludes_from_workspace: Vec<Requirement>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) environments: SupportedEnvironments,
     pub(crate) refresh: Refresh,
@@ -1776,6 +1790,7 @@ impl PipCompileSettings {
             src_file,
             constraints,
             overrides,
+            excludes,
             extra,
             all_extras,
             no_all_extras,
@@ -1853,6 +1868,20 @@ impl PipCompileSettings {
             Vec::new()
         };
 
+        let excludes_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .exclude_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
             configuration
                 .build_constraint_dependencies
@@ -1888,8 +1917,13 @@ impl PipCompileSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            excludes: excludes
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             constraints_from_workspace,
             overrides_from_workspace,
+            excludes_from_workspace,
             build_constraints_from_workspace,
             environments,
             refresh: Refresh::from(refresh),
@@ -2026,10 +2060,12 @@ pub(crate) struct PipInstallSettings {
     pub(crate) editables: Vec<String>,
     pub(crate) constraints: Vec<PathBuf>,
     pub(crate) overrides: Vec<PathBuf>,
+    pub(crate) excludes: Vec<PathBuf>,
     pub(crate) build_constraints: Vec<PathBuf>,
     pub(crate) dry_run: DryRun,
     pub(crate) constraints_from_workspace: Vec<Requirement>,
     pub(crate) overrides_from_workspace: Vec<Requirement>,
+    pub(crate) excludes_from_workspace: Vec<Requirement>,
     pub(crate) build_constraints_from_workspace: Vec<Requirement>,
     pub(crate) modifications: Modifications,
     pub(crate) refresh: Refresh,
@@ -2045,6 +2081,7 @@ impl PipInstallSettings {
             editable,
             constraints,
             overrides,
+            excludes,
             build_constraints,
             extra,
             all_extras,
@@ -2108,6 +2145,20 @@ impl PipInstallSettings {
             Vec::new()
         };
 
+        let excludes_from_workspace = if let Some(configuration) = &filesystem {
+            configuration
+                .exclude_dependencies
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|requirement| {
+                    Requirement::from(requirement.with_origin(RequirementOrigin::Workspace))
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         let build_constraints_from_workspace = if let Some(configuration) = &filesystem {
             configuration
                 .build_constraint_dependencies
@@ -2134,6 +2185,10 @@ impl PipInstallSettings {
                 .into_iter()
                 .filter_map(Maybe::into_option)
                 .collect(),
+            excludes: excludes
+                .into_iter()
+                .filter_map(Maybe::into_option)
+                .collect(),
             build_constraints: build_constraints
                 .into_iter()
                 .filter_map(Maybe::into_option)
@@ -2141,6 +2196,7 @@ impl PipInstallSettings {
             dry_run: DryRun::from_args(dry_run),
             constraints_from_workspace,
             overrides_from_workspace,
+            excludes_from_workspace,
             build_constraints_from_workspace,
             modifications: if flag(exact, inexact).unwrap_or(false) {
                 Modifications::Exact

@@ -90,9 +90,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -271,9 +273,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -453,9 +457,11 @@ fn resolve_uv_toml() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -667,9 +673,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -850,9 +858,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -1010,9 +1020,11 @@ fn resolve_pyproject_toml() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -1218,9 +1230,11 @@ fn resolve_index_url() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -1433,9 +1447,11 @@ fn resolve_index_url() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -1705,9 +1721,11 @@ fn resolve_find_links() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -1910,9 +1928,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -2075,9 +2095,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -2288,9 +2310,11 @@ fn resolve_top_level() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -2524,9 +2548,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -2679,9 +2705,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -2834,9 +2862,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -2991,9 +3021,11 @@ fn resolve_user_configuration() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -3168,6 +3200,7 @@ fn resolve_tool() -> anyhow::Result<()> {
         with_editable: [],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         python: None,
         refresh: None(
@@ -3332,9 +3365,11 @@ fn resolve_poetry_toml() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -3515,9 +3550,11 @@ fn resolve_both() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -3821,9 +3858,11 @@ fn resolve_config_file() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -3976,7 +4015,7 @@ fn resolve_config_file() -> anyhow::Result<()> {
         .arg("--show-settings")
         .arg("--config-file")
         .arg(config.path())
-        .arg("requirements.in"), @r###"
+        .arg("requirements.in"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3987,8 +4026,8 @@ fn resolve_config_file() -> anyhow::Result<()> {
       |
     1 | [project]
       |  ^^^^^^^
-    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `pip`, `cache-keys`, `override-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`, `build-backend`
-    "###
+    unknown field `project`, expected one of `required-version`, `native-tls`, `offline`, `no-cache`, `cache-dir`, `preview`, `python-preference`, `python-downloads`, `concurrent-downloads`, `concurrent-builds`, `concurrent-installs`, `index`, `index-url`, `extra-index-url`, `no-index`, `find-links`, `index-strategy`, `keyring-provider`, `allow-insecure-host`, `resolution`, `prerelease`, `fork-strategy`, `dependency-metadata`, `config-settings`, `no-build-isolation`, `no-build-isolation-package`, `exclude-newer`, `link-mode`, `compile-bytecode`, `no-sources`, `upgrade`, `upgrade-package`, `reinstall`, `reinstall-package`, `no-build`, `no-build-package`, `no-binary`, `no-binary-package`, `python-install-mirror`, `pypy-install-mirror`, `python-downloads-json-url`, `publish-url`, `trusted-publishing`, `check-url`, `pip`, `cache-keys`, `override-dependencies`, `exclude-dependencies`, `constraint-dependencies`, `build-constraint-dependencies`, `environments`, `required-environments`, `conflicts`, `workspace`, `sources`, `managed`, `package`, `default-groups`, `dev-dependencies`, `build-backend`
+    "
     );
 
     // Write an _actual_ `pyproject.toml`.
@@ -4103,9 +4142,11 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -4261,9 +4302,11 @@ fn resolve_skip_empty() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -4438,9 +4481,11 @@ fn allow_insecure_host() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -4607,9 +4652,11 @@ fn index_priority() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -4822,9 +4869,11 @@ fn index_priority() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -5043,9 +5092,11 @@ fn index_priority() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -5259,9 +5310,11 @@ fn index_priority() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -5482,9 +5535,11 @@ fn index_priority() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -5698,9 +5753,11 @@ fn index_priority() -> anyhow::Result<()> {
         ],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         environments: SupportedEnvironments(
             [],
@@ -5928,10 +5985,12 @@ fn verify_hashes() -> anyhow::Result<()> {
         editables: [],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
@@ -6076,10 +6135,12 @@ fn verify_hashes() -> anyhow::Result<()> {
         editables: [],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
@@ -6222,10 +6283,12 @@ fn verify_hashes() -> anyhow::Result<()> {
         editables: [],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
@@ -6370,10 +6433,12 @@ fn verify_hashes() -> anyhow::Result<()> {
         editables: [],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
@@ -6516,10 +6581,12 @@ fn verify_hashes() -> anyhow::Result<()> {
         editables: [],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
@@ -6663,10 +6730,12 @@ fn verify_hashes() -> anyhow::Result<()> {
         editables: [],
         constraints: [],
         overrides: [],
+        excludes: [],
         build_constraints: [],
         dry_run: Disabled,
         constraints_from_workspace: [],
         overrides_from_workspace: [],
+        excludes_from_workspace: [],
         build_constraints_from_workspace: [],
         modifications: Sufficient,
         refresh: None(
