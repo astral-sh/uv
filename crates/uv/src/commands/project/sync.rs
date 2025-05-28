@@ -180,13 +180,26 @@ pub(crate) async fn sync(
         lock: None,
     };
     report.sync = Some(SyncReport {
-        env_path: environment.root().into(),
         dry_run: dry_run.enabled(),
         python_executable: environment.python_executable().into(),
         python_version: environment.interpreter().python_full_version().to_string(),
         env_kind: match &environment {
             SyncEnvironment::Project(..) => EnvKind::Project,
             SyncEnvironment::Script(..) => EnvKind::Script,
+        },
+        env_path: match &environment {
+            SyncEnvironment::Project(ProjectEnvironment::Existing(env))
+            | SyncEnvironment::Project(ProjectEnvironment::Created(env))
+            | SyncEnvironment::Project(ProjectEnvironment::Replaced(env))
+            | SyncEnvironment::Script(ScriptEnvironment::Existing(env))
+            | SyncEnvironment::Script(ScriptEnvironment::Created(env))
+            | SyncEnvironment::Script(ScriptEnvironment::Replaced(env)) => env.root().into(),
+            SyncEnvironment::Project(ProjectEnvironment::WouldCreate(root, ..))
+            | SyncEnvironment::Project(ProjectEnvironment::WouldReplace(root, ..))
+            | SyncEnvironment::Script(ScriptEnvironment::WouldCreate(root, ..))
+            | SyncEnvironment::Script(ScriptEnvironment::WouldReplace(root, ..)) => {
+                root.as_path().into()
+            }
         },
         action: match &environment {
             SyncEnvironment::Project(ProjectEnvironment::Existing(..)) => SyncAction::AlreadyExist,
