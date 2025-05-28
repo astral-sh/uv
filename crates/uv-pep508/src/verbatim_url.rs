@@ -76,10 +76,8 @@ impl VerbatimUrl {
         let (path, fragment) = split_fragment(&path);
 
         // Convert to a URL.
-        let mut url = DisplaySafeUrl::from(
-            Url::from_file_path(path.clone())
-                .map_err(|()| VerbatimUrlError::UrlConversion(path.to_path_buf()))?,
-        );
+        let mut url = DisplaySafeUrl::from_file_path(path.clone())
+            .map_err(|()| VerbatimUrlError::UrlConversion(path.to_path_buf()))?;
 
         // Set the fragment, if it exists.
         if let Some(fragment) = fragment {
@@ -338,7 +336,7 @@ impl Pep508Url for VerbatimUrl {
     }
 
     fn displayable_with_credentials(&self) -> impl Display {
-        self.url.to_string_with_credentials()
+        self.url.displayable_with_credentials()
     }
 }
 

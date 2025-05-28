@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::fmt::Write;
+use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use url::Url;
@@ -90,10 +90,10 @@ impl DisplaySafeUrl {
         let _ = self.0.set_password(None);
     }
 
-    /// Returns string representation without masking credentials.
+    /// Returns [`Display`] implementation that doesn't mask credentials.
     #[inline]
-    pub fn to_string_with_credentials(&self) -> String {
-        self.0.to_string()
+    pub fn displayable_with_credentials(&self) -> impl Display {
+        &self.0
     }
 }
 
@@ -111,15 +111,15 @@ impl DerefMut for DisplaySafeUrl {
     }
 }
 
-impl std::fmt::Display for DisplaySafeUrl {
+impl Display for DisplaySafeUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt_with_obfuscated_credentials(&self.0, f)
+        display_with_redacted_credentials(&self.0, f)
     }
 }
 
-impl std::fmt::Debug for DisplaySafeUrl {
+impl Debug for DisplaySafeUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self}")
+        debug_with_redacted_credentials(&self.0, f)
     }
 }
 
@@ -143,7 +143,10 @@ impl FromStr for DisplaySafeUrl {
     }
 }
 
-fn fmt_with_obfuscated_credentials<W: Write>(url: &Url, mut f: W) -> std::fmt::Result {
+fn display_with_redacted_credentials(
+    url: &Url,
+    f: &mut std::fmt::Formatter<'_>,
+) -> std::fmt::Result {
     if url.password().is_none() && url.username() == "" {
         return write!(f, "{url}");
     }
@@ -176,6 +179,30 @@ fn fmt_with_obfuscated_credentials<W: Write>(url: &Url, mut f: W) -> std::fmt::R
     Ok(())
 }
 
+fn debug_with_redacted_credentials(url: &Url, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let (username, password) = if url.username() != "" && url.password().is_some() {
+        (url.username(), Some("****"))
+    } else if url.username() != "" {
+        ("****", None)
+    } else if url.password().is_some() {
+        ("", Some("****"))
+    } else {
+        ("", None)
+    };
+
+    f.debug_struct("DisplaySafeUrl")
+        .field("scheme", &url.scheme())
+        .field("cannot_be_a_base", &url.cannot_be_a_base())
+        .field("username", &username)
+        .field("password", &password)
+        .field("host", &url.host())
+        .field("port", &url.port())
+        .field("path", &url.path())
+        .field("query", &url.query())
+        .field("fragment", &url.fragment())
+        .finish()
+}
+
 /// A wrapper around a [`url::Url`] ref that safely handles credentials for
 /// logging purposes.
 ///
@@ -198,6 +225,7 @@ fn fmt_with_obfuscated_credentials<W: Write>(url: &Url, mut f: W) -> std::fmt::R
 /// // `Deref` implementation, you can still access the username and password
 /// assert_eq!(url.username(), "user");
 /// assert_eq!(url.password(), Some("password"));
+#[derive(Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct DisplaySafeUrlRef<'a>(&'a Url);
 
 impl<'a> Deref for DisplaySafeUrlRef<'a> {
@@ -208,15 +236,15 @@ impl<'a> Deref for DisplaySafeUrlRef<'a> {
     }
 }
 
-impl std::fmt::Display for DisplaySafeUrlRef<'_> {
+impl Display for DisplaySafeUrlRef<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt_with_obfuscated_credentials(self.0, f)
+        display_with_redacted_credentials(self.0, f)
     }
 }
 
-impl std::fmt::Debug for DisplaySafeUrlRef<'_> {
+impl Debug for DisplaySafeUrlRef<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self}")
+        debug_with_redacted_credentials(self.0, f)
     }
 }
 
@@ -317,10 +345,13 @@ mod tests {
     }
 
     #[test]
-    fn to_string_with_credentials() {
+    fn displayable_with_credentials() {
         let url_str = "https://user:pass@pypi-proxy.fly.dev/basic-auth/simple";
         let log_safe_url = DisplaySafeUrl::parse(url_str).unwrap();
-        assert_eq!(&log_safe_url.to_string_with_credentials(), url_str);
+        assert_eq!(
+            &log_safe_url.displayable_with_credentials().to_string(),
+            url_str
+        );
     }
 
     #[test]
