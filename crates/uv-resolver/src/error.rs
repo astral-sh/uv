@@ -377,10 +377,13 @@ impl NoSolutionError {
         if markers.is_disjoint(current_python_marker) {
             write!(
                 f,
-                "\n\n{}{} The resolution failed for a Python version range excluding the current Python version ({current_python_version}), \
-                consider limiting the Python version range using `requires-python`.",
+                "\n\n{}{} While the active Python version is {}, \
+                the resolution failed for other Python versions supported by your \
+                project. Consider limiting your project's supported Python versions \
+                using `requires-python`.",
                 "hint".bold().cyan(),
                 ":".bold(),
+                current_python_version,
             )?;
         } else if !markers.evaluate(&self.current_environment, &[]) {
             write!(
