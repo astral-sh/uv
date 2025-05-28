@@ -31,6 +31,17 @@ pub enum ArchVariant {
     V4,
 }
 
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Default)]
+pub enum ArchMode {
+    /// Select the most precise architecture matching the current platform, e.g., x86-64-v4
+    #[default]
+    BestNative,
+    /// Select the most compatible architecture matching the current platform, e.g., x86-64-v1
+    CompatibleNative,
+    /// Select an emulated architecture, e.g., x86-64 on aarch64 macOS.
+    Emulated,
+}
+
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub struct Arch {
     pub(crate) family: target_lexicon::Architecture,
@@ -92,6 +103,37 @@ impl FromStr for Libc {
 impl Os {
     pub fn from_env() -> Self {
         Self(target_lexicon::HOST.operating_system)
+    }
+}
+
+impl ArchMode {
+    pub fn allows(self, current: &Arch, other: &Arch) -> bool {
+        match self {
+            Self::CompatibleNative | Self::BestNative => {
+                // The architecture is native if the family is equal
+                if current.family != other.family {
+                    return false;
+                }
+
+                // There is only a compatibility nuance for x86_64 here
+                if current.family != target_lexicon::Architecture::X86_64 {
+                    return true;
+                }
+
+                if matches!(self, Self::CompatibleNative) {
+                    // Only allow x86_64 without a variant
+                    return other.variant.is_none();
+                } else if matches!(self, Self::BestNative) {
+                    // Only allow the variant matching the current architecture
+                    return current.variant == other.variant;
+                }
+
+                // We should handle all cases above
+                unreachable!();
+            }
+            // The architecture is emulated if the family differs
+            Self::Emulated => current.family != other.family,
+        }
     }
 }
 

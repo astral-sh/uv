@@ -17,7 +17,7 @@ use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDo
 use uv_python::managed::{
     ManagedPythonInstallation, ManagedPythonInstallations, python_executable_dir,
 };
-use uv_python::platform::{Arch, Libc};
+use uv_python::platform::{Arch, ArchMode, Libc};
 use uv_python::{
     PythonDownloads, PythonInstallationKey, PythonRequest, PythonVersionFile,
     VersionFileDiscoveryOptions, VersionFilePreference,
@@ -51,8 +51,7 @@ impl InstallRequest {
                     "`{}` is not a valid Python download request; see `uv help python` for supported formats and `uv python list --only-downloads` for available versions",
                     request.to_canonical_string()
                 )
-            })?
-            .fill()?;
+            })?.with_arch_mode(ArchMode::BestNative).fill()?;
 
         // Find a matching download
         let download =

@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 use uv_cli::PythonListFormat;
 use uv_pep440::Version;
+use uv_python::platform::ArchMode;
 
 use anyhow::Result;
 use itertools::Either;
@@ -80,7 +81,10 @@ pub(crate) async fn list(
             PythonListKinds::Downloads => Some(if all_platforms {
                 base_download_request
             } else {
-                base_download_request.fill_platform()?
+                base_download_request
+                    .fill_platform()?
+                    // Only show the best, native architecture by default
+                    .with_arch_mode(ArchMode::BestNative)
             }),
             PythonListKinds::Default => {
                 if python_downloads.is_automatic() {
@@ -89,7 +93,11 @@ pub(crate) async fn list(
                     } else if all_arches {
                         base_download_request.fill_platform()?.with_any_arch()
                     } else {
-                        base_download_request.fill_platform()?
+                        base_download_request
+                            .fill_platform()?
+                            // Only show the best, native architecture by default
+                            // TODO(zanieb): We should expose this option to the user
+                            .with_arch_mode(ArchMode::BestNative)
                     })
                 } else {
                     // If fetching is not automatic, then don't show downloads as available by default

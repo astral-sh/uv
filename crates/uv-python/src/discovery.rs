@@ -2799,7 +2799,8 @@ mod tests {
                 arch: None,
                 os: None,
                 libc: None,
-                prereleases: None
+                prereleases: None,
+                arch_mode: None,
             })
         );
         assert_eq!(
@@ -2818,7 +2819,8 @@ mod tests {
                 }),
                 os: Some(Os(target_lexicon::OperatingSystem::Darwin(None))),
                 libc: Some(Libc::None),
-                prereleases: None
+                prereleases: None,
+                arch_mode: None,
             })
         );
         assert_eq!(
@@ -2834,7 +2836,8 @@ mod tests {
                 arch: None,
                 os: None,
                 libc: None,
-                prereleases: None
+                prereleases: None,
+                arch_mode: None,
             })
         );
         assert_eq!(
@@ -2853,7 +2856,8 @@ mod tests {
                 }),
                 os: None,
                 libc: None,
-                prereleases: None
+                prereleases: None,
+                arch_mode: None,
             })
         );
 

@@ -36,7 +36,7 @@ use crate::implementation::{
 use crate::installation::PythonInstallationKey;
 use crate::libc::LibcDetectionError;
 use crate::managed::ManagedPythonInstallation;
-use crate::platform::{self, Arch, Libc, Os};
+use crate::platform::{self, Arch, ArchMode, Libc, Os};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
 #[derive(Error, Debug)]
@@ -123,6 +123,8 @@ pub struct PythonDownloadRequest {
     /// Whether to allow pre-releases or not. If not set, defaults to true if [`Self::version`] is
     /// not None, and false otherwise.
     pub(crate) prereleases: Option<bool>,
+
+    pub(crate) arch_mode: Option<ArchMode>,
 }
 
 impl PythonDownloadRequest {
@@ -133,6 +135,7 @@ impl PythonDownloadRequest {
         os: Option<Os>,
         libc: Option<Libc>,
         prereleases: Option<bool>,
+        arch_mode: Option<ArchMode>,
     ) -> Self {
         Self {
             version,
@@ -141,6 +144,7 @@ impl PythonDownloadRequest {
             os,
             libc,
             prereleases,
+            arch_mode,
         }
     }
 
@@ -183,6 +187,12 @@ impl PythonDownloadRequest {
     #[must_use]
     pub fn with_prereleases(mut self, prereleases: bool) -> Self {
         self.prereleases = Some(prereleases);
+        self
+    }
+
+    #[must_use]
+    pub fn with_arch_mode(mut self, arch_mode: ArchMode) -> Self {
+        self.arch_mode = Some(arch_mode);
         self
     }
 
@@ -247,6 +257,7 @@ impl PythonDownloadRequest {
             Some(Os::from_env()),
             Some(Libc::from_env()?),
             None,
+            None,
         ))
     }
 
@@ -290,6 +301,11 @@ impl PythonDownloadRequest {
         if let Some(arch) = &self.arch {
             if !arch.supports(key.arch) {
                 return false;
+            }
+            if let Some(mode) = self.arch_mode {
+                if !mode.allows(arch, &key.arch) {
+                    return false;
+                }
             }
         }
 
@@ -412,6 +428,7 @@ impl From<&ManagedPythonInstallation> for PythonDownloadRequest {
             Some(key.os),
             Some(key.libc),
             Some(key.prerelease.is_some()),
+            None,
         )
     }
 }
@@ -483,7 +500,15 @@ impl FromStr for PythonDownloadRequest {
                 _ => return Err(Error::TooManyParts(s.to_string())),
             }
         }
-        Ok(Self::new(version, implementation, arch, os, libc, None))
+        Ok(Self::new(
+            version,
+            implementation,
+            arch,
+            os,
+            libc,
+            None,
+            None,
+        ))
     }
 }
 
