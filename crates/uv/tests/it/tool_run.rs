@@ -2039,14 +2039,14 @@ fn tool_run_python_at_version() {
     // Request `@latest` (not yet supported)
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("python@latest")
-        .arg("--version"), @r"
+        .arg("--version"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Invalid version request: latest
-    ");
+    error: Requesting the 'latest' Python version is not yet supported
+    "###);
 }
 
 #[test]

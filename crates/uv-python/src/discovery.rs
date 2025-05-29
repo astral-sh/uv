@@ -238,6 +238,10 @@ pub enum Error {
     #[error("Invalid version request: {0}")]
     InvalidVersionRequest(String),
 
+    /// An invalid version request was given
+    #[error("Requesting the 'latest' Python version is not yet supported")]
+    LatestVersionRequest,
+
     // TODO(zanieb): Is this error case necessary still? We should probably drop it.
     #[error("Interpreter discovery for `{0}` requires `{1}` but only `{2}` is allowed")]
     SourceNotAllowed(PythonRequest, PythonSource, PythonPreference),
@@ -1578,6 +1582,11 @@ impl PythonRequest {
         // The @ separator is optional. If it's present, the right half must be a version, and
         // parsing errors are raised to the caller.
         if let Some(after_at) = rest.strip_prefix('@') {
+            if after_at == "latest" {
+                // Handle `@latest` as a special case. It's still an error for now, but we plan to
+                // support it. TODO(zanieb): Add `PythonRequest::Latest`
+                return Err(Error::LatestVersionRequest);
+            }
             return after_at.parse().map(Some);
         }
         // The @ was not present, so if the version fails to parse just return Ok(None). For
