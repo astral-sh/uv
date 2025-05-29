@@ -2101,15 +2101,16 @@ fn tool_run_python_from() {
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
-        .arg("python>=3.12")
+        .arg("python>3.11,<3.13")
         .arg("python")
         .arg("--version"), @r"
-    success: false
-    exit_code: 2
+    success: true
+    exit_code: 0
     ----- stdout -----
+    Python 3.12.[X]
 
     ----- stderr -----
-    error: Using `--from python<range>` is not supported. Use `python<version>` or `python@<version>` instead.
+    Resolved in [TIME]
     ");
 
     // The executed command isn't necessarily Python, but Python is in the PATH.

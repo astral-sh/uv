@@ -1471,7 +1471,7 @@ impl PythonRequest {
         Self::ExecutableName(value.to_string())
     }
 
-    /// Try to parse a tool executable as a Python version, e.g. `uvx [executable]`.
+    /// Try to parse a tool name as a Python version, e.g. `uvx python311`.
     ///
     /// The `PythonRequest::parse` constructor above is intended for the `--python` flag, where the
     /// value is unambiguously a Python version. This alternate constructor is intended for `uvx`

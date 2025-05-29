@@ -31,7 +31,7 @@ use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonEnvironment, PythonInstallation,
-    PythonPreference, PythonRequest, VersionRequest,
+    PythonPreference, PythonRequest,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
@@ -758,21 +758,10 @@ async fn get_or_create_environment(
     let from = match request {
         ToolRequest::Python {
             executable: request_executable,
-            request,
-        } => {
-            if matches!(request, PythonRequest::Version(VersionRequest::Range(..))) {
-                return Err(anyhow::anyhow!(
-                    "Using `{}` is not supported. Use `{}` or `{}` instead.",
-                    "--from python<range>".cyan(),
-                    "python<version>".cyan(),
-                    "python@<version>".cyan(),
-                )
-                .into());
-            }
-            ToolRequirement::Python {
-                executable: request_executable.unwrap_or("python").to_string(),
-            }
-        }
+            ..
+        } => ToolRequirement::Python {
+            executable: request_executable.unwrap_or("python").to_string(),
+        },
         ToolRequest::Package {
             executable: request_executable,
             target,
