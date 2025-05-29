@@ -143,7 +143,12 @@ impl Arch {
         // TODO: Implement `variant` support checks
 
         // Windows ARM64 runs emulated x86_64 binaries transparently
-        if cfg!(windows) && matches!(self.family, target_lexicon::Architecture::Aarch64(_)) {
+        // Similarly, macOS aarch64 runs emulated x86_64 binaries transparently if you have Rosetta
+        // installed. We don't try to be clever and check if that's the case here, we just assume
+        // that if x86_64 distributions are available, they're usable.
+        if (cfg!(windows) || cfg!(target_os = "macos"))
+            && matches!(self.family, target_lexicon::Architecture::Aarch64(_))
+        {
             return other.family == target_lexicon::Architecture::X86_64;
         }
 
