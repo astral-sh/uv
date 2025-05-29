@@ -1,6 +1,9 @@
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
+use ref_cast::RefCast;
+use rustc_hash::FxHashMap;
 use tracing::{debug, info};
 
 use uv_cache::Cache;
@@ -181,10 +184,10 @@ impl PythonInstallation {
         installed.ensure_sysconfig_patched()?;
         installed.ensure_canonical_executables()?;
 
-        let minor_version = installed.version().python_version();
+        let minor_version = installed.minor_version_key();
         let highest_patch = installations
             .find_all()?
-            .filter(|installation| installation.version().python_version() == minor_version)
+            .filter(|installation| installation.minor_version_key() == minor_version)
             .filter_map(|installation| installation.version().patch())
             .fold(0, std::cmp::max);
         if installed
@@ -503,5 +506,114 @@ impl Ord for PythonInstallationKey {
             .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
             // Python variants are sorted in preferred order, with `Default` first
             .then_with(|| self.variant.cmp(&other.variant).reverse())
+    }
+}
+
+/// A view into a [`PythonInstallationKey`] that excludes the patch and prerelease versions.
+#[derive(Clone, Eq, Ord, PartialOrd, RefCast)]
+#[repr(transparent)]
+pub struct PythonInstallationMinorVersionKey(PythonInstallationKey);
+
+impl PythonInstallationMinorVersionKey {
+    /// Cast a `&PythonInstallationKey` to a `&PythonInstallationMinorVersionKey` using ref-cast.
+    #[inline]
+    pub fn ref_cast(key: &PythonInstallationKey) -> &Self {
+        RefCast::ref_cast(key)
+    }
+
+    /// Takes an [`IntoIterator`] of [`ManagedPythonInstallation`]s and returns an [`FxHashMap`] from
+    /// [`PythonInstallationMinorVersionKey`] to the installation with highest [`PythonInstallationKey`]
+    /// for that minor version key.
+    #[inline]
+    pub fn highest_installations_by_minor_version_key<I>(
+        installations: I,
+    ) -> FxHashMap<Self, ManagedPythonInstallation>
+    where
+        I: IntoIterator<Item = ManagedPythonInstallation>,
+    {
+        let mut minor_versions = FxHashMap::default();
+        for installation in installations {
+            minor_versions
+                .entry(installation.minor_version_key().clone())
+                .and_modify(|high_installation: &mut ManagedPythonInstallation| {
+                    if installation.key() >= high_installation.key() {
+                        *high_installation = installation.clone();
+                    }
+                })
+                .or_insert_with(|| installation.clone());
+        }
+        minor_versions
+    }
+}
+
+impl fmt::Display for PythonInstallationMinorVersionKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Display every field on the wrapped key except the patch
+        // and prerelease (with special formatting for the variant).
+        let variant = match self.0.variant {
+            PythonVariant::Default => String::new(),
+            PythonVariant::Freethreaded => format!("+{}", self.0.variant),
+        };
+        write!(
+            f,
+            "{}-{}.{}{}-{}-{}-{}",
+            self.0.implementation,
+            self.0.major,
+            self.0.minor,
+            variant,
+            self.0.os,
+            self.0.arch,
+            self.0.libc,
+        )
+    }
+}
+
+impl fmt::Debug for PythonInstallationMinorVersionKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Display every field on the wrapped key except the patch
+        // and prerelease.
+        f.debug_struct("PythonInstallationMinorVersionKey")
+            .field("implementation", &self.0.implementation)
+            .field("major", &self.0.major)
+            .field("minor", &self.0.minor)
+            .field("variant", &self.0.variant)
+            .field("os", &self.0.os)
+            .field("arch", &self.0.arch)
+            .field("libc", &self.0.libc)
+            .finish()
+    }
+}
+
+impl PartialEq for PythonInstallationMinorVersionKey {
+    fn eq(&self, other: &Self) -> bool {
+        // Compare every field on the wrapped key except the patch
+        // and prerelease.
+        self.0.implementation == other.0.implementation
+            && self.0.major == other.0.major
+            && self.0.minor == other.0.minor
+            && self.0.os == other.0.os
+            && self.0.arch == other.0.arch
+            && self.0.libc == other.0.libc
+            && self.0.variant == other.0.variant
+    }
+}
+
+impl Hash for PythonInstallationMinorVersionKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // Hash every field on the wrapped key except the patch
+        // and prerelease.
+        self.0.implementation.hash(state);
+        self.0.major.hash(state);
+        self.0.minor.hash(state);
+        self.0.os.hash(state);
+        self.0.arch.hash(state);
+        self.0.libc.hash(state);
+        self.0.variant.hash(state);
+    }
+}
+
+impl From<PythonInstallationKey> for PythonInstallationMinorVersionKey {
+    fn from(key: PythonInstallationKey) -> Self {
+        PythonInstallationMinorVersionKey(key)
     }
 }
