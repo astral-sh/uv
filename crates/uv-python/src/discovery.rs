@@ -2723,7 +2723,7 @@ mod tests {
 
     use crate::{
         discovery::{PythonRequest, VersionRequest},
-        downloads::PythonDownloadRequest,
+        downloads::{ArchRequest, PythonDownloadRequest},
         implementation::ImplementationName,
         platform::{Arch, Libc, Os},
     };
@@ -2813,10 +2813,10 @@ mod tests {
                     PythonVariant::Default
                 )),
                 implementation: Some(ImplementationName::CPython),
-                arch: Some(Arch {
+                arch: Some(ArchRequest::Explicit(Arch {
                     family: Architecture::Aarch64(Aarch64Architecture::Aarch64),
                     variant: None
-                }),
+                })),
                 os: Some(Os(target_lexicon::OperatingSystem::Darwin(None))),
                 libc: Some(Libc::None),
                 prereleases: None
@@ -2848,10 +2848,10 @@ mod tests {
                     PythonVariant::Default
                 )),
                 implementation: None,
-                arch: Some(Arch {
+                arch: Some(ArchRequest::Explicit(Arch {
                     family: Architecture::Aarch64(Aarch64Architecture::Aarch64),
                     variant: None
-                }),
+                })),
                 os: None,
                 libc: None,
                 prereleases: None

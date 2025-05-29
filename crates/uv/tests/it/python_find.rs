@@ -97,15 +97,14 @@ fn python_find() {
     let arch = Arch::from_env();
 
     uv_snapshot!(context.filters(), context.python_find()
-    .arg(format!("cpython-3.12-{os}-{arch}"))
-    , @r###"
+        .arg(format!("cpython-3.12-{os}-{arch}")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.12]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Request PyPy (which should be missing)
     uv_snapshot!(context.filters(), context.python_find().arg("pypy"), @r"
