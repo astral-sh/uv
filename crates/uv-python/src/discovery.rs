@@ -222,8 +222,9 @@ pub enum Error {
         PythonSource,
     ),
 
-    /// An error was encountered when interacting with a managed Python installation.
-    #[error(transparent)]
+    /// An error was encountered while trying to find a managed Python installation matching the
+    /// current platform.
+    #[error("Failed to discover managed Python installations")]
     ManagedPython(#[from] crate::managed::Error),
 
     /// An error was encountered when inspecting a virtual environment.
