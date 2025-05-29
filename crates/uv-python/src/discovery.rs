@@ -224,11 +224,7 @@ pub enum Error {
 
     /// An error was encountered while trying to find a managed Python installation matching the
     /// current platform.
-    #[error("Failed to find a managed Python installation")]
-    FindMatchingError(#[source] crate::managed::Error),
-
-    /// Some other error was encountered when interacting with a managed Python installation.
-    #[error(transparent)]
+    #[error("Failed to find a managed Python installation matching the current platform")]
     ManagedPython(#[from] crate::managed::Error),
 
     /// An error was encountered when inspecting a virtual environment.
@@ -322,9 +318,7 @@ fn python_executables_from_installed<'a>(
                     "Searching for managed installations at `{}`",
                     installed_installations.root().user_display()
                 );
-                let installations = installed_installations
-                    .find_matching_current_platform()
-                    .map_err(Error::FindMatchingError)?;
+                let installations = installed_installations.find_matching_current_platform()?;
                 // Check that the Python version satisfies the request to avoid unnecessary interpreter queries later
                 Ok(installations
                     .into_iter()
