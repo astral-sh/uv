@@ -79,7 +79,8 @@ fn make_child_cmdline() -> CString {
     // Only execute the trampoline again if it's a script, otherwise, just invoke Python.
     match kind {
         TrampolineKind::Python => {
-            // `std::env::set_var` is safe to call on Windows.
+            // SAFETY: `std::env::set_var` is safe to call on Windows, and
+            // this code only ever runs on Windows.
             unsafe {
                 // Setting this env var will cause `getpath.py` to set
                 // `executable` to the path to this trampoline. This is
