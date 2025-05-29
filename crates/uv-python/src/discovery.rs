@@ -224,7 +224,7 @@ pub enum Error {
 
     /// An error was encountered while trying to find a managed Python installation matching the
     /// current platform.
-    #[error("Failed to find a managed Python installation matching the current platform")]
+    #[error("Failed to discover managed Python installations")]
     ManagedPython(#[from] crate::managed::Error),
 
     /// An error was encountered when inspecting a virtual environment.
