@@ -431,8 +431,9 @@ the installer from modifying shell profiles or environment variables.
 
 ### `UV_USE_ACTIVE_ENVIRONMENT`
 
-Equivalent to the `--active` command line argument. If set, uv will look at `VIRTUAL_ENV` and use
-the active virtual environment, if any. If `VIRTUAL_ENV` is not defined, this has no effect.
+Equivalent to the `--active` command line argument. If set, uv will look at `VIRTUAL_ENV`
+and use the active virtual environment, if any. If `VIRTUAL_ENV` is not defined, this has
+no effect.
 
 ### `UV_VENV_SEED`
 

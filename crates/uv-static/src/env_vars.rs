@@ -256,6 +256,9 @@ impl EnvVars {
     /// for more details.
     pub const UV_PROJECT_ENVIRONMENT: &'static str = "UV_PROJECT_ENVIRONMENT";
 
+    /// Equivalent to the `--active` command line argument. If set, uv will look at `VIRTUAL_ENV`
+    /// and use the active virtual environment, if any. If `VIRTUAL_ENV` is not defined, this has
+    /// no effect.
     pub const UV_USE_ACTIVE_ENVIRONMENT: &'static str = "UV_USE_ACTIVE_ENVIRONMENT";
 
     /// Specifies the directory to place links to installed, managed Python executables.
