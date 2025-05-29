@@ -43,7 +43,25 @@ impl Ord for Arch {
             return self.variant.cmp(&other.variant);
         }
 
-        let native = Arch::from_env();
+        // For the time being, manually make aarch64 windows disfavored
+        // on its own host platform, because most packages don't have wheels for
+        // aarch64 windows, making emulation more useful than native execution!
+        //
+        // The reason we do this in "sorting" and not "supports" is so that we don't
+        // *refuse* to use an aarch64 windows pythons if they happen to be installed
+        // and nothing else is available.
+        //
+        // Similarly if someone manually requests an aarch64 windows install, we
+        // should respect that request (this is the way users should "override"
+        // this behaviour).
+        let native = if cfg!(all(windows, target_arch = "aarch64")) {
+            Arch {
+                family: target_lexicon::Architecture::X86_64,
+                variant: None,
+            }
+        } else {
+            Arch::from_env()
+        };
 
         // Prefer native architectures
         match (self.family == native.family, other.family == native.family) {
