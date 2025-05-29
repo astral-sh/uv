@@ -56,6 +56,7 @@ uv run [OPTIONS] [COMMAND]
 
 <dl class="cli-reference"><dt id="uv-run--active"><a href="#uv-run--active"><code>--active</code></a></dt><dd><p>Prefer the active virtual environment over the project's virtual environment.</p>
 <p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
+<p>May also be set with the <code>UV_USE_ACTIVE_ENVIRONMENT</code> environment variable.</p>
 </dd><dt id="uv-run--all-extras"><a href="#uv-run--all-extras"><code>--all-extras</code></a></dt><dd><p>Include all optional dependencies.</p>
 <p>Optional dependencies are defined via <code>project.optional-dependencies</code> in a <code>pyproject.toml</code>.</p>
 <p>This option is only available when running in a project.</p>
@@ -410,6 +411,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 
 <dl class="cli-reference"><dt id="uv-add--active"><a href="#uv-add--active"><code>--active</code></a></dt><dd><p>Prefer the active virtual environment over the project's virtual environment.</p>
 <p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
+<p>May also be set with the <code>UV_USE_ACTIVE_ENVIRONMENT</code> environment variable.</p>
 </dd><dt id="uv-add--allow-insecure-host"><a href="#uv-add--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 <p>Can be provided multiple times.</p>
 <p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
@@ -613,6 +615,7 @@ uv remove [OPTIONS] <PACKAGES>...
 
 <dl class="cli-reference"><dt id="uv-remove--active"><a href="#uv-remove--active"><code>--active</code></a></dt><dd><p>Prefer the active virtual environment over the project's virtual environment.</p>
 <p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
+<p>May also be set with the <code>UV_USE_ACTIVE_ENVIRONMENT</code> environment variable.</p>
 </dd><dt id="uv-remove--allow-insecure-host"><a href="#uv-remove--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 <p>Can be provided multiple times.</p>
 <p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
@@ -777,6 +780,7 @@ uv version [OPTIONS] [VALUE]
 
 <dl class="cli-reference"><dt id="uv-version--active"><a href="#uv-version--active"><code>--active</code></a></dt><dd><p>Prefer the active virtual environment over the project's virtual environment.</p>
 <p>If the project virtual environment is active or no virtual environment is active, this has no effect.</p>
+<p>May also be set with the <code>UV_USE_ACTIVE_ENVIRONMENT</code> environment variable.</p>
 </dd><dt id="uv-version--allow-insecure-host"><a href="#uv-version--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 <p>Can be provided multiple times.</p>
 <p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
@@ -956,6 +960,7 @@ uv sync [OPTIONS]
 
 <dl class="cli-reference"><dt id="uv-sync--active"><a href="#uv-sync--active"><code>--active</code></a></dt><dd><p>Sync dependencies to the active virtual environment.</p>
 <p>Instead of creating or updating the virtual environment for the project or script, the active virtual environment will be preferred, if the <code>VIRTUAL_ENV</code> environment variable is set.</p>
+<p>Alternatively you can use the <code>UV_USE_ACTIVE_ENVIRONMENT</code> environment variable.</p>
 </dd><dt id="uv-sync--all-extras"><a href="#uv-sync--all-extras"><code>--all-extras</code></a></dt><dd><p>Include all optional dependencies.</p>
 <p>When two or more extras are declared as conflicting in <code>tool.uv.conflicts</code>, using this flag will always result in an error.</p>
 <p>Note that all optional dependencies are always included in the resolution; this option only affects the selection of packages to install.</p>
