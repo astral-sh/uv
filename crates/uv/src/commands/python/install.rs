@@ -61,7 +61,9 @@ impl InstallRequest {
                 Ok(download) => download,
                 Err(downloads::Error::NoDownloadFound(request))
                     if request.libc().is_some_and(Libc::is_musl)
-                        && request.arch().is_some_and(Arch::is_arm) =>
+                        && request
+                            .arch()
+                            .is_some_and(|arch| Arch::is_arm(&arch.inner())) =>
                 {
                     return Err(anyhow::anyhow!(
                         "uv does not yet provide musl Python distributions on aarch64."
