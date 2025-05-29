@@ -29,7 +29,10 @@ use crate::libc::LibcDetectionError;
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
-use crate::{Interpreter, PythonRequest, PythonVariant, macos_dylib, sysconfig};
+use crate::{
+    Interpreter, PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib,
+    sysconfig,
+};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -453,6 +456,10 @@ impl ManagedPythonInstallation {
         &self.key
     }
 
+    pub fn minor_version_key(&self) -> &PythonInstallationMinorVersionKey {
+        PythonInstallationMinorVersionKey::ref_cast(&self.key)
+    }
+
     pub fn satisfies(&self, request: &PythonRequest) -> bool {
         match request {
             PythonRequest::File(path) => self.executable(false) == *path,
@@ -695,25 +702,11 @@ impl DirectorySymlink {
             // We don't currently support transparent upgrades for PyPy or GraalPy.
             return None;
         }
-        let version = key.version();
         let executable_name = executable
             .file_name()
             .expect("Executable file name should exist");
-        let suffix = if *key.variant() == PythonVariant::Freethreaded {
-            "+freethreaded"
-        } else {
-            ""
-        };
-        let symlink_directory_name = format!(
-            "{}-{}.{}{}-{}-{}-{}",
-            key.implementation,
-            version.major(),
-            version.minor(),
-            suffix,
-            key.os(),
-            key.arch(),
-            key.libc(),
-        );
+        let symlink_directory_name =
+            format!("{}", PythonInstallationMinorVersionKey::ref_cast(key));
         let parent = executable
             .parent()
             .expect("Executable should have parent directory");

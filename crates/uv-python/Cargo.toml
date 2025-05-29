@@ -44,6 +44,7 @@ futures = { workspace = true }
 goblin = { workspace = true, default-features = false }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
+ref-cast = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
