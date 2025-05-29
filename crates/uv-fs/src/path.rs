@@ -277,21 +277,6 @@ fn normalized(path: &Path) -> PathBuf {
     normalized
 }
 
-/// Like `fs_err::canonicalize`, but avoids attempting to resolve symlinks on Windows.
-pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
-    let path = path.as_ref();
-    debug_assert!(
-        path.is_absolute(),
-        "path must be absolute: {}",
-        path.display()
-    );
-    if cfg!(windows) {
-        Ok(path.to_path_buf())
-    } else {
-        fs_err::canonicalize(path)
-    }
-}
-
 /// Compute a path describing `path` relative to `base`.
 ///
 /// `lib/python/site-packages/foo/__init__.py` and `lib/python/site-packages` -> `foo/__init__.py`

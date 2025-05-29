@@ -25,7 +25,7 @@ use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
 use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
-use crate::managed::ManagedPythonInstallations;
+use crate::managed::{DirectorySymlink, ManagedPythonInstallations};
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
 use crate::virtualenv::Error as VirtualEnvError;
@@ -314,6 +314,8 @@ fn python_executables_from_installed<'a>(
     implementation: Option<&'a ImplementationName>,
     preference: PythonPreference,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
+    let is_alternative_implementation =
+        implementation.is_some_and(|implementation| *implementation != ImplementationName::CPython);
     let from_managed_installations = iter::once_with(move || {
         ManagedPythonInstallations::from_settings(None)
             .map_err(Error::from)
@@ -335,7 +337,24 @@ fn python_executables_from_installed<'a>(
                         }
                     })
                     .inspect(|installation| debug!("Found managed installation `{installation}`"))
-                    .map(|installation| (PythonSource::Managed, installation.executable(false))))
+                    .map(move |installation| {
+                        (
+                            PythonSource::Managed,
+                            if version.patch().is_some() || is_alternative_implementation {
+                                installation.executable(false)
+                            } else {
+                                // If this is a CPython implementation, it's a minor version request, and a
+                                // minor version symlink directory (or junction on Windows) exists,
+                                // use an executable path containing that directory.
+                                DirectorySymlink::from_installation(&installation)
+                                    .filter(DirectorySymlink::symlink_exists)
+                                    .map(|directory_symlink| {
+                                        directory_symlink.symlink_executable.clone()
+                                    })
+                                    .unwrap_or_else(|| installation.executable(false))
+                            },
+                        )
+                    }))
             })
     })
     .flatten_ok();
