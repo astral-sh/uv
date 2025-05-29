@@ -109,6 +109,13 @@ impl Arch {
     /// architecture is transparently emulated or is a microarchitecture with worse performance
     /// characteristics.
     pub(crate) fn supports(self, other: Self) -> bool {
+        // Short-term override: There aren't many Windows ARM64 wheels
+        // yet, so we want users to fall back to x86-64 by default. See
+        // https://github.com/astral-sh/uv/issues/12906
+        if cfg!(windows) && matches!(other.family, target_lexicon::Architecture::Aarch64(_)) {
+            return false;
+        }
+
         if self == other {
             return true;
         }
