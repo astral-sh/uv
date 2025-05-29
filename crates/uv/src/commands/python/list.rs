@@ -169,7 +169,7 @@ pub(crate) async fn list(
 
         // Only show the latest patch version for each download unless all were requested.
         //
-        // We toggle off platforms/arches based on all_platforms/all_arches because
+        // We toggle off platforms/arches based unless all_platforms/all_arches because
         // we want to only show the "best" option for each version by default, even
         // if e.g. the x86_32 build would also work on x86_64.
         if !matches!(kind, Kind::System) {
