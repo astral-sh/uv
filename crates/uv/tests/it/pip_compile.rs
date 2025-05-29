@@ -3926,17 +3926,17 @@ fn exclude_dependency_from_pyproject() -> Result<()> {
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[project]
-name = "example"
-version = "0.0.0"
-dependencies = [
-    "flask==3.0.0"
-]
+    name = "example"
+    version = "0.0.0"
+    dependencies = [
+      "flask==3.0.0"
+    ]
 
-[tool.uv]
-exclude-dependencies = [
-    "werkzeug"
-]
-"#,
+    [tool.uv]
+    excluded-dependencies = [
+      "werkzeug"
+    ]
+    "#,
     )?;
 
     uv_snapshot!(context.filters(), context.pip_compile()
@@ -3948,9 +3948,9 @@ exclude-dependencies = [
     ----- stdout -----
 
     ----- stderr -----
-      × No solution found when resolving dependencies:
-      ╰─▶ Because flask==3.0.0 depends on Werkzeug>=3.0.0 and example==0.0.0 depends on flask==3.0.0, we can conclude that Werkzeug>=3.0.0 is required.
-          But Werkzeug is excluded.
+    error: Failed to resolve dependencies:
+      Because example depends on flask==3.0.0 which depends on Werkzeug>=2.3, werkzeug is required.
+      And because werkzeug is excluded, we can conclude that the requirements are unsatisfiable.
     "###
     );
 
