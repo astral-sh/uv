@@ -11,7 +11,7 @@ use rustc_hash::FxHashMap;
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
     IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
-    IndexLocations, IndexMetadata, IndexUrl,
+    IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
@@ -27,9 +27,7 @@ use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{
     MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
 };
-use crate::{
-    Flexibility, InMemoryIndex, Options, RequiresPython, ResolverEnvironment, VersionsResponse,
-};
+use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
 
 #[derive(Debug)]
 pub(crate) struct PubGrubReportFormatter<'a> {

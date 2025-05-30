@@ -652,7 +652,6 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
         deserializer.deserialize_map(SourcesVisitor)
     }
 }
-
 #[derive(Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
