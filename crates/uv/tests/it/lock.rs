@@ -20676,6 +20676,9 @@ fn lock_group_requires_python() -> Result<()> {
         [dependency-groups]
         foo = ["idna"]
         bar = ["sortedcontainers", "sniffio"]
+
+        [tool.uv.dependency-groups]
+        bar = { requires-python = ">=3.13" }
         "#,
     )?;
 
@@ -20698,6 +20701,10 @@ fn lock_group_requires_python() -> Result<()> {
         version = 1
         revision = 2
         requires-python = ">=3.12"
+        resolution-markers = [
+            "python_full_version >= '3.13'",
+            "python_full_version < '3.13'",
+        ]
 
         [options]
         exclude-newer = "2024-03-25T00:00:00Z"
@@ -20721,8 +20728,8 @@ fn lock_group_requires_python() -> Result<()> {
 
         [package.dev-dependencies]
         bar = [
-            { name = "sniffio" },
-            { name = "sortedcontainers" },
+            { name = "sniffio", marker = "python_full_version >= '3.13'" },
+            { name = "sortedcontainers", marker = "python_full_version >= '3.13'" },
         ]
         foo = [
             { name = "idna" },
@@ -20733,8 +20740,8 @@ fn lock_group_requires_python() -> Result<()> {
 
         [package.metadata.requires-dev]
         bar = [
-            { name = "sniffio" },
-            { name = "sortedcontainers" },
+            { name = "sniffio", marker = "python_full_version >= '3.13'" },
+            { name = "sortedcontainers", marker = "python_full_version >= '3.13'" },
         ]
         foo = [{ name = "idna" }]
 
@@ -20770,6 +20777,133 @@ fn lock_group_requires_python() -> Result<()> {
 
     Ok(())
 }
+
+
+#[test]
+fn lock_group_includes_requires_python() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [dependency-groups]
+        foo = ["idna", {include-group = "bar"}]
+        bar = ["sortedcontainers", "sniffio"]
+
+        [tool.uv.dependency-groups]
+        bar = { requires-python = ">=3.13" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            lock, @r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "python_full_version >= '3.13'",
+            "python_full_version < '3.13'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "typing-extensions" },
+        ]
+
+        [package.dev-dependencies]
+        bar = [
+            { name = "sniffio", marker = "python_full_version >= '3.13'" },
+            { name = "sortedcontainers", marker = "python_full_version >= '3.13'" },
+        ]
+        foo = [
+            { name = "idna" },
+            { name = "sniffio" },
+            { name = "sortedcontainers" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "typing-extensions" }]
+
+        [package.metadata.requires-dev]
+        bar = [
+            { name = "sniffio", marker = "python_full_version >= '3.13'" },
+            { name = "sortedcontainers", marker = "python_full_version >= '3.13'" },
+        ]
+        foo = [
+            { name = "idna" },
+            { name = "sniffio" },
+            { name = "sortedcontainers" },
+        ]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+        ]
+
+        [[package]]
+        name = "sortedcontainers"
+        version = "2.4.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
+        ]
+
+        [[package]]
+        name = "typing-extensions"
+        version = "4.10.0"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
+        ]
+        "#
+        );
+    });
+
+    Ok(())
+}
+
+
 
 
 #[test]
