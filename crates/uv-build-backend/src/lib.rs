@@ -956,4 +956,182 @@ mod tests {
         let build2 = build(src.path(), dist.path()).unwrap();
         assert_eq!(build1.wheel_contents, build2.wheel_contents);
     }
+
+    /// A simple namespace package with a single root `__init__.py`.
+    #[test]
+    fn simple_namespace_package() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "simple-namespace-part"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            module-name = "simple_namespace.part"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("simple_namespace").join("part"))
+            .unwrap();
+        // For a namespace package, there must not be an `__init__.py` here.
+        let bogus_init_py = src
+            .path()
+            .join("src")
+            .join("simple_namespace")
+            .join("__init__.py");
+        File::create(&bogus_init_py).unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let err_message = format_err(&build_err)
+            .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
+            .replace('\\', "/");
+        assert_snapshot!(
+            err_message,
+            @"Expected a Python module directory at: `[TEMP_PATH]/src/stuffed_bird-stubs/__init__.pyi`"
+        );
+
+        // Create the correct file
+        fs_err::remove_file(bogus_init_py).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("simple_namespace")
+                .join("part")
+                .join("__init__.pyi"),
+        )
+        .unwrap();
+
+        let build = build(src.path(), dist.path()).unwrap();
+        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        stuffed_bird-stubs/
+        stuffed_bird-stubs/__init__.pyi
+        stuffed_bird_stubs-1.0.0.dist-info/
+        stuffed_bird_stubs-1.0.0.dist-info/METADATA
+        stuffed_bird_stubs-1.0.0.dist-info/RECORD
+        stuffed_bird_stubs-1.0.0.dist-info/WHEEL
+        ");
+
+        // Check that setting the name manually works equally.
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "stuffed-bird-stubs"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            module-name = "stuffed_bird-stubs"
+            "#
+        };
+    }
+
+    /// A complex namespace package with a multiple root `__init__.py`.
+    #[test]
+    fn complex_namespace_package() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "complex-namespace"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            namespace = true
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(
+            src.path()
+                .join("src")
+                .join("complex_namespace")
+                .join("part_a"),
+        )
+        .unwrap();
+        fs_err::create_dir_all(
+            src.path()
+                .join("src")
+                .join("complex_namespace")
+                .join("part_b"),
+        )
+        .unwrap();
+        File::create(
+            &src.path()
+                .join("src")
+                .join("complex_namespace")
+                .join("part_a")
+                .join("__init__.py"),
+        )
+        .unwrap();
+        File::create(
+            &src.path()
+                .join("src")
+                .join("complex_namespace")
+                .join("part_b")
+                .join("__init__.py"),
+        )
+        .unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let err_message = format_err(&build_err)
+            .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
+            .replace('\\', "/");
+        assert_snapshot!(
+            err_message,
+            @"Expected a Python module directory at: `[TEMP_PATH]/src/stuffed_bird-stubs/__init__.pyi`"
+        );
+
+        // Create the correct file
+        fs_err::remove_file(
+            src.path()
+                .join("src")
+                .join("complex_namespace")
+                .join("part_a")
+                .join("__init__.py"),
+        )
+        .unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("complex_namespace")
+                .join("part")
+                .join("__init__.pyi"),
+        )
+        .unwrap();
+
+        let build = build(src.path(), dist.path()).unwrap();
+        assert_snapshot!(build.wheel_contents.join("\n"), @r"
+        stuffed_bird-stubs/
+        stuffed_bird-stubs/__init__.pyi
+        stuffed_bird_stubs-1.0.0.dist-info/
+        stuffed_bird_stubs-1.0.0.dist-info/METADATA
+        stuffed_bird_stubs-1.0.0.dist-info/RECORD
+        stuffed_bird_stubs-1.0.0.dist-info/WHEEL
+        ");
+
+        // Check that setting the name manually works equally.
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "stuffed-bird-stubs"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            module-name = "stuffed_bird-stubs"
+            "#
+        };
+    }
 }

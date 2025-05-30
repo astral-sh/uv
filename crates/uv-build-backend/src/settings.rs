@@ -38,6 +38,9 @@ pub struct BuildBackendSettings {
     /// `__init__.py`. An exception are stubs packages, whose name ends with `-stubs`, with the stem
     /// being the module name, and which contain a `__init__.pyi` file.
     ///
+    /// For namespace packages with a single module, the path can be dotted, e.g., `foo.bar` or
+    /// `foo-stubs.bar`.
+    ///
     /// Note that using this option runs the risk of creating two packages with different names but
     /// the same module names. Installing such packages together leads to unspecified behavior,
     /// often with corrupted files or directory trees.
@@ -85,6 +88,19 @@ pub struct BuildBackendSettings {
     )]
     pub wheel_exclude: Vec<String>,
 
+    /// Build a namespace package.
+    ///
+    /// Build a PEP 420 implicit namespace package. Note that this disables most coherence checks.
+    ///
+    /// Use this option is the namespace package contains multiple root `__init__.py`, for namespace
+    /// packages with a single root `__init__.py` use a dotted `module-name` instead.
+    #[option(
+        default = r#"false"#,
+        value_type = "bool",
+        example = r#"namespace = true"#
+    )]
+    namespace: bool,
+
     /// Data includes for wheels.
     ///
     /// Each entry is a directory, whose contents are copied to the matching directory in the wheel
@@ -129,6 +145,7 @@ impl Default for BuildBackendSettings {
             default_excludes: true,
             source_exclude: Vec::new(),
             wheel_exclude: Vec::new(),
+            namespace: false,
             data: WheelDataIncludes::default(),
         }
     }
