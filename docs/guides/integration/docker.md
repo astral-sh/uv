@@ -530,7 +530,7 @@ REPO          PREDICATE_TYPE                  WORKFLOW
 astral-sh/uv  https://slsa.dev/provenance/v1  .github/workflows/build-docker.yml@refs/heads/main
 ```
 
-This tells you that the specific Docker image was built by the official uv Github release workflow
+This tells you that the specific Docker image was built by the official uv GitHub release workflow
 and hasn't been tampered with since.
 
 GitHub attestations build on the [sigstore.dev infrastructure](https://www.sigstore.dev/). As such
