@@ -78,7 +78,18 @@ fn make_child_cmdline() -> CString {
 
     // Only execute the trampoline again if it's a script, otherwise, just invoke Python.
     match kind {
-        TrampolineKind::Python => {}
+        TrampolineKind::Python => {
+            // SAFETY: `std::env::set_var` is safe to call on Windows, and
+            // this code only ever runs on Windows.
+            unsafe {
+                // Setting this env var will cause `getpath.py` to set
+                // `executable` to the path to this trampoline. This is
+                // the approach taken by CPython for Python Launchers
+                // (in `launcher.c`). This allows virtual environments to
+                // be correctly detected when using trampolines.
+                std::env::set_var("__PYVENV_LAUNCHER__", &executable_name);
+            }
+        }
         TrampolineKind::Script => {
             // Use the full executable name because CMD only passes the name of the executable (but not the path)
             // when e.g. invoking `black` instead of `<PATH_TO_VENV>/Scripts/black` and Python then fails
@@ -240,10 +251,18 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
         parent_dir.join(path)
     };
 
-    // NOTICE: dunce adds 5kb~
-    let path = dunce::canonicalize(path.as_path()).unwrap_or_else(|_| {
-        error_and_exit("Failed to canonicalize script path");
-    });
+    let path = if !path.is_absolute() || matches!(kind, TrampolineKind::Script) {
+        // NOTICE: dunce adds 5kb~
+        // TODO(john): In order to avoid resolving junctions and symlinks for relative paths and
+        // scripts, we can consider reverting https://github.com/astral-sh/uv/pull/5750/files#diff-969979506be03e89476feade2edebb4689a9c261f325988d3c7efc5e51de26d1L273-L277.
+        dunce::canonicalize(path.as_path()).unwrap_or_else(|_| {
+            error_and_exit("Failed to canonicalize script path");
+        })
+    } else {
+        // For Python trampolines with absolute paths, we skip `dunce::canonicalize` to
+        // avoid resolving junctions.
+        path
+    };
 
     (kind, path)
 }

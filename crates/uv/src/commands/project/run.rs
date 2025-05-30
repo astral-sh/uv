@@ -446,6 +446,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     false,
                     false,
                     false,
+                    false,
                 )?;
 
                 Some(environment.into_interpreter())
@@ -637,6 +638,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     temp_dir.path(),
                     interpreter,
                     uv_virtualenv::Prompt::None,
+                    false,
                     false,
                     false,
                     false,
@@ -868,6 +870,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     temp_dir.path(),
                     interpreter,
                     uv_virtualenv::Prompt::None,
+                    false,
                     false,
                     false,
                     false,
