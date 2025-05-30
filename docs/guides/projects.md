@@ -160,6 +160,43 @@ version, while keeping the rest of the lockfile intact.
 See the documentation on [managing dependencies](../concepts/projects/dependencies.md) for more
 details.
 
+## Managing version
+
+The `uv version` command can be used to read your package's version.
+[See the publishing docs for updating your package's version](./package.md#updating-your-version).
+
+To get the version of your package, run `uv version` with no other arguments:
+
+```console
+$ uv version
+hello-world 0.7.0
+```
+
+To get the version of a particular package, pass `--package`:
+
+```console
+$ uv version --package myapp
+myapp 1.2.3
+```
+
+To just get the version with no other output, pass `--short`:
+
+```console
+$ uv version --short
+0.7.0
+```
+
+To get the version as json, pass `--output-format json`:
+
+```console
+$ uv version --output-format json
+{
+    "package_name": "hello-world",
+    "version": "0.7.0",
+    "commit_info": null
+}
+```
+
 ## Running commands
 
 `uv run` can be used to run arbitrary scripts or commands in your project environment.
