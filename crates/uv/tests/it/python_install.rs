@@ -1256,8 +1256,8 @@ fn python_install_314() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.0a6 in [TIME]
-     + cpython-3.14.0a6-[PLATFORM]
+    Installed Python 3.14.0a7 in [TIME]
+     + cpython-3.14.0a7-[PLATFORM]
     ");
 
     // Install a specific pre-release
