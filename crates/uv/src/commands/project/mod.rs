@@ -18,7 +18,8 @@ use uv_configuration::{
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredRequirement};
 use uv_distribution_types::{
-    Index, Requirement, Resolution, UnresolvedRequirement, UnresolvedRequirementSpecification,
+    Index, Requirement, RequiresPython, Resolution, UnresolvedRequirement,
+    UnresolvedRequirementSpecification,
 };
 use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::ResolvedRepositoryReference;
@@ -35,8 +36,8 @@ use uv_python::{
 use uv_requirements::upgrade::{LockedRequirements, read_lock_requirements};
 use uv_requirements::{NamedRequirementsResolver, RequirementsSpecification};
 use uv_resolver::{
-    FlatIndex, Lock, OptionsBuilder, Preference, PythonRequirement, RequiresPython,
-    ResolverEnvironment, ResolverOutput,
+    FlatIndex, Lock, OptionsBuilder, Preference, PythonRequirement, ResolverEnvironment,
+    ResolverOutput,
 };
 use uv_scripts::Pep723ItemRef;
 use uv_settings::PythonInstallMirrors;

@@ -22,7 +22,9 @@ use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
-use uv_distribution_types::{DependencyMetadata, Index, IndexLocations, SourceDist};
+use uv_distribution_types::{
+    DependencyMetadata, Index, IndexLocations, RequiresPython, SourceDist,
+};
 use uv_fs::{Simplified, relative_to};
 use uv_install_wheel::LinkMode;
 use uv_normalize::PackageName;
@@ -33,7 +35,7 @@ use uv_python::{
     VersionRequest,
 };
 use uv_requirements::RequirementsSource;
-use uv_resolver::{ExcludeNewer, FlatIndex, RequiresPython};
+use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};

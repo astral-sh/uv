@@ -5,16 +5,17 @@ use uv_configuration::BuildOptions;
 use uv_distribution::{ArchiveMetadata, DistributionDatabase, Reporter};
 use uv_distribution_types::{
     Dist, IndexCapabilities, IndexMetadata, IndexMetadataRef, InstalledDist, RequestedDist,
+    RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_platform_tags::Tags;
 use uv_types::{BuildContext, HashStrategy};
 
+use crate::ExcludeNewer;
 use crate::flat_index::FlatIndex;
 use crate::version_map::VersionMap;
 use crate::yanks::AllowedYanks;
-use crate::{ExcludeNewer, RequiresPython};
 
 pub type PackageVersionsResult = Result<VersionsResponse, uv_client::Error>;
 pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
