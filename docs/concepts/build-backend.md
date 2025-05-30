@@ -54,7 +54,25 @@ module-name = "PIL"
 module-root = ""
 ```
 
-The build backend supports building stubs packages with a `-stubs` package or module name.
+For a namespace packages, the path can be dotted. The example below expects to find a
+`src/cloud/db/schema/__init__.py`:
+
+```toml
+[tool.uv.build-backend]
+module-name = "cloud.db.schema"
+```
+
+Complex namespaces with more than one root module can be built by setting the `namespace` option.
+Note that this option disables most coherence check, but it is still required to have a valid
+namespace package structure:
+
+```toml
+[tool.uv.build-backend]
+namespace = true
+```
+
+The build backend supports building stubs packages with a `-stubs` suffix on the package or module
+name, including for namespace packages.
 
 ## Include and exclude configuration
 
