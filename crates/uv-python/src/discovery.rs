@@ -238,7 +238,7 @@ pub enum Error {
     #[error("Invalid version request: {0}")]
     InvalidVersionRequest(String),
 
-    /// An invalid version request was given
+    /// The @latest version request was given
     #[error("Requesting the 'latest' Python version is not yet supported")]
     LatestVersionRequest,
 
