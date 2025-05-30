@@ -3,6 +3,60 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.9
+
+### Python
+
+The changes reverted in [0.7.8](#078) have been restored.
+
+See the
+[`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250529)
+for more details.
+
+### Enhancements
+
+- Improve obfuscation of credentials in URLs ([#13560](https://github.com/astral-sh/uv/pull/13560))
+- Allow running non-default Python implementations via `uvx` ([#13583](https://github.com/astral-sh/uv/pull/13583))
+- Add `uvw` as alias for `uv` without console window on Windows ([#11786](https://github.com/astral-sh/uv/pull/11786))
+- Allow discovery of x86-64 managed Python builds on macOS ([#13722](https://github.com/astral-sh/uv/pull/13722))
+- Differentiate between implicit vs explicit architecture requests ([#13723](https://github.com/astral-sh/uv/pull/13723))
+- Implement ordering for Python architectures to prefer native installations ([#13709](https://github.com/astral-sh/uv/pull/13709))
+- Only show the first match per platform (and architecture) by default in `uv python list`  ([#13721](https://github.com/astral-sh/uv/pull/13721))
+- Write the path of the parent environment to an `extends-environment` key in the `pyvenv.cfg` file of an ephemeral environment ([#13598](https://github.com/astral-sh/uv/pull/13598))
+- Improve the error message when libc cannot be found, e.g., when using the distroless containers ([#13549](https://github.com/astral-sh/uv/pull/13549))
+
+### Performance
+
+- Avoid rendering info log level ([#13642](https://github.com/astral-sh/uv/pull/13642))
+- Improve performance of `uv-python` crate's manylinux submodule ([#11131](https://github.com/astral-sh/uv/pull/11131))
+- Optimize `Version` display ([#13643](https://github.com/astral-sh/uv/pull/13643))
+- Reduce number of reference-checks for `uv cache clean` ([#13669](https://github.com/astral-sh/uv/pull/13669))
+
+### Bug fixes
+
+- Avoid reinstalling dependency group members with `--all-packages` ([#13678](https://github.com/astral-sh/uv/pull/13678))
+- Don't fail direct URL hash checking with dependency metadata ([#13736](https://github.com/astral-sh/uv/pull/13736))
+- Exit early on `self update` if global `--offline` is set ([#13663](https://github.com/astral-sh/uv/pull/13663))
+- Fix cases where the uv lock is incorrectly marked as out of date ([#13635](https://github.com/astral-sh/uv/pull/13635))
+- Include pre-release versions in `uv python install --reinstall` ([#13645](https://github.com/astral-sh/uv/pull/13645))
+- Set `LC_ALL=C` for git when checking git worktree ([#13637](https://github.com/astral-sh/uv/pull/13637))
+- Avoid rejecting Windows paths for remote Python download JSON targets ([#13625](https://github.com/astral-sh/uv/pull/13625))
+
+### Preview
+
+- Add `uv add --bounds` to configure version constraints ([#12946](https://github.com/astral-sh/uv/pull/12946))
+
+### Documentation
+
+- Add documentation about Python versions to Tools concept page ([#7673](https://github.com/astral-sh/uv/pull/7673))
+- Add example of enabling Dependabot ([#13692](https://github.com/astral-sh/uv/pull/13692))
+- Fix `exclude-newer` date format for persistent configuration files ([#13706](https://github.com/astral-sh/uv/pull/13706))
+- Quote versions variables in GitLab documentation ([#13679](https://github.com/astral-sh/uv/pull/13679))
+- Update Dependabot support status ([#13690](https://github.com/astral-sh/uv/pull/13690))
+- Explicitly specify to add a new repo entry to the repos list item in the `.pre-commit-config.yaml` ([#10243](https://github.com/astral-sh/uv/pull/10243))
+- Add integration with marimo guide ([#13691](https://github.com/astral-sh/uv/pull/13691))
+- Add pronunciation to README ([#5336](https://github.com/astral-sh/uv/pull/5336))
+
 ## 0.7.8
 
 ### Python
