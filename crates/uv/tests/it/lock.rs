@@ -20778,7 +20778,6 @@ fn lock_group_requires_python() -> Result<()> {
     Ok(())
 }
 
-
 #[test]
 fn lock_group_includes_requires_python() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -20795,9 +20794,13 @@ fn lock_group_includes_requires_python() -> Result<()> {
         [dependency-groups]
         foo = ["idna", {include-group = "bar"}]
         bar = ["sortedcontainers", "sniffio"]
+        baz = ["idna", {include-group = "bar"}]
+        blargh = ["idna", {include-group = "bar"}]
 
         [tool.uv.dependency-groups]
         bar = { requires-python = ">=3.13" }
+        baz = { requires-python = ">=3.13.1" }
+        blargh = { requires-python = ">=3.12.1" }
         "#,
     )?;
 
@@ -20821,8 +20824,10 @@ fn lock_group_includes_requires_python() -> Result<()> {
         revision = 2
         requires-python = ">=3.12"
         resolution-markers = [
-            "python_full_version >= '3.13'",
-            "python_full_version < '3.13'",
+            "python_full_version >= '3.13.1'",
+            "python_full_version >= '3.13' and python_full_version < '3.13.1'",
+            "python_full_version >= '3.12.[X]' and python_full_version < '3.13'",
+            "python_full_version < '3.12.[X]'",
         ]
 
         [options]
@@ -20850,10 +20855,20 @@ fn lock_group_includes_requires_python() -> Result<()> {
             { name = "sniffio", marker = "python_full_version >= '3.13'" },
             { name = "sortedcontainers", marker = "python_full_version >= '3.13'" },
         ]
+        baz = [
+            { name = "idna", marker = "python_full_version >= '3.13.1'" },
+            { name = "sniffio", marker = "python_full_version >= '3.13.1'" },
+            { name = "sortedcontainers", marker = "python_full_version >= '3.13.1'" },
+        ]
+        blargh = [
+            { name = "idna", marker = "python_full_version >= '3.12.[X]'" },
+            { name = "sniffio", marker = "python_full_version >= '3.13'" },
+            { name = "sortedcontainers", marker = "python_full_version >= '3.13'" },
+        ]
         foo = [
             { name = "idna" },
-            { name = "sniffio" },
-            { name = "sortedcontainers" },
+            { name = "sniffio", marker = "python_full_version >= '3.13'" },
+            { name = "sortedcontainers", marker = "python_full_version >= '3.13'" },
         ]
 
         [package.metadata]
@@ -20864,10 +20879,20 @@ fn lock_group_includes_requires_python() -> Result<()> {
             { name = "sniffio", marker = "python_full_version >= '3.13'" },
             { name = "sortedcontainers", marker = "python_full_version >= '3.13'" },
         ]
+        baz = [
+            { name = "idna", marker = "python_full_version >= '3.13.1'" },
+            { name = "sniffio", marker = "python_full_version >= '3.13.1'" },
+            { name = "sortedcontainers", marker = "python_full_version >= '3.13.1'" },
+        ]
+        blargh = [
+            { name = "idna", marker = "python_full_version >= '3.12.[X]'" },
+            { name = "sniffio", marker = "python_full_version >= '3.13'" },
+            { name = "sortedcontainers", marker = "python_full_version >= '3.13'" },
+        ]
         foo = [
             { name = "idna" },
-            { name = "sniffio" },
-            { name = "sortedcontainers" },
+            { name = "sniffio", marker = "python_full_version >= '3.13'" },
+            { name = "sortedcontainers", marker = "python_full_version >= '3.13'" },
         ]
 
         [[package]]
@@ -20902,9 +20927,6 @@ fn lock_group_includes_requires_python() -> Result<()> {
 
     Ok(())
 }
-
-
-
 
 #[test]
 fn lock_group_include_cycle() -> Result<()> {

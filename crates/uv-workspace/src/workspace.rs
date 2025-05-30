@@ -19,7 +19,8 @@ use uv_warnings::warn_user_once;
 
 use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
 use crate::pyproject::{
-    Project, PyProjectToml, PyprojectTomlError, Sources, ToolUvSources, ToolUvWorkspace,
+    Project, PyProjectToml, PyprojectTomlError, Sources, ToolUvDependencyGroups, ToolUvSources,
+    ToolUvWorkspace,
 };
 
 type WorkspaceMembers = Arc<BTreeMap<PackageName, WorkspaceMember>>;
@@ -471,10 +472,22 @@ impl Workspace {
                 .flatten()
                 .collect::<BTreeMap<_, _>>();
 
+            // Get additional settings
+            let empty_settings = ToolUvDependencyGroups::default();
+            let group_settings = self
+                .pyproject_toml
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.dependency_groups.as_ref())
+                .unwrap_or(&empty_settings);
+
             // Flatten the dependency groups.
-            let mut dependency_groups =
-                FlatDependencyGroups::from_dependency_groups(&dependency_groups)
-                    .map_err(|err| err.with_dev_dependencies(dev_dependencies))?;
+            let mut dependency_groups = FlatDependencyGroups::from_dependency_groups(
+                &dependency_groups,
+                group_settings.inner(),
+            )
+            .map_err(|err| err.with_dev_dependencies(dev_dependencies))?;
 
             // Add the `dev` group, if `dev-dependencies` is defined.
             if let Some(dev_dependencies) = dev_dependencies {
