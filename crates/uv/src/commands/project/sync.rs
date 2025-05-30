@@ -6,8 +6,10 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use serde::Serialize;
 
 use uv_cache::Cache;
+use uv_cli::SyncFormat;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
@@ -18,7 +20,7 @@ use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
     DirectorySourceDist, Dist, Index, Requirement, Resolution, ResolvedDist, SourceDist,
 };
-use uv_fs::Simplified;
+use uv_fs::{PortablePathBuf, Simplified};
 use uv_installer::SitePackages;
 use uv_normalize::{DefaultExtras, DefaultGroups, PackageName};
 use uv_pep508::{MarkerTree, VersionOrUrl};
@@ -74,6 +76,7 @@ pub(crate) async fn sync(
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
+    format: SyncFormat,
 ) -> Result<ExitStatus> {
     // Identify the target.
     let workspace_cache = WorkspaceCache::default();
@@ -167,102 +170,59 @@ pub(crate) async fn sync(
     };
 
     // Notify the user of any environment changes.
-    match &environment {
-        SyncEnvironment::Project(ProjectEnvironment::Existing(environment))
-            if dry_run.enabled() =>
-        {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Discovered existing environment at: {}",
-                    environment.root().user_display().bold()
-                )
-                .dimmed()
-            )?;
-        }
-        SyncEnvironment::Project(ProjectEnvironment::WouldReplace(root, ..))
-            if dry_run.enabled() =>
-        {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Would replace existing virtual environment at: {}",
-                    root.user_display().bold()
-                )
-                .dimmed()
-            )?;
-        }
-        SyncEnvironment::Project(ProjectEnvironment::WouldCreate(root, ..))
-            if dry_run.enabled() =>
-        {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Would create virtual environment at: {}",
-                    root.user_display().bold()
-                )
-                .dimmed()
-            )?;
-        }
-        SyncEnvironment::Script(ScriptEnvironment::Existing(environment)) => {
-            if dry_run.enabled() {
-                writeln!(
-                    printer.stderr(),
-                    "{}",
-                    format!(
-                        "Discovered existing environment at: {}",
-                        environment.root().user_display().bold()
-                    )
-                    .dimmed()
-                )?;
-            } else {
-                writeln!(
-                    printer.stderr(),
-                    "Using script environment at: {}",
-                    environment.root().user_display().cyan()
-                )?;
-            }
-        }
-        SyncEnvironment::Script(ScriptEnvironment::Replaced(environment)) if !dry_run.enabled() => {
-            writeln!(
-                printer.stderr(),
-                "Recreating script environment at: {}",
-                environment.root().user_display().cyan()
-            )?;
-        }
-        SyncEnvironment::Script(ScriptEnvironment::Created(environment)) if !dry_run.enabled() => {
-            writeln!(
-                printer.stderr(),
-                "Creating script environment at: {}",
-                environment.root().user_display().cyan()
-            )?;
-        }
-        SyncEnvironment::Script(ScriptEnvironment::WouldReplace(root, ..)) if dry_run.enabled() => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Would replace existing script environment at: {}",
-                    root.user_display().bold()
-                )
-                .dimmed()
-            )?;
-        }
-        SyncEnvironment::Script(ScriptEnvironment::WouldCreate(root, ..)) if dry_run.enabled() => {
-            writeln!(
-                printer.stderr(),
-                "{}",
-                format!(
-                    "Would create script environment at: {}",
-                    root.user_display().bold()
-                )
-                .dimmed()
-            )?;
-        }
-        _ => {}
+    let mut report = ProjectReport {
+        project_dir: project_dir.into(),
+        workspace_dir: match &target {
+            SyncTarget::Project(project) => Some(project.root().into()),
+            SyncTarget::Script(_) => None,
+        },
+        sync: None,
+        lock: None,
+    };
+    report.sync = Some(SyncReport {
+        dry_run: dry_run.enabled(),
+        python_executable: environment.python_executable().into(),
+        python_version: environment.interpreter().python_full_version().to_string(),
+        env_kind: match &environment {
+            SyncEnvironment::Project(..) => EnvKind::Project,
+            SyncEnvironment::Script(..) => EnvKind::Script,
+        },
+        env_path: match &environment {
+            SyncEnvironment::Project(
+                ProjectEnvironment::Existing(env)
+                | ProjectEnvironment::Created(env)
+                | ProjectEnvironment::Replaced(env),
+            )
+            | SyncEnvironment::Script(
+                ScriptEnvironment::Existing(env)
+                | ScriptEnvironment::Created(env)
+                | ScriptEnvironment::Replaced(env),
+            ) => env.root().into(),
+            SyncEnvironment::Project(
+                ProjectEnvironment::WouldCreate(root, ..)
+                | ProjectEnvironment::WouldReplace(root, ..),
+            )
+            | SyncEnvironment::Script(
+                ScriptEnvironment::WouldCreate(root, ..)
+                | ScriptEnvironment::WouldReplace(root, ..),
+            ) => root.as_path().into(),
+        },
+        action: match &environment {
+            SyncEnvironment::Project(ProjectEnvironment::Existing(..)) => SyncAction::AlreadyExist,
+            SyncEnvironment::Project(ProjectEnvironment::Created(..)) => SyncAction::Create,
+            SyncEnvironment::Project(ProjectEnvironment::WouldCreate(..)) => SyncAction::Create,
+            SyncEnvironment::Project(ProjectEnvironment::WouldReplace(..)) => SyncAction::Update,
+            SyncEnvironment::Project(ProjectEnvironment::Replaced(..)) => SyncAction::Update,
+            SyncEnvironment::Script(ScriptEnvironment::Existing(..)) => SyncAction::AlreadyExist,
+            SyncEnvironment::Script(ScriptEnvironment::Created(..)) => SyncAction::Create,
+            SyncEnvironment::Script(ScriptEnvironment::WouldCreate(..)) => SyncAction::Create,
+            SyncEnvironment::Script(ScriptEnvironment::WouldReplace(..)) => SyncAction::Update,
+            SyncEnvironment::Script(ScriptEnvironment::Replaced(..)) => SyncAction::Update,
+        },
+    });
+    // If we're printing human, eagerly report these partial results
+    if !format.is_json() {
+        report.print_sync_text(printer)?;
     }
 
     // Special-case: we're syncing a script that doesn't have an associated lockfile. In that case,
@@ -326,7 +286,13 @@ pub(crate) async fn sync(
             )
             .await
             {
-                Ok(..) => return Ok(ExitStatus::Success),
+                Ok(..) => {
+                    // If we're successfully exiting early, be sure to print buffered json output
+                    if format.is_json() {
+                        report.print_json(printer)?;
+                    }
+                    return Ok(ExitStatus::Success);
+                }
                 Err(ProjectError::Operation(err)) => {
                     return diagnostics::OperationDiagnostic::native_tls(
                         network_settings.native_tls,
@@ -373,43 +339,15 @@ pub(crate) async fn sync(
     .await
     {
         Ok(result) => {
-            if dry_run.enabled() {
-                match result {
-                    LockResult::Unchanged(..) => {
-                        writeln!(
-                            printer.stderr(),
-                            "{}",
-                            format!(
-                                "Found up-to-date lockfile at: {}",
-                                lock_target.lock_path().user_display().bold()
-                            )
-                            .dimmed()
-                        )?;
-                    }
-                    LockResult::Changed(None, ..) => {
-                        writeln!(
-                            printer.stderr(),
-                            "{}",
-                            format!(
-                                "Would create lockfile at: {}",
-                                lock_target.lock_path().user_display().bold()
-                            )
-                            .dimmed()
-                        )?;
-                    }
-                    LockResult::Changed(Some(..), ..) => {
-                        writeln!(
-                            printer.stderr(),
-                            "{}",
-                            format!(
-                                "Would update lockfile at: {}",
-                                lock_target.lock_path().user_display().bold()
-                            )
-                            .dimmed()
-                        )?;
-                    }
-                }
-            }
+            report.lock = Some(LockReport {
+                lock_path: lock_target.lock_path().deref().into(),
+                dry_run: dry_run.enabled(),
+                action: match &result {
+                    LockResult::Unchanged(..) => LockAction::AlreadyExist,
+                    LockResult::Changed(None, ..) => LockAction::Create,
+                    LockResult::Changed(Some(_), ..) => LockAction::Update,
+                },
+            });
             Outcome::Success(result.into_lock())
         }
         Err(ProjectError::Operation(err)) => {
@@ -424,6 +362,17 @@ pub(crate) async fn sync(
         }
         Err(err) => return Err(err.into()),
     };
+
+    match format {
+        // If printing human, report the new results
+        SyncFormat::Text => {
+            report.print_lock_text(printer)?;
+        }
+        // If printing json, report the full buffered results
+        SyncFormat::Json => {
+            report.print_json(printer)?;
+        }
+    }
 
     // Identify the installation target.
     let sync_target =
@@ -879,5 +828,259 @@ fn store_credentials_from_target(target: InstallTarget<'_>) {
             }
             _ => {}
         }
+    }
+}
+
+/// A report of a project's state and updates to make.
+#[derive(Debug, Serialize)]
+struct ProjectReport {
+    /// The project directory path.
+    project_dir: PortablePathBuf,
+    /// The workspace root
+    workspace_dir: Option<PortablePathBuf>,
+    /// The environment details, including path and action.
+    sync: Option<SyncReport>,
+    // Lockfile details, including path and actions taken
+    lock: Option<LockReport>,
+}
+
+/// The kind of environment this is
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum EnvKind {
+    /// An environment for a project
+    Project,
+    /// An environment for a script
+    Script,
+}
+
+/// Represents the lockfile details during a dry run.
+///
+/// this struct captures the path to the lockfile and action
+/// that would be taken on it.
+#[derive(Debug, Serialize)]
+struct LockReport {
+    /// The path to the lockfile
+    lock_path: PortablePathBuf,
+    /// Whether the lockfile was preserved, created, or updated.
+    action: LockAction,
+    /// Whether this is a dry run
+    dry_run: bool,
+}
+
+/// Represents the action taken during a sync.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+enum SyncAction {
+    /// No changes are needed.
+    AlreadyExist,
+    /// The environment would be updated.
+    Update,
+    /// Create a new environment.
+    Create,
+}
+
+/// Represents the action taken during a lock.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+enum LockAction {
+    /// No changes are needed.
+    AlreadyExist,
+    /// The lock would be updated.
+    Update,
+    /// Create a new lock.
+    Create,
+}
+
+/// The synced environment details, including path, action, and Python configuration.
+#[derive(Serialize, Debug)]
+struct SyncReport {
+    /// The path to the environment.
+    env_path: PortablePathBuf,
+    /// Whether a project or a script environment is used.
+    env_kind: EnvKind,
+    /// Whether this is a dry run.
+    dry_run: bool,
+    /// Whether the environment was preserved, created, or updated.
+    action: SyncAction,
+    // Python executable path.
+    python_executable: PortablePathBuf,
+    // Python full version.
+    python_version: String,
+}
+
+impl ProjectReport {
+    /// Prints the entire report as JSON
+    fn print_json(&self, printer: Printer) -> Result<()> {
+        let output = serde_json::to_string_pretty(self)?;
+        writeln!(printer.stdout(), "{output}")?;
+        Ok(())
+    }
+
+    /// Prints the sync component in human readable form
+    fn print_sync_text(&self, printer: Printer) -> Result<()> {
+        let Some(SyncReport {
+            env_path: path,
+            env_kind: kind,
+            dry_run: dry,
+            action,
+            python_executable: _,
+            python_version: _,
+        }) = &self.sync
+        else {
+            return Ok(());
+        };
+
+        match (kind, action, dry) {
+            (EnvKind::Project, SyncAction::AlreadyExist, true) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Discovered existing environment at: {}",
+                        path.user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
+            (EnvKind::Project, SyncAction::AlreadyExist, false) => {
+                // Currently intentionally silent
+            }
+            (EnvKind::Project, SyncAction::Update, true) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Would replace existing virtual environment at: {}",
+                        path.user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
+            (EnvKind::Project, SyncAction::Update, false) => {
+                // Currently intentionally silent
+            }
+            (EnvKind::Project, SyncAction::Create, true) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Would create virtual environment at: {}",
+                        path.user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
+            (EnvKind::Project, SyncAction::Create, false) => {
+                // Currently intentionally silent
+            }
+            (EnvKind::Script, SyncAction::AlreadyExist, true) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Discovered existing environment at: {}",
+                        path.user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
+            (EnvKind::Script, SyncAction::AlreadyExist, false) => {
+                writeln!(
+                    printer.stderr(),
+                    "Using script environment at: {}",
+                    path.user_display().cyan()
+                )?;
+            }
+            (EnvKind::Script, SyncAction::Update, false) => {
+                writeln!(
+                    printer.stderr(),
+                    "Recreating script environment at: {}",
+                    path.user_display().cyan()
+                )?;
+            }
+            (EnvKind::Script, SyncAction::Create, false) => {
+                writeln!(
+                    printer.stderr(),
+                    "Creating script environment at: {}",
+                    path.user_display().cyan()
+                )?;
+            }
+            (EnvKind::Script, SyncAction::Update, true) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Would replace existing script environment at: {}",
+                        path.user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
+            (EnvKind::Script, SyncAction::Create, true) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Would create script environment at: {}",
+                        path.user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Prints the lock component in human readable form
+    fn print_lock_text(&self, printer: Printer) -> Result<()> {
+        let Some(LockReport {
+            lock_path: path,
+            action,
+            dry_run: dry,
+        }) = &self.lock
+        else {
+            return Ok(());
+        };
+
+        match (action, dry) {
+            (LockAction::AlreadyExist, true) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!(
+                        "Found up-to-date lockfile at: {}",
+                        path.user_display().bold()
+                    )
+                    .dimmed()
+                )?;
+            }
+            (LockAction::AlreadyExist, false) => {
+                // Currently intentionally silent
+            }
+            (LockAction::Update, true) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!("Would update lockfile at: {}", path.user_display().bold()).dimmed()
+                )?;
+            }
+            (LockAction::Update, false) => {
+                // Currently intentionally silent
+            }
+            (LockAction::Create, true) => {
+                writeln!(
+                    printer.stderr(),
+                    "{}",
+                    format!("Would create lockfile at: {}", path.user_display().bold()).dimmed()
+                )?;
+            }
+            (LockAction::Create, false) => {
+                // Currently intentionally silent
+            }
+        }
+
+        Ok(())
     }
 }
