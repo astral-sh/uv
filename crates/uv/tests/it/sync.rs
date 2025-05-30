@@ -9572,3 +9572,40 @@ fn repeated_dev_member_all_packages() -> Result<()> {
 
     Ok(())
 }
+
+/// Test that hash checking doesn't fail with dependency metadata.
+#[test]
+fn direct_url_dependency_metadata() -> Result<()> {
+    let context = TestContext::new("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(r#"
+        [project]
+        name = "debug"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "tqdm",
+        ]
+
+        [tool.uv]
+        dependency-metadata = [
+          { name = "tqdm", version = "4.67.1", requires-dist = [] },
+        ]
+
+        [tool.uv.sources]
+        tqdm = { url = "https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl" }
+        "#
+    )?;
+
+    uv_snapshot!(context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==4.67.1 (from https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+    ");
+
+    Ok(())
+}
