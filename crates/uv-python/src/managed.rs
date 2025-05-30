@@ -29,7 +29,10 @@ use crate::libc::LibcDetectionError;
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
-use crate::{Interpreter, PythonRequest, PythonVariant, macos_dylib, sysconfig};
+use crate::{
+    Interpreter, PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib,
+    sysconfig,
+};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -453,6 +456,10 @@ impl ManagedPythonInstallation {
         &self.key
     }
 
+    pub fn minor_version_key(&self) -> &PythonInstallationMinorVersionKey {
+        PythonInstallationMinorVersionKey::ref_cast(&self.key)
+    }
+
     pub fn satisfies(&self, request: &PythonRequest) -> bool {
         match request {
             PythonRequest::File(path) => self.executable(false) == *path,
@@ -517,12 +524,9 @@ impl ManagedPythonInstallation {
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
     pub fn ensure_minor_version_link(&self) -> Result<(), Error> {
-        if let Some(directory_symlink) = DirectorySymlink::from_executable(
-            self.key.major,
-            self.key.minor,
-            self.executable(false).as_path(),
-            self.key.implementation(),
-        ) {
+        if let Some(directory_symlink) =
+            DirectorySymlink::from_executable(self.executable(false).as_path(), &self.key)
+        {
             directory_symlink.create_directory()?;
         }
         Ok(())
@@ -682,19 +686,15 @@ impl DirectorySymlink {
     ///
     /// ## Unix
     /// For a Python 3.10.8 installation in `/path/to/uv/python/cpython-3.10.8-macos-aarch64-none/bin/python3.10`,
-    /// the symlink directory would be `/path/to/uv/python/python3.10` and the executable path including the
-    /// symlink directory would be `/path/to/uv/python/python3.10/bin/python3.10`.
+    /// the symlink directory would be `/path/to/uv/python/cpython-3.10-macos-aarch64-none` and the executable path including the
+    /// symlink directory would be `/path/to/uv/python/cpython-3.10-macos-aarch64-none/bin/python3.10`.
     ///
     /// ## Windows
     /// For a Python 3.10.8 installation in `C:\path\to\uv\python\cpython-3.10.8-windows-x86_64-none\python.exe`,
-    /// the junction would be `C:\path\to\uv\python\python3.10` and the executable path including the
-    /// junction would be `C:\path\to\uv\python\python3.10\python.exe`.
-    pub fn from_executable(
-        major: u8,
-        minor: u8,
-        executable: &Path,
-        implementation: &LenientImplementationName,
-    ) -> Option<Self> {
+    /// the junction would be `C:\path\to\uv\python\cpython-3.10-windows-x86_64-none` and the executable path including the
+    /// junction would be `C:\path\to\uv\python\cpython-3.10-windows-x86_64-none\python.exe`.
+    pub fn from_executable(executable: &Path, key: &PythonInstallationKey) -> Option<Self> {
+        let implementation = key.implementation();
         if !matches!(
             implementation,
             LenientImplementationName::Known(ImplementationName::CPython)
@@ -705,7 +705,8 @@ impl DirectorySymlink {
         let executable_name = executable
             .file_name()
             .expect("Executable file name should exist");
-        let symlink_directory_name = format!("python{major}.{minor}");
+        let symlink_directory_name =
+            format!("{}", PythonInstallationMinorVersionKey::ref_cast(key));
         let parent = executable
             .parent()
             .expect("Executable should have parent directory");
@@ -746,20 +747,13 @@ impl DirectorySymlink {
 
     pub fn from_installation(installation: &ManagedPythonInstallation) -> Option<Self> {
         DirectorySymlink::from_executable(
-            installation.key().version().major(),
-            installation.key().version().minor(),
             installation.executable(false).as_path(),
-            installation.key().implementation(),
+            installation.key(),
         )
     }
 
     pub fn from_interpreter(interpreter: &Interpreter) -> Option<Self> {
-        DirectorySymlink::from_executable(
-            interpreter.python_major(),
-            interpreter.python_minor(),
-            interpreter.sys_executable(),
-            &LenientImplementationName::from(interpreter.implementation_name()),
-        )
+        DirectorySymlink::from_executable(interpreter.sys_executable(), &interpreter.key())
     }
 
     pub fn create_directory(&self) -> Result<(), Error> {
