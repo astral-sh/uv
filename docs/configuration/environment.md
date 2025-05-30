@@ -429,6 +429,16 @@ Equivalent to the `--torch-backend` command-line argument (e.g., `cpu`, `cu126`,
 Used ephemeral environments like CI to install uv to a specific path while preventing
 the installer from modifying shell profiles or environment variables.
 
+### `UV_USE_ACTIVE_ENVIRONMENT`
+
+Equivalent to the `--active` command line argument for commands that support it. For
+example, when running inside a project or when running a script with inline metadata,
+`uv run` manages its own virtual environment and ignores the caller's active environment
+(i.e. the `VIRTUAL_ENV` environment variable). Similarly, `uv sync` and `uv add` expect to
+run in a project, and they use the managed virtual environment by default. The active
+option causes these commands to use the caller's active virtual environment instead, if
+there is one.
+
 ### `UV_VENV_SEED`
 
 Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment

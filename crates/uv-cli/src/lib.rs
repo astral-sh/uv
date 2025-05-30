@@ -562,7 +562,7 @@ pub struct VersionArgs {
     ///
     /// If the project virtual environment is active or no virtual environment is active, this has
     /// no effect.
-    #[arg(long, overrides_with = "no_active")]
+    #[arg(long, env = EnvVars::UV_USE_ACTIVE_ENVIRONMENT, overrides_with = "no_active")]
     pub active: bool,
 
     /// Prefer project's virtual environment over an active environment.
@@ -3057,7 +3057,7 @@ pub struct RunArgs {
     ///
     /// If the project virtual environment is active or no virtual environment is active, this has
     /// no effect.
-    #[arg(long, overrides_with = "no_active")]
+    #[arg(long, env = EnvVars::UV_USE_ACTIVE_ENVIRONMENT, overrides_with = "no_active")]
     pub active: bool,
 
     /// Prefer project's virtual environment over an active environment.
@@ -3284,7 +3284,7 @@ pub struct SyncArgs {
     /// Instead of creating or updating the virtual environment for the project or script, the
     /// active virtual environment will be preferred, if the `VIRTUAL_ENV` environment variable is
     /// set.
-    #[arg(long, overrides_with = "no_active")]
+    #[arg(long, env = EnvVars::UV_USE_ACTIVE_ENVIRONMENT, overrides_with = "no_active")]
     pub active: bool,
 
     /// Prefer project's virtual environment over an active environment.
@@ -3613,7 +3613,7 @@ pub struct AddArgs {
     ///
     /// If the project virtual environment is active or no virtual environment is active, this has
     /// no effect.
-    #[arg(long, overrides_with = "no_active")]
+    #[arg(long, env = EnvVars::UV_USE_ACTIVE_ENVIRONMENT, overrides_with = "no_active")]
     pub active: bool,
 
     /// Prefer project's virtual environment over an active environment.
@@ -3692,7 +3692,7 @@ pub struct RemoveArgs {
     ///
     /// If the project virtual environment is active or no virtual environment is active, this has
     /// no effect.
-    #[arg(long, overrides_with = "no_active")]
+    #[arg(long, env = EnvVars::UV_USE_ACTIVE_ENVIRONMENT, overrides_with = "no_active")]
     pub active: bool,
 
     /// Prefer project's virtual environment over an active environment.
