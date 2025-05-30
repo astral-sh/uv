@@ -653,6 +653,16 @@ impl<'de> serde::de::Deserialize<'de> for ToolUvSources {
     }
 }
 
+#[derive(Deserialize, Default, Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case")]
+pub struct DependencyGroupSettings {
+    /// Version of python to require when installing this group
+    #[cfg_attr(feature = "schemars", schemars(with = "Option<String>"))]
+    pub requires_python: Option<VersionSpecifiers>,
+}
+
 #[derive(Deserialize, OptionsMetadata, Default, Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(Serialize))]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
