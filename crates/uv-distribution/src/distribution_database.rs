@@ -418,15 +418,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        // If the metadata was provided by the user directly, prefer it.
-        if let Some(metadata) = self
-            .build_context
-            .dependency_metadata()
-            .get(dist.name(), Some(dist.version()))
-        {
-            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
-        }
-
         // If hash generation is enabled, and the distribution isn't hosted on a registry, get the
         // entire wheel to ensure that the hashes are included in the response. If the distribution
         // is hosted on an index, the hashes will be included in the simple metadata response.
@@ -443,12 +434,30 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
         if hashes.is_generate(dist) {
             let wheel = self.get_wheel(dist, hashes).await?;
-            let metadata = wheel.metadata()?;
+            // If the metadata was provided by the user directly, prefer it.
+            let metadata = if let Some(metadata) = self
+                .build_context
+                .dependency_metadata()
+                .get(dist.name(), Some(dist.version()))
+            {
+                metadata.clone()
+            } else {
+                wheel.metadata()?
+            };
             let hashes = wheel.hashes;
             return Ok(ArchiveMetadata {
                 metadata: Metadata::from_metadata23(metadata),
                 hashes,
             });
+        }
+
+        // If the metadata was provided by the user directly, prefer it.
+        if let Some(metadata) = self
+            .build_context
+            .dependency_metadata()
+            .get(dist.name(), Some(dist.version()))
+        {
+            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
         }
 
         let result = self
