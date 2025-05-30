@@ -127,6 +127,24 @@ default-groups = ["docs"]
 
 ---
 
+### [`dependency-groups`](#dependency-groups) {: #dependency-groups }
+
+Additional settings for `dependency-groups`
+
+**Default value**: `[]`
+
+**Type**: `dict`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+
+[tool.uv.dependency-groups.mygroup]
+requires-python = ">=3.12"
+```
+
+---
+
 ### [`dev-dependencies`](#dev-dependencies) {: #dev-dependencies }
 
 The project's development dependencies.
