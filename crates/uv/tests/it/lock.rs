@@ -21051,7 +21051,6 @@ fn lock_group_includes_requires_python_contradiction() -> Result<()> {
     Ok(())
 }
 
-
 #[test]
 fn lock_group_include_cycle() -> Result<()> {
     let context = TestContext::new("3.12");
