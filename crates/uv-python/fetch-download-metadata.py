@@ -64,8 +64,10 @@ VERSIONS_FILE = SELF_DIR / "download-metadata.json"
 # The date at which the default CPython musl builds became dynamically linked
 # instead of statically.
 CPYTHON_MUSL_STATIC_RELEASE_END = 20250311
-# The date at which the linux CPython builds started to have seemingly buggy runtimes
+# The first date at which the linux CPython builds had seemingly buggy runtimes
 CPYTHON_BAD_LINUX_RUNTIME_START = 20250517
+# The last date at which the linux CPython builds had seemingly buggy runtimes
+CPYTHON_BAD_LINUX_RUNTIME_END = 20250521
 # This alpha was introduced in the bad linux runtime, and we don't want to show it
 # only on some platforms, so hide it everywhere.
 CPYTHON_HIDDEN_ALPHA = "3.14.0a7"
@@ -271,6 +273,7 @@ class CPythonFinder(Finder):
                         continue
                     if (
                         download.release >= CPYTHON_BAD_LINUX_RUNTIME_START
+                        and download.release <= CPYTHON_BAD_LINUX_RUNTIME_END
                         and download.triple.platform == "linux"
                         and download.triple.arch.family != "aarch64"
                     ):
