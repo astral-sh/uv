@@ -65,6 +65,7 @@ VERSIONS_FILE = SELF_DIR / "download-metadata.json"
 # instead of statically.
 CPYTHON_MUSL_STATIC_RELEASE_END = 20250311
 
+
 def batched(iterable: Iterable, n: int) -> Generator[tuple, None, None]:
     """Batch data into tuples of length n. The last batch may be shorter."""
     # batched('ABCDEFG', 3) --> ABC DEF G
