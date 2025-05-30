@@ -68,9 +68,6 @@ CPYTHON_MUSL_STATIC_RELEASE_END = 20250311
 CPYTHON_BAD_LINUX_RUNTIME_START = 20250517
 # The last date at which the linux CPython builds had seemingly buggy runtimes
 CPYTHON_BAD_LINUX_RUNTIME_END = 20250521
-# This alpha was introduced in the bad linux runtime, and we don't want to show it
-# only on some platforms, so hide it everywhere.
-CPYTHON_HIDDEN_ALPHA = "3.14.0a7"
 
 
 def batched(iterable: Iterable, n: int) -> Generator[tuple, None, None]:
