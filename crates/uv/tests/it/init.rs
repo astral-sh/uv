@@ -2408,7 +2408,7 @@ fn init_requires_python_version() -> Result<()> {
 /// specifiers verbatim.
 #[test]
 fn init_requires_python_specifiers() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {
@@ -2424,7 +2424,7 @@ fn init_requires_python_specifiers() -> Result<()> {
     })?;
 
     let child = context.temp_dir.join("foo");
-    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("==3.8.*"), @r###"
+    uv_snapshot!(context.filters(), context.init().current_dir(&context.temp_dir).arg(&child).arg("--python").arg("==3.9.*"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2445,7 +2445,7 @@ fn init_requires_python_specifiers() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
-        requires-python = "==3.8.*"
+        requires-python = "==3.9.*"
         dependencies = []
         "###
         );
@@ -2456,7 +2456,7 @@ fn init_requires_python_specifiers() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            python_version, @"3.8"
+            python_version, @"3.9"
         );
     });
 
@@ -2503,7 +2503,7 @@ fn init_requires_python_version_file() -> Result<()> {
 /// Run `uv init`, inferring the Python version from an existing `.venv`
 #[test]
 fn init_existing_environment() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let child = context.temp_dir.child("foo");
     child.create_dir_all()?;
@@ -2552,7 +2552,7 @@ fn init_existing_environment() -> Result<()> {
 /// Run `uv init`, it should ignore a the Python version from a parent `.venv`
 #[test]
 fn init_existing_environment_parent() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     // Create a new virtual environment in the parent directory
     uv_snapshot!(context.filters(), context.venv().current_dir(&context.temp_dir).arg("--python").arg("3.12"), @r###"
@@ -2588,7 +2588,7 @@ fn init_existing_environment_parent() -> Result<()> {
         version = "0.1.0"
         description = "Add your description here"
         readme = "README.md"
-        requires-python = ">=3.8"
+        requires-python = ">=3.9"
         dependencies = []
         "###
         );
