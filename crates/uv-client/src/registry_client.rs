@@ -151,6 +151,18 @@ impl<'a> RegistryClientBuilder<'a> {
         self
     }
 
+    /// Allows credentials to be propagated on cross-origin redirects.
+    ///
+    /// WARNING: This should only be available for tests. In production code, propagating credentials
+    /// during cross-origin redirects can lead to security vulnerabilities including credential
+    /// leakage to untrusted domains.
+    #[cfg(test)]
+    #[must_use]
+    pub fn allow_cross_origin_credentials(mut self) -> Self {
+        self.base_client_builder = self.base_client_builder.allow_cross_origin_credentials();
+        self
+    }
+
     pub fn build(self) -> RegistryClient {
         // Build a base client
         let builder = self
@@ -1223,6 +1235,7 @@ impl Connectivity {
 mod tests {
     use std::str::FromStr;
 
+    use url::Url;
     use uv_normalize::PackageName;
     use uv_pypi_types::{JoinRelativeError, SimpleJson};
     use uv_redacted::DisplaySafeUrl;
@@ -1267,7 +1280,7 @@ mod tests {
         // Configure the redirect server to respond with a 302 to the auth server
         Mock::given(method("GET"))
             .respond_with(
-                ResponseTemplate::new(302).insert_header("Location", format!("{}", &auth_base_url)),
+                ResponseTemplate::new(302).insert_header("Location", format!("{auth_base_url}")),
             )
             .mount(&redirect_server)
             .await;
@@ -1275,7 +1288,9 @@ mod tests {
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache).build();
+        let registry_client = RegistryClientBuilder::new(cache)
+            .allow_cross_origin_credentials()
+            .build();
         let client = registry_client.cached_client().uncached();
 
         assert_eq!(
@@ -1296,7 +1311,7 @@ mod tests {
         assert_eq!(
             client
                 .for_host(&redirect_server_url)
-                .get(format!("{url}"))
+                .get(Url::from(url))
                 .send()
                 .await?
                 .status(),
@@ -1333,7 +1348,9 @@ mod tests {
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache).build();
+        let registry_client = RegistryClientBuilder::new(cache)
+            .allow_cross_origin_credentials()
+            .build();
         let client = registry_client.cached_client().uncached();
 
         let mut url = redirect_server_url.clone();
@@ -1343,7 +1360,7 @@ mod tests {
         assert_eq!(
             client
                 .for_host(&url)
-                .get(format!("{url}"))
+                .get(Url::from(url))
                 .send()
                 .await?
                 .status(),
@@ -1371,6 +1388,7 @@ mod tests {
 
         Mock::given(method("GET"))
             .and(path_regex("/foo/"))
+            .and(basic_auth(username, password))
             .respond_with(
                 ResponseTemplate::new(307).insert_header("Location", "bar/baz/".to_string()),
             )
@@ -1378,7 +1396,9 @@ mod tests {
             .await;
 
         let cache = Cache::temp()?;
-        let registry_client = RegistryClientBuilder::new(cache).build();
+        let registry_client = RegistryClientBuilder::new(cache)
+            .allow_cross_origin_credentials()
+            .build();
         let client = registry_client.cached_client().uncached();
 
         let redirect_server_url = DisplaySafeUrl::parse(&redirect_server.uri())?.join("foo/")?;
@@ -1389,7 +1409,7 @@ mod tests {
         assert_eq!(
             client
                 .for_host(&url)
-                .get(format!("{url}"))
+                .get(Url::from(url))
                 .send()
                 .await?
                 .status(),
@@ -1426,7 +1446,7 @@ mod tests {
         assert_eq!(
             client
                 .for_host(&url)
-                .get(format!("{}", url.clone()))
+                .get(Url::from(url.clone()))
                 .send()
                 .await?
                 .url()

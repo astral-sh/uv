@@ -567,7 +567,7 @@ async fn install_remote_requirements_txt() -> Result<()> {
     let filters = context
         .filters()
         .into_iter()
-        .chain([(r"127\.0\.0\.1[^\r\n]*", "[LOCALHOST]")])
+        .chain([(r"127\.0\.0\.1:\d*", "[LOCALHOST]")])
         .collect::<Vec<_>>();
 
     let username = "user";
@@ -582,14 +582,14 @@ async fn install_remote_requirements_txt() -> Result<()> {
     uv_snapshot!(filters, context.pip_install()
         .arg("-r")
         .arg(requirements_url.as_str())
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Error while accessing remote requirements file: `http://[LOCALHOST]
-    "###
+    error: Error while accessing remote requirements file: `http://[LOCALHOST]/requirements.txt`
+    "
     );
 
     let _ = requirements_url.set_username(username);
