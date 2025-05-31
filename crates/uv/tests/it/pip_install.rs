@@ -2148,8 +2148,6 @@ fn install_git_public_https_exact_commit() {
     ----- stdout -----
 
     ----- stderr -----
-       Updating https://github.com/astral-test/uv-public-pypackage (b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
-        Updated https://github.com/astral-test/uv-public-pypackage (b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     Resolved 1 package in [TIME]
     Audited 1 package in [TIME]
     ");
