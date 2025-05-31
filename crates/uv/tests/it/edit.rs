@@ -14,6 +14,7 @@ use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use std::path::Path;
+use url::Url;
 use uv_fs::Simplified;
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
@@ -11647,6 +11648,197 @@ fn add_auth_policy_never_without_credentials() -> Result<()> {
 
     context.assert_command("import anyio").success();
     Ok(())
+}
+
+/// If uv receives a 302 redirect, it should use supplied credentials for the
+/// new location.
+#[tokio::test]
+async fn add_redirect() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+        "#
+    })?;
+
+    let redirect_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(|req: &wiremock::Request| {
+            let redirect_url = redirect_url_to_pypi_proxy(req);
+            ResponseTemplate::new(302).insert_header("Location", &redirect_url)
+        })
+        .mount(&redirect_server)
+        .await;
+
+    let mut redirect_url = Url::parse(&redirect_server.uri())?;
+    let _ = redirect_url.set_username("public");
+    let _ = redirect_url.set_password(Some("heron"));
+
+    uv_snapshot!(context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    context.assert_command("import anyio").success();
+    Ok(())
+}
+
+/// If uv receives a 302 redirect, it should use credentials from the keyring
+/// for the new location.
+#[tokio::test]
+async fn add_redirect_with_keyring() -> Result<()> {
+    let keyring_context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    keyring_context
+        .pip_install()
+        .arg(
+            keyring_context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"127\.0\.0\.1[^\r\n]*", "[LOCALHOST]")])
+        .collect::<Vec<_>>();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [tool.uv]
+        keyring-provider = "subprocess"
+        "#,
+    })?;
+
+    let redirect_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(|req: &wiremock::Request| {
+            let redirect_url = redirect_url_to_pypi_proxy(req);
+            ResponseTemplate::new(302).insert_header("Location", &redirect_url)
+        })
+        .mount(&redirect_server)
+        .await;
+
+    let mut redirect_url = Url::parse(&redirect_server.uri())?;
+    let _ = redirect_url.set_username("public");
+
+    uv_snapshot!(filters, context.add().arg("--default-index")
+        .arg(redirect_url.as_str())
+        .arg("anyio")
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Keyring request for public@http://[LOCALHOST]
+    Keyring request for public@[LOCALHOST]
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
+    Keyring request for public@pypi-proxy.fly.dev
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    context.assert_command("import anyio").success();
+    Ok(())
+}
+
+/// If uv receives a 302 redirect, it should use credentials from netrc
+/// for the new location.
+#[tokio::test]
+async fn add_redirect_with_netrc() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"127\.0\.0\.1[^\r\n]*", "[LOCALHOST]")])
+        .collect::<Vec<_>>();
+
+    let netrc = context.temp_dir.child(".netrc");
+    netrc.write_str("machine pypi-proxy.fly.dev login public password heron")?;
+
+    let redirect_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(|req: &wiremock::Request| {
+            let redirect_url = redirect_url_to_pypi_proxy(req);
+            ResponseTemplate::new(302).insert_header("Location", &redirect_url)
+        })
+        .mount(&redirect_server)
+        .await;
+
+    let mut redirect_url = Url::parse(&redirect_server.uri())?;
+    let _ = redirect_url.set_username("public");
+
+    uv_snapshot!(filters, context.pip_install()
+        .arg("anyio")
+        .arg("--index-url")
+        .arg(redirect_url.as_str())
+        .env(EnvVars::NETRC, netrc.to_str().unwrap())
+        .arg("--strict"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###
+    );
+
+    context.assert_command("import anyio").success();
+
+    Ok(())
+}
+
+fn redirect_url_to_pypi_proxy(req: &wiremock::Request) -> String {
+    let last_path_segment = req
+        .url
+        .path_segments()
+        .expect("path has segments")
+        .filter(|segment| !segment.is_empty()) // Filter out empty segments
+        .next_back()
+        .expect("path has a package segment");
+    format!("https://pypi-proxy.fly.dev/basic-auth/simple/{last_path_segment}/")
 }
 
 /// Test the error message when adding a package with multiple existing references in

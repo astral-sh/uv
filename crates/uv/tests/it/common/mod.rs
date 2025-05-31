@@ -1655,9 +1655,9 @@ pub async fn download_to_disk(url: &str, path: &Path) {
         .allow_insecure_host(trusted_hosts)
         .build();
     let url = url.parse().unwrap();
-    let client = client.for_host(&url);
     let response = client
-        .request(http::Method::GET, reqwest::Url::from(url))
+        .for_host(&url)
+        .get(reqwest::Url::from(url))
         .send()
         .await
         .unwrap();
