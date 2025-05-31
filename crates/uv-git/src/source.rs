@@ -11,11 +11,11 @@ use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, instrument};
 
 use uv_cache_key::{RepositoryUrl, cache_digest};
-use uv_git_types::GitUrl;
+use uv_git_types::{GitOid, GitReference, GitUrl};
 use uv_redacted::DisplaySafeUrl;
 
 use crate::GIT_STORE;
-use crate::git::GitRemote;
+use crate::git::{GitDatabase, GitRemote};
 
 /// A remote Git source that can be checked out locally.
 pub struct GitSource {
@@ -86,40 +86,59 @@ impl GitSource {
             Cow::Borrowed(self.git.repository())
         };
 
-        let remote = GitRemote::new(&remote);
-        let (db, actual_rev, task) = match (self.git.precise(), remote.db_at(&db_path).ok()) {
-            // If we have a locked revision, and we have a preexisting database
-            // which has that revision, then no update needs to happen.
-            (Some(rev), Some(db)) if db.contains(rev) => {
-                debug!("Using existing Git source `{}`", self.git.repository());
-                (db, rev, None)
+        // Fetch the commit, if we don't already have it. Wrapping this section in a closure makes
+        // it easier to short-circuit this in the cases where we do have the commit.
+        let (db, actual_rev, maybe_task) = || -> Result<(GitDatabase, GitOid, Option<usize>)> {
+            let git_remote = GitRemote::new(&remote);
+            let maybe_db = git_remote.db_at(&db_path).ok();
+
+            // If we have a locked revision, and we have a pre-existing database which has that
+            // revision, then no update needs to happen.
+            if let (Some(rev), Some(db)) = (self.git.precise(), &maybe_db) {
+                if db.contains(rev) {
+                    debug!("Using existing Git source `{}`", self.git.repository());
+                    return Ok((maybe_db.unwrap(), rev, None));
+                }
             }
 
-            // ... otherwise we use this state to update the git database. Note
-            // that we still check for being offline here, for example in the
-            // situation that we have a locked revision but the database
-            // doesn't have it.
-            (locked_rev, db) => {
-                debug!("Updating Git source `{}`", self.git.repository());
-
-                // Report the checkout operation to the reporter.
-                let task = self.reporter.as_ref().map(|reporter| {
-                    reporter.on_checkout_start(remote.url(), self.git.reference().as_rev())
-                });
-
-                let (db, actual_rev) = remote.checkout(
-                    &db_path,
-                    db,
-                    self.git.reference(),
-                    locked_rev,
-                    &self.client,
-                    self.disable_ssl,
-                    self.offline,
-                )?;
-
-                (db, actual_rev, task)
+            // If the revision isn't locked, but it looks like it might be an exact commit hash,
+            // and we do have a pre-existing database, then check whether it is, in fact, a commit
+            // hash. If so, treat it like it's locked.
+            if let Some(db) = &maybe_db {
+                if let GitReference::BranchOrTagOrCommit(maybe_commit) = self.git.reference() {
+                    if let Ok(oid) = maybe_commit.parse::<GitOid>() {
+                        if db.contains(oid) {
+                            // This reference is an exact commit. Treat it like it's
+                            // locked.
+                            debug!("Using existing Git source `{}`", self.git.repository());
+                            return Ok((maybe_db.unwrap(), oid, None));
+                        }
+                    }
+                }
             }
-        };
+
+            // ... otherwise, we use this state to update the Git database. Note that we still check
+            // for being offline here, for example in the situation that we have a locked revision
+            // but the database doesn't have it.
+            debug!("Updating Git source `{}`", self.git.repository());
+
+            // Report the checkout operation to the reporter.
+            let task = self.reporter.as_ref().map(|reporter| {
+                reporter.on_checkout_start(git_remote.url(), self.git.reference().as_rev())
+            });
+
+            let (db, actual_rev) = git_remote.checkout(
+                &db_path,
+                maybe_db,
+                self.git.reference(),
+                self.git.precise(),
+                &self.client,
+                self.disable_ssl,
+                self.offline,
+            )?;
+
+            Ok((db, actual_rev, task))
+        }()?;
 
         // Don’t use the full hash, in order to contribute less to reaching the
         // path length limit on Windows.
@@ -137,9 +156,9 @@ impl GitSource {
         db.copy_to(actual_rev, &checkout_path)?;
 
         // Report the checkout operation to the reporter.
-        if let Some(task) = task {
+        if let Some(task) = maybe_task {
             if let Some(reporter) = self.reporter.as_ref() {
-                reporter.on_checkout_complete(remote.url(), actual_rev.as_str(), task);
+                reporter.on_checkout_complete(remote.as_ref(), actual_rev.as_str(), task);
             }
         }
 
