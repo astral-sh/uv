@@ -945,7 +945,9 @@ impl InterpreterInfo {
     /// unless the Python executable changes, so we use the executable's last modified
     /// time as a cache key.
     pub(crate) fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
+        dbg!("query_cached. Executable: {:?}", &executable);
         let absolute = std::path::absolute(executable)?;
+        dbg!("query_cached. Absolute: {:?}", &absolute);
 
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
@@ -961,6 +963,7 @@ impl InterpreterInfo {
             format!("{}.msgpack", cache_digest(&absolute)),
         );
 
+        dbg!("Check timestamp");
         // We check the timestamp of the canonicalized executable to check if an underlying
         // interpreter has been modified.
         let modified = canonicalize_executable(&absolute)
@@ -969,6 +972,13 @@ impl InterpreterInfo {
                 if err.kind() == io::ErrorKind::NotFound {
                     #[cfg(unix)]
                     let trampoline_target = false;
+
+                    // FIXME
+                    #[cfg(windows)]
+                    {
+                        dbg!("Launcher: {:?}", uv_trampoline_builder::Launcher::try_from_path(&absolute));
+                        dbg!("Launcher is_ok: {:?}", uv_trampoline_builder::Launcher::try_from_path(&absolute).is_ok());
+                    }
 
                     #[cfg(windows)]
                     let trampoline_target =
@@ -997,6 +1007,8 @@ impl InterpreterInfo {
                     err.into()
                 }
             })?;
+
+        dbg!("Made it past timestamp");
 
         // Read from the cache.
         if cache
