@@ -1,14 +1,10 @@
 use std::fmt::Display;
 use std::io;
-#[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
 use tempfile::NamedTempFile;
 use tracing::{debug, error, info, trace, warn};
-#[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 pub use crate::path::*;
 

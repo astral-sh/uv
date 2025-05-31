@@ -2,6 +2,8 @@ use core::fmt;
 use std::cmp::Reverse;
 use std::ffi::OsStr;
 use std::io::{self, Write};
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -10,9 +12,9 @@ use itertools::Itertools;
 use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
-
 #[cfg(windows)]
-use uv_fs::is_symlink;
+use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+
 use uv_fs::{LockedFile, Simplified, replace_symlink, symlink_or_copy_file};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
@@ -785,7 +787,11 @@ impl DirectorySymlink {
         }
         #[cfg(windows)]
         {
-            is_symlink(self.symlink_directory.as_path())
+            self.symlink_directory.symlink_metadata().is_ok_and(|metadata| {
+                // Check that this is a reparse point, which indicates this
+                // is a symlink or junction.
+                (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0
+            })
         }
     }
 }
