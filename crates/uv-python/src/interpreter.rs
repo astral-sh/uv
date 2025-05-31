@@ -17,7 +17,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
-use uv_fs::{PythonExt, Simplified, is_symlink, write_atomic_sync};
+use uv_fs::{PythonExt, Simplified, write_atomic_sync};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
@@ -977,7 +977,9 @@ impl InterpreterInfo {
 
                     // Check if it looks like a venv interpreter where the underlying Python
                     // installation was removed.
-                    if trampoline_target || is_symlink(absolute.as_path()) {
+                    if trampoline_target || absolute.symlink_metadata()
+                            .is_ok_and(|metadata| metadata.is_symlink())
+                    {
                         let venv = executable
                             .parent()
                             .and_then(Path::parent)

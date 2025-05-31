@@ -147,21 +147,6 @@ pub fn remove_symlink(path: impl AsRef<Path>) -> std::io::Result<()> {
     fs_err::remove_file(path.as_ref())
 }
 
-#[cfg(unix)]
-pub fn is_symlink(path: &Path) -> bool {
-    path.symlink_metadata()
-        .is_ok_and(|metadata| metadata.is_symlink())
-}
-
-#[cfg(windows)]
-pub fn is_symlink(path: &Path) -> bool {
-    path.symlink_metadata().is_ok_and(|metadata| {
-        // Check that this is a reparse point, which indicates this
-        // is a symlink or junction.
-        (metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0
-    })
-}
-
 /// Create a symlink at `dst` pointing to `src` on Unix or copy `src` to `dst` on Windows
 ///
 /// This does not replace an existing symlink or file at `dst`.
