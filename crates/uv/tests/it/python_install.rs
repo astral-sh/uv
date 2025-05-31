@@ -2146,16 +2146,13 @@ fn uninstall_last_patch() {
     );
 
     #[cfg(windows)]
-    uv_snapshot!(filters, context.run().arg("python").arg("--version"), @r"
+    uv_snapshot!(filters, context.run().arg("python").arg("--version"), @r#"
     success: false
-    exit_code: 2
+    exit_code: 103
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
-      Caused by: Missing trampoline target at `.venv/[BIN]/python`, was the underlying Python interpreter removed?
-
-    hint: Consider recreating the environment (e.g., with `uv venv`)
-    "
+    No Python at '"[TEMP_DIR]/managed/cpython-3.10-[PLATFORM]/python'
+    "#
     );
 }
