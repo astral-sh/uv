@@ -26,6 +26,7 @@ fn show_empty() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn show_requires_multiple() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -75,6 +76,7 @@ fn show_requires_multiple() -> Result<()> {
 /// Asserts that the Python version marker in the metadata is correctly evaluated.
 /// `click` v8.1.7 requires `importlib-metadata`, but only when `python_version < "3.8"`.
 #[test]
+#[cfg(feature = "pypi")]
 fn show_python_version_marker() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -124,6 +126,7 @@ fn show_python_version_marker() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn show_found_single_package() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -168,6 +171,7 @@ fn show_found_single_package() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn show_found_multiple_packages() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -224,6 +228,7 @@ fn show_found_multiple_packages() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn show_found_one_out_of_three() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -276,6 +281,7 @@ fn show_found_one_out_of_three() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn show_found_one_out_of_two_quiet() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -323,6 +329,7 @@ fn show_found_one_out_of_two_quiet() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn show_empty_quiet() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -369,6 +376,7 @@ fn show_empty_quiet() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn show_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -405,6 +413,7 @@ fn show_editable() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn show_required_by_multiple() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -460,6 +469,7 @@ fn show_required_by_multiple() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn show_files() {
     let context = TestContext::new("3.12");
 

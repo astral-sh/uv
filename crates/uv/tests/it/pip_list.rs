@@ -56,6 +56,7 @@ fn list_empty_json() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn list_single_no_editable() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -96,6 +97,7 @@ fn list_single_no_editable() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn list_outdated_columns() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -136,6 +138,7 @@ fn list_outdated_columns() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn list_outdated_json() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -232,6 +235,7 @@ fn list_outdated_git() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn list_outdated_index() -> Result<()> {
     let context = TestContext::new("3.12");
 
@@ -275,6 +279,7 @@ fn list_outdated_index() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn list_editable() {
     let context = TestContext::new("3.12");
 
@@ -320,6 +325,7 @@ fn list_editable() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn list_editable_only() {
     let context = TestContext::new("3.12");
 
@@ -394,6 +400,7 @@ fn list_editable_only() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn list_exclude() {
     let context = TestContext::new("3.12");
 
@@ -475,6 +482,7 @@ fn list_exclude() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 #[cfg(not(windows))]
 fn list_format_json() {
     let context = TestContext::new("3.12");
@@ -541,6 +549,7 @@ fn list_format_json() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn list_format_freeze() {
     let context = TestContext::new("3.12");
 
@@ -706,6 +715,7 @@ Version: 0.1-bulbasaur
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn list_ignores_quiet_flag_format_freeze() {
     let context = TestContext::new("3.12");
 
