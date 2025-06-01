@@ -27,6 +27,7 @@ use uv_extract::hash::Hasher;
 use uv_fs::write_atomic;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{HashDigest, HashDigests};
+use uv_redacted::DisplaySafeUrl;
 use uv_types::{BuildContext, BuildStack};
 
 use crate::archive::Archive;
@@ -417,15 +418,6 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: HashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        // If the metadata was provided by the user directly, prefer it.
-        if let Some(metadata) = self
-            .build_context
-            .dependency_metadata()
-            .get(dist.name(), Some(dist.version()))
-        {
-            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
-        }
-
         // If hash generation is enabled, and the distribution isn't hosted on a registry, get the
         // entire wheel to ensure that the hashes are included in the response. If the distribution
         // is hosted on an index, the hashes will be included in the simple metadata response.
@@ -442,12 +434,30 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
         if hashes.is_generate(dist) {
             let wheel = self.get_wheel(dist, hashes).await?;
-            let metadata = wheel.metadata()?;
+            // If the metadata was provided by the user directly, prefer it.
+            let metadata = if let Some(metadata) = self
+                .build_context
+                .dependency_metadata()
+                .get(dist.name(), Some(dist.version()))
+            {
+                metadata.clone()
+            } else {
+                wheel.metadata()?
+            };
             let hashes = wheel.hashes;
             return Ok(ArchiveMetadata {
                 metadata: Metadata::from_metadata23(metadata),
                 hashes,
             });
+        }
+
+        // If the metadata was provided by the user directly, prefer it.
+        if let Some(metadata) = self
+            .build_context
+            .dependency_metadata()
+            .get(dist.name(), Some(dist.version()))
+        {
+            return Ok(ArchiveMetadata::from_metadata23(metadata.clone()));
         }
 
         let result = self
@@ -529,7 +539,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Stream a wheel from a URL, unzipping it into the cache as it's downloaded.
     async fn stream_wheel(
         &self,
-        url: Url,
+        url: DisplaySafeUrl,
         filename: &WheelFilename,
         size: Option<u64>,
         wheel_entry: &CacheEntry,
@@ -666,7 +676,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     /// Download a wheel from a URL, then unzip it into the cache.
     async fn download_wheel(
         &self,
-        url: Url,
+        url: DisplaySafeUrl,
         filename: &WheelFilename,
         size: Option<u64>,
         wheel_entry: &CacheEntry,
@@ -980,11 +990,11 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     }
 
     /// Returns a GET [`reqwest::Request`] for the given URL.
-    fn request(&self, url: Url) -> Result<reqwest::Request, reqwest::Error> {
+    fn request(&self, url: DisplaySafeUrl) -> Result<reqwest::Request, reqwest::Error> {
         self.client
             .unmanaged
             .uncached_client(&url)
-            .get(url)
+            .get(Url::from(url))
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading

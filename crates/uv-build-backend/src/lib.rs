@@ -20,9 +20,10 @@ use tracing::debug;
 use uv_fs::Simplified;
 use uv_globfilter::PortableGlobError;
 use uv_normalize::PackageName;
-use uv_pypi_types::{Identifier, IdentifierParseError};
+use uv_pypi_types::IdentifierParseError;
 
 use crate::metadata::ValidationError;
+use crate::settings::ModuleName;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -199,7 +200,7 @@ fn find_roots(
     source_tree: &Path,
     pyproject_toml: &PyProjectToml,
     relative_module_root: &Path,
-    module_name: Option<&Identifier>,
+    module_name: Option<&ModuleName>,
 ) -> Result<(PathBuf, PathBuf), Error> {
     let relative_module_root = uv_fs::normalize_path(relative_module_root);
     let src_root = source_tree.join(&relative_module_root);
@@ -229,17 +230,29 @@ fn find_roots(
 /// Returns the module root path, the directory below which the `__init__.py` lives.
 fn find_module_root(
     src_root: &Path,
-    module_name: Option<&Identifier>,
+    module_name: Option<&ModuleName>,
     package_name: &PackageName,
 ) -> Result<PathBuf, Error> {
-    let module_name = if let Some(module_name) = module_name {
+    let (module_name, stubs) = if let Some(module_name) = module_name {
         // This name can be uppercase.
-        module_name.to_string()
+        match module_name {
+            ModuleName::Identifier(module_name) => (module_name.to_string(), false),
+            ModuleName::Stubs(module_name) => (module_name.to_string(), true),
+        }
     } else {
-        // Should never error, the rules for package names (in dist-info formatting) are stricter
-        // than those for identifiers.
-        // This name is always lowercase.
-        Identifier::from_str(package_name.as_dist_info_name().as_ref())?.to_string()
+        // Infer stubs packages from package name alone. There are potential false positives if
+        // someone had a regular package with `-stubs`.
+        if let Some(stem) = package_name.to_string().strip_suffix("-stubs") {
+            debug!("Building stubs package instead of a regular package");
+            let module_name = PackageName::from_str(stem)
+                .expect("non-empty package name prefix must be valid package name")
+                .as_dist_info_name()
+                .to_string();
+            (format!("{module_name}-stubs"), true)
+        } else {
+            // This name is always lowercase.
+            (package_name.as_dist_info_name().to_string(), false)
+        }
     };
 
     let dir = match fs_err::read_dir(src_root) {
@@ -262,11 +275,12 @@ fn find_module_root(
             None
         }
     });
+    let init_py = if stubs { "__init__.pyi" } else { "__init__.py" };
     let module_root = if let Some(module_root) = module_root {
-        if module_root.join("__init__.py").is_file() {
+        if module_root.join(init_py).is_file() {
             module_root.clone()
         } else {
-            return Err(Error::MissingInitPy(module_root.join("__init__.py")));
+            return Err(Error::MissingInitPy(module_root.join(init_py)));
         }
     } else {
         return Err(Error::MissingModuleDir {
@@ -293,9 +307,17 @@ mod tests {
     use itertools::Itertools;
     use sha2::Digest;
     use std::io::{BufReader, Read};
+    use std::iter;
     use tempfile::TempDir;
     use uv_distribution_filename::{SourceDistFilename, WheelFilename};
     use uv_fs::{copy_dir_all, relative_to};
+
+    fn format_err(err: &Error) -> String {
+        let context = iter::successors(std::error::Error::source(&err), |&err| err.source())
+            .map(|err| format!("  Caused by: {err}"))
+            .join("\n");
+        err.to_string() + "\n" + &context
+    }
 
     /// File listings, generated archives and archive contents for both a build with
     /// source tree -> wheel
@@ -818,13 +840,120 @@ mod tests {
         )
         .unwrap();
         let build_err = build(src.path(), dist.path()).unwrap_err();
-        let err_message = build_err
-            .to_string()
+        let err_message = format_err(&build_err)
             .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
             .replace('\\', "/");
         assert_snapshot!(
             err_message,
             @"Missing module directory for `camel_case` in `[TEMP_PATH]/src`. Found: `camelCase`"
         );
+    }
+
+    #[test]
+    fn invalid_stubs_name() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "camelcase"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            module-name = "django@home-stubs"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let err_message = format_err(&build_err);
+        assert_snapshot!(
+            err_message,
+            @r#"
+        Invalid pyproject.toml
+          Caused by: TOML parse error at line 10, column 15
+           |
+        10 | module-name = "django@home-stubs"
+           |               ^^^^^^^^^^^^^^^^^^^
+        Invalid character `@` at position 7 for identifier `django@home`, expected an underscore or an alphanumeric character
+        "#
+        );
+    }
+
+    /// Stubs packages use a special name and `__init__.pyi`.
+    #[test]
+    fn stubs_package() {
+        let src = TempDir::new().unwrap();
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "stuffed-bird-stubs"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+        fs_err::create_dir_all(src.path().join("src").join("stuffed_bird-stubs")).unwrap();
+        // That's the wrong file, we're expecting a `__init__.pyi`.
+        let regular_init_py = src
+            .path()
+            .join("src")
+            .join("stuffed_bird-stubs")
+            .join("__init__.py");
+        File::create(&regular_init_py).unwrap();
+
+        let dist = TempDir::new().unwrap();
+        let build_err = build(src.path(), dist.path()).unwrap_err();
+        let err_message = format_err(&build_err)
+            .replace(&src.path().user_display().to_string(), "[TEMP_PATH]")
+            .replace('\\', "/");
+        assert_snapshot!(
+            err_message,
+            @"Expected a Python module directory at: `[TEMP_PATH]/src/stuffed_bird-stubs/__init__.pyi`"
+        );
+
+        // Create the correct file
+        fs_err::remove_file(regular_init_py).unwrap();
+        File::create(
+            src.path()
+                .join("src")
+                .join("stuffed_bird-stubs")
+                .join("__init__.pyi"),
+        )
+        .unwrap();
+
+        let build1 = build(src.path(), dist.path()).unwrap();
+        assert_snapshot!(build1.wheel_contents.join("\n"), @r"
+        stuffed_bird-stubs/
+        stuffed_bird-stubs/__init__.pyi
+        stuffed_bird_stubs-1.0.0.dist-info/
+        stuffed_bird_stubs-1.0.0.dist-info/METADATA
+        stuffed_bird_stubs-1.0.0.dist-info/RECORD
+        stuffed_bird_stubs-1.0.0.dist-info/WHEEL
+        ");
+
+        // Check that setting the name manually works equally.
+        let pyproject_toml = indoc! {r#"
+            [project]
+            name = "stuffed-bird-stubs"
+            version = "1.0.0"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<0.6"]
+            build-backend = "uv_build"
+
+            [tool.uv.build-backend]
+            module-name = "stuffed_bird-stubs"
+            "#
+        };
+        fs_err::write(src.path().join("pyproject.toml"), pyproject_toml).unwrap();
+
+        let build2 = build(src.path(), dist.path()).unwrap();
+        assert_eq!(build1.wheel_contents, build2.wheel_contents);
     }
 }

@@ -32,7 +32,8 @@ use uv_static::EnvVars;
 // Exclude any packages uploaded after this date.
 static EXCLUDE_NEWER: &str = "2024-03-25T00:00:00Z";
 
-pub const PACKSE_VERSION: &str = "0.3.46";
+pub const PACKSE_VERSION: &str = "0.3.47";
+pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 /// Using a find links url allows using `--index-url` instead of `--extra-index-url` in tests
 /// to prevent dependency confusion attacks against our test suite.
@@ -239,6 +240,30 @@ impl TestContext {
                 r"[\\/]python".to_string(),
                 "/[INSTALL-BIN]/python".to_string(),
             ));
+        }
+        self
+    }
+
+    /// Filtering for various keys in a `pyvenv.cfg` file that will vary
+    /// depending on the specific machine used:
+    /// - `home = foo/bar/baz/python3.X.X/bin`
+    /// - `uv = X.Y.Z`
+    /// - `extends-environment = <path/to/parent/venv>`
+    #[must_use]
+    pub fn with_pyvenv_cfg_filters(mut self) -> Self {
+        let added_filters = [
+            (r"home = .+".to_string(), "home = [PYTHON_HOME]".to_string()),
+            (
+                r"uv = \d+\.\d+\.\d+".to_string(),
+                "uv = [UV_VERSION]".to_string(),
+            ),
+            (
+                r"extends-environment = .+".to_string(),
+                "extends-environment = [PARENT_VENV]".to_string(),
+            ),
+        ];
+        for filter in added_filters {
+            self.filters.insert(0, filter);
         }
         self
     }
@@ -874,6 +899,13 @@ impl TestContext {
     pub fn self_version(&self) -> Command {
         let mut command = self.new_command();
         command.arg("self").arg("version");
+        self.add_shared_options(&mut command, false);
+        command
+    }
+
+    pub fn self_update(&self) -> Command {
+        let mut command = self.new_command();
+        command.arg("self").arg("update");
         self.add_shared_options(&mut command, false);
         command
     }
@@ -1622,9 +1654,13 @@ pub async fn download_to_disk(url: &str, path: &Path) {
     let client = uv_client::BaseClientBuilder::new()
         .allow_insecure_host(trusted_hosts)
         .build();
-    let url: reqwest::Url = url.parse().unwrap();
+    let url = url.parse().unwrap();
     let client = client.for_host(&url);
-    let response = client.request(http::Method::GET, url).send().await.unwrap();
+    let response = client
+        .request(http::Method::GET, reqwest::Url::from(url))
+        .send()
+        .await
+        .unwrap();
 
     let mut file = tokio::fs::File::create(path).await.unwrap();
     let mut stream = response.bytes_stream();

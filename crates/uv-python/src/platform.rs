@@ -18,7 +18,7 @@ pub enum Error {
 }
 
 /// Architecture variants, e.g., with support for different instruction sets
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Ord, PartialOrd)]
 pub enum ArchVariant {
     /// Targets 64-bit Intel/AMD CPUs newer than Nehalem (2008).
     /// Includes SSE3, SSE4 and other post-2003 CPU instructions.
@@ -35,6 +35,33 @@ pub enum ArchVariant {
 pub struct Arch {
     pub(crate) family: target_lexicon::Architecture,
     pub(crate) variant: Option<ArchVariant>,
+}
+
+impl Ord for Arch {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if self.family == other.family {
+            return self.variant.cmp(&other.variant);
+        }
+
+        let native = Arch::from_env();
+
+        // Prefer native architectures
+        match (self.family == native.family, other.family == native.family) {
+            (true, true) => unreachable!(),
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            (false, false) => {
+                // Both non-native, fallback to lexicographic order
+                self.family.to_string().cmp(&other.family.to_string())
+            }
+        }
+    }
+}
+
+impl PartialOrd for Arch {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
@@ -116,7 +143,12 @@ impl Arch {
         // TODO: Implement `variant` support checks
 
         // Windows ARM64 runs emulated x86_64 binaries transparently
-        if cfg!(windows) && matches!(self.family, target_lexicon::Architecture::Aarch64(_)) {
+        // Similarly, macOS aarch64 runs emulated x86_64 binaries transparently if you have Rosetta
+        // installed. We don't try to be clever and check if that's the case here, we just assume
+        // that if x86_64 distributions are available, they're usable.
+        if (cfg!(windows) || cfg!(target_os = "macos"))
+            && matches!(self.family, target_lexicon::Architecture::Aarch64(_))
+        {
             return other.family == target_lexicon::Architecture::X86_64;
         }
 

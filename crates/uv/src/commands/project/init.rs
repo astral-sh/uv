@@ -24,6 +24,7 @@ use uv_python::{
 use uv_resolver::RequiresPython;
 use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;
+use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceError};
@@ -1235,6 +1236,7 @@ fn detect_git_repository(path: &Path) -> GitDiscoveryResult {
     let Ok(output) = Command::new(git)
         .arg("rev-parse")
         .arg("--is-inside-work-tree")
+        .env(EnvVars::LC_ALL, "C")
         .current_dir(path)
         .output()
     else {

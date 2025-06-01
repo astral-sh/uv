@@ -19,7 +19,7 @@ existing project, add it to the `[build-system]` section in your `pyproject.toml
 
 ```toml
 [build-system]
-requires = ["uv_build>=0.7.6,<0.8.0"]
+requires = ["uv_build>=0.7.9,<0.8.0"]
 build-backend = "uv_build"
 ```
 
@@ -53,6 +53,8 @@ expects to find `src/<package_name>/__init__.py`. These defaults can be changed 
 module-name = "PIL"
 module-root = ""
 ```
+
+The build backend supports building stubs packages with a `-stubs` package or module name.
 
 ## Include and exclude configuration
 

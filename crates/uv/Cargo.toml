@@ -1,6 +1,6 @@
 [package]
 name = "uv"
-version = "0.7.6"
+version = "0.7.9"
 edition = { workspace = true }
 rust-version = { workspace = true }
 homepage = { workspace = true }
@@ -58,7 +58,7 @@ uv-types = { workspace = true }
 uv-version = { workspace = true }
 uv-virtualenv = { workspace = true }
 uv-warnings = { workspace = true }
-uv-workspace = { workspace = true }
+uv-workspace = { workspace = true, features = ["clap"] }
 
 anstream = { workspace = true }
 anyhow = { workspace = true }
@@ -156,6 +156,7 @@ default-tests = [
     "pypi",
     "python",
     "python-managed",
+    "python-eol",
     "slow-tests",
     "test-ecosystem"
 ]
@@ -169,12 +170,20 @@ pypi = []
 python = []
 # Introduces a testing dependency on a local Python installation with specific patch versions.
 python-patch = []
+# Introduces a testing dependency on a local Python installation with an EOL version.
+python-eol = []
 # Introduces a testing dependency on managed Python installations.
 python-managed = []
 # Include "slow" test cases.
 slow-tests = []
 # Includes test cases that require ecosystem packages
 test-ecosystem = []
+# Build uvw binary on Windows
+windows-gui-bin = []
 
 [package.metadata.dist]
 dist = true
+
+[[bin]]
+name = "uvw"
+required-features = ["windows-gui-bin"]
