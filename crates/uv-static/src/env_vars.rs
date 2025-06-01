@@ -149,6 +149,9 @@ impl EnvVars {
     /// Disable use of uv-managed Python versions.
     pub const UV_NO_MANAGED_PYTHON: &'static str = "UV_NO_MANAGED_PYTHON";
 
+    /// Disable file locking (flock) operations or ignore 
+    pub const UV_UNSAGE_IGNORE_FLOCK: &'static str = "UV_UNSAGE_IGNORE_FLOCK";
+
     /// Equivalent to the
     /// [`python-downloads`](../reference/settings.md#python-downloads) setting and, when disabled, the
     /// `--no-python-downloads` option. Whether uv should allow Python downloads.

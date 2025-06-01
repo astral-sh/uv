@@ -1296,6 +1296,7 @@ impl AddSettings {
             tag,
             branch,
             no_sync,
+            unsage_ignore_flock,
             locked,
             frozen,
             active,
