@@ -10,6 +10,7 @@ use fs_err::File;
 use itertools::Itertools;
 use tracing::debug;
 
+use uv_configuration::PreviewMode;
 use uv_fs::{CWD, Simplified, cachedir};
 use uv_pypi_types::Scheme;
 use uv_python::managed::{DirectorySymlink, create_bin_link};
@@ -55,6 +56,7 @@ pub(crate) fn create(
     relocatable: bool,
     seed: bool,
     upgradeable: bool,
+    preview: PreviewMode,
 ) -> Result<VirtualEnvironment, Error> {
     // Determine the base Python executable; that is, the Python executable that should be
     // considered the "base" for the virtual environment.
@@ -147,7 +149,7 @@ pub(crate) fn create(
 
     let executable_target = if upgradeable && interpreter.is_standalone() {
         if let Some(directory_symlink) =
-            DirectorySymlink::from_executable(base_python.as_path(), &interpreter.key())
+            DirectorySymlink::from_executable(base_python.as_path(), &interpreter.key(), preview)
         {
             if tracing::enabled!(tracing::Level::DEBUG) {
                 let debug_symlink_term = if cfg!(windows) {
@@ -176,8 +178,9 @@ pub(crate) fn create(
     };
 
     // Per PEP 405, the Python `home` is the parent directory of the interpreter.
-    // For standalone interpreters, this `home` value will include a symlink directory
-    // on Unix or junction on Windows to enable transparent Python patch upgrades.
+    // In preview mode, for standalone interpreters, this `home` value will include a
+    // symlink directory on Unix or junction on Windows to enable transparent Python patch
+    // upgrades.
     let python_home = executable_target
         .parent()
         .ok_or_else(|| {

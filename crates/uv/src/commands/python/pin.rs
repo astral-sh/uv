@@ -8,6 +8,7 @@ use tracing::debug;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_configuration::PreviewMode;
 use uv_dirs::user_uv_config_dir;
 use uv_fs::Simplified;
 use uv_python::{
@@ -39,6 +40,7 @@ pub(crate) async fn pin(
     network_settings: NetworkSettings,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let workspace_cache = WorkspaceCache::default();
     let virtual_project = if no_project {
@@ -93,6 +95,7 @@ pub(crate) async fn pin(
                         virtual_project,
                         python_preference,
                         cache,
+                        preview,
                     );
                 }
             }
@@ -123,6 +126,7 @@ pub(crate) async fn pin(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
+        preview,
     )
     .await
     {
@@ -259,6 +263,7 @@ fn warn_if_existing_pin_incompatible_with_project(
     virtual_project: &VirtualProject,
     python_preference: PythonPreference,
     cache: &Cache,
+    preview: PreviewMode,
 ) {
     // Check if the pinned version is compatible with the project.
     if let Some(pin_version) = pep440_version_from_request(pin) {
@@ -283,6 +288,7 @@ fn warn_if_existing_pin_incompatible_with_project(
         EnvironmentPreference::OnlySystem,
         python_preference,
         cache,
+        preview,
     ) {
         Ok(python) => {
             let python_version = python.python_version();
