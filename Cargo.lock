@@ -4611,7 +4611,7 @@ dependencies = [
  "itertools 0.14.0",
  "jiff",
  "miette",
- "nix 0.29.0",
+ "nix 0.30.1",
  "owo-colors",
  "petgraph",
  "predicates",
