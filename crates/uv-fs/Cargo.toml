@@ -31,7 +31,7 @@ tempfile = { workspace = true }
 tokio = { workspace = true, optional = true}
 tracing = { workspace = true }
 
-#[target.'cfg(target_os = "windows")'.dependencies]
+[target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true }
 windows-core = { workspace = true }
 
