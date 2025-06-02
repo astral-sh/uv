@@ -26,6 +26,7 @@ async_zip = { workspace = true }
 blake2 = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
+liblzma-sys = { workspace = true }
 md-5 = { workspace = true }
 rayon = { workspace = true }
 reqwest = { workspace = true }
@@ -35,13 +36,12 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true, features = ["compat"] }
 tracing = { workspace = true }
-xz2 = { workspace = true }
 zip = { workspace = true }
 
 [features]
 default = []
 # Avoid a liblzma.so dependency
-static = ["xz2/static"]
+static = ["liblzma-sys/static"]
 
 [package.metadata.cargo-shear]
-ignored = ["xz2"]
+ignored = ["liblzma-sys"]
