@@ -91,7 +91,7 @@ pub(crate) async fn list(
             })
             .take_if(|extras| extras.peek().is_some())
             .map(|extras| {
-                let extras_str = extras.map(|extra| extra.to_string()).join(", ");
+                let extras_str = extras.map(ToString::to_string).join(", ");
                 format!(" [extras: {extras_str}]")
             })
             .unwrap_or_default();
