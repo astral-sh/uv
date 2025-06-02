@@ -602,7 +602,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let id = self
                     .build_context
                     .cache()
-                    .persist(temp_dir.into_path(), wheel_entry.path())
+                    .persist(temp_dir.keep(), wheel_entry.path())
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -773,7 +773,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 let id = self
                     .build_context
                     .cache()
-                    .persist(temp_dir.into_path(), wheel_entry.path())
+                    .persist(temp_dir.keep(), wheel_entry.path())
                     .await
                     .map_err(Error::CacheRead)?;
 
@@ -934,7 +934,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             let id = self
                 .build_context
                 .cache()
-                .persist(temp_dir.into_path(), wheel_entry.path())
+                .persist(temp_dir.keep(), wheel_entry.path())
                 .await
                 .map_err(Error::CacheWrite)?;
 
@@ -982,7 +982,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let id = self
             .build_context
             .cache()
-            .persist(temp_dir.into_path(), target)
+            .persist(temp_dir.keep(), target)
             .await
             .map_err(Error::CacheWrite)?;
 

@@ -117,9 +117,7 @@ impl CachedEnvironment {
         .await?;
 
         // Now that the environment is complete, sync it to its content-addressed location.
-        let id = cache
-            .persist(temp_dir.into_path(), cache_entry.path())
-            .await?;
+        let id = cache.persist(temp_dir.keep(), cache_entry.path()).await?;
         let root = cache.archive(&id);
 
         Ok(Self(PythonEnvironment::from_root(root, cache)?))

@@ -798,7 +798,7 @@ impl ManagedPythonDownload {
         // Extract the top-level directory.
         let mut extracted = match uv_extract::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
-            Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.into_path(),
+            Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.keep(),
             Err(err) => return Err(Error::ExtractError(filename.to_string(), err)),
         };
 
