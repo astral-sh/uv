@@ -1,6 +1,6 @@
 use std::path::Path;
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 #[allow(unsafe_code)] // We need to do an FFI call through the windows-* crates.
 fn get_binary_type(path: &Path) -> windows::core::Result<u32> {
     use std::os::windows::ffi::OsStrExt;
