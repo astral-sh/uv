@@ -29,7 +29,7 @@ $ uv init
 uv will create the following files:
 
 ```text
-.
+├── .gitignore
 ├── .python-version
 ├── README.md
 ├── main.py
