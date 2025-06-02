@@ -4419,7 +4419,7 @@ pub struct ToolListArgs {
     #[arg(long)]
     pub show_with: bool,
 
-    /// Wether to display the extra requirements installed with each tool.
+    /// Whether to display the extra requirements installed with each tool.
     #[arg(long)]
     pub show_extras: bool,
 
