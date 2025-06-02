@@ -77,7 +77,7 @@ anyhow = { version = "1.0.89" }
 arcstr = { version = "1.2.0" }
 astral-tokio-tar = { version = "0.5.1" }
 async-channel = { version = "2.3.1" }
-async-compression = { version = "0.4.12", features = ["bzip2", "gzip", "xz", "zstd"] }
+async-compression = { version = "0.4.23", features = ["bzip2", "gzip", "xz", "zstd"] }
 async-trait = { version = "0.1.82" }
 async_http_range_reader = { version = "0.9.1" }
 async_zip = { git = "https://github.com/charliermarsh/rs-async-zip", rev = "c909fda63fcafe4af496a07bfda28a5aae97e58d", features = ["bzip2", "deflate", "lzma", "tokio", "xz", "zstd"] }
@@ -121,6 +121,7 @@ indoc = { version = "2.0.5" }
 itertools = { version = "0.14.0" }
 jiff = { version = "0.2.0", features = ["serde"] }
 junction = { version = "1.2.0" }
+liblzma-sys = { version = "0.4.3" }
 mailparse = { version = "0.16.0" }
 md-5 = { version = "0.10.6" }
 memchr = { version = "2.7.4" }
@@ -189,11 +190,10 @@ windows-result = { version = "0.3.0" }
 windows-sys = { version = "0.59.0", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_IO", "Win32_System_Registry"] }
 winsafe = { version = "0.0.24", features = ["kernel"] }
 wiremock = { version = "0.6.2" }
-xz2 = { version = "0.1.7" }
 zip = { version = "2.2.3", default-features = false, features = ["deflate"] }
 
 [workspace.metadata.cargo-shear]
-ignored = ["flate2", "xz2"]
+ignored = ["flate2", "liblzma-sys"]
 
 [workspace.lints.rust]
 unsafe_code = "warn"
