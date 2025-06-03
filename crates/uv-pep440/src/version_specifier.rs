@@ -1387,7 +1387,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err().to_string(),
             indoc! {"
-            Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?):
+            Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?:
             3`2
             ^^^^
             "}
@@ -1810,7 +1810,7 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "\
-Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==5.4.3`?):
+Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==5.4.3`?:
 >=1.2.3, 5.4.3, >=3.4.5
         ^^^^^^
 "
