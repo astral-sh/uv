@@ -3,6 +3,20 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.10
+
+### Enhancements
+
+- Add `--show-extras` to `uv tool list` ([#13783](https://github.com/astral-sh/uv/pull/13783))
+- Add dynamically generated sysconfig replacement mappings ([#13441](https://github.com/astral-sh/uv/pull/13441))
+- Add data locations to install wheel logs ([#13797](https://github.com/astral-sh/uv/pull/13797))
+
+### Bug fixes
+
+- Avoid redaction of placeholder `git` username when using SSH authentication ([#13799](https://github.com/astral-sh/uv/pull/13799))
+- Propagate credentials to files on devpi indexes ending in `/+simple` ([#13743](https://github.com/astral-sh/uv/pull/13743))
+- Restore retention of credentials for direct URLs in `uv export` ([#13809](https://github.com/astral-sh/uv/pull/13809)) 
+
 ## 0.7.9
 
 ### Python
