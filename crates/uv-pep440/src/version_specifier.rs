@@ -1388,7 +1388,7 @@ mod tests {
             result.unwrap_err().to_string(),
             indoc! {"
             Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?:
-            3`2
+            3.12
             ^^^^
             "}
         );
