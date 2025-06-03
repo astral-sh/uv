@@ -8355,6 +8355,7 @@ fn lock_redact_url_sources() -> Result<()> {
 
     let lock = context.read("uv.lock");
 
+    // The credentials are for a direct URL, and are included in the lockfile
     insta::with_settings!({
         filters => context.filters(),
     }, {
