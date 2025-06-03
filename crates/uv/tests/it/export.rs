@@ -8,6 +8,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
+use std::path::Path;
 use std::process::Stdio;
 use uv_fs::Simplified;
 
@@ -1175,6 +1176,35 @@ fn requirements_txt_https_git_credentials() -> Result<()> {
     Ok(())
 }
 
+/// SSH blocks too permissive key files.
+fn reduce_key_permissions(key_file: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::fs::Permissions;
+        use std::os::unix::fs::PermissionsExt;
+        fs_err::set_permissions(key_file, Permissions::from_mode(0o400))?;
+    }
+    #[cfg(windows)]
+    {
+        use assert_fs::fixture::ChildPath;
+        use std::process::Command;
+
+        // https://superuser.com/a/1489152
+        Command::new("icacls")
+            .arg(key_file)
+            .arg("/inheritance:r")
+            .assert()
+            .success();
+        Command::new("icacls")
+            .arg(key_file)
+            .arg("/grant:r")
+            .arg(format!(r#"{}:R"#, whoami::username()))
+            .assert()
+            .success();
+    }
+    Ok(())
+}
+
 /// Don't redact the username `git` in SSH URLs.
 #[cfg(feature = "git")]
 #[test]
@@ -1194,23 +1224,7 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
 
     let fake_deploy_key = context.temp_dir.child("fake_deploy_key");
     fake_deploy_key.write_str("not a key")?;
-    #[cfg(windows)]
-    {
-        use std::process::Command;
-
-        // https://superuser.com/a/1489152
-        Command::new("icacls")
-            .arg(fake_deploy_key.path())
-            .arg("/inheritance:r")
-            .assert()
-            .success();
-        Command::new("icacls")
-            .arg(fake_deploy_key.path())
-            .arg("/grant:r")
-            .arg(format!(r#"{}:R"#, whoami::username()))
-            .assert()
-            .success();
-    }
+    reduce_key_permissions(&fake_deploy_key)?;
 
     // Ensure that we're loading the key and fail if it isn't present
     let failing_git_ssh_command = format!(
@@ -1254,30 +1268,8 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
 
     let ssh_deploy_key = context.temp_dir.child("uv_test_key");
     ssh_deploy_key.write_str((decode_token(&[SSH_DEPLOY_KEY]) + "\n").as_str())?;
-    // SSH blocks too permissive key files.
-    #[cfg(unix)]
-    {
-        use std::fs::Permissions;
-        use std::os::unix::fs::PermissionsExt;
-        fs_err::set_permissions(ssh_deploy_key.path(), Permissions::from_mode(0o400))?;
-    }
-    #[cfg(windows)]
-    {
-        use std::process::Command;
+    reduce_key_permissions(&ssh_deploy_key)?;
 
-        // https://superuser.com/a/1489152
-        Command::new("icacls")
-            .arg(ssh_deploy_key.path())
-            .arg("/inheritance:r")
-            .assert()
-            .success();
-        Command::new("icacls")
-            .arg(ssh_deploy_key.path())
-            .arg("/grant:r")
-            .arg(format!(r#"{}:R"#, whoami::username()))
-            .assert()
-            .success();
-    }
     // Use the specified SSH key, and only that key, ignore `~/.ssh/config`, disable host key
     // verification for Windows.
     let git_ssh_command = format!(
