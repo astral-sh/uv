@@ -15,15 +15,15 @@ uv supports creating virtual environments, e.g., to create a virtual environment
 $ uv venv
 ```
 
-!!! note
-
-    Running `uv venv` will overwrite any existing `.venv` directory.
-
 A specific name or path can be specified, e.g., to create a virtual environment at `my-name`:
 
 ```console
 $ uv venv my-name
 ```
+
+!!! note
+
+    Running `uv venv` will overwrite any existing virtual environment in the `.venv` directory. Specifying `my-name` will overwrite any existing virtual environment in the `my-name` directory. 
 
 A Python version can be requested, e.g., to create a virtual environment with Python 3.11:
 
