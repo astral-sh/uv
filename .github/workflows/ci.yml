@@ -223,10 +223,13 @@ jobs:
 
       - name: "Cargo test"
         run: |
-          cargo nextest run \
-            --features python-patch \
-            --workspace \
-            --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+          while true; do
+            cargo nextest run \
+              sync_dry_run \
+              --features python-patch \
+              --workspace \
+              --status-level fail --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+          done
 
   cargo-test-macos:
     timeout-minutes: 15
@@ -255,11 +258,14 @@ jobs:
 
       - name: "Cargo test"
         run: |
-          cargo nextest run \
-            --no-default-features \
-            --features python,python-managed,pypi,git,performance,crates-io \
-            --workspace \
-            --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+          while true; do
+              cargo nextest run \
+                sync_dry_run \
+                --no-default-features \
+                --features python,python-managed,pypi,git,performance,crates-io \
+                --workspace \
+                --status-level fail --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
+          done
 
   cargo-test-windows:
     timeout-minutes: 15
@@ -323,7 +329,7 @@ jobs:
             --no-default-features \
             --features python,pypi,python-managed \
             --workspace \
-            --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+            --status-level fail --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
       # Get crash dumps to debug the `exit_code: -1073741819` failures (contd.)
       - name: Analyze crashes
