@@ -9,6 +9,7 @@ use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use std::process::Stdio;
+use uv_fs::Simplified;
 
 #[test]
 fn requirements_txt_dependency() -> Result<()> {
@@ -1191,16 +1192,44 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
     "#,
     )?;
 
+    let fake_deploy_key = context.temp_dir.child("fake_deploy_key");
+    fake_deploy_key.write_str("not a key")?;
+    #[cfg(windows)]
+    {
+        use std::process::Command;
+
+        // https://superuser.com/a/1489152
+        Command::new("icacls")
+            .arg(fake_deploy_key.path())
+            .arg("/inheritance:r")
+            .assert()
+            .success();
+        Command::new("icacls")
+            .arg(fake_deploy_key.path())
+            .arg("/grant:r")
+            .arg(format!(r#"{}:R"#, whoami::username()))
+            .assert()
+            .success();
+    }
+
     // Ensure that we're loading the key and fail if it isn't present
-    let failing_git_ssh_command = "ssh -i /dev/null -o IdentitiesOnly=yes -F /dev/null";
+    let failing_git_ssh_command = format!(
+        "ssh -i {} -o IdentitiesOnly=yes -F /dev/null -o StrictHostKeyChecking=no",
+        fake_deploy_key.portable_display()
+    );
     let mut filters = context.filters();
     filters.push((
-        "process didn't exit successfully: `.* fetch",
-        "process didn't exit successfully: `git fetch",
+        "process didn't exit successfully: .*",
+        "process didn't exit successfully: [GIT_COMMAND_ERROR]",
+    ));
+    let load_key_error = regex::escape(r#"Load key "[TEMP_DIR]/fake_deploy_key":"#) + ".*";
+    filters.push((
+        &load_key_error,
+        r#"Load key "[TEMP_DIR]/fake_deploy_key": [ERROR]"#,
     ));
     filters.push((
-        r#"Load key "/dev/null": error in libcrypto"#,
-        r#"Load key "/dev/null": [ERROR]"#,
+        " *Warning: Permanently added 'github.com' \\(ED25519\\) to the list of known hosts.*\n",
+        "",
     ));
     filters.push(("failed to clone into: .*", "failed to clone into: [PATH]"));
     uv_snapshot!(filters, context.export().env("GIT_SSH_COMMAND", failing_git_ssh_command), @r#"
@@ -1213,9 +1242,9 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
       ├─▶ Git operation failed
       ├─▶ failed to clone into: [PATH]
       ├─▶ failed to fetch branch, tag, or commit `d780faf0ac91257d4d5a4f0c5a0e4509608c0071`
-      ╰─▶ process didn't exit successfully: `git fetch --tags --force --update-head-ok 'ssh://git@github.com/astral-test/uv-private-pypackage.git' '+refs/heads/*:refs/remotes/origin/*' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
+      ╰─▶ process didn't exit successfully: [GIT_COMMAND_ERROR]
           --- stderr
-          Load key "/dev/null": [ERROR]
+          Load key "[TEMP_DIR]/fake_deploy_key": [ERROR]
           git@github.com: Permission denied (publickey).
           fatal: Could not read from remote repository.
 
@@ -1232,10 +1261,28 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
         use std::os::unix::fs::PermissionsExt;
         fs_err::set_permissions(ssh_deploy_key.path(), Permissions::from_mode(0o400))?;
     }
-    // Use the specified SSH key, and only that key, ignore `~/.ssh/config`.
+    #[cfg(windows)]
+    {
+        use std::process::Command;
+
+        // https://superuser.com/a/1489152
+        Command::new("icacls")
+            .arg(ssh_deploy_key.path())
+            .arg("/inheritance:r")
+            .assert()
+            .success();
+        Command::new("icacls")
+            .arg(ssh_deploy_key.path())
+            .arg("/grant:r")
+            .arg(format!(r#"{}:R"#, whoami::username()))
+            .assert()
+            .success();
+    }
+    // Use the specified SSH key, and only that key, ignore `~/.ssh/config`, disable host key
+    // verification for Windows.
     let git_ssh_command = format!(
-        "ssh -i {} -o IdentitiesOnly=yes -F /dev/null",
-        ssh_deploy_key.display()
+        "ssh -i {} -o IdentitiesOnly=yes -F /dev/null -o StrictHostKeyChecking=no",
+        ssh_deploy_key.portable_display()
     );
 
     uv_snapshot!(context.filters(), context.export().env("GIT_SSH_COMMAND", git_ssh_command), @r"

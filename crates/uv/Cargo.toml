@@ -124,6 +124,7 @@ reqwest = { workspace = true, features = ["blocking"], default-features = false 
 similar = { version = "2.6.0" }
 tar = { workspace = true }
 tempfile = { workspace = true }
+whoami = { version = "1.6.0" }
 wiremock = { workspace = true }
 zip = { workspace = true }
 
