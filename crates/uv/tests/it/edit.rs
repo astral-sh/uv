@@ -11424,7 +11424,7 @@ fn add_invalid_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.add().arg("anyio"), @r###"
+    uv_snapshot!(context.add().arg("anyio"), @r#"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -11435,10 +11435,10 @@ fn add_invalid_requires_python() -> Result<()> {
       |
     4 | requires-python = "3.12"
       |                   ^^^^^^
-    Failed to parse version: Unexpected end of version specifier, expected operator (did you mean "==3.12"?):
+    Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?:
     3.12
     ^^^^
-    "###);
+    "#);
 
     Ok(())
 }
