@@ -91,7 +91,10 @@ impl DisplaySafeUrl {
     pub fn remove_credentials(&mut self) {
         // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
         // username.
-        if self.0.scheme() == "ssh" && self.0.username() == "git" && self.0.password().is_none() {
+        if matches!(self.0.scheme(), "git+ssh" | "ssh")
+            && self.0.username() == "git"
+            && self.0.password().is_none()
+        {
             return;
         }
         let _ = self.0.set_username("");
@@ -177,6 +180,15 @@ fn display_with_redacted_credentials(
     f: &mut std::fmt::Formatter<'_>,
 ) -> std::fmt::Result {
     if url.password().is_none() && url.username() == "" {
+        return write!(f, "{url}");
+    }
+
+    // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
+    // username.
+    if matches!(url.scheme(), "git+ssh" | "ssh")
+        && url.username() == "git"
+        && url.password().is_none()
+    {
         return write!(f, "{url}");
     }
 
