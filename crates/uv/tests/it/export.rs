@@ -1186,7 +1186,6 @@ fn reduce_key_permissions(key_file: &Path) -> Result<()> {
     }
     #[cfg(windows)]
     {
-        use assert_fs::fixture::ChildPath;
         use std::process::Command;
 
         // https://superuser.com/a/1489152
@@ -1198,7 +1197,7 @@ fn reduce_key_permissions(key_file: &Path) -> Result<()> {
         Command::new("icacls")
             .arg(key_file)
             .arg("/grant:r")
-            .arg(format!(r#"{}:R"#, whoami::username()))
+            .arg(format!("{}:R", whoami::username()))
             .assert()
             .success();
     }
