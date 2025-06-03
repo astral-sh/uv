@@ -717,7 +717,7 @@ impl std::fmt::Display for VersionOperatorBuildError {
             let version_specifier =
                 VersionSpecifier::from_pattern(Operator::Equal, version_pattern.clone()).unwrap();
             write!(f, ". Did you mean `{version_specifier}`?")?;
-        };
+        }
         Ok(())
     }
 }
@@ -1386,11 +1386,11 @@ mod tests {
         let result = VersionSpecifiers::from_str("3.12");
         assert_eq!(
             result.unwrap_err().to_string(),
-            indoc! {r#"
+            indoc! {"
             Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?):
             3`2
             ^^^^
-            "#}
+            "}
         );
     }
 
