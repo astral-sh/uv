@@ -91,10 +91,7 @@ impl DisplaySafeUrl {
     pub fn remove_credentials(&mut self) {
         // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
         // username.
-        if matches!(self.0.scheme(), "git+ssh" | "ssh")
-            && self.0.username() == "git"
-            && self.0.password().is_none()
-        {
+        if is_ssh_git_username(&self.0) {
             return;
         }
         let _ = self.0.set_username("");
@@ -131,7 +128,11 @@ impl Display for DisplaySafeUrl {
 impl Debug for DisplaySafeUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let url = &self.0;
-        let (username, password) = if url.username() != "" && url.password().is_some() {
+        // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid masking the
+        // username.
+        let (username, password) = if is_ssh_git_username(url) {
+            (url.username(), None)
+        } else if url.username() != "" && url.password().is_some() {
             (url.username(), Some("****"))
         } else if url.username() != "" {
             ("****", None)
@@ -175,6 +176,10 @@ impl FromStr for DisplaySafeUrl {
     }
 }
 
+fn is_ssh_git_username(url: &Url) -> bool {
+    matches!(url.scheme(), "ssh" | "git+ssh") && url.username() == "git" && url.password().is_none()
+}
+
 fn display_with_redacted_credentials(
     url: &Url,
     f: &mut std::fmt::Formatter<'_>,
@@ -185,10 +190,7 @@ fn display_with_redacted_credentials(
 
     // For URLs that use the `git` convention (i.e., `ssh://git@github.com/...`), avoid dropping the
     // username.
-    if matches!(url.scheme(), "git+ssh" | "ssh")
-        && url.username() == "git"
-        && url.password().is_none()
-    {
+    if is_ssh_git_username(url) {
         return write!(f, "{url}");
     }
 
@@ -274,6 +276,21 @@ mod tests {
     }
 
     #[test]
+    fn from_url_git_username() {
+        let ssh_str = "ssh://git@github.com/org/repo";
+        let ssh_url = DisplaySafeUrl::parse(ssh_str).unwrap();
+        assert_eq!(ssh_url.username(), "git");
+        assert!(ssh_url.password().is_none());
+        assert_eq!(format!("{ssh_url}"), ssh_str);
+        // Test again for the `git+ssh` scheme
+        let git_ssh_str = "git+ssh://git@github.com/org/repo";
+        let git_ssh_url = DisplaySafeUrl::parse(git_ssh_str).unwrap();
+        assert_eq!(git_ssh_url.username(), "git");
+        assert!(git_ssh_url.password().is_none());
+        assert_eq!(format!("{git_ssh_url}"), git_ssh_str);
+    }
+
+    #[test]
     fn parse_url_string() {
         let url_str = "https://user:pass@pypi-proxy.fly.dev/basic-auth/simple";
         let log_safe_url = DisplaySafeUrl::parse(url_str).unwrap();
@@ -296,6 +313,23 @@ mod tests {
             format!("{log_safe_url}"),
             "https://pypi-proxy.fly.dev/basic-auth/simple"
         );
+    }
+
+    #[test]
+    fn preserve_ssh_git_username_on_remove_credentials() {
+        let ssh_str = "ssh://git@pypi-proxy.fly.dev/basic-auth/simple";
+        let mut ssh_url = DisplaySafeUrl::parse(ssh_str).unwrap();
+        ssh_url.remove_credentials();
+        assert_eq!(ssh_url.username(), "git");
+        assert!(ssh_url.password().is_none());
+        assert_eq!(format!("{ssh_url}"), ssh_str);
+        // Test again for `git+ssh` scheme
+        let git_ssh_str = "git+ssh://git@pypi-proxy.fly.dev/basic-auth/simple";
+        let mut git_shh_url = DisplaySafeUrl::parse(git_ssh_str).unwrap();
+        git_shh_url.remove_credentials();
+        assert_eq!(git_shh_url.username(), "git");
+        assert!(git_shh_url.password().is_none());
+        assert_eq!(format!("{git_shh_url}"), git_ssh_str);
     }
 
     #[test]
