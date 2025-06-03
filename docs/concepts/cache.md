@@ -156,6 +156,19 @@ built from source. We recommend running `uv cache prune --ci` at the end of your
 integration job to ensure maximum cache efficiency. For an example, see the
 [GitHub integration guide](../guides/integration/github.md#caching).
 
+## Sharing caching with multiple (parallel running) containers
+
+UV supports using the same cache between multiple processes on the same machine but this also might
+work between different containers running on the same machine.
+
+This is especially useful in CI systems when you run - in parallel - multiple, containers running
+your CI tests where you want to run `uv sync` as part of your CI tests. In such case you can share
+the cache between the containers to speed up the installation of dependencies and limit network
+traffic and load on the registry you are using.
+
+In order to do it, the folder where the cache is stored must be mounted to the `~/.cache/uv`
+directory in all the running containers as read/write volumes.
+
 ## Cache directory
 
 uv determines the cache directory according to, in order:
