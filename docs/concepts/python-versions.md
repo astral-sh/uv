@@ -160,30 +160,49 @@ $ uv python install 3.12.8 --preview  # Updates `python3.12` to point to 3.12.8
 
 ## Upgrading Python patch versions
 
-uv-managed Python minor versions can be upgraded to the latest supported patch release. This is not
-currently supported for PyPy and GraalPy implementations.
+!!! important
+
+    Support for upgrading Python patch versions is in _preview_, this means the behavior is experimental
+    and subject to change.
+
+uv-managed Python minor versions can be upgraded to the latest supported patch release with the
+`--preview` flag. This is not currently supported for PyPy and GraalPy implementations.
 
 To upgrade a Python minor version to the latest supported patch release:
 
 ```console
-$ uv python upgrade 3.12
+$ uv python upgrade 3.12 --preview
 ```
 
 To upgrade all installed Python minor versions to their latest supported patch releases:
 
 ```console
-$ uv python upgrade
+$ uv python upgrade --preview
 ```
 
-All virtual environments created by uv on a managed minor version will transparently upgrade when
-that minor version is upgraded.
+All virtual environments created by uv with the `--preview` flag on a managed minor version will
+transparently upgrade when that minor version is upgraded. This means:
 
-Transparent upgrades are supported for virtual environments created:
+- When you upgrade a Python minor version (e.g., from 3.12.1 to 3.12.2), all virtual environments
+  pointing to that minor version will automatically use the new patch version. No manual recreation
+  of virtual environments is needed after upgrading the Python patch version.
+- Virtual environments created with a specific patch version (e.g., `uv venv -p 3.10.8`) will remain
+  on that patch version regardless of upgrades.
 
-- With `uv venv`.
-- With `uv run python -m venv` (as long as the Python being run is a uv-managed CPython
-  implementation).
-- Within virtual environments created in any of these ways.
+Technically, this works by having virtual environments point to a uv-managed minor version symlink
+directory (or junction on Windows) that points to the latest supported patch version.
+
+Transparent upgrades are supported for virtual environments created in any of these ways:
+
+- With `uv venv --preview`
+- With `uv run --preview python -m venv` (as long as the Python being run is a uv-managed CPython
+  implementation)
+- Within virtual environments created in any of these ways
+
+!!! tip
+
+    Upgrading Python patch versions ensures you have the latest security fixes and bug fixes
+    without needing to recreate your virtual environments.
 
 ## Project Python versions
 
