@@ -1294,6 +1294,45 @@ jobs:
         run: |
           .\uv.exe pip install anyio
 
+  integration-test-pyodide-linux:
+    timeout-minutes: 10
+    needs: build-binary-linux-libc
+    name: "integration test | pyodide on ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-libc-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create a native virtual environment"
+        run: |
+          ./uv venv venv-native -p 3.12
+          # We use features added in 0.30.3 but there is no known breakage in
+          # newer versions.
+          ./uv pip install -p venv-native/bin/python pyodide-build==0.30.3 pip
+
+      - name: "Install pyodide interpreter"
+        run: |
+          source ./venv-native/bin/activate
+          pyodide xbuildenv install 0.27.5
+          PYODIDE_PYTHON=$(pyodide config get interpreter)
+          PYODIDE_INDEX=$(pyodide config get package_index)
+          echo "PYODIDE_PYTHON=$PYODIDE_PYTHON" >> $GITHUB_ENV
+          echo "PYODIDE_INDEX=$PYODIDE_INDEX" >> $GITHUB_ENV
+
+      - name: "Create pyodide virtual environment"
+        run: |
+          ./uv venv -p $PYODIDE_PYTHON venv-pyodide
+          source ./venv-pyodide/bin/activate
+          ./uv pip install --extra-index-url=$PYODIDE_INDEX --no-build numpy
+          python -c 'import numpy'
+
   integration-test-github-actions:
     timeout-minutes: 10
     needs: build-binary-linux-libc

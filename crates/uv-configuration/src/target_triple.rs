@@ -226,6 +226,10 @@ pub enum TargetTriple {
     #[serde(rename = "aarch64-manylinux_2_40")]
     #[serde(alias = "aarch64-manylinux240")]
     Aarch64Manylinux240,
+
+    /// A wasm32 target using the the Pyodide 2024 platform. Meant for use with Python 3.12.
+    #[cfg_attr(feature = "clap", value(name = "wasm32-pyodide2024"))]
+    Wasm32Pyodide2024,
 }
 
 impl TargetTriple {
@@ -450,6 +454,13 @@ impl TargetTriple {
                 },
                 Arch::Aarch64,
             ),
+            Self::Wasm32Pyodide2024 => Platform::new(
+                Os::Pyodide {
+                    major: 2024,
+                    minor: 0,
+                },
+                Arch::Wasm32,
+            ),
         }
     }
 
@@ -490,6 +501,7 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => "aarch64",
             Self::Aarch64Manylinux239 => "aarch64",
             Self::Aarch64Manylinux240 => "aarch64",
+            Self::Wasm32Pyodide2024 => "wasm32",
         }
     }
 
@@ -530,6 +542,7 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => "Linux",
             Self::Aarch64Manylinux239 => "Linux",
             Self::Aarch64Manylinux240 => "Linux",
+            Self::Wasm32Pyodide2024 => "Emscripten",
         }
     }
 
@@ -570,6 +583,10 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => "",
             Self::Aarch64Manylinux239 => "",
             Self::Aarch64Manylinux240 => "",
+            // This is the value Emscripten gives for its version:
+            // https://github.com/emscripten-core/emscripten/blob/4.0.8/system/lib/libc/emscripten_syscall_stubs.c#L63
+            // It doesn't really seem to mean anything? But for completeness we include it here.
+            Self::Wasm32Pyodide2024 => "#1",
         }
     }
 
@@ -610,6 +627,9 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => "",
             Self::Aarch64Manylinux239 => "",
             Self::Aarch64Manylinux240 => "",
+            // This is the Emscripten compiler version for Pyodide 2024.
+            // See https://pyodide.org/en/stable/development/abi.html#pyodide-2024-0
+            Self::Wasm32Pyodide2024 => "3.1.58",
         }
     }
 
@@ -650,6 +670,7 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => "posix",
             Self::Aarch64Manylinux239 => "posix",
             Self::Aarch64Manylinux240 => "posix",
+            Self::Wasm32Pyodide2024 => "posix",
         }
     }
 
@@ -690,6 +711,7 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => "linux",
             Self::Aarch64Manylinux239 => "linux",
             Self::Aarch64Manylinux240 => "linux",
+            Self::Wasm32Pyodide2024 => "emscripten",
         }
     }
 
@@ -730,6 +752,7 @@ impl TargetTriple {
             Self::Aarch64Manylinux238 => true,
             Self::Aarch64Manylinux239 => true,
             Self::Aarch64Manylinux240 => true,
+            Self::Wasm32Pyodide2024 => false,
         }
     }
 
