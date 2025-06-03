@@ -1178,9 +1178,6 @@ fn requirements_txt_https_git_credentials() -> Result<()> {
 #[cfg(feature = "git")]
 #[test]
 fn requirements_txt_ssh_git_username() -> Result<()> {
-    use std::fs::Permissions;
-    use std::os::unix::fs::PermissionsExt;
-
     let context = TestContext::new("3.12");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -1229,7 +1226,12 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
     let ssh_deploy_key = context.temp_dir.child("uv_test_key");
     ssh_deploy_key.write_str((decode_token(&[SSH_DEPLOY_KEY]) + "\n").as_str())?;
     // SSH blocks too permissive key files.
-    fs_err::set_permissions(ssh_deploy_key.path(), Permissions::from_mode(0o400))?;
+    #[cfg(unix)]
+    {
+        use std::fs::Permissions;
+        use std::os::unix::fs::PermissionsExt;
+        fs_err::set_permissions(ssh_deploy_key.path(), Permissions::from_mode(0o400))?;
+    }
     // Use the specified SSH key, and only that key, ignore `~/.ssh/config`.
     let git_ssh_command = format!(
         "ssh -i {} -o IdentitiesOnly=yes -F /dev/null",
