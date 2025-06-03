@@ -33,7 +33,7 @@ fn command(context: &TestContext, python_versions: &[&str]) -> Command {
         .arg(packse_index_url())
         .arg("--find-links")
         .arg(build_vendor_links_url());
-    context.add_shared_args(&mut command, true);
+    context.add_shared_options(&mut command, true);
     command.env_remove(EnvVars::UV_EXCLUDE_NEWER);
     command.env(EnvVars::UV_TEST_PYTHON_PATH, python_path);
 

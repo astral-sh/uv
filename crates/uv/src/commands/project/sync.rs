@@ -39,10 +39,10 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, detect_conflicts, script_specification, update_environment,
     PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment, UniversalState,
+    default_dependency_groups, detect_conflicts, script_specification, update_environment,
 };
-use crate::commands::{diagnostics, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings};
 
@@ -470,6 +470,7 @@ pub(crate) async fn sync(
 
 /// The outcome of a `lock` operation within a `sync` operation.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Outcome {
     /// The `lock` operation was successful.
     Success(Lock),

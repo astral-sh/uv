@@ -319,14 +319,11 @@ pub fn relative_to(
                 .map(|stripped| (stripped, ancestor))
         })
         .ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Trivial strip failed: {} vs. {}",
-                    path.simplified_display(),
-                    base.simplified_display()
-                ),
-            )
+            std::io::Error::other(format!(
+                "Trivial strip failed: {} vs. {}",
+                path.simplified_display(),
+                base.simplified_display()
+            ))
         })?;
 
     // go as many levels up as required

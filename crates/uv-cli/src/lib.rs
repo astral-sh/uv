@@ -3,12 +3,11 @@ use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use anyhow::{anyhow, Result};
-use clap::builder::styling::{AnsiColor, Effects, Style};
+use anyhow::{Result, anyhow};
 use clap::builder::Styles;
+use clap::builder::styling::{AnsiColor, Effects, Style};
 use clap::{Args, Parser, Subcommand};
 
-use url::Url;
 use uv_cache::CacheArgs;
 use uv_configuration::{
     ConfigSettingEntry, ExportFormat, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
@@ -19,9 +18,11 @@ use uv_normalize::{ExtraName, GroupName, PackageName, PipGroupName};
 use uv_pep508::{MarkerTree, Requirement};
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
+use uv_workspace::pyproject_mut::AddBoundsKind;
 
 pub mod comma;
 pub mod compat;
@@ -493,8 +494,6 @@ pub enum Commands {
     /// Clear the cache, removing all entries or those linked to specific packages.
     #[command(hide = true)]
     Clean(CleanArgs),
-    /// Read or update the project's version.
-    Version(VersionArgs),
     /// Generate shell completion
     #[command(alias = "--generate-shell-completion", hide = true)]
     GenerateShellCompletion(GenerateShellCompletionArgs),
@@ -525,29 +524,91 @@ pub struct HelpArgs {
     pub command: Option<Vec<String>>,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args)]
 #[command(group = clap::ArgGroup::new("operation"))]
+#[allow(clippy::struct_excessive_bools)]
 pub struct VersionArgs {
     /// Set the project version to this value
     ///
     /// To update the project using semantic versioning components instead, use `--bump`.
     #[arg(group = "operation")]
     pub value: Option<String>,
+
     /// Update the project version using the given semantics
     #[arg(group = "operation", long)]
     pub bump: Option<VersionBump>,
+
     /// Don't write a new version to the `pyproject.toml`
     ///
     /// Instead, the version will be displayed.
     #[arg(long)]
     pub dry_run: bool,
+
     /// Only show the version
     ///
     /// By default, uv will show the project name before the version.
     #[arg(long)]
     pub short: bool,
+
+    /// The format of the output
     #[arg(long, value_enum, default_value = "text")]
     pub output_format: VersionFormat,
+
+    /// Avoid syncing the virtual environment after re-locking the project.
+    #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
+    pub no_sync: bool,
+
+    /// Prefer the active virtual environment over the project's virtual environment.
+    ///
+    /// If the project virtual environment is active or no virtual environment is active, this has
+    /// no effect.
+    #[arg(long, overrides_with = "no_active")]
+    pub active: bool,
+
+    /// Prefer project's virtual environment over an active environment.
+    ///
+    /// This is the default behavior.
+    #[arg(long, overrides_with = "active", hide = true)]
+    pub no_active: bool,
+
+    /// Assert that the `uv.lock` will remain unchanged.
+    ///
+    /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
+    /// uv will exit with an error.
+    #[arg(long, env = EnvVars::UV_LOCKED, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["frozen", "upgrade"])]
+    pub locked: bool,
+
+    /// Update the version without re-locking the project.
+    ///
+    /// The project environment will not be synced.
+    #[arg(long, env = EnvVars::UV_FROZEN, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with_all = ["locked", "upgrade", "no_sources"])]
+    pub frozen: bool,
+
+    #[command(flatten)]
+    pub installer: ResolverInstallerArgs,
+
+    #[command(flatten)]
+    pub build: BuildOptionsArgs,
+
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
+
+    /// Update the version of a specific package in the workspace.
+    #[arg(long, conflicts_with = "isolated")]
+    pub package: Option<PackageName>,
+
+    /// The Python interpreter to use for resolving and syncing.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_PYTHON,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
+    )]
+    pub python: Option<Maybe<String>>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, clap::ValueEnum)]
@@ -776,10 +837,6 @@ pub enum ProjectCommand {
     /// it includes markers that differ from the existing specifier in which case another entry for
     /// the dependency will be added.
     ///
-    /// If no constraint or URL is provided for a dependency, a lower bound is added equal to the
-    /// latest compatible version of the package, e.g., `>=1.2.3`, unless `--frozen` is provided, in
-    /// which case no resolution is performed.
-    ///
     /// The lockfile and project environment will be updated to reflect the added dependencies. To
     /// skip updating the lockfile, use `--frozen`. To skip updating the environment, use
     /// `--no-sync`.
@@ -819,6 +876,8 @@ pub enum ProjectCommand {
         after_long_help = ""
     )]
     Remove(RemoveArgs),
+    /// Read or update the project's version.
+    Version(VersionArgs),
     /// Update the project's environment.
     ///
     /// Syncing ensures that all project dependencies are installed and up-to-date with the
@@ -3500,6 +3559,19 @@ pub struct AddArgs {
     )]
     pub raw: bool,
 
+    /// The kind of version specifier to use when adding dependencies.
+    ///
+    /// When adding a dependency to the project, if no constraint or URL is provided, a constraint
+    /// is added based on the latest compatible version of the package. By default, a lower bound
+    /// constraint is used, e.g., `>=1.2.3`.
+    ///
+    /// When `--frozen` is provided, no resolution is performed, and dependencies are always added
+    /// without constraints.
+    ///
+    /// This option is in preview and may change in any future release.
+    #[arg(long, value_enum)]
+    pub bounds: Option<AddBoundsKind>,
+
     /// Commit to use when adding a dependency from Git.
     #[arg(long, group = "git-ref", action = clap::ArgAction::Set)]
     pub rev: Option<String>,
@@ -4347,6 +4419,10 @@ pub struct ToolListArgs {
     #[arg(long)]
     pub show_with: bool,
 
+    /// Whether to display the extra requirements installed with each tool.
+    #[arg(long)]
+    pub show_extras: bool,
+
     // Hide unused global Python options.
     #[arg(long, hide = true)]
     pub python_preference: Option<PythonPreference>,
@@ -4954,9 +5030,6 @@ pub struct PythonPinArgs {
     ///
     /// When a local Python version pin is not found in the working directory or an ancestor
     /// directory, this version will be used instead.
-    ///
-    /// Unlike local version pins, this version is used as the default for commands that mutate
-    /// global state, like `uv tool install`.
     #[arg(long)]
     pub global: bool,
 }
@@ -5838,7 +5911,7 @@ pub struct PublishArgs {
     ///
     /// Defaults to PyPI's publish URL (<https://upload.pypi.org/legacy/>).
     #[arg(long, env = EnvVars::UV_PUBLISH_URL)]
-    pub publish_url: Option<Url>,
+    pub publish_url: Option<DisplaySafeUrl>,
 
     /// Check an index URL for existing files to skip duplicate uploads.
     ///

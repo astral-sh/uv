@@ -5,8 +5,8 @@ use indoc::indoc;
 
 use uv_static::EnvVars;
 
-use crate::common::uv_snapshot;
 use crate::common::TestContext;
+use crate::common::uv_snapshot;
 
 /// `cache prune` should be a no-op if there's nothing out-of-date in the cache.
 #[test]

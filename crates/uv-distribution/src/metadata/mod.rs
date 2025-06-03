@@ -142,11 +142,6 @@ impl ArchiveMetadata {
             hashes: HashDigests::empty(),
         }
     }
-
-    /// Create an [`ArchiveMetadata`] with the given metadata and hashes.
-    pub fn with_hashes(metadata: Metadata, hashes: HashDigests) -> Self {
-        Self { metadata, hashes }
-    }
 }
 
 impl From<Metadata> for ArchiveMetadata {

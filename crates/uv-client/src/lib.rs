@@ -1,6 +1,6 @@
 pub use base_client::{
-    is_extended_transient_error, AuthIntegration, BaseClient, BaseClientBuilder, ExtraMiddleware,
-    UvRetryableStrategy, DEFAULT_RETRIES,
+    AuthIntegration, BaseClient, BaseClientBuilder, DEFAULT_RETRIES, ExtraMiddleware,
+    UvRetryableStrategy, is_extended_transient_error,
 };
 pub use cached_client::{CacheControl, CachedClient, CachedClientError, DataWithCachePolicy};
 pub use error::{Error, ErrorKind, WrappedReqwestError};

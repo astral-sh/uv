@@ -446,6 +446,10 @@ The name of the module directory inside `module-root`.
 
 The default module name is the package name with dots and dashes replaced by underscores.
 
+Package names need to be valid Python identifiers, and the directory needs to contain a
+`__init__.py`. An exception are stubs packages, whose name ends with `-stubs`, with the stem
+being the module name, and which contain a `__init__.pyi` file.
+
 Note that using this option runs the risk of creating two packages with different names but
 the same module names. Installing such packages together leads to unspecified behavior,
 often with corrupted files or directory trees.
@@ -588,6 +592,44 @@ members = ["member1", "path/to/member2", "libs/*"]
 ---
 
 ## Configuration
+### [`add-bounds`](#add-bounds) {: #add-bounds }
+
+The default version specifier when adding a dependency.
+
+When adding a dependency to the project, if no constraint or URL is provided, a constraint
+is added based on the latest compatible version of the package. By default, a lower bound
+constraint is used, e.g., `>=1.2.3`.
+
+When `--frozen` is provided, no resolution is performed, and dependencies are always added
+without constraints.
+
+This option is in preview and may change in any future release.
+
+**Default value**: `"lower"`
+
+**Possible values**:
+
+- `"lower"`: Only a lower bound, e.g., `>=1.2.3`
+- `"major"`: Allow the same major version, similar to the semver caret, e.g., `>=1.2.3, <2.0.0`
+- `"minor"`: Allow the same minor version, similar to the semver tilde, e.g., `>=1.2.3, <1.3.0`
+- `"exact"`: Pin the exact version, e.g., `==1.2.3`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    add-bounds = "major"
+    ```
+=== "uv.toml"
+
+    ```toml
+    add-bounds = "major"
+    ```
+
+---
+
 ### [`allow-insecure-host`](#allow-insecure-host) {: #allow-insecure-host }
 
 Allow insecure connections to host.
@@ -918,11 +960,11 @@ standard, though only the following fields are respected:
 
 ### [`exclude-newer`](#exclude-newer) {: #exclude-newer }
 
-Limit candidate packages to those that were uploaded prior to the given date.
+Limit candidate packages to those that were uploaded prior to a given point in time.
 
-Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-`2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
-system's configured time zone.
+Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
+`2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
+behave consistently across timezones.
 
 **Default value**: `None`
 
@@ -934,12 +976,12 @@ system's configured time zone.
 
     ```toml
     [tool.uv]
-    exclude-newer = "2006-12-02"
+    exclude-newer = "2006-12-02T02:07:43Z"
     ```
 === "uv.toml"
 
     ```toml
-    exclude-newer = "2006-12-02"
+    exclude-newer = "2006-12-02T02:07:43Z"
     ```
 
 ---

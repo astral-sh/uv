@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use either::Either;
 use thiserror::Error;
-use url::Url;
 
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
@@ -13,10 +12,11 @@ use uv_distribution_types::{
 use uv_git_types::{GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
-use uv_pep508::{looks_like_git_repository, MarkerTree, VerbatimUrl, VersionOrUrl};
+use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository};
 use uv_pypi_types::{ConflictItem, ParsedUrlError, VerbatimParsedUrl};
-use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
+use uv_redacted::DisplaySafeUrl;
 use uv_workspace::Workspace;
+use uv_workspace::pyproject::{PyProjectToml, Source, Sources};
 
 use crate::metadata::GitWorkspaceMember;
 
@@ -285,8 +285,7 @@ impl LoweredRequirement {
                             // relative to main workspace: `../current_workspace/packages/current_project`
                             let url = VerbatimUrl::from_absolute_path(member.root())?;
                             let install_path = url.to_file_path().map_err(|()| {
-                                LoweringError::RelativeTo(io::Error::new(
-                                    io::ErrorKind::Other,
+                                LoweringError::RelativeTo(io::Error::other(
                                     "Invalid path in file URL",
                                 ))
                             })?;
@@ -529,11 +528,11 @@ pub enum LoweringError {
     #[error(transparent)]
     InvalidVerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
     #[error("Fragments are not allowed in URLs: `{0}`")]
-    ForbiddenFragment(Url),
+    ForbiddenFragment(DisplaySafeUrl),
     #[error(
         "`{0}` is associated with a URL source, but references a Git repository. Consider using a Git source instead (e.g., `{0} = {{ git = \"{1}\" }}`)"
     )]
-    MissingGitSource(PackageName, Url),
+    MissingGitSource(PackageName, DisplaySafeUrl),
     #[error("`workspace = false` is not yet supported")]
     WorkspaceFalse,
     #[error("Source with `editable = true` must refer to a local directory, not a file: `{0}`")]
@@ -573,7 +572,7 @@ impl std::fmt::Display for SourceKind {
 
 /// Convert a Git source into a [`RequirementSource`].
 fn git_source(
-    git: &Url,
+    git: &DisplaySafeUrl,
     subdirectory: Option<Box<Path>>,
     rev: Option<String>,
     tag: Option<String>,
@@ -588,9 +587,10 @@ fn git_source(
     };
 
     // Create a PEP 508-compatible URL.
-    let mut url = Url::parse(&format!("git+{git}"))?;
+    let mut url = DisplaySafeUrl::parse(&format!("git+{git}"))?;
     if let Some(rev) = reference.as_str() {
-        url.set_path(&format!("{}@{}", url.path(), rev));
+        let path = format!("{}@{}", url.path(), rev);
+        url.set_path(&path);
     }
     if let Some(subdirectory) = subdirectory.as_ref() {
         let subdirectory = subdirectory
@@ -612,7 +612,7 @@ fn git_source(
 /// Convert a URL source into a [`RequirementSource`].
 fn url_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
-    url: Url,
+    url: DisplaySafeUrl,
     subdirectory: Option<Box<Path>>,
 ) -> Result<RequirementSource, LoweringError> {
     let mut verbatim_url = url.clone();
@@ -689,12 +689,9 @@ fn path_source(
         RequirementOrigin::Workspace => workspace_root,
     };
     let url = VerbatimUrl::from_path(path, base)?.with_given(path.to_string_lossy());
-    let install_path = url.to_file_path().map_err(|()| {
-        LoweringError::RelativeTo(io::Error::new(
-            io::ErrorKind::Other,
-            "Invalid path in file URL",
-        ))
-    })?;
+    let install_path = url
+        .to_file_path()
+        .map_err(|()| LoweringError::RelativeTo(io::Error::other("Invalid path in file URL")))?;
 
     let is_dir = if let Ok(metadata) = install_path.metadata() {
         metadata.is_dir()

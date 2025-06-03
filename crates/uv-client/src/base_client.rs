@@ -21,14 +21,15 @@ use uv_configuration::{KeyringProviderType, TrustedHost};
 use uv_fs::Simplified;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_version::version;
 use uv_warnings::warn_user_once;
 
+use crate::Connectivity;
 use crate::linehaul::LineHaul;
 use crate::middleware::OfflineMiddleware;
 use crate::tls::read_identity;
-use crate::Connectivity;
 
 pub const DEFAULT_RETRIES: u32 = 3;
 
@@ -407,7 +408,7 @@ enum Security {
 
 impl BaseClient {
     /// Selects the appropriate client based on the host's trustworthiness.
-    pub fn for_host(&self, url: &Url) -> &ClientWithMiddleware {
+    pub fn for_host(&self, url: &DisplaySafeUrl) -> &ClientWithMiddleware {
         if self.disable_ssl(url) {
             &self.dangerous_client
         } else {
@@ -416,7 +417,7 @@ impl BaseClient {
     }
 
     /// Returns `true` if the host is trusted to use the insecure client.
-    pub fn disable_ssl(&self, url: &Url) -> bool {
+    pub fn disable_ssl(&self, url: &DisplaySafeUrl) -> bool {
         self.allow_insecure_host
             .iter()
             .any(|allow_insecure_host| allow_insecure_host.matches(url))

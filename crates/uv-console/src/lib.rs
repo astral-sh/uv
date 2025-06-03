@@ -1,4 +1,4 @@
-use console::{measure_text_width, style, Key, Term};
+use console::{Key, Term, measure_text_width, style};
 use std::{cmp::Ordering, iter};
 
 /// Prompt the user for confirmation in the given [`Term`].

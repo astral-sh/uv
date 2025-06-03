@@ -1,4 +1,4 @@
-use crate::common::{uv_snapshot, venv_bin_path, TestContext};
+use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
@@ -24,6 +24,7 @@ const BUILT_BY_UV_TEST_SCRIPT: &str = indoc! {r#"
 ///
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel.
 #[test]
+#[cfg(feature = "pypi")]
 fn built_by_uv_direct_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
@@ -83,6 +84,7 @@ fn built_by_uv_direct_wheel() -> Result<()> {
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel,
 /// so we call the build backend directly.
 #[test]
+#[cfg(feature = "pypi")]
 fn built_by_uv_direct() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
@@ -160,6 +162,7 @@ fn built_by_uv_direct() -> Result<()> {
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel,
 /// so we call the build backend directly.
 #[test]
+#[cfg(feature = "pypi")]
 fn built_by_uv_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
@@ -216,7 +219,7 @@ fn built_by_uv_editable() -> Result<()> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "git"))]
 #[test]
 fn preserve_executable_bit() -> Result<()> {
     use std::io::Write;

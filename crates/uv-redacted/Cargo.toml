@@ -16,4 +16,10 @@ doctest = false
 workspace = true
 
 [dependencies]
+ref-cast = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true }
 url = { workspace = true }
+
+[features]
+schemars = ["dep:schemars"]

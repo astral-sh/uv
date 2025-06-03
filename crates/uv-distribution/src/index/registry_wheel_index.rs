@@ -12,7 +12,7 @@ use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
 use crate::index::cached_wheel::CachedWheel;
-use crate::source::{HttpRevisionPointer, LocalRevisionPointer, HTTP_REVISION, LOCAL_REVISION};
+use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
 
 /// An entry in the [`RegistryWheelIndex`].
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -64,7 +64,7 @@ impl<'a> RegistryWheelIndex<'a> {
 
     /// Get an entry in the index.
     fn get_impl(&mut self, name: &'a PackageName) -> &[IndexEntry] {
-        let versions = match self.index.entry(name) {
+        (match self.index.entry(name) {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => entry.insert(Self::index(
                 name,
@@ -74,8 +74,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 self.hasher,
                 self.build_configuration,
             )),
-        };
-        versions
+        }) as _
     }
 
     /// Add a package to the index by reading from the cache.

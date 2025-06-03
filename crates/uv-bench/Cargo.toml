@@ -49,7 +49,7 @@ uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 codspeed-criterion-compat = { version = "2.7.2", default-features = false, optional = true }
-criterion = { version = "0.5.1", default-features = false, features = ["async_tokio"] }
+criterion = { version = "0.6.0", default-features = false, features = ["async_tokio"] }
 jiff = { workspace = true }
 tokio = { workspace = true }
 

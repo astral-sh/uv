@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use anstream::println;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::Parser;
 
 use uv_cache::{Cache, CacheArgs};

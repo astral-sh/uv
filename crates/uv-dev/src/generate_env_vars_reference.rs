@@ -7,8 +7,8 @@ use std::path::PathBuf;
 
 use uv_static::EnvVars;
 
-use crate::generate_all::Mode;
 use crate::ROOT_DIR;
+use crate::generate_all::Mode;
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
@@ -113,7 +113,7 @@ mod tests {
 
     use crate::generate_all::Mode;
 
-    use super::{main, Args};
+    use super::{Args, main};
 
     #[test]
     fn test_generate_env_vars_reference() -> Result<()> {

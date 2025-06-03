@@ -1,10 +1,11 @@
 use std::{env, path::Path, process::Command};
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 use assert_fs::{
     assert::PathAssert,
-    prelude::{FileTouch, PathChild, PathCreateDir},
+    prelude::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
 };
+use indoc::indoc;
 use predicates::prelude::predicate;
 use tracing::debug;
 use uv_fs::Simplified;
@@ -284,6 +285,41 @@ fn python_install_automatic() {
         ----- stderr -----
         "###);
     }
+}
+
+/// Regression test for a bad cpython runtime
+/// <https://github.com/astral-sh/uv/issues/13610>
+#[test]
+fn regression_cpython() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_python_sources()
+        .with_managed_python_dirs();
+
+    let init = context.temp_dir.child("mre.py");
+    init.write_str(indoc! { r#"
+        class Foo(str): ...
+
+        a = []
+        new_value = Foo("1")
+        a += new_value
+        "#
+    })
+    .unwrap();
+
+    // We should respect the Python request
+    uv_snapshot!(context.filters(), context.run()
+        .env_remove("VIRTUAL_ENV")
+        .arg("-p").arg("3.12")
+        .arg("mre.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+
+    "###);
 }
 
 #[test]
@@ -998,8 +1034,8 @@ fn read_link_path(path: &Path) -> String {
             .ok()
             .unwrap_or_else(|| panic!("{} should be readable", path.display()))
             .unwrap_or_else(|| panic!("{} should be a valid launcher", path.display()));
-        let path = launcher.python_path.simplified_display().to_string();
-        path
+
+        launcher.python_path.simplified_display().to_string()
     } else {
         unreachable!()
     }
@@ -1220,8 +1256,8 @@ fn python_install_314() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.14.0a6 in [TIME]
-     + cpython-3.14.0a6-[PLATFORM]
+    Installed Python 3.14.0a7 in [TIME]
+     + cpython-3.14.0a7-[PLATFORM]
     ");
 
     // Install a specific pre-release
@@ -1241,7 +1277,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0a6-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0a7-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");
@@ -1251,7 +1287,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0a6-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0a7-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");
@@ -1260,7 +1296,7 @@ fn python_install_314() {
     success: true
     exit_code: 0
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0a6-[PLATFORM]/[INSTALL-BIN]/python
+    [TEMP_DIR]/managed/cpython-3.14.0a7-[PLATFORM]/[INSTALL-BIN]/python
 
     ----- stderr -----
     ");
@@ -1378,5 +1414,75 @@ fn python_install_cached() {
     ----- stderr -----
     error: Failed to install cpython-3.12.10-[PLATFORM]
       Caused by: An offline Python installation was requested, but cpython-3.12.10[DATE]-[PLATFORM].tar.gz) is missing in python-cache
+    ");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn python_install_emulated_macos() {
+    let context: TestContext = TestContext::new_with_versions(&[])
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs();
+
+    // Before installation, `uv python list` should not show the x86_64 download
+    uv_snapshot!(context.filters(), context.python_list().arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.13.3-macos-aarch64-none    <download available>
+
+    ----- stderr -----
+    ");
+
+    // Install an x86_64 version (assuming an aarch64 host)
+    uv_snapshot!(context.filters(), context.python_install().arg("cpython-3.13-macos-x86_64"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.3 in [TIME]
+     + cpython-3.13.3-macos-x86_64-none
+    ");
+
+    // It should be discoverable with `uv python find`
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.3-macos-x86_64-none/bin/python3.13
+
+    ----- stderr -----
+    ");
+
+    // And included in `uv python list`
+    uv_snapshot!(context.filters(), context.python_list().arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    cpython-3.13.3-macos-aarch64-none    <download available>
+    cpython-3.13.3-macos-x86_64-none     managed/cpython-3.13.3-macos-x86_64-none/bin/python3.13
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.python_install().arg("cpython-3.13-macos-aarch64"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.13.3 in [TIME]
+     + cpython-3.13.3-macos-aarch64-none
+    ");
+
+    // Once we've installed the native version, it should be preferred over x86_64
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.13.3-macos-aarch64-none/bin/python3.13
+
+    ----- stderr -----
     ");
 }

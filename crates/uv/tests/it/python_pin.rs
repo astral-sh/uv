@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 use anyhow::Result;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use insta::assert_snapshot;
 use uv_python::{
+    PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME,
     platform::{Arch, Os},
-    PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME,
 };
 
 #[test]

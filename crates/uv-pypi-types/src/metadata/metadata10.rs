@@ -2,8 +2,8 @@ use serde::Deserialize;
 
 use uv_normalize::PackageName;
 
-use crate::metadata::Headers;
 use crate::MetadataError;
+use crate::metadata::Headers;
 
 /// A subset of the full core metadata specification, including only the
 /// fields that have been consistent across all versions of the specification.

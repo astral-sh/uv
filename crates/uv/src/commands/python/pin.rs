@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
@@ -10,13 +10,13 @@ use uv_cache::Cache;
 use uv_dirs::user_uv_config_dir;
 use uv_fs::Simplified;
 use uv_python::{
-    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions, PYTHON_VERSION_FILENAME,
+    EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonInstallation, PythonPreference,
+    PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::{project::find_requires_python, ExitStatus};
+use crate::commands::{ExitStatus, project::find_requires_python};
 use crate::printer::Printer;
 
 /// Pin to a specific Python version.

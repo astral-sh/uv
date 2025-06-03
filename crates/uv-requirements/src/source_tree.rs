@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::{borrow::Cow, collections::BTreeMap};
 
 use anyhow::{Context, Result};
-use futures::stream::FuturesOrdered;
 use futures::TryStreamExt;
+use futures::stream::FuturesOrdered;
 use url::Url;
 
 use uv_configuration::{DependencyGroups, ExtrasSpecification};
@@ -16,6 +16,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep508::RequirementOrigin;
+use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
@@ -79,7 +80,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
         source_trees: impl Iterator<Item = &Path>,
     ) -> Result<Vec<SourceTreeResolution>> {
         let resolutions: Vec<_> = source_trees
-            .map(|source_tree| async { self.resolve_source_tree(source_tree).await })
+            .map(async |source_tree| self.resolve_source_tree(source_tree).await)
             .collect::<FuturesOrdered<_>>()
             .try_collect()
             .await?;
@@ -180,7 +181,7 @@ impl<'a, Context: BuildContext> SourceTreeResolver<'a, Context> {
             return Ok(metadata);
         }
 
-        let Ok(url) = Url::from_directory_path(source_tree) else {
+        let Ok(url) = Url::from_directory_path(source_tree).map(DisplaySafeUrl::from) else {
             return Err(anyhow::anyhow!("Failed to convert path to URL"));
         };
         let source = SourceUrl::Directory(DirectorySourceUrl {

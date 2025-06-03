@@ -109,6 +109,7 @@ nav:
           - guides/integration/index.md
           - Docker: guides/integration/docker.md
           - Jupyter: guides/integration/jupyter.md
+          - marimo: guides/integration/marimo.md
           - GitHub Actions: guides/integration/github.md
           - GitLab CI/CD: guides/integration/gitlab.md
           - Pre-commit: guides/integration/pre-commit.md

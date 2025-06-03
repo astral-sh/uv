@@ -414,13 +414,10 @@ pub fn entrypoint_paths(
     let layout = site_packages.interpreter().layout();
     let script_relative = pathdiff::diff_paths(&layout.scheme.scripts, &layout.scheme.purelib)
         .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Could not find relative path for: {}",
-                    layout.scheme.scripts.simplified_display()
-                ),
-            )
+            io::Error::other(format!(
+                "Could not find relative path for: {}",
+                layout.scheme.scripts.simplified_display()
+            ))
         })?;
 
     // Identify any installed binaries (both entrypoints and scripts from the `.data` directory).

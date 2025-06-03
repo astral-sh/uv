@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::str::FromStr;
 use std::{cmp::Ordering, path::Path};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use owo_colors::OwoColorize;
 
 use uv_cli::version::VersionInfo;
@@ -12,8 +12,8 @@ use uv_pep440::Version;
 use uv_warnings::warn_user;
 use uv_workspace::pyproject_mut::Error;
 use uv_workspace::{
-    pyproject_mut::{DependencyTarget, PyProjectTomlMut},
     DiscoveryOptions, ProjectWorkspace, WorkspaceCache,
+    pyproject_mut::{DependencyTarget, PyProjectTomlMut},
 };
 
 use crate::{commands::ExitStatus, printer::Printer};

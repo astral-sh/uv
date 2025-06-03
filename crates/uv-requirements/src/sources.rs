@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use console::Term;
 
-use uv_fs::{Simplified, CWD};
+use uv_fs::{CWD, Simplified};
 use uv_requirements_txt::RequirementsTxtRequirement;
 
 #[derive(Debug, Clone)]

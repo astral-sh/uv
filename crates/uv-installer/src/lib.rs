@@ -1,9 +1,9 @@
-pub use compile::{compile_tree, CompileError};
+pub use compile::{CompileError, compile_tree};
 pub use installer::{Installer, Reporter as InstallReporter};
 pub use plan::{Plan, Planner};
 pub use preparer::{Error as PrepareError, Preparer, Reporter as PrepareReporter};
 pub use site_packages::{SatisfiesResult, SitePackages, SitePackagesDiagnostic};
-pub use uninstall::{uninstall, UninstallError};
+pub use uninstall::{UninstallError, uninstall};
 
 mod compile;
 mod preparer;
