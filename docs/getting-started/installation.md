@@ -62,7 +62,7 @@ uv provides a standalone installer to download and install uv:
 
     Alternatively, the installer or binaries can be downloaded directly from [GitHub](#github-releases).
 
-See the documentation on [installer configuration](../configuration/installer.md) for details on
+See the reference documentation on the [installer](../reference/installer.md) for details on
 customizing your uv installation.
 
 ### PyPI
