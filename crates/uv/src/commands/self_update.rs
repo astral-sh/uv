@@ -63,6 +63,14 @@ pub(crate) async fn self_update(
         return Ok(ExitStatus::Error);
     };
 
+    // If we know what our version is, ignore whatever the receipt thinks it is!
+    // This makes us behave better if someone manually installs a random version of uv
+    // in a way that doesn't update the receipt.
+    if let Ok(version) = env!("CARGO_PKG_VERSION").parse() {
+        // This is best-effort, it's fine if it fails (also it can't actually fail)
+        let _ = updater.set_current_version(version);
+    }
+
     // Ensure the receipt is for the current binary. If it's not, then the user likely has multiple
     // uv binaries installed, and the current binary was _not_ installed via the standalone
     // installation scripts.
