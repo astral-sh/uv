@@ -33,10 +33,10 @@ credentials, you will be prompted to enter them.
     to fetch the new dependency, for example if you delete the lockfile or clone your project on a
     new machine. It's better to configure Git to use your credential automatically as follows.
 
-If there are no credentials present in the URL and authentication is needed, the [Git credential
-helper](https://git-scm.com/doc/credential-helpers) will be queried. If you're using GitHub, the
-simplest way to set up a credential helper is to [install the `gh`
-utility](https://github.com/cli/cli#installation) and run:
+If there are no credentials present in the URL and authentication is needed, the
+[Git credential helper](https://git-scm.com/doc/credential-helpers) will be queried. If you're using
+GitHub, the simplest way to set up a credential helper is to
+[install the `gh` utility](https://github.com/cli/cli#installation) and run:
 
 ```console
 $ gh auth login
