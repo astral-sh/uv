@@ -5,6 +5,15 @@
 
 ## 0.7.11
 
+### Python
+
+- Add Python 3.14.0b1
+- Add Python 3.13.4
+- Add Python 3.12.11
+- Add Python 3.11.13
+- Add Python 3.10.18
+- Add Python 3.9.23
+
 ### Enhancements
 
 - Add Pyodide support ([#12731](https://github.com/astral-sh/uv/pull/12731))
