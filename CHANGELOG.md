@@ -12,7 +12,7 @@
 
 ### Bug fixes
 
-- Downgrade `reqwest` and `hyper-util` ([#13835](https://github.com/astral-sh/uv/pull/13835))
+- Downgrade `reqwest` and `hyper-util` to resolve connection reset errors over ipv6 ([#13835](https://github.com/astral-sh/uv/pull/13835))
 - Prefer `uv`'s binary's version when checking if it's up to date ([#13840](https://github.com/astral-sh/uv/pull/13840))
 
 ### Documentation
