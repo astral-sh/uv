@@ -1,6 +1,6 @@
 use std::{env, path::Path, process::Command};
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 use assert_fs::{
     assert::PathAssert,
     prelude::{FileTouch, FileWriteStr, PathChild, PathCreateDir},
