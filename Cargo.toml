@@ -142,7 +142,7 @@ ref-cast = { version = "1.0.24" }
 reflink-copy = { version = "0.1.19" }
 regex = { version = "1.10.6" }
 regex-automata = { version = "0.4.8", default-features = false, features = ["dfa-build", "dfa-search", "perf", "std", "syntax"] }
-reqwest = { version = "0.12.7", default-features = false, features = ["json", "gzip", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
+reqwest = { version = "=0.12.15", default-features = false, features = ["json", "gzip", "stream", "rustls-tls", "rustls-tls-native-roots", "socks", "multipart", "http2", "blocking"] }
 reqwest-middleware = { version = "0.4.0", features = ["multipart"] }
 reqwest-retry = { version = "0.7.0" }
 rkyv = { version = "0.8.8", features = ["bytecheck"] }
@@ -193,8 +193,11 @@ wiremock = { version = "0.6.2" }
 xz2 = { version = "0.1.7" }
 zip = { version = "2.2.3", default-features = false, features = ["deflate", "zstd", "bzip2", "lzma", "xz"] }
 
+# https://github.com/astral-sh/uv/issues/13831
+hyper-util = "=0.1.12"
+
 [workspace.metadata.cargo-shear]
-ignored = ["flate2", "xz2"]
+ignored = ["flate2", "xz2", "hyper-util"]
 
 [workspace.lints.rust]
 unsafe_code = "warn"
