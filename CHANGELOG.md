@@ -8,6 +8,7 @@
 ### Enhancements
 
 - Add Pyodide support ([#12731](https://github.com/astral-sh/uv/pull/12731))
+- Better error message for version specifier with missing operator ([#13803](https://github.com/astral-sh/uv/pull/13803))
 
 ### Bug fixes
 
@@ -17,10 +18,6 @@
 ### Documentation
 
 - Use "terminal driver" instead of "shell" in `SIGINT` docs ([#13787](https://github.com/astral-sh/uv/pull/13787))
-
-### Other changes
-
-- Better error message for version specifier with missing operator ([#13803](https://github.com/astral-sh/uv/pull/13803))
 
 ## 0.7.10
 
