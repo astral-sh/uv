@@ -3,12 +3,24 @@
 This guide will discuss converting from a `pip` and `pip-tools` workflow centered on `requirements`
 files to uv's project workflow using a `pyproject.toml` and `uv.lock` file.
 
+<!--
+TODO(zanieb): Write the other migration guides
+
 !!! tip
 
     If you're looking to migrate from `pip` and `pip-tools` to uv's drop-in interface instead, see
     the [`uv pip` migration guide](./pip-to-uv-pip.md) instead.
 
+    If you're looking to migrate from an existing workflow where you're already using a `pyproject.toml`,
+    see the [project management migration guide](./project-to-uv.md) instead.
+-->
+
 We'll start with an overview of developing with `pip`, then discuss migrating to uv.
+
+!!! tip
+
+    If you're familiar with the ecosystem, you can jump ahead to the
+    [requirements file import](#importing-requirements-files) instructions.
 
 ## Requirements
 
@@ -99,7 +111,7 @@ typing-extensions==4.12.2
 
 Here, all the versions constraints are _exact_. Only a single version of each package can be used.
 The above example was generated with `uv pip compile`, but could also be generated with
-`pip-compile` from `pip-tools`. 
+`pip-compile` from `pip-tools`.
 
 Though less common, the `requirements.txt` can also be generated using `pip freeze`, by first
 installing the input dependencies into the environment then exporting the installed versions:
@@ -156,7 +168,7 @@ package version to ensure that the `requirements-dev.txt` uses the same versions
     `-r requirements.in`, and `-c requirements.txt`. There's no difference in the resulting package
     versions, but using both files produces annotations which allow you to determine which
     dependencies are _direct_ (annotated with `-r requirements.in`) and which are _indirect_ (only
-    annotated with `-c requirements.txt`).  
+    annotated with `-c requirements.txt`).
 
 The compiled development dependencies look like:
 
@@ -300,6 +312,8 @@ allowing uv to support advanced features. It replaces `requirements.txt` files. 
 `requirements.txt` files, the `uv.lock` file can represent arbitrary groups of dependencies, so
 multiple files are not needed to lock development dependencies.
 
+To learn more, see the [lockfile](../../concepts/projects/layout.md#the-lockfile) documentation.
+
 ## Importing requirements files
 
 The simpest way to import requirements is with `uv add`:
@@ -354,7 +368,7 @@ tqdm==4.67.1
     # via -r requirements.in
 ```
 
-When using `-o`, uv will constrain the versions to match the existing output file if it can.
+When using `-o`, uv will constrain the versions to match the existing output file, if it can.
 
 Markers can be added for other platforms by changing the `--python-platform` and `-o` values for
 each requirements file you need to import, e.g., to `linux` and `macos`.
@@ -366,4 +380,47 @@ Once each `requirements.txt` file has been transformed, the dependencies can be 
 $ uv add -r requirements.in -c requirements-win.txt -c requirements-linux.txt
 ```
 
+### Importing development dependency files
+
+As discussed in the [development dependencies](#development-dependencies) section, it's common to
+have have groups of dependencies for development purposes.
+
+To import development dependencies, use the `--dev` flag during `uv add`:
+
+```console
+$ uv add -r requirements-dev.in -c requirements-dev.txt --dev
+```
+
+In addition to the `dev` dependency group, uv supports arbitrary group names. For example, if you
+also have a dedicated set of dependencies for building your documentation, those can be imported to
+a `docs` group:
+
+```console
+$ uv add -r requirements-docs.in -c requirements-docs.txt --group docs
+```
+
 ## Project environments
+
+Unlike pip, uv is not centered around the concept of an "active" virtual environment. Instead, uv
+uses a dedicated virtual environment for each project in a `.venv` directory. This environment is
+automatically managed, so when you run a command, like `uv add`, the environment is synced with the
+project dependencies.
+
+The preferred way to execute commands in the environment is with `uv run`. Prior to every `uv run`
+invocation, uv will verify that the lockfile is up-to-date with the `pyproject.toml`, and that the
+environment is up-to-date with the lockfile, keeping your project in-sync without the need for
+manual intervention. `uv run` guarantees that your command is run in a consistent, locked
+environment.
+
+The project environment can also be explicitly created with `uv sync`, e.g., for use with editors.
+
+When in projects, uv will not respect the `VIRTUAL_ENV` variable by default, though you can opt-in
+to it with the `--active` flag.
+
+To learn more, see the
+[project environment](../../concepts/projects/layout.md#the-project-environment) documentation.
+
+## Next steps
+
+Now that you've migrated to uv, take a look at the
+[project concept](../../concepts/projects/index.md) page for more details about uv projects.
