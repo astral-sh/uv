@@ -25,8 +25,32 @@ When using a GitHub personal access token, the username is arbitrary. GitHub doe
 logging in with password directly, although other hosts may. If a username is provided without
 credentials, you will be prompted to enter them.
 
-If there are no credentials present in the URL and authentication is needed, the
-[Git credential helper](https://git-scm.com/doc/credential-helpers) will be queried.
+!!! important
+
+    If you use `uv add <url>` with a password or token in the URL as above, that credential will
+    _not_ be saved in `pyproject.toml` or `uv.lock`, because those files are often checked-in and
+    published. In that case, uv will probably fail with authentication errors the next time it tries
+    to fetch the new dependency, for example if you delete the lockfile or clone your project on a
+    new machine. It's better to configure Git to use your credential automatically as follows.
+
+If there are no credentials present in the URL and authentication is needed, the [Git credential
+helper](https://git-scm.com/doc/credential-helpers) will be queried. If you're using GitHub, the
+simplest way to set up a credential helper is to [install the `gh`
+utility](https://github.com/cli/cli#installation) and run:
+
+```console
+$ gh auth login
+```
+
+See the [`gh auth login`](https://cli.github.com/manual/gh_auth_login) docs. uv runs Git internally
+when fetching Git dependencies, so it benefits from this configuration automatically.
+
+!!! note
+
+    If you run `gh auth login` interactively, it will set up `~/.gitconfig` for you. But if you use
+    `gh auth login --with-token`, as in our [GitHub Actions integration
+    docs](../../guides/integration/github/#private-repos), you need to run [`gh auth
+    setup-git`](https://cli.github.com/manual/gh_auth_setup-git) explicitly afterwards.
 
 ## HTTP authentication
 
