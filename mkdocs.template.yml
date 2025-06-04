@@ -134,6 +134,16 @@ nav:
       - Python versions: concepts/python-versions.md
       - Resolution: concepts/resolution.md
       - Caching: concepts/cache.md
+      # Note:  The `pip` section was moved to the `concepts/` section but the
+      # top-level directory structure was retained to ease the transition.
+      - The pip interface:
+          - pip/index.md
+          - Using environments: pip/environments.md
+          - Managing packages: pip/packages.md
+          - Inspecting environments: pip/inspection.md
+          - Declaring dependencies: pip/dependencies.md
+          - Locking environments: pip/compile.md
+          - Compatibility with pip: pip/compatibility.md
   - Configuration:
       - configuration/index.md
       - Configuration files: configuration/files.md
@@ -142,14 +152,6 @@ nav:
       - Package indexes: configuration/indexes.md
       - Installer: configuration/installer.md
       - Build backend: configuration/build-backend.md
-  - The pip interface:
-      - pip/index.md
-      - Using environments: pip/environments.md
-      - Managing packages: pip/packages.md
-      - Inspecting environments: pip/inspection.md
-      - Declaring dependencies: pip/dependencies.md
-      - Locking environments: pip/compile.md
-      - Compatibility with pip: pip/compatibility.md
   - Reference:
       - reference/index.md
       - Commands: reference/cli.md
