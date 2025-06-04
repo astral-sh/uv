@@ -349,10 +349,10 @@ To opt-out again, the `--no-system` flag can be used in any uv invocation.
 
 ## Private repos
 
-If your project has [Git dependencies](../../../concepts/projects/dependencies/#git) that are
-private GitHub repositories, you might need to set up a [personal access token (PAT)][PAT] to allow
-uv to fetch them. After creating a PAT that has read access to the private repos you need, expose it
-to your CI environment as a ["repository secret"]. Let's call it `MY_PAT`. You can then use the
+If your project has [Git dependencies](../../concepts/projects/dependencies.md#git) that are private
+GitHub repositories, you might need to set up a [personal access token (PAT)][PAT] to allow uv to
+fetch them. After creating a PAT that has read access to the private repos you need, expose it to
+your CI environment as a ["repository secret"]. Let's call it `MY_PAT`. You can then use the
 [`gh`](https://cli.github.com/) tool, which is installed in GitHub Actions runners by default, to
 create or update `~/.gitconfig` such that Git uses your PAT whenever it talks to `github.com`. uv
 runs Git internally when fetching Git dependencies, so it benefits from this configuration

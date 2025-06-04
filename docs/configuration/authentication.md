@@ -49,7 +49,7 @@ when fetching Git dependencies, so it benefits from this configuration automatic
 
     If you run `gh auth login` interactively, it will set up `~/.gitconfig` for you. But if you use
     `gh auth login --with-token`, as in our [GitHub Actions integration
-    docs](../../guides/integration/github/#private-repos), you need to run [`gh auth
+    docs](../guides/integration/github.md#private-repos), you need to run [`gh auth
     setup-git`](https://cli.github.com/manual/gh_auth_setup-git) explicitly afterwards.
 
 ## HTTP authentication
