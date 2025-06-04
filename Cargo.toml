@@ -193,11 +193,8 @@ wiremock = { version = "0.6.2" }
 xz2 = { version = "0.1.7" }
 zip = { version = "2.2.3", default-features = false, features = ["deflate", "zstd", "bzip2", "lzma", "xz"] }
 
-# https://github.com/astral-sh/uv/issues/13831
-hyper-util = "=0.1.12"
-
 [workspace.metadata.cargo-shear]
-ignored = ["flate2", "xz2", "hyper-util"]
+ignored = ["flate2", "xz2"]
 
 [workspace.lints.rust]
 unsafe_code = "warn"
