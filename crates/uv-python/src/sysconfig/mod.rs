@@ -25,115 +25,20 @@
 //! ```
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::LazyLock;
 
 use itertools::{Either, Itertools};
 use tracing::trace;
 
+use crate::sysconfig::generated_mappings::DEFAULT_VARIABLE_UPDATES;
 use crate::sysconfig::parser::{Error as ParseError, SysconfigData, Value};
 
 mod cursor;
+mod generated_mappings;
 mod parser;
-
-/// Replacement mode for sysconfig values.
-#[derive(Debug)]
-enum ReplacementMode {
-    Partial { from: String },
-    Full,
-}
-
-/// A replacement entry to patch in sysconfig data.
-#[derive(Debug)]
-struct ReplacementEntry {
-    mode: ReplacementMode,
-    to: String,
-}
-
-impl ReplacementEntry {
-    /// Patches a sysconfig value either partially (replacing a specific word) or fully.
-    fn patch(&self, entry: &str) -> String {
-        match &self.mode {
-            ReplacementMode::Partial { from } => entry
-                .split_whitespace()
-                .map(|word| if word == from { &self.to } else { word })
-                .collect::<Vec<_>>()
-                .join(" "),
-            ReplacementMode::Full => self.to.clone(),
-        }
-    }
-}
-
-/// Mapping for sysconfig keys to lookup and replace with the appropriate entry.
-static DEFAULT_VARIABLE_UPDATES: LazyLock<BTreeMap<String, ReplacementEntry>> =
-    LazyLock::new(|| {
-        BTreeMap::from_iter([
-            (
-                "CC".to_string(),
-                ReplacementEntry {
-                    mode: ReplacementMode::Partial {
-                        from: "clang".to_string(),
-                    },
-                    to: "cc".to_string(),
-                },
-            ),
-            (
-                "CXX".to_string(),
-                ReplacementEntry {
-                    mode: ReplacementMode::Partial {
-                        from: "clang++".to_string(),
-                    },
-                    to: "c++".to_string(),
-                },
-            ),
-            (
-                "BLDSHARED".to_string(),
-                ReplacementEntry {
-                    mode: ReplacementMode::Partial {
-                        from: "clang".to_string(),
-                    },
-                    to: "cc".to_string(),
-                },
-            ),
-            (
-                "LDSHARED".to_string(),
-                ReplacementEntry {
-                    mode: ReplacementMode::Partial {
-                        from: "clang".to_string(),
-                    },
-                    to: "cc".to_string(),
-                },
-            ),
-            (
-                "LDCXXSHARED".to_string(),
-                ReplacementEntry {
-                    mode: ReplacementMode::Partial {
-                        from: "clang++".to_string(),
-                    },
-                    to: "c++".to_string(),
-                },
-            ),
-            (
-                "LINKCC".to_string(),
-                ReplacementEntry {
-                    mode: ReplacementMode::Partial {
-                        from: "clang".to_string(),
-                    },
-                    to: "cc".to_string(),
-                },
-            ),
-            (
-                "AR".to_string(),
-                ReplacementEntry {
-                    mode: ReplacementMode::Full,
-                    to: "ar".to_string(),
-                },
-            ),
-        ])
-    });
+mod replacements;
 
 /// Update the `sysconfig` data in a Python installation.
 pub(crate) fn update_sysconfig(
@@ -224,7 +129,7 @@ fn find_sysconfigdata(
         let metadata = entry.metadata()?;
         if metadata.is_symlink() {
             continue;
-        };
+        }
 
         if metadata.is_file() {
             return Ok(entry.path());
@@ -278,8 +183,10 @@ fn patch_sysconfigdata(mut data: SysconfigData, real_prefix: &Path) -> Sysconfig
         let patched = update_prefix(value, real_prefix);
         let mut patched = remove_isysroot(&patched);
 
-        if let Some(replacement_entry) = DEFAULT_VARIABLE_UPDATES.get(key) {
-            patched = replacement_entry.patch(&patched);
+        if let Some(replacement_entries) = DEFAULT_VARIABLE_UPDATES.get(key) {
+            for replacement_entry in replacement_entries {
+                patched = replacement_entry.patch(&patched);
+            }
         }
 
         if *value != patched {
@@ -356,11 +263,7 @@ fn patch_pkgconfig(contents: &str) -> Option<String> {
             Cow::Owned(format!("{prefix}=${{pcfiledir}}/../.."))
         })
         .join("\n");
-    if changed {
-        Some(new_contents)
-    } else {
-        None
-    }
+    if changed { Some(new_contents) } else { None }
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -434,7 +337,7 @@ mod tests {
         let real_prefix = Path::new("/real/prefix");
         let data = patch_sysconfigdata(sysconfigdata, real_prefix);
 
-        insta::assert_snapshot!(data.to_string_pretty()?, @r###"
+        insta::assert_snapshot!(data.to_string_pretty()?, @r##"
         # system configuration generated and used by the sysconfig module
         build_time_vars = {
             "AR": "ar",
@@ -442,7 +345,28 @@ mod tests {
             "CXX": "c++ -pthread",
             "PYTHON_BUILD_STANDALONE": 1
         }
-        "###);
+        "##);
+
+        // Cross-compiles use GNU
+        let sysconfigdata = [
+            ("CC", "/usr/bin/aarch64-linux-gnu-gcc"),
+            ("CXX", "/usr/bin/x86_64-linux-gnu-g++"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), Value::String(v.to_string())))
+        .collect::<SysconfigData>();
+
+        let real_prefix = Path::new("/real/prefix");
+        let data = patch_sysconfigdata(sysconfigdata, real_prefix);
+
+        insta::assert_snapshot!(data.to_string_pretty()?, @r##"
+        # system configuration generated and used by the sysconfig module
+        build_time_vars = {
+            "CC": "cc",
+            "CXX": "c++",
+            "PYTHON_BUILD_STANDALONE": 1
+        }
+        "##);
 
         Ok(())
     }

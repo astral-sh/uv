@@ -8,9 +8,9 @@ use uv_normalize::ExtraName;
 
 use crate::marker::parse;
 use crate::{
-    expand_env_vars, parse_extras_cursor, split_extras, split_scheme, strip_host, Cursor,
-    MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
-    RequirementOrigin, Scheme, TracingReporter, VerbatimUrl, VerbatimUrlError,
+    Cursor, MarkerEnvironment, MarkerTree, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
+    RequirementOrigin, Scheme, TracingReporter, VerbatimUrl, VerbatimUrlError, expand_env_vars,
+    parse_extras_cursor, split_extras, split_scheme, strip_host,
 };
 
 /// An extension over [`Pep508Url`] that also supports parsing unnamed requirements, namely paths.
@@ -19,7 +19,7 @@ use crate::{
 pub trait UnnamedRequirementUrl: Pep508Url {
     /// Parse a URL from a relative or absolute path.
     fn parse_path(path: impl AsRef<Path>, working_dir: impl AsRef<Path>)
-        -> Result<Self, Self::Err>;
+    -> Result<Self, Self::Err>;
 
     /// Parse a URL from an absolute path.
     fn parse_absolute_path(path: impl AsRef<Path>) -> Result<Self, Self::Err>;
@@ -66,12 +66,12 @@ impl UnnamedRequirementUrl for VerbatimUrl {
 /// dependencies. This isn't compliant with PEP 508, but is common in `requirements.txt`, which
 /// is implementation-defined.
 #[derive(Hash, Debug, Clone, Eq, PartialEq)]
-pub struct UnnamedRequirement<Url: UnnamedRequirementUrl = VerbatimUrl> {
+pub struct UnnamedRequirement<ReqUrl: UnnamedRequirementUrl = VerbatimUrl> {
     /// The direct URL that defines the version specifier.
-    pub url: Url,
+    pub url: ReqUrl,
     /// The list of extras such as `security`, `tests` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
-    pub extras: Vec<ExtraName>,
+    pub extras: Box<[ExtraName]>,
     /// The markers such as `python_version > "3.8"` in
     /// `requests [security,tests] >= 2.8.1, == 2.8.* ; python_version > "3.8"`.
     /// Those are a nested and/or tree.
@@ -193,7 +193,7 @@ fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
 
     Ok(UnnamedRequirement {
         url,
-        extras,
+        extras: extras.into_boxed_slice(),
         marker: marker.unwrap_or_default(),
         origin: None,
     })

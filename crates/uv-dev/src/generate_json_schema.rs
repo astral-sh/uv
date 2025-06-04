@@ -1,16 +1,16 @@
 use std::path::PathBuf;
 
 use anstream::println;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use pretty_assertions::StrComparison;
-use schemars::{schema_for, JsonSchema};
+use schemars::{JsonSchema, schema_for};
 use serde::Deserialize;
 
 use uv_settings::Options as SettingsOptions;
 use uv_workspace::pyproject::ToolUv as WorkspaceOptions;
 
-use crate::generate_all::Mode;
 use crate::ROOT_DIR;
+use crate::generate_all::Mode;
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -47,7 +47,9 @@ pub(crate) fn main(args: &Args) -> Result<()> {
                     println!("Up-to-date: {filename}");
                 } else {
                     let comparison = StrComparison::new(&current, &schema_string);
-                    bail!("{filename} changed, please run `cargo dev generate-json-schema`:\n{comparison}");
+                    bail!(
+                        "{filename} changed, please run `cargo dev generate-json-schema`:\n{comparison}"
+                    );
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -116,7 +118,7 @@ mod tests {
 
     use crate::generate_all::Mode;
 
-    use super::{main, Args};
+    use super::{Args, main};
 
     #[test]
     fn test_generate_json_schema() -> Result<()> {

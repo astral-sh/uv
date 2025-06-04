@@ -82,11 +82,12 @@ If you're using a custom index through `[[tool.uv.index]]`, add `publish-url` an
 name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
+explicit = true
 ```
 
 !!! note
 
-    When using `uv publish --index <name>`, the `pyproject.toml` must be present, i.e. you need to
+    When using `uv publish --index <name>`, the `pyproject.toml` must be present, i.e., you need to
     have a checkout step in a publish CI job.
 
 Even though `uv publish` retries failed uploads, it can happen that publishing fails in the middle,

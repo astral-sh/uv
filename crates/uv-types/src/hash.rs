@@ -1,18 +1,17 @@
-use rustc_hash::FxHashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use url::Url;
+
+use rustc_hash::FxHashMap;
 
 use uv_configuration::HashCheckingMode;
 use uv_distribution_types::{
-    DistributionMetadata, HashGeneration, HashPolicy, Name, Resolution, UnresolvedRequirement,
-    VersionId,
+    DistributionMetadata, HashGeneration, HashPolicy, Name, Requirement, RequirementSource,
+    Resolution, UnresolvedRequirement, VersionId,
 };
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_pypi_types::{
-    HashDigest, HashError, Hashes, Requirement, RequirementSource, ResolverMarkerEnvironment,
-};
+use uv_pypi_types::{HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
+use uv_redacted::DisplaySafeUrl;
 
 #[derive(Debug, Default, Clone)]
 pub enum HashStrategy {
@@ -77,7 +76,7 @@ impl HashStrategy {
     }
 
     /// Return the [`HashPolicy`] for the given direct URL package.
-    pub fn get_url(&self, url: &Url) -> HashPolicy {
+    pub fn get_url(&self, url: &DisplaySafeUrl) -> HashPolicy {
         match self {
             Self::None => HashPolicy::None,
             Self::Generate(mode) => HashPolicy::Generate(*mode),
@@ -110,7 +109,7 @@ impl HashStrategy {
     }
 
     /// Returns `true` if the given direct URL package is allowed.
-    pub fn allows_url(&self, url: &Url) -> bool {
+    pub fn allows_url(&self, url: &DisplaySafeUrl) -> bool {
         match self {
             Self::None => true,
             Self::Generate(_) => true,
@@ -157,7 +156,8 @@ impl HashStrategy {
                 // it from the fragment.
                 requirement
                     .hashes()
-                    .map(Hashes::into_digests)
+                    .map(HashDigests::from)
+                    .map(|hashes| hashes.to_vec())
                     .unwrap_or_default()
             } else {
                 // Parse the hashes.
@@ -210,7 +210,8 @@ impl HashStrategy {
                 // it from the fragment.
                 requirement
                     .hashes()
-                    .map(Hashes::into_digests)
+                    .map(HashDigests::from)
+                    .map(|hashes| hashes.to_vec())
                     .unwrap_or_default()
             } else {
                 // Parse the hashes.
@@ -332,6 +333,8 @@ pub enum HashStrategyError {
     UnpinnedRequirement(String, HashCheckingMode),
     #[error("In `{1}` mode, all requirements must have a hash, but none were provided for: {0}")]
     MissingHashes(String, HashCheckingMode),
-    #[error("In `{1}` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: {0}")]
+    #[error(
+        "In `{1}` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: {0}"
+    )]
     NoIntersection(String, HashCheckingMode),
 }

@@ -100,7 +100,7 @@ pub struct StaticMetadata {
     pub version: Option<Version>,
     // Optional fields
     #[serde(default)]
-    pub requires_dist: Vec<Requirement<VerbatimParsedUrl>>,
+    pub requires_dist: Box<[Requirement<VerbatimParsedUrl>]>,
     #[cfg_attr(
         feature = "schemars",
         schemars(
@@ -110,5 +110,5 @@ pub struct StaticMetadata {
     )]
     pub requires_python: Option<VersionSpecifiers>,
     #[serde(default)]
-    pub provides_extras: Vec<ExtraName>,
+    pub provides_extras: Box<[ExtraName]>,
 }

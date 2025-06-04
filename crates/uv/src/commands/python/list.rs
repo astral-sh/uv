@@ -12,8 +12,8 @@ use uv_cache::Cache;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::{
-    find_python_installations, DiscoveryError, EnvironmentPreference, PythonDownloads,
-    PythonInstallation, PythonNotFound, PythonPreference, PythonRequest, PythonSource,
+    DiscoveryError, EnvironmentPreference, PythonDownloads, PythonInstallation, PythonNotFound,
+    PythonPreference, PythonRequest, PythonSource, find_python_installations,
 };
 
 use crate::commands::ExitStatus;
@@ -52,34 +52,44 @@ struct PrintData {
 /// List available Python installations.
 #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
 pub(crate) async fn list(
+    request: Option<String>,
     kinds: PythonListKinds,
     all_versions: bool,
     all_platforms: bool,
     all_arches: bool,
     show_urls: bool,
     output_format: PythonListFormat,
+    python_downloads_json_url: Option<String>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
+    let request = request.as_deref().map(PythonRequest::parse);
+    let base_download_request = if python_preference == PythonPreference::OnlySystem {
+        None
+    } else {
+        // If the user request cannot be mapped to a download request, we won't show any downloads
+        PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any))
+    };
+
     let mut output = BTreeSet::new();
-    if python_preference != PythonPreference::OnlySystem {
+    if let Some(base_download_request) = base_download_request {
         let download_request = match kinds {
             PythonListKinds::Installed => None,
             PythonListKinds::Downloads => Some(if all_platforms {
-                PythonDownloadRequest::default()
+                base_download_request
             } else {
-                PythonDownloadRequest::from_env()?
+                base_download_request.fill_platform()?
             }),
             PythonListKinds::Default => {
                 if python_downloads.is_automatic() {
                     Some(if all_platforms {
-                        PythonDownloadRequest::default()
+                        base_download_request
                     } else if all_arches {
-                        PythonDownloadRequest::from_env()?.with_any_arch()
+                        base_download_request.fill_platform()?.with_any_arch()
                     } else {
-                        PythonDownloadRequest::from_env()?
+                        base_download_request.fill_platform()?
                     })
                 } else {
                     // If fetching is not automatic, then don't show downloads as available by default
@@ -92,7 +102,8 @@ pub(crate) async fn list(
 
         let downloads = download_request
             .as_ref()
-            .map(PythonDownloadRequest::iter_downloads)
+            .map(|a| PythonDownloadRequest::iter_downloads(a, python_downloads_json_url.as_deref()))
+            .transpose()?
             .into_iter()
             .flatten();
 
@@ -103,13 +114,13 @@ pub(crate) async fn list(
                 Either::Right(download.url()),
             ));
         }
-    };
+    }
 
     let installed =
         match kinds {
             PythonListKinds::Installed | PythonListKinds::Default => {
                 Some(find_python_installations(
-                &PythonRequest::Any,
+                request.as_ref().unwrap_or(&PythonRequest::Any),
                 EnvironmentPreference::OnlySystem,
                 python_preference,
                 cache,
@@ -119,7 +130,7 @@ pub(crate) async fn list(
                 result
                     .as_ref()
                     .err()
-                    .map_or(true, DiscoveryError::is_critical)
+                    .is_none_or(DiscoveryError::is_critical)
             })
             .collect::<Result<Vec<Result<PythonInstallation, PythonNotFound>>, DiscoveryError>>()?
             .into_iter()
@@ -139,7 +150,7 @@ pub(crate) async fn list(
             output.insert((
                 installation.key(),
                 kind,
-                Either::Left(installation.interpreter().sys_executable().to_path_buf()),
+                Either::Left(installation.interpreter().real_executable().to_path_buf()),
             ));
         }
     }
@@ -156,16 +167,20 @@ pub(crate) async fn list(
             }
         }
 
-        // Only show the latest patch version for each download unless all were requested
+        // Only show the latest patch version for each download unless all were requested.
+        //
+        // We toggle off platforms/arches based unless all_platforms/all_arches because
+        // we want to only show the "best" option for each version by default, even
+        // if e.g. the x86_32 build would also work on x86_64.
         if !matches!(kind, Kind::System) {
             if let [major, minor, ..] = *key.version().release() {
                 if !seen_minor.insert((
-                    *key.os(),
+                    all_platforms.then_some(*key.os()),
                     major,
                     minor,
                     key.variant(),
                     key.implementation(),
-                    *key.arch(),
+                    all_arches.then_some(*key.arch()),
                     *key.libc(),
                 )) {
                     if matches!(kind, Kind::Download) && !all_versions {
@@ -175,13 +190,13 @@ pub(crate) async fn list(
             }
             if let [major, minor, patch] = *key.version().release() {
                 if !seen_patch.insert((
-                    *key.os(),
+                    all_platforms.then_some(*key.os()),
                     major,
                     minor,
                     patch,
                     key.variant(),
                     key.implementation(),
-                    *key.arch(),
+                    all_arches.then_some(*key.arch()),
                     key.libc(),
                 )) {
                     if matches!(kind, Kind::Download) {
@@ -214,7 +229,7 @@ pub(crate) async fn list(
                         Either::Right(url) => {
                             url_or_none = Some((*url).to_string());
                         }
-                    };
+                    }
                     let version = key.version();
                     let release = version.release();
 

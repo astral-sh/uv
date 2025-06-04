@@ -39,7 +39,7 @@ RequirementsTxt {
                                 parsed_url: Git(
                                     ParsedGitUrl {
                                         url: GitUrl {
-                                            repository: Url {
+                                            repository: DisplaySafeUrl {
                                                 scheme: "https",
                                                 cannot_be_a_base: false,
                                                 username: "",
@@ -61,7 +61,7 @@ RequirementsTxt {
                                     },
                                 ),
                                 verbatim: VerbatimUrl {
-                                    url: Url {
+                                    url: DisplaySafeUrl {
                                         scheme: "git+https",
                                         cannot_be_a_base: false,
                                         username: "",

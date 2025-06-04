@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::PartialEq;
 use std::ops::Deref;
 
@@ -23,6 +24,15 @@ impl From<String> for SmallString {
     #[inline]
     fn from(s: String) -> Self {
         Self(s.into())
+    }
+}
+
+impl From<Cow<'_, str>> for SmallString {
+    fn from(s: Cow<'_, str>) -> Self {
+        match s {
+            Cow::Borrowed(s) => Self::from(s),
+            Cow::Owned(s) => Self::from(s),
+        }
     }
 }
 
@@ -70,6 +80,26 @@ impl serde::Serialize for SmallString {
         S: serde::Serializer,
     {
         self.0.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for SmallString {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = SmallString;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Ok(v.into())
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
@@ -125,7 +155,7 @@ impl schemars::JsonSchema for SmallString {
         String::schema_name()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         String::json_schema(_gen)
     }
 }

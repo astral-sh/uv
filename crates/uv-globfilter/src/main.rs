@@ -3,7 +3,7 @@
 use globset::GlobSetBuilder;
 use std::env::args;
 use tracing::trace;
-use uv_globfilter::{parse_portable_glob, GlobDirFilter};
+use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use walkdir::WalkDir;
 
 fn main() {
@@ -12,7 +12,7 @@ fn main() {
 
     let mut include_globs = Vec::new();
     for include in includes {
-        let glob = parse_portable_glob(include).unwrap();
+        let glob = PortableGlobParser::Pep639.parse(include).unwrap();
         include_globs.push(glob.clone());
     }
     let include_matcher = GlobDirFilter::from_globs(&include_globs).unwrap();
@@ -25,7 +25,7 @@ fn main() {
         } else {
             format!("**/{exclude}").to_string()
         };
-        let glob = parse_portable_glob(&exclude).unwrap();
+        let glob = PortableGlobParser::Pep639.parse(&exclude).unwrap();
         exclude_builder.add(glob);
     }
     // https://github.com/BurntSushi/ripgrep/discussions/2927
@@ -33,6 +33,7 @@ fn main() {
 
     let walkdir_root = args().next().unwrap();
     for entry in WalkDir::new(&walkdir_root)
+        .sort_by_file_name()
         .into_iter()
         .filter_entry(|entry| {
             // TODO(konsti): This should be prettier.
@@ -56,7 +57,7 @@ fn main() {
         if !include_matcher.match_path(&relative) || exclude_matcher.is_match(&relative) {
             trace!("Excluding: `{}`", relative.display());
             continue;
-        };
+        }
         println!("{}", relative.display());
     }
 }

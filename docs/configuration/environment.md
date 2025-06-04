@@ -115,7 +115,7 @@ space-separated list of URLs as additional indexes when searching for packages.
 
 Equivalent to the `--index-strategy` command-line argument.
 
-For example, if set to `unsafe-any-match`, uv will consider versions of a given package
+For example, if set to `unsafe-best-match`, uv will consider versions of a given package
 available across all index URLs, rather than limiting its search to the first index URL
 that contains the package.
 
@@ -173,6 +173,16 @@ a link mode.
 Equivalent to the `--locked` command-line argument. If set, uv will assert that the
 `uv.lock` remains unchanged.
 
+### `UV_LOG_CONTEXT`
+
+Add additional context and structure to log messages.
+
+If logging is not enabled, e.g., with `RUST_LOG` or `-v`, this has no effect.
+
+### `UV_MANAGED_PYTHON`
+
+Require use of uv-managed Python versions.
+
 ### `UV_NATIVE_TLS`
 
 Equivalent to the `--native-tls` command-line argument. If set to `true`, uv will
@@ -189,10 +199,20 @@ extract package metadata, if available.
 Equivalent to the `--no-binary-package` command line argument. If set, uv will
 not use pre-built wheels for the given space-delimited list of packages.
 
+### `UV_NO_BUILD`
+
+Equivalent to the `--no-build` command-line argument. If set, uv will not build
+source distributions.
+
 ### `UV_NO_BUILD_ISOLATION`
 
 Equivalent to the `--no-build-isolation` command-line argument. If set, uv will
 skip isolation when building source distributions.
+
+### `UV_NO_BUILD_PACKAGE`
+
+Equivalent to the `--no-build-package` command line argument. If set, uv will
+not build source distributions for the given space-delimited list of packages.
 
 ### `UV_NO_CACHE`
 
@@ -205,6 +225,12 @@ Equivalent to the `--no-config` command-line argument. If set, uv will not read
 any configuration files from the current directory, parent directories, or user configuration
 directories.
 
+### `UV_NO_EDITABLE`
+
+Equivalent to the `--no-editable` command-line argument. If set, uv
+installs any editable dependencies, including the project and any workspace members, as
+non-editable
+
 ### `UV_NO_ENV_FILE`
 
 Ignore `.env` files when executing `uv run` commands.
@@ -212,6 +238,10 @@ Ignore `.env` files when executing `uv run` commands.
 ### `UV_NO_INSTALLER_METADATA`
 
 Skip writing `uv` installer metadata files (e.g., `INSTALLER`, `REQUESTED`, and `direct_url.json`) to site-packages `.dist-info` directories.
+
+### `UV_NO_MANAGED_PYTHON`
+
+Disable use of uv-managed Python versions.
 
 ### `UV_NO_PROGRESS`
 
@@ -249,6 +279,10 @@ Equivalent to the `--prerelease` command-line argument. For example, if set to
 ### `UV_PREVIEW`
 
 Equivalent to the `--preview` argument. Enables preview mode.
+
+### `UV_PROJECT`
+
+Equivalent to the `--project` command-line argument.
 
 ### `UV_PROJECT_ENVIRONMENT`
 
@@ -305,11 +339,25 @@ this Python interpreter for all operations.
 
 Specifies the directory to place links to installed, managed Python executables.
 
+### `UV_PYTHON_CACHE_DIR`
+
+Specifies the directory for caching the archives of managed Python installations before
+installation.
+
 ### `UV_PYTHON_DOWNLOADS`
 
 Equivalent to the
 [`python-downloads`](../reference/settings.md#python-downloads) setting and, when disabled, the
 `--no-python-downloads` option. Whether uv should allow Python downloads.
+
+### `UV_PYTHON_DOWNLOADS_JSON_URL`
+
+Managed Python installations information is hardcoded in the `uv` binary.
+
+This variable can be set to a URL pointing to JSON to use as a list for Python installations.
+This will allow for setting each property of the Python installation, mostly the url part for offline mirror.
+
+Note that currently, only local paths are supported.
 
 ### `UV_PYTHON_INSTALL_DIR`
 
@@ -327,8 +375,7 @@ Distributions can be read from a local directory by using the `file://` URL sche
 
 ### `UV_PYTHON_PREFERENCE`
 
-Equivalent to the `--python-preference` command-line argument. Whether uv
-should prefer system or managed Python versions.
+Whether uv should prefer system or managed Python versions.
 
 ### `UV_REQUEST_TIMEOUT`
 
@@ -343,6 +390,18 @@ uv will require that all dependencies have a hash specified in the requirements 
 
 Equivalent to the `--resolution` command-line argument. For example, if set to
 `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
+
+### `UV_STACK_SIZE`
+
+Use to set the stack size used by uv.
+
+The value is in bytes, and if both `UV_STACK_SIZE` are `RUST_MIN_STACK` unset, uv uses a 4MB
+(4194304) stack. `UV_STACK_SIZE` takes precedence over `RUST_MIN_STACK`.
+
+Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
+stack size, because we actually spawn our own main2 thread to work around
+the fact that Windows' real main thread is only 1MB. That thread has size
+`max(UV_STACK_SIZE, 1MB)`.
 
 ### `UV_SYSTEM_PYTHON`
 
@@ -360,6 +419,10 @@ Specifies the "bin" directory for installing tool executables.
 ### `UV_TOOL_DIR`
 
 Specifies the directory where uv stores managed tools.
+
+### `UV_TORCH_BACKEND`
+
+Equivalent to the `--torch-backend` command-line argument (e.g., `cpu`, `cu126`, or `auto`).
 
 ### `UV_UNMANAGED_INSTALL`
 
@@ -393,7 +456,7 @@ General proxy for all network requests.
 
 ### `APPDATA`
 
-The base path for user site packages on Windows.
+Path to user-level configuration directory on Windows systems.
 
 ### `BASH_VERSION`
 
@@ -407,7 +470,7 @@ Use to control color via `anstyle`.
 
 Overrides terminal width used for wrapping. This variable is not read by uv directly.
 
-This is a quasi-standard variable, described e.g. in `ncurses(3x)`.
+This is a quasi-standard variable, described, e.g., in `ncurses(3x)`.
 
 ### `CONDA_DEFAULT_ENV`
 
@@ -469,7 +532,7 @@ Used to look for Microsoft Store Pythons installations.
 Used with `--python-platform macos` and related variants to set the
 deployment target (i.e., the minimum supported macOS version).
 
-Defaults to `12.0`, the least-recent non-EOL macOS version at time of writing.
+Defaults to `13.0`, the least-recent non-EOL macOS version at time of writing.
 
 ### `NETRC`
 
@@ -507,29 +570,9 @@ The validation modes to use when run with `--compile`.
 
 See [`PycInvalidationMode`](https://docs.python.org/3/library/py_compile.html#py_compile.PycInvalidationMode).
 
-### `PYTHONHOME`
-
-Overrides `sys.prefix`.
-
-### `PYTHONNOUSERSITE`
-
-Don't add the user site packages to `sys.path`.
-
 ### `PYTHONPATH`
 
 Adds directories to Python module search path (e.g., `PYTHONPATH=/path/to/modules`).
-
-### `PYTHONPLATLIBDIR`
-
-Overrides `sys.platlibdir`.
-
-### `PYTHONSAFEPATH`
-
-Don't prepend a potentially unsafe path to `sys.path`.
-
-### `PYTHONUSERBASE`
-
-Overrides `site.USER_BASE`.
 
 ### `RUST_LOG`
 
@@ -548,11 +591,16 @@ for more.
 
 Use to set the stack size used by uv.
 
-The value is in bytes, and the default is typically 2MB (2097152).
+The value is in bytes, and if both `UV_STACK_SIZE` are `RUST_MIN_STACK` unset, uv uses a 4MB
+(4194304) stack. `UV_STACK_SIZE` takes precedence over `RUST_MIN_STACK`.
+
+Prefer setting `UV_STACK_SIZE`, since `RUST_MIN_STACK` also affects subprocesses, such as
+build backends that use Rust code.
+
 Unlike the normal `RUST_MIN_STACK` semantics, this can affect main thread
 stack size, because we actually spawn our own main2 thread to work around
 the fact that Windows' real main thread is only 1MB. That thread has size
-`max(RUST_MIN_STACK, 4MB)`.
+`max(RUST_MIN_STACK, 1MB)`.
 
 ### `SHELL`
 
@@ -574,6 +622,10 @@ Path to system-level configuration directory on Windows systems.
 ### `TRACING_DURATIONS_FILE`
 
 Use to create the tracing durations file via the `tracing-durations-export` feature.
+
+### `USERPROFILE`
+
+Path to root directory of user's profile on Windows systems.
 
 ### `UV`
 

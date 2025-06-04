@@ -17,7 +17,7 @@ impl BuildIsolation<'_> {
             Self::Isolated => true,
             Self::Shared(_) => false,
             Self::SharedPackage(_, packages) => {
-                package.map_or(true, |package| !packages.iter().any(|p| p == package))
+                package.is_none_or(|package| !packages.iter().any(|p| p == package))
             }
         }
     }

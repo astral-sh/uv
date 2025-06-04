@@ -6,12 +6,12 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{DryRun, KeyringProviderType, TrustedHost};
+use uv_client::BaseClientBuilder;
+use uv_configuration::{DryRun, KeyringProviderType};
+use uv_distribution_types::Requirement;
 use uv_distribution_types::{InstalledMetadata, Name, UnresolvedRequirement};
 use uv_fs::Simplified;
 use uv_pep508::UnnamedRequirement;
-use uv_pypi_types::Requirement;
 use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::EnvironmentPreference;
 use uv_python::PythonRequest;
@@ -19,8 +19,9 @@ use uv_python::{Prefix, PythonEnvironment, Target};
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 
 use crate::commands::pip::operations::report_target_environment;
-use crate::commands::{elapsed, ExitStatus};
+use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Uninstall packages from the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -32,20 +33,18 @@ pub(crate) async fn pip_uninstall(
     target: Option<Target>,
     prefix: Option<Prefix>,
     cache: Cache,
-    connectivity: Connectivity,
-    native_tls: bool,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: &[TrustedHost],
+    network_settings: &NetworkSettings,
     dry_run: DryRun,
     printer: Printer,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Read all requirements from the provided sources.
     let spec = RequirementsSpecification::from_simple_sources(sources, &client_builder).await?;
@@ -177,8 +176,8 @@ pub(crate) async fn pip_uninstall(
         }
 
         // Deduplicate, since a package could be listed both by name and editable URL.
-        distributions.sort_unstable_by_key(|dist| dist.path());
-        distributions.dedup_by_key(|dist| dist.path());
+        distributions.sort_unstable_by_key(|dist| dist.install_path());
+        distributions.dedup_by_key(|dist| dist.install_path());
         distributions
     };
 

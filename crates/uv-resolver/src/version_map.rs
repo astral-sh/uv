@@ -1,12 +1,12 @@
-use std::collections::btree_map::{BTreeMap, Entry};
 use std::collections::Bound;
+use std::collections::btree_map::{BTreeMap, Entry};
 use std::ops::RangeBounds;
 use std::sync::OnceLock;
 
 use pubgrub::Ranges;
 use tracing::instrument;
 
-use uv_client::{OwnedArchive, SimpleMetadata, VersionFiles};
+use uv_client::{FlatIndexEntry, OwnedArchive, SimpleMetadata, VersionFiles};
 use uv_configuration::BuildOptions;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
@@ -21,7 +21,7 @@ use uv_types::HashStrategy;
 use uv_warnings::warn_user_once;
 
 use crate::flat_index::FlatDistributions;
-use crate::{yanks::AllowedYanks, ExcludeNewer, RequiresPython};
+use crate::{ExcludeNewer, RequiresPython, yanks::AllowedYanks};
 
 /// A map from versions to distributions.
 #[derive(Debug)]
@@ -41,7 +41,7 @@ impl VersionMap {
     ///
     /// PEP 592: <https://peps.python.org/pep-0592/#warehouse-pypi-implementation-notes>
     #[instrument(skip_all, fields(package_name))]
-    pub(crate) fn from_metadata(
+    pub(crate) fn from_simple_metadata(
         simple_metadata: OwnedArchive<SimpleMetadata>,
         package_name: &PackageName,
         index: &IndexUrl,
@@ -113,6 +113,30 @@ impl VersionMap {
                 requires_python: requires_python.clone(),
                 exclude_newer: exclude_newer.copied(),
             }),
+        }
+    }
+
+    #[instrument(skip_all, fields(package_name))]
+    pub(crate) fn from_flat_metadata(
+        flat_metadata: Vec<FlatIndexEntry>,
+        tags: Option<&Tags>,
+        hasher: &HashStrategy,
+        build_options: &BuildOptions,
+    ) -> Self {
+        let mut stable = false;
+        let mut local = false;
+        let mut map = BTreeMap::new();
+
+        for (version, prioritized_dist) in
+            FlatDistributions::from_entries(flat_metadata, tags, hasher, build_options)
+        {
+            stable |= version.is_stable();
+            local |= version.is_local();
+            map.insert(version, prioritized_dist);
+        }
+
+        Self {
+            inner: VersionMapInner::Eager(VersionMapEager { map, stable, local }),
         }
     }
 
@@ -201,12 +225,12 @@ impl VersionMap {
     }
 
     /// Return the [`Hashes`] for the given version, if any.
-    pub(crate) fn hashes(&self, version: &Version) -> Option<Vec<HashDigest>> {
+    pub(crate) fn hashes(&self, version: &Version) -> Option<&[HashDigest]> {
         match self.inner {
             VersionMapInner::Eager(ref eager) => {
-                eager.map.get(version).map(|file| file.hashes().to_vec())
+                eager.map.get(version).map(PrioritizedDist::hashes)
             }
-            VersionMapInner::Lazy(ref lazy) => lazy.get(version).map(|file| file.hashes().to_vec()),
+            VersionMapInner::Lazy(ref lazy) => lazy.get(version).map(PrioritizedDist::hashes),
         }
     }
 
@@ -285,6 +309,7 @@ impl<'a> VersionMapDistHandle<'a> {
 
 /// The kind of internal version map we have.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum VersionMapInner {
     /// All distributions are fully materialized in memory.
     ///
@@ -414,7 +439,7 @@ impl VersionMapLazy {
                 };
 
                 // Prioritize amongst all available files.
-                let yanked = file.yanked.clone();
+                let yanked = file.yanked.as_deref();
                 let hashes = file.hashes.clone();
                 match filename {
                     DistFilename::WheelFilename(filename) => {
@@ -422,7 +447,7 @@ impl VersionMapLazy {
                             &filename,
                             &filename.name,
                             &filename.version,
-                            &hashes,
+                            hashes.as_slice(),
                             yanked,
                             excluded,
                             upload_time,
@@ -438,7 +463,7 @@ impl VersionMapLazy {
                         let compatibility = self.source_dist_compatibility(
                             &filename.name,
                             &filename.version,
-                            &hashes,
+                            hashes.as_slice(),
                             yanked,
                             excluded,
                             upload_time,
@@ -469,7 +494,7 @@ impl VersionMapLazy {
         name: &PackageName,
         version: &Version,
         hashes: &[HashDigest],
-        yanked: Option<Yanked>,
+        yanked: Option<&Yanked>,
         excluded: bool,
         upload_time: Option<i64>,
     ) -> SourceDistCompatibility {
@@ -488,7 +513,9 @@ impl VersionMapLazy {
         // Check if yanked
         if let Some(yanked) = yanked {
             if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
-                return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(yanked));
+                return SourceDistCompatibility::Incompatible(IncompatibleSource::Yanked(
+                    yanked.clone(),
+                ));
             }
         }
 
@@ -516,7 +543,7 @@ impl VersionMapLazy {
         name: &PackageName,
         version: &Version,
         hashes: &[HashDigest],
-        yanked: Option<Yanked>,
+        yanked: Option<&Yanked>,
         excluded: bool,
         upload_time: Option<i64>,
     ) -> WheelCompatibility {
@@ -533,7 +560,7 @@ impl VersionMapLazy {
         // Check if yanked
         if let Some(yanked) = yanked {
             if yanked.is_yanked() && !self.allowed_yanks.contains(name, version) {
-                return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked));
+                return WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(yanked.clone()));
             }
         }
 

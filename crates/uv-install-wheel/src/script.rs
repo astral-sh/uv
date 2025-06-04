@@ -4,7 +4,7 @@ use rustc_hash::FxHashSet;
 use serde::Serialize;
 use std::sync::LazyLock;
 
-use crate::{wheel, Error};
+use crate::{Error, wheel};
 
 /// A script defining the name of the runnable entrypoint and the module and function that should be
 /// run.
@@ -109,7 +109,7 @@ pub(crate) fn scripts_from_ini(
 
 #[cfg(test)]
 mod test {
-    use crate::script::{scripts_from_ini, Script};
+    use crate::script::{Script, scripts_from_ini};
 
     #[test]
     fn test_valid_script_names() {

@@ -5,16 +5,21 @@ use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use assert_fs::prelude::*;
 use flate2::write::GzEncoder;
 use fs_err::File;
 use indoc::indoc;
 use url::Url;
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use crate::common::{download_to_disk, packse_index_url, uv_snapshot, TestContext};
 use uv_fs::Simplified;
 use uv_static::EnvVars;
+
+use crate::common::{
+    DEFAULT_PYTHON_VERSION, TestContext, download_to_disk, packse_index_url, uv_snapshot,
+};
 
 #[test]
 fn compile_requirements_in() -> Result<()> {
@@ -1591,7 +1596,7 @@ fn compile_python_conflicts() -> Result<()> {
         .arg("--python")
         .arg("3.12")
         .arg("-p")
-        .arg("3.12"), @r###"
+        .arg("3.12"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -1599,10 +1604,10 @@ fn compile_python_conflicts() -> Result<()> {
     ----- stderr -----
     error: the argument '--python <PYTHON>' cannot be used multiple times
 
-    Usage: uv pip compile [OPTIONS] <SRC_FILE>...
+    Usage: uv pip compile [OPTIONS] <SRC_FILE|--group <GROUP>>
 
     For more information, try '--help'.
-    "###
+    "
     );
 
     // `UV_PYTHON` should  be usable with `-p`
@@ -2102,6 +2107,7 @@ fn omit_non_matching_annotation() -> Result<()> {
 
 /// Test that we select the last 3.8 compatible numpy version instead of trying to compile an
 /// incompatible sdist <https://github.com/astral-sh/uv/issues/388>
+#[cfg(feature = "python-eol")]
 #[test]
 fn compile_numpy_py38() -> Result<()> {
     let context = TestContext::new("3.8");
@@ -3263,7 +3269,7 @@ optional-dependencies.bar = [
             .arg("--all-extras")
             .arg("--extra")
             .arg("foo"),
-            @r###"
+            @r"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -3271,10 +3277,10 @@ optional-dependencies.bar = [
     ----- stderr -----
     error: the argument '--all-extras' cannot be used with '--extra <EXTRA>'
 
-    Usage: uv pip compile --cache-dir [CACHE_DIR] --all-extras --exclude-newer <EXCLUDE_NEWER> <SRC_FILE>...
+    Usage: uv pip compile --cache-dir [CACHE_DIR] --all-extras --exclude-newer <EXCLUDE_NEWER> <SRC_FILE|--group <GROUP>>
 
     For more information, try '--help'.
-    "###
+    "
     );
 
     Ok(())
@@ -4131,23 +4137,22 @@ fn override_dependency_from_workspace_invalid_syntax() -> Result<()> {
 
     ----- stderr -----
     warning: Failed to parse `pyproject.toml` during settings discovery:
-      TOML parse error at line 9, column 29
-        |
-      9 |     override-dependencies = [
-        |                             ^
+      TOML parse error at line 10, column 7
+         |
+      10 |       "werkzeug=2.3.0"
+         |       ^^^^^^^^^^^^^^^^
       no such comparison operator "=", must be one of ~= == != <= >= < > ===
       werkzeug=2.3.0
               ^^^^^^
 
     error: Failed to parse: `pyproject.toml`
-      Caused by: TOML parse error at line 9, column 29
-      |
-    9 |     override-dependencies = [
-      |                             ^
+      Caused by: TOML parse error at line 10, column 7
+       |
+    10 |       "werkzeug=2.3.0"
+       |       ^^^^^^^^^^^^^^^^
     no such comparison operator "=", must be one of ~= == != <= >= < > ===
     werkzeug=2.3.0
             ^^^^^^
-
     "###
     );
 
@@ -5355,7 +5360,7 @@ fn find_links_directory() -> Result<()> {
     Ok(())
 }
 
-/// Compile using `--find-links` with a URL by resolving `tqdm` from the `PyTorch` wheels index.
+/// Compile using `--find-links` with a URL by resolving `tqdm` from the PyTorch wheels index.
 #[test]
 fn find_links_url() -> Result<()> {
     let context = TestContext::new("3.12").with_exclude_newer("2025-01-30T00:00:00Z");
@@ -5410,7 +5415,7 @@ fn find_links_env_var() -> Result<()> {
     Ok(())
 }
 
-/// Compile using `--find-links` with a URL by resolving `tqdm` from the `PyTorch` wheels index,
+/// Compile using `--find-links` with a URL by resolving `tqdm` from the PyTorch wheels index,
 /// with the URL itself provided in a `requirements.txt` file.
 #[test]
 fn find_links_requirements_txt() -> Result<()> {
@@ -5561,6 +5566,7 @@ coverage = ["example[test]", "extras>=0.0.1,<=0.0.2"]
 ///
 /// `voluptuous==0.15.1` requires Python 3.9 or later, so we should resolve to an earlier version
 /// and avoiding building 0.15.1 at all.
+#[cfg(feature = "python-eol")]
 #[test]
 fn requires_python_prefetch() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2025-01-01T00:00:00Z");
@@ -6955,7 +6961,7 @@ fn invalid_metadata_requires_python() -> Result<()> {
       ╰─▶ Because validation==2.0.0 has invalid metadata and you require validation==2.0.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Metadata for `validation` (v2.0.0) could not be parsed:
-            Failed to parse version: Unexpected end of version specifier, expected operator:
+            Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==12`?:
             12
             ^^
     "###
@@ -9509,7 +9515,7 @@ fn universal_marker_propagation() -> Result<()> {
             .arg("requirements.in")
             .arg("-p")
             .arg("3.8")
-            .arg("--universal"), @r###"
+            .arg("--universal"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -9537,9 +9543,11 @@ fn universal_marker_propagation() -> Result<()> {
         # via jinja2
     mpmath==1.3.0
         # via sympy
-    networkx==3.2.1
+    networkx==3.1 ; python_full_version < '3.9'
         # via torch
-    numpy==1.26.3 ; python_full_version < '3.9'
+    networkx==3.2 ; python_full_version >= '3.9'
+        # via torch
+    numpy==1.24.4 ; python_full_version < '3.9'
         # via torchvision
     numpy==1.26.4 ; python_full_version >= '3.9'
         # via torchvision
@@ -9577,8 +9585,8 @@ fn universal_marker_propagation() -> Result<()> {
 
     ----- stderr -----
     warning: The requested Python version 3.8 is not available; 3.12.[X] will be used to build dependencies instead.
-    Resolved 25 packages in [TIME]
-    "###
+    Resolved 26 packages in [TIME]
+    "
     );
 
     Ok(())
@@ -11703,7 +11711,7 @@ fn dynamic_dependencies() -> Result<()> {
 #[cfg(feature = "python-patch")]
 #[test]
 fn emit_marker_expression_exciting_linux() -> Result<()> {
-    let context = TestContext::new("3.12.6");
+    let context = TestContext::new("3.12.9");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio")?;
 
@@ -11712,14 +11720,14 @@ fn emit_marker_expression_exciting_linux() -> Result<()> {
         .arg("requirements.in")
         .arg("--python-platform")
         .arg("linux")
-        .arg("--emit-marker-expression"), @r###"
+        .arg("--emit-marker-expression"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --python-platform linux --emit-marker-expression
     # Pinned dependencies known to be valid for:
-    #    python_full_version == '3.12.6' and platform_python_implementation == 'CPython' and sys_platform == 'linux'
+    #    python_full_version == '3.12.9' and platform_python_implementation == 'CPython' and sys_platform == 'linux'
     anyio==4.3.0
         # via -r requirements.in
     idna==3.6
@@ -11729,7 +11737,7 @@ fn emit_marker_expression_exciting_linux() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -11739,7 +11747,7 @@ fn emit_marker_expression_exciting_linux() -> Result<()> {
 #[cfg(feature = "python-patch")]
 #[test]
 fn emit_marker_expression_direct() -> Result<()> {
-    let context = TestContext::new("3.12.6");
+    let context = TestContext::new("3.12.9");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio ; sys_platform == 'linux'")?;
 
@@ -11748,14 +11756,14 @@ fn emit_marker_expression_direct() -> Result<()> {
         .arg("requirements.in")
         .arg("--python-platform")
         .arg("linux")
-        .arg("--emit-marker-expression"), @r###"
+        .arg("--emit-marker-expression"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --python-platform linux --emit-marker-expression
     # Pinned dependencies known to be valid for:
-    #    python_full_version == '3.12.6' and platform_python_implementation == 'CPython' and sys_platform == 'linux'
+    #    python_full_version == '3.12.9' and platform_python_implementation == 'CPython' and sys_platform == 'linux'
     anyio==4.3.0
         # via -r requirements.in
     idna==3.6
@@ -11765,7 +11773,7 @@ fn emit_marker_expression_direct() -> Result<()> {
 
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -11809,7 +11817,7 @@ fn emit_marker_expression_conditional() -> Result<()> {
 #[cfg(feature = "python-patch")]
 #[test]
 fn emit_marker_expression_pypy() -> Result<()> {
-    let context = TestContext::new("3.12.6");
+    let context = TestContext::new("3.12.9");
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("pendulum")?;
 
@@ -11818,14 +11826,14 @@ fn emit_marker_expression_pypy() -> Result<()> {
         .arg("requirements.in")
         .arg("--python-platform")
         .arg("linux")
-        .arg("--emit-marker-expression"), @r###"
+        .arg("--emit-marker-expression"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     # This file was autogenerated by uv via the following command:
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --python-platform linux --emit-marker-expression
     # Pinned dependencies known to be valid for:
-    #    python_full_version == '3.12.6' and implementation_name == 'cpython'
+    #    python_full_version == '3.12.9' and implementation_name == 'cpython'
     pendulum==3.0.0
         # via -r requirements.in
     python-dateutil==2.9.0.post0
@@ -11841,7 +11849,7 @@ fn emit_marker_expression_pypy() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    "###);
+    ");
 
     Ok(())
 }
@@ -12442,6 +12450,37 @@ fn compile_index_url_first_match_marker() -> Result<()> {
 
 /// Install a package via `--extra-index-url`.
 ///
+/// If the package "exists" on the "extra" index, but without any versions, the resolution
+/// should fail by default (even though a compatible version exists on the "primary" index).
+#[test]
+fn compile_index_url_first_match_all_versions() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("pandas")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--index-url")
+        .arg("https://pypi.org/simple")
+        .arg("--extra-index-url")
+        .arg("https://test.pypi.org/simple")
+        .arg("requirements.in")
+        .arg("--no-deps"), @r###"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because there are no versions of pandas and you require pandas, we can conclude that your requirements are unsatisfiable.
+    "###
+    );
+
+    Ok(())
+}
+
+/// Install a package via `--extra-index-url`.
+///
 /// If the package exists exist on the "extra" index, but at an incompatible version, the
 /// resolution should fallback to the "primary" index when `--index-strategy unsafe-any-match`
 /// is provided.
@@ -12585,7 +12624,7 @@ fn compile_index_url_unsafe_lowest() -> Result<()> {
         .arg("--extra-index-url")
         .arg("https://test.pypi.org/simple")
         .arg("requirements.in")
-        .arg("--no-deps"), @r###"
+        .arg("--no-deps"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -12595,9 +12634,9 @@ fn compile_index_url_unsafe_lowest() -> Result<()> {
         # via -r requirements.in
 
     ----- stderr -----
-    warning: The direct dependency `anyio` is unpinned. Consider setting a lower bound when using `--resolution lowest` to avoid using outdated versions.
+    warning: The direct dependency `anyio` is unpinned. Consider setting a lower bound when using `--resolution lowest` or `--resolution lowest-direct` to avoid using outdated versions.
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -13516,7 +13555,7 @@ fn ignore_invalid_constraint() -> Result<()> {
 /// Include a `build_constraints.txt` file with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
 
@@ -13545,7 +13584,7 @@ fn incompatible_build_constraint() -> Result<()> {
 /// Include a `build_constraints.txt` file with a compatible constraint.
 #[test]
 fn compatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
     let requirements_txt = context.temp_dir.child("requirements.txt");
     requirements_txt.write_str("requests==1.2")?;
 
@@ -13555,7 +13594,7 @@ fn compatible_build_constraint() -> Result<()> {
     uv_snapshot!(context.pip_compile()
         .arg("requirements.txt")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13566,7 +13605,7 @@ fn compatible_build_constraint() -> Result<()> {
 
     ----- stderr -----
     Resolved 1 package in [TIME]
-    "###
+    "
     );
 
     Ok(())
@@ -13575,7 +13614,7 @@ fn compatible_build_constraint() -> Result<()> {
 /// Include `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint_in_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
         r#"[build-system]
@@ -13613,6 +13652,7 @@ build-constraint-dependencies = [
 }
 
 /// Include `build-constraint-dependencies` in pyproject.toml with a compatible constraint.
+#[cfg(feature = "python-eol")]
 #[test]
 fn compatible_build_constraint_in_pyproject_toml() -> Result<()> {
     let context = TestContext::new("3.8");
@@ -13656,7 +13696,7 @@ build-constraint-dependencies = [
 /// Merge `build_constraints.txt` with `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     // incompatible setuptools version in pyproject.toml, compatible in build_constraints.txt
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
@@ -13741,7 +13781,7 @@ build-constraint-dependencies = [
 /// Merge CLI args `build_constraints.txt` with `build-constraint-dependencies` in pyproject.toml with a compatible constraint.
 #[test]
 fn compatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     // incompatible setuptools version in pyproject.toml, compatible in build_constraints.txt
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
@@ -13907,7 +13947,7 @@ fn invalid_extra() -> Result<()> {
 #[test]
 #[cfg(not(windows))]
 fn symlink() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("anyio")?;
 
@@ -13923,7 +13963,7 @@ fn symlink() -> Result<()> {
     uv_snapshot!(context.pip_compile()
         .arg("requirements.in")
         .arg("--output-file")
-        .arg("requirements-symlink.txt"), @r###"
+        .arg("requirements-symlink.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -13931,18 +13971,14 @@ fn symlink() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --output-file requirements-symlink.txt
     anyio==4.3.0
         # via -r requirements.in
-    exceptiongroup==1.2.0
-        # via anyio
     idna==3.6
         # via anyio
     sniffio==1.3.1
         # via anyio
-    typing-extensions==4.10.0
-        # via anyio
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
-    "###
+    Resolved 3 packages in [TIME]
+    "
     );
 
     // The symlink should still be a symlink.
@@ -14451,6 +14487,7 @@ fn unsupported_requires_python_static_metadata() -> Result<()> {
 /// dynamic metadata.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/8767>
+#[cfg(feature = "python-eol")]
 #[test]
 fn unsupported_requires_python_dynamic_metadata() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2024-11-04T00:00:00Z");
@@ -14925,7 +14962,7 @@ fn compile_lowest_extra_unpinned_warning() -> Result<()> {
         .arg("--index-url")
         .arg(packse_index_url())
         .arg(requirements_in.path())
-        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r###"
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -14943,14 +14980,15 @@ fn compile_lowest_extra_unpinned_warning() -> Result<()> {
         #   all-extras-required-a
 
     ----- stderr -----
-    warning: The direct dependency `all-extras-required-a` is unpinned. Consider setting a lower bound when using `--resolution lowest` to avoid using outdated versions.
+    warning: The direct dependency `all-extras-required-a` is unpinned. Consider setting a lower bound when using `--resolution lowest` or `--resolution lowest-direct` to avoid using outdated versions.
     Resolved 3 packages in [TIME]
-    "###
+    "
     );
 
     Ok(())
 }
 
+#[cfg(feature = "python-eol")]
 #[test]
 fn disjoint_requires_python() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2025-01-29T00:00:00Z");
@@ -15051,6 +15089,7 @@ fn dynamic_version_source_dist() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "python-eol")]
 #[test]
 fn max_python_requirement() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2024-12-18T00:00:00Z");
@@ -15231,7 +15270,735 @@ fn respect_index_preference() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn dependency_group() -> Result<()> {
+    // uv pip compile --group tests, with a single pyproject.toml
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            bar = ["iniconfig"]
+            dev = ["sniffio"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let mut context;
+
+    // Passing --group should add just that group's contents from ./pyproject.toml
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --group bar
+    iniconfig==2.0.0
+        # via myproject (pyproject.toml:bar)
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Passing a pyproject.toml and --group should include both its deps and the group
+    // (This is a "try to confuse the internals" test, as this file is logically
+    // imported twice, but with two different semantics.)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("pyproject.toml")
+        .arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] pyproject.toml --group bar
+    iniconfig==2.0.0
+        # via myproject (pyproject.toml:bar)
+    typing-extensions==4.10.0
+        # via myproject (pyproject.toml)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Another "try to confuse the internals" test with an absolute path
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg(context.temp_dir.child("pyproject.toml").path())
+        .arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/pyproject.toml --group bar
+    iniconfig==2.0.0
+        # via myproject (pyproject.toml:bar)
+    typing-extensions==4.10.0
+        # via myproject (pyproject.toml)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // An explicit use of `<path>:<group>` syntax, here using what the default is anyway
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("pyproject.toml:bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --group pyproject.toml:bar
+    iniconfig==2.0.0
+        # via myproject (pyproject.toml:bar)
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // "try to confuse the internals" with an explicit path for the group
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("pyproject.toml")
+        .arg("--group").arg("pyproject.toml:bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] pyproject.toml --group pyproject.toml:bar
+    iniconfig==2.0.0
+        # via myproject (pyproject.toml:bar)
+    typing-extensions==4.10.0
+        # via myproject (pyproject.toml)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Let's check that the other group works fine individually
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --group foo
+    sortedcontainers==2.4.0
+        # via myproject (pyproject.toml:foo)
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Now let's do both of the groups together
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --group foo --group bar
+    iniconfig==2.0.0
+        # via myproject (pyproject.toml:bar)
+    sortedcontainers==2.4.0
+        # via myproject (pyproject.toml:foo)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // And finally put it all together
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("pyproject.toml")
+        .arg("--group").arg("foo")
+        .arg("--group").arg("bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] pyproject.toml --group foo --group bar
+    iniconfig==2.0.0
+        # via myproject (pyproject.toml:bar)
+    sortedcontainers==2.4.0
+        # via myproject (pyproject.toml:foo)
+    typing-extensions==4.10.0
+        # via myproject (pyproject.toml)
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn many_pyproject_group() -> Result<()> {
+    // uv pip compile --group tests, with multiple pyproject.tomls at once
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let mut context;
+
+    // Use the 'foo' group from the main toml
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --group pyproject.toml:foo
+    sortedcontainers==2.4.0
+        # via myproject (pyproject.toml:foo)
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Use the 'foo' group from the subtoml
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("subdir/pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --group subdir/pyproject.toml:foo
+    iniconfig==2.0.0
+        # via mysubproject (subdir/pyproject.toml:foo)
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // Now try both together, where they happen to define a group with the same name
+    // (This does nothing special but the code shouldn't get confused.)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("pyproject.toml:foo")
+        .arg("--group").arg("subdir/pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --group pyproject.toml:foo --group subdir/pyproject.toml:foo
+    iniconfig==2.0.0
+        # via mysubproject (subdir/pyproject.toml:foo)
+    sortedcontainers==2.4.0
+        # via myproject (pyproject.toml:foo)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn suspicious_group() -> Result<()> {
+    // uv pip compile --group tests, where the invocations are suspicious
+    // and we might want to add warnings
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let mut context;
+
+    // Another variant of "both" but with the path sugar applied to the one in cwd
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("subdir/pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --group foo --group subdir/pyproject.toml:foo
+    iniconfig==2.0.0
+        # via mysubproject (subdir/pyproject.toml:foo)
+    sortedcontainers==2.4.0
+        # via myproject (pyproject.toml:foo)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Using the path sugar for "foo" but requesting "bar" for the subtoml
+    // Although you would be forgiven for thinking "foo" should be used from
+    // the subtoml, that's not what should happen.
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("foo")
+        .arg("--group").arg("subdir/pyproject.toml:bar"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --group foo --group subdir/pyproject.toml:bar
+    sniffio==1.3.1
+        # via mysubproject (subdir/pyproject.toml:bar)
+    sortedcontainers==2.4.0
+        # via myproject (pyproject.toml:foo)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // Using the path sugar to request pyproject.toml:foo
+    // while also importing subdir/pyproject.toml's dependencies
+    // Although you would be forgiven for thinking "foo" should be used from
+    // the subtoml, that's not what should happen.
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("subdir/pyproject.toml")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] subdir/pyproject.toml --group foo
+    sortedcontainers==2.4.0
+        # via myproject (pyproject.toml:foo)
+    typing-extensions==4.10.0
+        # via mysubproject (subdir/pyproject.toml)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // An inversion of the previous -- this one isn't terribly ambiguous
+    // but we should have it in the suite too in case it should be distinguished!
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("pyproject.toml")
+        .arg("--group").arg("subdir/pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] pyproject.toml --group subdir/pyproject.toml:foo
+    iniconfig==2.0.0
+        # via mysubproject (subdir/pyproject.toml:foo)
+    typing-extensions==4.10.0
+        # via myproject (pyproject.toml)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn invalid_group() -> Result<()> {
+    // uv pip compile --group tests, where the invocations should fail
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let context = new_context()?;
+
+    // Hey you passed a path and not a group!
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("subdir/"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'subdir/' for '--group <GROUP>': Not a valid package or extra name: "subdir/". Names must start and end with a letter or digit and may only contain -, _, ., and alphanumeric characters.
+
+    For more information, try '--help'.
+    "#);
+
+    // Hey this path needs to end with "pyproject.toml"!
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("./:foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value './:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: ./
+
+    For more information, try '--help'.
+    ");
+
+    // Hey this path needs to end with "pyproject.toml"!
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("subdir/:foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: invalid value 'subdir/:foo' for '--group <GROUP>': The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: subdir/
+
+    For more information, try '--help'.
+    ");
+
+    // Another invocation that Looks Weird but is asking for bar from two
+    // different tomls. In this case the main one doesn't define it and
+    // we should error!
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--group").arg("bar")
+        .arg("--group").arg("subdir/pyproject.toml:bar"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: The dependency group 'bar' was not found in the project: pyproject.toml
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn project_and_group() -> Result<()> {
+    // Checking that --project is handled properly with --group
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let mut context;
+
+    // 'foo' from subtoml, by implicit-sugar + --project
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--project").arg("subdir")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --project subdir --group foo
+    iniconfig==2.0.0
+        # via mysubproject (subdir/pyproject.toml:foo)
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    // 'foo' from subtoml, by implicit-sugar + --project
+    // 'bar' from subtoml, by explicit relpath from cwd
+    // (explicit relpaths are not affected by --project)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--project").arg("subdir")
+        .arg("--group").arg("subdir/pyproject.toml:bar")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --project subdir --group subdir/pyproject.toml:bar --group foo
+    iniconfig==2.0.0
+        # via mysubproject (subdir/pyproject.toml:foo)
+    sniffio==1.3.1
+        # via mysubproject (subdir/pyproject.toml:bar)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // 'bar' from subtoml, by implicit-sugar + --project
+    // 'foo' from main toml, by explicit relpath from cwd
+    // (explicit relpaths are not affected by --project)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--project").arg("subdir")
+        .arg("--group").arg("bar")
+        .arg("--group").arg("pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --project subdir --group bar --group pyproject.toml:foo
+    sniffio==1.3.1
+        # via mysubproject (subdir/pyproject.toml:bar)
+    sortedcontainers==2.4.0
+        # via myproject (pyproject.toml:foo)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // 'bar' from subtoml, by explicit relpath from cwd
+    // 'foo' from main toml, by explicit relpath from cwd
+    // (explicit relpaths are not affected by --project)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--project").arg("subdir")
+        .arg("--group").arg("subdir/pyproject.toml:bar")
+        .arg("--group").arg("pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --project subdir --group subdir/pyproject.toml:bar --group pyproject.toml:foo
+    sniffio==1.3.1
+        # via mysubproject (subdir/pyproject.toml:bar)
+    sortedcontainers==2.4.0
+        # via myproject (pyproject.toml:foo)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn directory_and_group() -> Result<()> {
+    // Checking that --directory is handled properly with --group
+    fn new_context() -> Result<TestContext> {
+        let context = TestContext::new("3.12");
+
+        let pyproject_toml = context.temp_dir.child("pyproject.toml");
+        pyproject_toml.write_str(
+            r#"
+            [project]
+            name = "myproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = ["typing-extensions"]
+            [dependency-groups]
+            foo = ["sortedcontainers"]
+            "#,
+        )?;
+
+        let subdir = context.temp_dir.child("subdir");
+        subdir.create_dir_all()?;
+        let pyproject_toml2 = subdir.child("pyproject.toml");
+        pyproject_toml2.write_str(
+            r#"
+            [project]
+            name = "mysubproject"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            [dependency-groups]
+            foo = ["iniconfig"]
+            bar = ["sniffio"]
+            "#,
+        )?;
+
+        Ok(context)
+    }
+
+    let mut context;
+
+    // 'bar' from subtoml, by implicit-sugar + --directory
+    // 'foo' from main toml, by explicit relpath from --directory
+    // (explicit relpaths ARE affected by --directory)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--directory").arg("subdir")
+        .arg("--group").arg("bar")
+        .arg("--group").arg("../pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --directory subdir --group bar --group ../pyproject.toml:foo
+    sniffio==1.3.1
+        # via mysubproject (pyproject.toml:bar)
+    sortedcontainers==2.4.0
+        # via myproject (../pyproject.toml:foo)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // 'bar' from subtoml, by explicit relpath from --directory
+    // 'foo' from main toml, by explicit relpath from --directory
+    // (explicit relpaths ARE affected by --directory)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--directory").arg("subdir")
+        .arg("--group").arg("pyproject.toml:bar")
+        .arg("--group").arg("../pyproject.toml:foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --directory subdir --group pyproject.toml:bar --group ../pyproject.toml:foo
+    sniffio==1.3.1
+        # via mysubproject (pyproject.toml:bar)
+    sortedcontainers==2.4.0
+        # via myproject (../pyproject.toml:foo)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // 'bar' from subtoml, by explicit relpath from --directory
+    // 'foo' from main toml, by implicit path + --project + --directory
+    // (explicit relpaths ARE affected by --directory)
+    context = new_context()?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("--directory").arg("subdir")
+        .arg("--project").arg("../")
+        .arg("--group").arg("pyproject.toml:bar")
+        .arg("--group").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --directory subdir --project ../ --group pyproject.toml:bar --group foo
+    sniffio==1.3.1
+        # via mysubproject (pyproject.toml:bar)
+    sortedcontainers==2.4.0
+        # via myproject ([TEMP_DIR]/pyproject.toml:foo)
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
 /// See: <https://github.com/astral-sh/uv/issues/10957>
+#[cfg(feature = "python-eol")]
 #[test]
 fn compile_preserve_requires_python_split() -> Result<()> {
     let context = TestContext::new("3.8").with_exclude_newer("2025-01-01T00:00:00Z");
@@ -15369,6 +16136,1364 @@ fn respect_non_local_preference() -> Result<()> {
     ----- stderr -----
     Resolved 11 packages in [TIME]
     "###);
+
+    Ok(())
+}
+
+#[test]
+fn omit_wheels_exclude_newer() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2024-08-01T00:00:00Z");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("pillow-avif-plugin")?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("--universal")
+        .arg("--generate-hashes"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal --generate-hashes
+    pillow-avif-plugin==1.4.6 \
+        --hash=sha256:0014a215e197c52520d3946f3704c8c0932a170cc5783f96d2385f55191dce29 \
+        --hash=sha256:07372b7740439cc26346d8e3995de1fd5c49a92ab307321b74b3e6305a7e0e49 \
+        --hash=sha256:09a7e4b00b18df55b9f34d4f031060ca46d8f5f5e0ba347dda600dcb5172e5f2 \
+        --hash=sha256:0e699ca8dcfee82732495e101401567184fed6ba10f17e7fb872c46415606ec7 \
+        --hash=sha256:2347399f2457e5efacec8fc9e446a5a90252b8723c6a47dc61e2353aa97e3e2e \
+        --hash=sha256:25d1dea0c496a49b17a336b271263ea76a4a0af19553565e95c4bb03281a4113 \
+        --hash=sha256:323804efe752cf4d15fdcf770749ba23d727f8ea94b95cfe42bec597f3b9bbbb \
+        --hash=sha256:334e1d39e8b3b4548db690df3735039378e96e1497fd8ba0e25a5e21561b7cf5 \
+        --hash=sha256:41a8c41b56a891adbcff30933009d475fdd649f2025d62ba59885975ed4379c0 \
+        --hash=sha256:450b34d19d88443e39b011e84b54433f7ccd6cf8774ed626e433ec3cc7d52924 \
+        --hash=sha256:56be2604b734caf23788922dbcc92d880d241d02b444c7a8367a65bb25b16aac \
+        --hash=sha256:584469ea7dedd8ca4f579917cf22f25e8ab980e1b98bbe212cbd7395f881cd42 \
+        --hash=sha256:5bacc0802516f054f98d9f218ada17b2e8a756e35cb71e7401bb8422848fe796 \
+        --hash=sha256:5c5e6575e0ca0cd292d459cf627a27a505f38a6edad6f35fd9c4bce4a2cccef3 \
+        --hash=sha256:5d3c1202e9e03b93ef5e385fcee917d73e23833618472e6416c0fc58b53ba8b8 \
+        --hash=sha256:60699d10679c8361690703b79abde4a2e7b8047540f0c58fd5da0ac672a15321 \
+        --hash=sha256:6556cbee2d755dc99a99a5a85c302393e58bcbbf675bc93fa9ab283904dadbfc \
+        --hash=sha256:6bc73ea62605c8725aba2422de1b546a5c4a6e5e73dcf66f9e22102249342d6b \
+        --hash=sha256:7d2e933e9b197e9a51c3fbfce389a70201fbce1b7c60172f790760217d7927f8 \
+        --hash=sha256:855cf50d03f6fc16e1fd5e364b3cea0b79f4bf90d39ff2123969735d851e08ba \
+        --hash=sha256:91537935612d8fb4b8f621a912ce0eb4e363fdf615d472b20a043a7a18efb461 \
+        --hash=sha256:963ce7b93340f235db5c7f16b46835c72681896052dcbf1652a01946e7b9103e \
+        --hash=sha256:a6f97ffc84cdce0926f86a2f4bee088e661f5f93bec9112adca281341f463479 \
+        --hash=sha256:b37e1314500cec3457210f4c8a7583afe35751f076efa8122faa0f205403d645 \
+        --hash=sha256:b4f08c341d8aed2d7762589fdd99c4d3e191d4976dab59516b522704a67a281d \
+        --hash=sha256:b7c2e4adcdf7341dc05f31f13d85b6c4eed0e08daafc836e7b3317df41074bab \
+        --hash=sha256:b95c477fc619a82a68800ff18599e2704aec6fcf9aa65898b02f0240feeb0af5 \
+        --hash=sha256:c1cd659136fca622a9324fa7efa56f711f2e576206754c284b80aa5504fb96e4 \
+        --hash=sha256:c8b9347a91acd183db302e198cf582127eb3de98ad185bf9aff773c99e415320 \
+        --hash=sha256:c96ee1d1b504a2efa80c9d6d3b71a9884c724dc34d6e67131a64678e09c7a81c \
+        --hash=sha256:ce89c26671cd0fcb7967e4be4098ae8775b93cc6376ecd523c815cb5a2146298 \
+        --hash=sha256:d643db246d6c07994fbb98b5fa6c6ae8f9b19b4ed24566bc06942b7dad10ad47 \
+        --hash=sha256:dec8a348e46266dd0bf20a6edd01b96b0a11042e8654d701444e4a5cebf7f44b \
+        --hash=sha256:df9a1e569543006abe0c534a3fa66ee1d72393644fd0d5bc74de57bfdb619573 \
+        --hash=sha256:e2087daa49881421a5e703fcff80aa2cbcb5a455cf73114ed5f0ea2a697794c8 \
+        --hash=sha256:e74e53951228c3e6ff5141121bd2876e8aecdb27d5f12d01cc519258e0073d8b \
+        --hash=sha256:f262547edeec00ad287c8845ac6c9d7d822ef4b00d1832175c4c8fd692e34eba \
+        --hash=sha256:fdd6ee615d948a2b68fd293f74a1a73d22e9d075f5d714b95a90ec2cb8da8de0
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// See: <https://github.com/astral-sh/uv/issues/12260>
+#[test]
+fn compile_quotes() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("tbump")?;
+
+    uv_snapshot!(context.filters(), windows_filters=false, context.pip_compile()
+        .arg("requirements.in")
+        .arg("--universal"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.in --universal
+    cli-ui==0.17.2
+        # via tbump
+    colorama==0.4.6
+        # via cli-ui
+    contextlib2==21.6.0
+        # via schema
+    docopt==0.6.2
+        # via tbump
+    schema==0.7.5
+        # via tbump
+    tabulate==0.8.10
+        # via cli-ui
+    tbump==6.11.0
+        # via -r requirements.in
+    tomlkit==0.11.8
+        # via tbump
+    unidecode==1.3.8
+        # via cli-ui
+
+    ----- stderr -----
+    Resolved 9 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn compile_invalid_output_file() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio==3.7.0")?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in")
+        .arg("-o")
+        .arg("pyproject.toml"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `pyproject.toml` is not a supported output format for `uv pip compile` (only `requirements.txt`-style output is supported)
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_filename() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig")?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("--format")
+        .arg("pylock.toml")
+        .arg("-o")
+        .arg("test.toml"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Expected the output filename to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`); `test.toml` won't be recognized as a `pylock.toml` file in subsequent commands
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_compile_registry_wheel() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig")?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "iniconfig"
+    version = "2.0.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", upload-time = 2023-01-07T11:08:11Z, size = 4646, hashes = { sha256 = "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", upload-time = 2023-01-07T11:08:09Z, size = 5892, hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_compile_registry_sdist() -> Result<()> {
+    let context = TestContext::new("3.12").with_exclude_newer("2025-01-29T00:00:00Z");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("source-distribution")?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "source-distribution"
+    version = "0.0.3"
+    sdist = { url = "https://files.pythonhosted.org/packages/1f/e5/5b016c945d745f8b108e759d428341488a6aee8f51f07c6c4e33498bb91f/source_distribution-0.0.3.tar.gz", upload-time = 2024-11-03T02:35:36Z, size = 2166, hashes = { sha256 = "be5895c175dbca2d91709a6ab7d5f28e1794272db551ae9a5faf3ae2ed74c3d8" } }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + source-distribution==0.0.3
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_compile_directory() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Create a local dependency in a subdirectory.
+    let pyproject_toml = context.temp_dir.child("foo").child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        dependencies = ["anyio"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+    context
+        .temp_dir
+        .child("foo")
+        .child("src")
+        .child("foo")
+        .child("__init__.py")
+        .touch()?;
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("./foo")?;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["foo"]
+
+        [tool.uv.sources]
+        foo = { path = "foo" }
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "anyio"
+    version = "4.3.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", upload-time = 2024-02-19T08:36:28Z, size = 159642, hashes = { sha256 = "f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", upload-time = 2024-02-19T08:36:26Z, size = 85584, hashes = { sha256 = "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" } }]
+
+    [[packages]]
+    name = "foo"
+    directory = { path = "foo" }
+
+    [[packages]]
+    name = "idna"
+    version = "3.6"
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", upload-time = 2023-11-25T15:40:54Z, size = 175426, hashes = { sha256 = "9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
+
+    [[packages]]
+    name = "sniffio"
+    version = "1.3.1"
+    sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + foo==1.0.0 (from file://[TEMP_DIR]/foo)
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "git")]
+fn pep_751_compile_git() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage.git@0.0.1",
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "uv-public-pypackage"
+    version = "0.1.0"
+    vcs = { type = "git", url = "https://github.com/astral-test/uv-public-pypackage.git", requested-revision = "0.0.1", commit-id = "0dacfd662c64cb4ceb16e6cf65a157a8b715b979" }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage.git@0dacfd662c64cb4ceb16e6cf65a157a8b715b979)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_compile_url_wheel() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio @ https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl",
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "anyio"
+    version = "4.3.0"
+    archive = { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hashes = { sha256 = "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" } }
+
+    [[packages]]
+    name = "idna"
+    version = "3.6"
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", upload-time = 2023-11-25T15:40:54Z, size = 175426, hashes = { sha256 = "9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
+
+    [[packages]]
+    name = "sniffio"
+    version = "1.3.1"
+    sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0 (from https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl)
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_compile_url_sdist() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(
+        "anyio @ https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz",
+    )?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "anyio"
+    version = "4.3.0"
+    archive = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hashes = { sha256 = "f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" } }
+
+    [[packages]]
+    name = "idna"
+    version = "3.6"
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", upload-time = 2023-11-25T15:40:54Z, size = 175426, hashes = { sha256 = "9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
+
+    [[packages]]
+    name = "sniffio"
+    version = "1.3.1"
+    sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0 (from https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz)
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_compile_path_wheel() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Download the source.
+    let archive = context.temp_dir.child("iniconfig-2.0.0-py3-none-any.whl");
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl",
+        &archive,
+    );
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("./iniconfig-2.0.0-py3-none-any.whl")?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "iniconfig"
+    version = "2.0.0"
+    archive = { path = "iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0 (from file://[TEMP_DIR]/iniconfig-2.0.0-py3-none-any.whl)
+    "
+    );
+
+    // Ensure that the path is relative to the output `pylock.toml` file.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("nested/pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o nested/pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "iniconfig"
+    version = "2.0.0"
+    archive = { path = "../iniconfig-2.0.0-py3-none-any.whl", hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_compile_path_sdist() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Download the source.
+    let archive = context.temp_dir.child("iniconfig-2.0.0.tar.gz");
+    download_to_disk(
+        "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz",
+        &archive,
+    );
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("./iniconfig-2.0.0.tar.gz")?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "iniconfig"
+    version = "2.0.0"
+    archive = { path = "iniconfig-2.0.0.tar.gz", hashes = { sha256 = "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" } }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("--preview")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0 (from file://[TEMP_DIR]/iniconfig-2.0.0.tar.gz)
+    "
+    );
+
+    // Ensure that the path is relative to the output `pylock.toml` file.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("nested/pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o nested/pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "iniconfig"
+    version = "2.0.0"
+    archive = { path = "../iniconfig-2.0.0.tar.gz", hashes = { sha256 = "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" } }
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_compile_preferences() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc::indoc! {r"
+        anyio==3.0.0
+        idna==3.0.0
+    "})?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "anyio"
+    version = "3.0.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/99/0d/65165f99e5f4f3b4c43a5ed9db0fb7aa655f5a58f290727a30528a87eb45/anyio-3.0.0.tar.gz", upload-time = 2021-04-20T14:02:14Z, size = 116952, hashes = { sha256 = "b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/3b/49/ebee263b69fe243bd1fd0a88bc6bb0f7732bf1794ba3273cb446351f9482/anyio-3.0.0-py3-none-any.whl", upload-time = 2021-04-20T14:02:13Z, size = 72182, hashes = { sha256 = "e71c3d9d72291d12056c0265d07c6bbedf92332f78573e278aeb116f24f30395" } }]
+
+    [[packages]]
+    name = "idna"
+    version = "3.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/2f/2e/bfe821bd26194fb474e0932df8ed82e24bd312ba628a8644d93c5a28b5d4/idna-3.0.tar.gz", upload-time = 2021-01-01T05:58:25Z, size = 180786, hashes = { sha256 = "c9a26e10e5558412384fac891eefb41957831d31be55f1e2c98ed97a70abb969" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/0f/6b/3a878f15ef3324754bf4780f8f047d692d9860be894ff8fb3135cef8bed8/idna-3.0-py2.py3-none-any.whl", upload-time = 2021-01-01T05:58:22Z, size = 58618, hashes = { sha256 = "320229aadbdfc597bc28876748cc0c9d04d476e0fe6caacaaddea146365d9f63" } }]
+
+    [[packages]]
+    name = "sniffio"
+    version = "1.3.1"
+    sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "#);
+
+    // Modify the requirements to loosen the `anyio` version.
+    requirements_txt.write_str("anyio")?;
+
+    // The `anyio` version should be retained, since we respect the existing preferences.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "anyio"
+    version = "3.0.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/99/0d/65165f99e5f4f3b4c43a5ed9db0fb7aa655f5a58f290727a30528a87eb45/anyio-3.0.0.tar.gz", upload-time = 2021-04-20T14:02:14Z, size = 116952, hashes = { sha256 = "b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/3b/49/ebee263b69fe243bd1fd0a88bc6bb0f7732bf1794ba3273cb446351f9482/anyio-3.0.0-py3-none-any.whl", upload-time = 2021-04-20T14:02:13Z, size = 72182, hashes = { sha256 = "e71c3d9d72291d12056c0265d07c6bbedf92332f78573e278aeb116f24f30395" } }]
+
+    [[packages]]
+    name = "idna"
+    version = "3.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/2f/2e/bfe821bd26194fb474e0932df8ed82e24bd312ba628a8644d93c5a28b5d4/idna-3.0.tar.gz", upload-time = 2021-01-01T05:58:25Z, size = 180786, hashes = { sha256 = "c9a26e10e5558412384fac891eefb41957831d31be55f1e2c98ed97a70abb969" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/0f/6b/3a878f15ef3324754bf4780f8f047d692d9860be894ff8fb3135cef8bed8/idna-3.0-py2.py3-none-any.whl", upload-time = 2021-01-01T05:58:22Z, size = 58618, hashes = { sha256 = "320229aadbdfc597bc28876748cc0c9d04d476e0fe6caacaaddea146365d9f63" } }]
+
+    [[packages]]
+    name = "sniffio"
+    version = "1.3.1"
+    sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "#);
+
+    // Unless we pass `--upgrade-package`.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml")
+        .arg("--upgrade-package")
+        .arg("idna"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "anyio"
+    version = "3.0.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/99/0d/65165f99e5f4f3b4c43a5ed9db0fb7aa655f5a58f290727a30528a87eb45/anyio-3.0.0.tar.gz", upload-time = 2021-04-20T14:02:14Z, size = 116952, hashes = { sha256 = "b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/3b/49/ebee263b69fe243bd1fd0a88bc6bb0f7732bf1794ba3273cb446351f9482/anyio-3.0.0-py3-none-any.whl", upload-time = 2021-04-20T14:02:13Z, size = 72182, hashes = { sha256 = "e71c3d9d72291d12056c0265d07c6bbedf92332f78573e278aeb116f24f30395" } }]
+
+    [[packages]]
+    name = "idna"
+    version = "3.6"
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", upload-time = 2023-11-25T15:40:54Z, size = 175426, hashes = { sha256 = "9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
+
+    [[packages]]
+    name = "sniffio"
+    version = "1.3.1"
+    sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "#);
+
+    // Or `--upgrade`.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml")
+        .arg("--upgrade"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "anyio"
+    version = "4.3.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", upload-time = 2024-02-19T08:36:28Z, size = 159642, hashes = { sha256 = "f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", upload-time = 2024-02-19T08:36:26Z, size = 85584, hashes = { sha256 = "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" } }]
+
+    [[packages]]
+    name = "idna"
+    version = "3.6"
+    sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", upload-time = 2023-11-25T15:40:54Z, size = 175426, hashes = { sha256 = "9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
+
+    [[packages]]
+    name = "sniffio"
+    version = "1.3.1"
+    sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_compile_warn() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("iniconfig")?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml")
+        .arg("--emit-index-url"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --emit-index-url
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "iniconfig"
+    version = "2.0.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", upload-time = 2023-01-07T11:08:11Z, size = 4646, hashes = { sha256 = "2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", upload-time = 2023-01-07T11:08:09Z, size = 5892, hashes = { sha256 = "b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374" } }]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    warning: The `--emit-index-url` option is not supported for `pylock.toml` output
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_compile_non_universal() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("black")?;
+
+    // `colorama` should be excluded, since we're on Linux.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--python-platform")
+        .arg("linux")
+        .arg("-o")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --python-platform linux -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "black"
+    version = "24.3.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", upload-time = 2024-03-15T19:35:43Z, size = 634292, hashes = { sha256 = "a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f" } }
+    wheels = [
+        { url = "https://files.pythonhosted.org/packages/3b/32/1a25d1b83147ca128797a627f429f9dc390eb066805c6aa319bea3ffffa5/black-24.3.0-cp310-cp310-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:43:32Z, size = 1587891, hashes = { sha256 = "7d5e026f8da0322b5662fa7a8e752b3fa2dac1c1cbc213c3d7ff9bdd0ab12395" } },
+        { url = "https://files.pythonhosted.org/packages/c4/91/6cb204786acc693edc4bf1b9230ffdc3cbfaeb7cd04d3a12fb4b13882a53/black-24.3.0-cp310-cp310-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:41:59Z, size = 1434886, hashes = { sha256 = "9f50ea1132e2189d8dff0115ab75b65590a3e97de1e143795adb4ce317934995" } },
+        { url = "https://files.pythonhosted.org/packages/ef/e4/53b5d07117381f7d5e946a54dd4c62617faad90713649619bbc683769dfe/black-24.3.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:22Z, size = 1747400, hashes = { sha256 = "e2af80566f43c85f5797365077fb64a393861a3730bd110971ab7a0c94e873e7" } },
+        { url = "https://files.pythonhosted.org/packages/13/9c/f2e7532d11b05add5ab383a9f90be1a49954bf510803f98064b45b42f98e/black-24.3.0-cp310-cp310-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1363816, hashes = { sha256 = "4be5bb28e090456adfc1255e03967fb67ca846a03be7aadf6249096100ee32d0" } },
+        { url = "https://files.pythonhosted.org/packages/68/df/ceea5828be9c4931cb5a75b7e8fb02971f57524da7a16dfec0d4d575327f/black-24.3.0-cp311-cp311-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:27Z, size = 1571235, hashes = { sha256 = "4f1373a7808a8f135b774039f61d59e4be7eb56b2513d3d2f02a8b9365b8a8a9" } },
+        { url = "https://files.pythonhosted.org/packages/46/5f/30398c5056cb72f883b32b6520ad00042a9d0454b693f70509867db03a80/black-24.3.0-cp311-cp311-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:43:52Z, size = 1414926, hashes = { sha256 = "aadf7a02d947936ee418777e0247ea114f78aff0d0959461057cae8a04f20597" } },
+        { url = "https://files.pythonhosted.org/packages/6b/59/498885b279e890f656ea4300a2671c964acb6d97994ea626479c2e5501b4/black-24.3.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:13Z, size = 1725920, hashes = { sha256 = "65c02e4ea2ae09d16314d30912a58ada9a5c4fdfedf9512d23326128ac08ac3d" } },
+        { url = "https://files.pythonhosted.org/packages/8f/b0/4bef40c808cc615187db983b75bacdca1c110a229d41ba9887549fac529c/black-24.3.0-cp311-cp311-win_amd64.whl", upload-time = 2024-03-15T19:39:34Z, size = 1372608, hashes = { sha256 = "bf21b7b230718a5f08bd32d5e4f1db7fc8788345c8aea1d155fc17852b3410f5" } },
+        { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:20Z, size = 1600822, hashes = { sha256 = "2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f" } },
+        { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:45:00Z, size = 1429987, hashes = { sha256 = "4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11" } },
+        { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:24Z, size = 1755319, hashes = { sha256 = "c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4" } },
+        { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", upload-time = 2024-03-15T19:39:37Z, size = 1385180, hashes = { sha256 = "56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5" } },
+        { url = "https://files.pythonhosted.org/packages/37/76/1f85c4349d6b3424c7672dbc6c4b39ab89372b575801ffdc23d34b023c6f/black-24.3.0-cp38-cp38-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:47:26Z, size = 1579568, hashes = { sha256 = "79dcf34b33e38ed1b17434693763301d7ccbd1c5860674a8f871bd15139e7837" } },
+        { url = "https://files.pythonhosted.org/packages/ba/24/6d82cde63c1340ea55cb74fd697f62b94b6d6fa7069a1aa216475dfd2a30/black-24.3.0-cp38-cp38-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:46:18Z, size = 1423188, hashes = { sha256 = "e19cb1c6365fd6dc38a6eae2dcb691d7d83935c10215aef8e6c38edee3f77abd" } },
+        { url = "https://files.pythonhosted.org/packages/71/61/48664319cee4f8e22633e075ff101ec6253195b056cb23e0c5f8a5086e87/black-24.3.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:15Z, size = 1730623, hashes = { sha256 = "65b76c275e4c1c5ce6e9870911384bff5ca31ab63d19c76811cb1fb162678213" } },
+        { url = "https://files.pythonhosted.org/packages/3b/95/ed26a160d7a13d6afb3e94448ec079fb4e37bbedeaf408b6b6dbf67d6cd2/black-24.3.0-cp38-cp38-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1370465, hashes = { sha256 = "b5991d523eee14756f3c8d5df5231550ae8993e2286b8014e2fdea7156ed0959" } },
+        { url = "https://files.pythonhosted.org/packages/62/f5/78881e9b1c340ccc02d5d4ebe61cfb9140452b3d11272a896b405033511b/black-24.3.0-cp39-cp39-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:48:33Z, size = 1587504, hashes = { sha256 = "c45f8dff244b3c431b36e3224b6be4a127c6aca780853574c00faf99258041eb" } },
+        { url = "https://files.pythonhosted.org/packages/17/cc/67ba827fe23b39d55e8408937763b2ad21d904d63ca1c60b47d608ee7fb2/black-24.3.0-cp39-cp39-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:47:39Z, size = 1434037, hashes = { sha256 = "6905238a754ceb7788a73f02b45637d820b2f5478b20fec82ea865e4f5d4d9f7" } },
+        { url = "https://files.pythonhosted.org/packages/fa/aa/6a2493c7d3506e9b64edbd0782e21637c376da005eecc546904e47b5cdbf/black-24.3.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:16Z, size = 1745481, hashes = { sha256 = "d7de8d330763c66663661a1ffd432274a2f92f07feeddd89ffd085b5744f85e7" } },
+        { url = "https://files.pythonhosted.org/packages/18/68/9e86e73b58819624af6797ffe68dd7d09ed90fa1f9eb8d4d675f8c5e6ab0/black-24.3.0-cp39-cp39-win_amd64.whl", upload-time = 2024-03-15T19:39:15Z, size = 1363531, hashes = { sha256 = "7bb041dca0d784697af4646d3b62ba4a6b028276ae878e53f6b4f74ddd6db99f" } },
+        { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", upload-time = 2024-03-15T19:35:41Z, size = 201493, hashes = { sha256 = "41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93" } },
+    ]
+
+    [[packages]]
+    name = "click"
+    version = "8.1.7"
+    sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", upload-time = 2023-08-17T17:29:11Z, size = 336121, hashes = { sha256 = "ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", upload-time = 2023-08-17T17:29:10Z, size = 97941, hashes = { sha256 = "ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28" } }]
+
+    [[packages]]
+    name = "mypy-extensions"
+    version = "1.0.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/98/a4/1ab47638b92648243faf97a5aeb6ea83059cc3624972ab6b8d2316078d3f/mypy_extensions-1.0.0.tar.gz", upload-time = 2023-02-04T12:11:27Z, size = 4433, hashes = { sha256 = "75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl", upload-time = 2023-02-04T12:11:25Z, size = 4695, hashes = { sha256 = "4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d" } }]
+
+    [[packages]]
+    name = "packaging"
+    version = "24.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", upload-time = 2024-03-10T09:39:28Z, size = 147882, hashes = { sha256 = "eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", upload-time = 2024-03-10T09:39:25Z, size = 53488, hashes = { sha256 = "2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5" } }]
+
+    [[packages]]
+    name = "pathspec"
+    version = "0.12.1"
+    sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", upload-time = 2023-12-10T22:30:45Z, size = 51043, hashes = { sha256 = "a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", upload-time = 2023-12-10T22:30:43Z, size = 31191, hashes = { sha256 = "a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08" } }]
+
+    [[packages]]
+    name = "platformdirs"
+    version = "4.2.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/96/dc/c1d911bf5bb0fdc58cc05010e9f3efe3b67970cef779ba7fbc3183b987a8/platformdirs-4.2.0.tar.gz", upload-time = 2024-01-31T01:00:36Z, size = 20055, hashes = { sha256 = "ef0cc731df711022c174543cb70a9b5bd22e5a9337c8624ef2c2ceb8ddad8768" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", upload-time = 2024-01-31T01:00:34Z, size = 17717, hashes = { sha256 = "0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068" } }]
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    "#);
+
+    // `colorama` should be included, since we're on Windows.
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--python-platform")
+        .arg("windows")
+        .arg("-o")
+        .arg("pylock.toml"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --python-platform windows -o pylock.toml
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "black"
+    version = "24.3.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/8f/5f/bac24a952668c7482cfdb4ebf91ba57a796c9da8829363a772040c1a3312/black-24.3.0.tar.gz", upload-time = 2024-03-15T19:35:43Z, size = 634292, hashes = { sha256 = "a0c9c4a0771afc6919578cec71ce82a3e31e054904e7197deacbc9382671c41f" } }
+    wheels = [
+        { url = "https://files.pythonhosted.org/packages/3b/32/1a25d1b83147ca128797a627f429f9dc390eb066805c6aa319bea3ffffa5/black-24.3.0-cp310-cp310-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:43:32Z, size = 1587891, hashes = { sha256 = "7d5e026f8da0322b5662fa7a8e752b3fa2dac1c1cbc213c3d7ff9bdd0ab12395" } },
+        { url = "https://files.pythonhosted.org/packages/c4/91/6cb204786acc693edc4bf1b9230ffdc3cbfaeb7cd04d3a12fb4b13882a53/black-24.3.0-cp310-cp310-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:41:59Z, size = 1434886, hashes = { sha256 = "9f50ea1132e2189d8dff0115ab75b65590a3e97de1e143795adb4ce317934995" } },
+        { url = "https://files.pythonhosted.org/packages/ef/e4/53b5d07117381f7d5e946a54dd4c62617faad90713649619bbc683769dfe/black-24.3.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:22Z, size = 1747400, hashes = { sha256 = "e2af80566f43c85f5797365077fb64a393861a3730bd110971ab7a0c94e873e7" } },
+        { url = "https://files.pythonhosted.org/packages/13/9c/f2e7532d11b05add5ab383a9f90be1a49954bf510803f98064b45b42f98e/black-24.3.0-cp310-cp310-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1363816, hashes = { sha256 = "4be5bb28e090456adfc1255e03967fb67ca846a03be7aadf6249096100ee32d0" } },
+        { url = "https://files.pythonhosted.org/packages/68/df/ceea5828be9c4931cb5a75b7e8fb02971f57524da7a16dfec0d4d575327f/black-24.3.0-cp311-cp311-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:27Z, size = 1571235, hashes = { sha256 = "4f1373a7808a8f135b774039f61d59e4be7eb56b2513d3d2f02a8b9365b8a8a9" } },
+        { url = "https://files.pythonhosted.org/packages/46/5f/30398c5056cb72f883b32b6520ad00042a9d0454b693f70509867db03a80/black-24.3.0-cp311-cp311-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:43:52Z, size = 1414926, hashes = { sha256 = "aadf7a02d947936ee418777e0247ea114f78aff0d0959461057cae8a04f20597" } },
+        { url = "https://files.pythonhosted.org/packages/6b/59/498885b279e890f656ea4300a2671c964acb6d97994ea626479c2e5501b4/black-24.3.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:13Z, size = 1725920, hashes = { sha256 = "65c02e4ea2ae09d16314d30912a58ada9a5c4fdfedf9512d23326128ac08ac3d" } },
+        { url = "https://files.pythonhosted.org/packages/8f/b0/4bef40c808cc615187db983b75bacdca1c110a229d41ba9887549fac529c/black-24.3.0-cp311-cp311-win_amd64.whl", upload-time = 2024-03-15T19:39:34Z, size = 1372608, hashes = { sha256 = "bf21b7b230718a5f08bd32d5e4f1db7fc8788345c8aea1d155fc17852b3410f5" } },
+        { url = "https://files.pythonhosted.org/packages/b6/c6/1d174efa9ff02b22d0124c73fc5f4d4fb006d0d9a081aadc354d05754a13/black-24.3.0-cp312-cp312-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:45:20Z, size = 1600822, hashes = { sha256 = "2818cf72dfd5d289e48f37ccfa08b460bf469e67fb7c4abb07edc2e9f16fb63f" } },
+        { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:45:00Z, size = 1429987, hashes = { sha256 = "4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11" } },
+        { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:24Z, size = 1755319, hashes = { sha256 = "c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4" } },
+        { url = "https://files.pythonhosted.org/packages/71/9d/e5fa1ff4ef1940be15a64883c0bb8d2fcf626efec996eab4ae5a8c691d2c/black-24.3.0-cp312-cp312-win_amd64.whl", upload-time = 2024-03-15T19:39:37Z, size = 1385180, hashes = { sha256 = "56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5" } },
+        { url = "https://files.pythonhosted.org/packages/37/76/1f85c4349d6b3424c7672dbc6c4b39ab89372b575801ffdc23d34b023c6f/black-24.3.0-cp38-cp38-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:47:26Z, size = 1579568, hashes = { sha256 = "79dcf34b33e38ed1b17434693763301d7ccbd1c5860674a8f871bd15139e7837" } },
+        { url = "https://files.pythonhosted.org/packages/ba/24/6d82cde63c1340ea55cb74fd697f62b94b6d6fa7069a1aa216475dfd2a30/black-24.3.0-cp38-cp38-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:46:18Z, size = 1423188, hashes = { sha256 = "e19cb1c6365fd6dc38a6eae2dcb691d7d83935c10215aef8e6c38edee3f77abd" } },
+        { url = "https://files.pythonhosted.org/packages/71/61/48664319cee4f8e22633e075ff101ec6253195b056cb23e0c5f8a5086e87/black-24.3.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:15Z, size = 1730623, hashes = { sha256 = "65b76c275e4c1c5ce6e9870911384bff5ca31ab63d19c76811cb1fb162678213" } },
+        { url = "https://files.pythonhosted.org/packages/3b/95/ed26a160d7a13d6afb3e94448ec079fb4e37bbedeaf408b6b6dbf67d6cd2/black-24.3.0-cp38-cp38-win_amd64.whl", upload-time = 2024-03-15T19:39:43Z, size = 1370465, hashes = { sha256 = "b5991d523eee14756f3c8d5df5231550ae8993e2286b8014e2fdea7156ed0959" } },
+        { url = "https://files.pythonhosted.org/packages/62/f5/78881e9b1c340ccc02d5d4ebe61cfb9140452b3d11272a896b405033511b/black-24.3.0-cp39-cp39-macosx_10_9_x86_64.whl", upload-time = 2024-03-15T19:48:33Z, size = 1587504, hashes = { sha256 = "c45f8dff244b3c431b36e3224b6be4a127c6aca780853574c00faf99258041eb" } },
+        { url = "https://files.pythonhosted.org/packages/17/cc/67ba827fe23b39d55e8408937763b2ad21d904d63ca1c60b47d608ee7fb2/black-24.3.0-cp39-cp39-macosx_11_0_arm64.whl", upload-time = 2024-03-15T19:47:39Z, size = 1434037, hashes = { sha256 = "6905238a754ceb7788a73f02b45637d820b2f5478b20fec82ea865e4f5d4d9f7" } },
+        { url = "https://files.pythonhosted.org/packages/fa/aa/6a2493c7d3506e9b64edbd0782e21637c376da005eecc546904e47b5cdbf/black-24.3.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-15T19:38:16Z, size = 1745481, hashes = { sha256 = "d7de8d330763c66663661a1ffd432274a2f92f07feeddd89ffd085b5744f85e7" } },
+        { url = "https://files.pythonhosted.org/packages/18/68/9e86e73b58819624af6797ffe68dd7d09ed90fa1f9eb8d4d675f8c5e6ab0/black-24.3.0-cp39-cp39-win_amd64.whl", upload-time = 2024-03-15T19:39:15Z, size = 1363531, hashes = { sha256 = "7bb041dca0d784697af4646d3b62ba4a6b028276ae878e53f6b4f74ddd6db99f" } },
+        { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", upload-time = 2024-03-15T19:35:41Z, size = 201493, hashes = { sha256 = "41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93" } },
+    ]
+
+    [[packages]]
+    name = "click"
+    version = "8.1.7"
+    sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", upload-time = 2023-08-17T17:29:11Z, size = 336121, hashes = { sha256 = "ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", upload-time = 2023-08-17T17:29:10Z, size = 97941, hashes = { sha256 = "ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28" } }]
+
+    [[packages]]
+    name = "colorama"
+    version = "0.4.6"
+    marker = "sys_platform == 'win32'"
+    sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", upload-time = 2022-10-25T02:36:22Z, size = 27697, hashes = { sha256 = "08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", upload-time = 2022-10-25T02:36:20Z, size = 25335, hashes = { sha256 = "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6" } }]
+
+    [[packages]]
+    name = "mypy-extensions"
+    version = "1.0.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/98/a4/1ab47638b92648243faf97a5aeb6ea83059cc3624972ab6b8d2316078d3f/mypy_extensions-1.0.0.tar.gz", upload-time = 2023-02-04T12:11:27Z, size = 4433, hashes = { sha256 = "75dbf8955dc00442a438fc4d0666508a9a97b6bd41aa2f0ffe9d2f2725af0782" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/2a/e2/5d3f6ada4297caebe1a2add3b126fe800c96f56dbe5d1988a2cbe0b267aa/mypy_extensions-1.0.0-py3-none-any.whl", upload-time = 2023-02-04T12:11:25Z, size = 4695, hashes = { sha256 = "4392f6c0eb8a5668a69e23d168ffa70f0be9ccfd32b5cc2d26a34ae5b844552d" } }]
+
+    [[packages]]
+    name = "packaging"
+    version = "24.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/ee/b5/b43a27ac7472e1818c4bafd44430e69605baefe1f34440593e0332ec8b4d/packaging-24.0.tar.gz", upload-time = 2024-03-10T09:39:28Z, size = 147882, hashes = { sha256 = "eb82c5e3e56209074766e6885bb04b8c38a0c015d0a30036ebe7ece34c9989e9" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/49/df/1fceb2f8900f8639e278b056416d49134fb8d84c5942ffaa01ad34782422/packaging-24.0-py3-none-any.whl", upload-time = 2024-03-10T09:39:25Z, size = 53488, hashes = { sha256 = "2ddfb553fdf02fb784c234c7ba6ccc288296ceabec964ad2eae3777778130bc5" } }]
+
+    [[packages]]
+    name = "pathspec"
+    version = "0.12.1"
+    sdist = { url = "https://files.pythonhosted.org/packages/ca/bc/f35b8446f4531a7cb215605d100cd88b7ac6f44ab3fc94870c120ab3adbf/pathspec-0.12.1.tar.gz", upload-time = 2023-12-10T22:30:45Z, size = 51043, hashes = { sha256 = "a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/cc/20/ff623b09d963f88bfde16306a54e12ee5ea43e9b597108672ff3a408aad6/pathspec-0.12.1-py3-none-any.whl", upload-time = 2023-12-10T22:30:43Z, size = 31191, hashes = { sha256 = "a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08" } }]
+
+    [[packages]]
+    name = "platformdirs"
+    version = "4.2.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/96/dc/c1d911bf5bb0fdc58cc05010e9f3efe3b67970cef779ba7fbc3183b987a8/platformdirs-4.2.0.tar.gz", upload-time = 2024-01-31T01:00:36Z, size = 20055, hashes = { sha256 = "ef0cc731df711022c174543cb70a9b5bd22e5a9337c8624ef2c2ceb8ddad8768" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/55/72/4898c44ee9ea6f43396fbc23d9bfaf3d06e01b83698bdf2e4c919deceb7c/platformdirs-4.2.0-py3-none-any.whl", upload-time = 2024-01-31T01:00:34Z, size = 17717, hashes = { sha256 = "0614df2a2f37e1a662acbd8e2b25b92ccf8632929bc6d43467e17fe89c75e068" } }]
+
+    ----- stderr -----
+    Resolved 7 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_compile_no_emit_package() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str("anyio")?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("requirements.txt")
+        .arg("--universal")
+        .arg("-o")
+        .arg("pylock.toml")
+        .arg("--no-emit-package")
+        .arg("idna"), @r#"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] requirements.txt --universal -o pylock.toml --no-emit-package idna
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12.[X]"
+
+    [[packages]]
+    name = "anyio"
+    version = "4.3.0"
+    sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", upload-time = 2024-02-19T08:36:28Z, size = 159642, hashes = { sha256 = "f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", upload-time = 2024-02-19T08:36:26Z, size = 85584, hashes = { sha256 = "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" } }]
+
+    [[packages]]
+    name = "sniffio"
+    version = "1.3.1"
+    sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
+    wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
+
+    # The following packages were excluded from the output:
+    # idna
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    "#);
+
+    Ok(())
+}
+
+/// Check that we reject versions that have an incompatible `Requires-Python`, but don't
+/// have a `data-requires-python` key on the index page.
+#[tokio::test]
+async fn index_has_no_requires_python() -> Result<()> {
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
+    let server = MockServer::start().await;
+
+    // Unlike PyPI, https://download.pytorch.org/whl/cpu/networkx/ does not contain the
+    // `data-requires-python` key.
+    let networkx_page = r#"
+    <!DOCTYPE html>
+    <html>
+        <body>
+        <h1>Links for networkx</h1>
+        <a href="https://download.pytorch.org/whl/networkx-3.0-py3-none-any.whl#sha256=58058d66b1818043527244fab9d41a51fcd7dcc271748015f3c181b8a90c8e2e">networkx-3.0-py3-none-any.whl</a><br/>
+        <a href="https://download.pytorch.org/whl/networkx-3.2.1-py3-none-any.whl#sha256=f18c69adc97877c42332c170849c96cefa91881c99a7cb3e95b7c659ebdc1ec2">networkx-3.2.1-py3-none-any.whl</a><br/>
+        <a href="https://download.pytorch.org/whl/networkx-3.3-py3-none-any.whl#sha256=28575580c6ebdaf4505b22c6256a2b9de86b316dc63ba9e93abde3d78dfdbcf2">networkx-3.3-py3-none-any.whl</a><br/>
+    </body>
+    </html>
+    "#;
+    Mock::given(method("GET"))
+        .and(path("/networkx/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(networkx_page, "text/html"))
+        .mount(&server)
+        .await;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("networkx >3.0,<=3.3")?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--python")
+        .arg("3.9")
+        .arg("--index-url")
+        .arg(server.uri())
+        .arg("requirements.in"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --python 3.9 requirements.in
+    networkx==3.2.1
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context
+        .pip_compile()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("--python")
+        .arg("3.12")
+        .arg("--index-url")
+        .arg(server.uri())
+        .arg("requirements.in"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] --python 3.12 requirements.in
+    networkx==3.3
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Disallow resolving to multiple different PyTorch indexes.
+#[test]
+fn incompatible_cuda() -> Result<()> {
+    let context = TestContext::new("3.11");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(indoc! {r"
+        torch==2.6.0+cu126
+        torchvision==0.16.0+cu121
+    "})?;
+
+    uv_snapshot!(context
+        .pip_compile()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .env(EnvVars::UV_TORCH_BACKEND, "auto")
+        .env(EnvVars::UV_CUDA_DRIVER_VERSION, "525.60.13")
+        .arg("--preview")
+        .arg("requirements.in")
+        .arg("--python-platform")
+        .arg("x86_64-manylinux_2_28")
+        .arg("--python-version")
+        .arg("3.11"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because torchvision==0.16.0+cu121 depends on system:cuda==12.1 and torch==2.6.0+cu126 depends on system:cuda==12.6, we can conclude that torch==2.6.0+cu126 and torchvision==0.16.0+cu121 are incompatible.
+          And because you require torch==2.6.0+cu126 and torchvision==0.16.0+cu121, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn compile_broken_active_venv() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("anyio==3.7.0")?;
+
+    // A broken system Python
+    let broken_system_python = context.temp_dir.join("python3.14159");
+    fs_err::os::unix::fs::symlink("/does/not/exist", &broken_system_python)?;
+    uv_snapshot!(context
+        .venv()
+        .arg("--python")
+        .arg(&broken_system_python)
+        .arg("venv2"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No interpreter found at path `python3.14159`
+    ");
+
+    // Simulate a removed Python interpreter
+    fs_err::remove_file(context.interpreter())?;
+    fs_err::os::unix::fs::symlink("/removed/python/interpreter", context.interpreter())?;
+    uv_snapshot!(context
+        .pip_compile()
+        .arg("requirements.in"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/bin/python3`
+      Caused by: Broken symlink at `.venv/bin/python3`, was the underlying Python interpreter removed?
+
+    hint: Consider recreating the environment (e.g., with `uv venv`)
+    ");
+
+    Ok(())
+}
+
+/// <https://github.com/astral-sh/uv/issues/13344>
+#[test]
+fn pubgrub_panic_double_self_dependency() -> Result<()> {
+    let context = TestContext::new("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        dependencies = [
+            "foo",
+            "foo",
+        ]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(".")?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg(requirements_in.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
+    .
+        # via -r requirements.in
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// <https://github.com/astral-sh/uv/issues/13344>
+#[test]
+fn pubgrub_panic_double_self_dependency_extra() -> Result<()> {
+    let context = TestContext::new("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        dependencies = [
+            "foo[test]",
+            "foo[test]",
+        ]
+
+        [project.optional-dependencies]
+        test = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+    "#})?;
+
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str(".")?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg(requirements_in.path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    # This file was autogenerated by uv via the following command:
+    #    uv pip compile --cache-dir [CACHE_DIR] [TEMP_DIR]/requirements.in
+    .
+        # via -r requirements.in
+    iniconfig==2.0.0
+        # via foo
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
 
     Ok(())
 }

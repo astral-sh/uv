@@ -144,9 +144,9 @@ as, e.g., resolvers will backtrack to the first published version that omits the
 By default, the universal resolver attempts to solve for all platforms and Python versions.
 
 If your project supports only a limited set of platforms or Python versions, you can constrain the
-set of solved platforms via the `environments` setting, which accepts a list of PEP 508 environment
-markers. In other words, you can use the `environments` setting to _reduce_ the set of supported
-platforms.
+set of solved platforms via the `environments` setting, which accepts a list of
+[PEP 508 environment markers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers).
+In other words, you can use the `environments` setting to _reduce_ the set of supported platforms.
 
 For example, to constrain the lockfile to macOS and Linux, and avoid solving for Windows:
 
@@ -183,14 +183,16 @@ install the resulting built distribution.
 Some packages (like PyTorch) publish built distributions, but omit a source distribution. Such
 packages are _only_ installable on platforms for which a built distribution is available. For
 example, if a package publishes built distributions for Linux, but not macOS or Windows, then that
-package will _only_ be installable on Windows.
+package will _only_ be installable on Linux.
 
 Packages that lack source distributions cause problems for universal resolution, since there will
 typically be at least one platform or Python version for which the package is not installable.
 
 By default, uv requires each such package to include at least one wheel that is compatible with the
 target Python version. The `required-environments` setting can be used to ensure that the resulting
-resolution contains wheels for specific platforms, or fails if no such wheels are available.
+resolution contains wheels for specific platforms, or fails if no such wheels are available. The
+setting accepts a list of
+[PEP 508 environment markers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers).
 
 While the `environments` setting _limits_ the set of environments that uv will consider when
 resolving dependencies, `required-environments` _expands_ the set of platforms that uv _must_
@@ -216,7 +218,7 @@ required-environments = [
 
 ## Dependency preferences
 
-If resolution output file exists, i.e. a uv lockfile (`uv.lock`) or a requirements output file
+If resolution output file exists, i.e., a uv lockfile (`uv.lock`) or a requirements output file
 (`requirements.txt`), uv will _prefer_ the dependency versions listed there. Similarly, if
 installing a package into a virtual environment, uv will prefer the already installed version if
 present. This means that locked or installed versions will not change unless an incompatible version

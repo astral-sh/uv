@@ -15,8 +15,8 @@ use uv_pypi_types::{DirectUrl, Metadata10};
 
 use crate::linker::{LinkMode, Locks};
 use crate::wheel::{
-    dist_info_metadata, find_dist_info, install_data, parse_scripts, parse_wheel_file,
-    read_record_file, write_installer_metadata, write_script_entrypoints, LibKind,
+    LibKind, dist_info_metadata, find_dist_info, install_data, parse_scripts, parse_wheel_file,
+    read_record_file, write_installer_metadata, write_script_entrypoints,
 };
 use crate::{Error, Layout};
 

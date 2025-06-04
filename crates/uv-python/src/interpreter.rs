@@ -1,11 +1,10 @@
 use std::borrow::Cow;
 use std::env::consts::ARCH;
-use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::sync::OnceLock;
-use std::{env, io};
 
 use configparser::ini::Ini;
 use fs_err as fs;
@@ -15,17 +14,16 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, trace, warn};
 
-use uv_cache::{Cache, CacheBucket, CacheEntry, Freshness};
+use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
-use uv_fs::{write_atomic_sync, PythonExt, Simplified};
+use uv_fs::{PythonExt, Simplified, write_atomic_sync};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
 use uv_platform_tags::Platform;
 use uv_platform_tags::{Tags, TagsError};
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
-use uv_static::EnvVars;
 
 use crate::implementation::LenientImplementationName;
 use crate::platform::{Arch, Libc, Os};
@@ -56,6 +54,7 @@ pub struct Interpreter {
     prefix: Option<Prefix>,
     pointer_size: PointerSize,
     gil_disabled: bool,
+    real_executable: PathBuf,
 }
 
 impl Interpreter {
@@ -88,6 +87,7 @@ impl Interpreter {
             tags: OnceLock::new(),
             target: None,
             prefix: None,
+            real_executable: executable.as_ref().to_path_buf(),
         })
     }
 
@@ -318,31 +318,37 @@ impl Interpreter {
         &self.markers.python_full_version().version
     }
 
-    /// Returns the full minor Python version.
+    /// Returns the Python version up to the minor component.
     #[inline]
     pub fn python_minor_version(&self) -> Version {
         Version::new(self.python_version().release().iter().take(2).copied())
     }
 
-    /// Return the major version of this Python version.
+    /// Returns the Python version up to the patch component.
+    #[inline]
+    pub fn python_patch_version(&self) -> Version {
+        Version::new(self.python_version().release().iter().take(3).copied())
+    }
+
+    /// Return the major version component of this Python version.
     pub fn python_major(&self) -> u8 {
         let major = self.markers.python_full_version().version.release()[0];
         u8::try_from(major).expect("invalid major version")
     }
 
-    /// Return the minor version of this Python version.
+    /// Return the minor version component of this Python version.
     pub fn python_minor(&self) -> u8 {
         let minor = self.markers.python_full_version().version.release()[1];
         u8::try_from(minor).expect("invalid minor version")
     }
 
-    /// Return the patch version of this Python version.
+    /// Return the patch version component of this Python version.
     pub fn python_patch(&self) -> u8 {
         let minor = self.markers.python_full_version().version.release()[2];
         u8::try_from(minor).expect("invalid patch version")
     }
 
-    /// Returns the Python version as a simple tuple.
+    /// Returns the Python version as a simple tuple, e.g., `(3, 12)`.
     pub fn python_tuple(&self) -> (u8, u8) {
         (self.python_major(), self.python_minor())
     }
@@ -393,6 +399,11 @@ impl Interpreter {
     /// Return the `sys.executable` path for this Python interpreter.
     pub fn sys_executable(&self) -> &Path {
         &self.sys_executable
+    }
+
+    /// Return the "real" queried executable path for this Python interpreter.
+    pub fn real_executable(&self) -> &Path {
+        &self.real_executable
     }
 
     /// Return the `sys.path` for this Python interpreter.
@@ -666,6 +677,8 @@ impl Display for StatusCodeError {
 pub enum Error {
     #[error("Failed to query Python interpreter")]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    BrokenSymlink(BrokenSymlink),
     #[error("Python interpreter not found at `{0}`")]
     NotFound(PathBuf),
     #[error("Failed to query Python interpreter at `{path}`")]
@@ -688,6 +701,33 @@ pub enum Error {
     Encode(#[from] rmp_serde::encode::Error),
 }
 
+#[derive(Debug, Error)]
+pub struct BrokenSymlink {
+    pub path: PathBuf,
+    /// Whether the interpreter path looks like a virtual environment.
+    pub venv: bool,
+}
+
+impl Display for BrokenSymlink {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Broken symlink at `{}`, was the underlying Python interpreter removed?",
+            self.path.user_display()
+        )?;
+        if self.venv {
+            write!(
+                f,
+                "\n\n{}{} Consider recreating the environment (e.g., with `{}`)",
+                "hint".bold().cyan(),
+                ":".bold(),
+                "uv venv".green()
+            )?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "result", rename_all = "lowercase")]
 enum InterpreterInfoResult {
@@ -700,7 +740,9 @@ enum InterpreterInfoResult {
 pub enum InterpreterInfoError {
     #[error("Could not detect a glibc or a musl libc (while running on Linux)")]
     LibcNotFound,
-    #[error("Broken Python installation, `platform.mac_ver()` returned an empty value, please reinstall Python")]
+    #[error(
+        "Broken Python installation, `platform.mac_ver()` returned an empty value, please reinstall Python"
+    )]
     BrokenMacVer,
     #[error("Unknown operating system: `{operating_system}`")]
     UnknownOperatingSystem { operating_system: String },
@@ -708,47 +750,15 @@ pub enum InterpreterInfoError {
     UnsupportedPythonVersion { python_version: String },
     #[error("Python executable does not support `-I` flag. Please use Python 3.8 or newer.")]
     UnsupportedPython,
-    #[error("Python installation is missing `distutils`, which is required for packaging on older Python versions. Your system may package it separately, e.g., as `python{python_major}-distutils` or `python{python_major}.{python_minor}-distutils`.")]
+    #[error(
+        "Python installation is missing `distutils`, which is required for packaging on older Python versions. Your system may package it separately, e.g., as `python{python_major}-distutils` or `python{python_major}.{python_minor}-distutils`."
+    )]
     MissingRequiredDistutils {
         python_major: usize,
         python_minor: usize,
     },
-}
-
-/// Environment variables that can change the values of [`InterpreterInfo`].
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
-struct PythonEnvVars {
-    /// `PYTHONHOME` overrides `sys.prefix`.
-    pythonhome: Option<OsString>,
-    /// `PYTHONPATH` adds to `sys.path`.
-    pythonpath: Option<OsString>,
-    /// `PYTHONSAFEPATH` influences `sys.path`.
-    pythonsafepath: Option<OsString>,
-    /// `PYTHONPLATLIBDIR` influences `sys.path`.
-    pythonplatlibdir: Option<OsString>,
-    /// `PYTHONNOUSERSITE` influences `sys.path`.
-    pythonnousersite: Option<OsString>,
-    /// `PYTHONUSERBASE` influences `sys.path`.
-    pythonuserbase: Option<OsString>,
-    /// `APPDATA` influences `sys.path` through the user site packages (windows).
-    appdata: Option<OsString>,
-    /// `HOME` influences `sys.path` through the user site packages (unix).
-    home: Option<OsString>,
-}
-
-impl PythonEnvVars {
-    fn from_env() -> Self {
-        Self {
-            pythonhome: env::var_os(EnvVars::PYTHONHOME),
-            pythonpath: env::var_os(EnvVars::PYTHONPATH),
-            pythonsafepath: env::var_os(EnvVars::PYTHONSAFEPATH),
-            pythonplatlibdir: env::var_os(EnvVars::PYTHONPLATLIBDIR),
-            pythonnousersite: env::var_os(EnvVars::PYTHONNOUSERSITE),
-            pythonuserbase: env::var_os(EnvVars::PYTHONUSERBASE),
-            appdata: env::var_os(EnvVars::APPDATA),
-            home: env::var_os(EnvVars::HOME),
-        }
-    }
+    #[error("Only Pyodide is support for Emscripten Python")]
+    EmscriptenNotPyodide,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -768,18 +778,6 @@ struct InterpreterInfo {
     standalone: bool,
     pointer_size: PointerSize,
     gil_disabled: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-struct CachedInterpreterInfo {
-    /// Information about a Python interpreter at a path.
-    data: InterpreterInfo,
-    /// The last modified timestamp of the Python interpreter path.
-    ///
-    /// It is ctime on unix.
-    timestamp: Timestamp,
-    /// Environment variables that can influence the other keys used for cache invalidation.
-    env_vars: PythonEnvVars,
 }
 
 impl InterpreterInfo {
@@ -898,9 +896,13 @@ impl InterpreterInfo {
 
         let cache_entry = cache.entry(
             CacheBucket::Interpreter,
-            // Shard interpreter metadata by host architecture, to avoid cache collisions when
-            // running universal binaries under Rosetta.
-            ARCH,
+            // Shard interpreter metadata by host architecture, operating system, and version, to
+            // invalidate the cache (e.g.) on OS upgrades.
+            cache_digest(&(
+                ARCH,
+                sys_info::os_type().unwrap_or_default(),
+                sys_info::os_release().unwrap_or_default(),
+            )),
             // We use the absolute path for the cache entry to avoid cache collisions for relative
             // paths. But we don't to query the executable with symbolic links resolved.
             format!("{}.msgpack", cache_digest(&absolute)),
@@ -912,17 +914,60 @@ impl InterpreterInfo {
             .and_then(Timestamp::from_path)
             .map_err(|err| {
                 if err.kind() == io::ErrorKind::NotFound {
-                    Error::NotFound(executable.to_path_buf())
+                    // Check if it looks like a venv interpreter where the underlying Python
+                    // installation was removed.
+                    if absolute
+                        .symlink_metadata()
+                        .is_ok_and(|metadata| metadata.is_symlink())
+                    {
+                        let venv = executable
+                            .parent()
+                            .and_then(Path::parent)
+                            .map(|path| path.join("pyvenv.cfg").is_file())
+                            .unwrap_or(false);
+                        Error::BrokenSymlink(BrokenSymlink {
+                            path: executable.to_path_buf(),
+                            venv,
+                        })
+                    } else {
+                        Error::NotFound(executable.to_path_buf())
+                    }
                 } else {
                     err.into()
                 }
             })?;
 
         // Read from the cache.
-        if let Some(value) =
-            Self::read_and_validate_cache(executable, cache, &cache_entry, modified)
+        if cache
+            .freshness(&cache_entry, None, None)
+            .is_ok_and(Freshness::is_fresh)
         {
-            return Ok(value);
+            if let Ok(data) = fs::read(cache_entry.path()) {
+                match rmp_serde::from_slice::<CachedByTimestamp<Self>>(&data) {
+                    Ok(cached) => {
+                        if cached.timestamp == modified {
+                            trace!(
+                                "Cached interpreter info for Python {}, skipping probing: {}",
+                                cached.data.markers.python_full_version(),
+                                executable.user_display()
+                            );
+                            return Ok(cached.data);
+                        }
+
+                        trace!(
+                            "Ignoring stale interpreter markers for: {}",
+                            executable.user_display()
+                        );
+                    }
+                    Err(err) => {
+                        warn!(
+                            "Broken interpreter cache entry at {}, removing: {err}",
+                            cache_entry.path().user_display()
+                        );
+                        let _ = fs_err::remove_file(cache_entry.path());
+                    }
+                }
+            }
         }
 
         // Otherwise, run the Python script.
@@ -938,81 +983,14 @@ impl InterpreterInfo {
             fs::create_dir_all(cache_entry.dir())?;
             write_atomic_sync(
                 cache_entry.path(),
-                rmp_serde::to_vec(&CachedInterpreterInfo {
+                rmp_serde::to_vec(&CachedByTimestamp {
                     timestamp: modified,
                     data: info.clone(),
-                    env_vars: PythonEnvVars::from_env(),
                 })?,
             )?;
         }
 
         Ok(info)
-    }
-
-    /// If a cache entry for the Python interpreter exists and it's fresh, return it.
-    fn read_and_validate_cache(
-        executable: &Path,
-        cache: &Cache,
-        cache_entry: &CacheEntry,
-        modified: Timestamp,
-    ) -> Option<InterpreterInfo> {
-        if !cache
-            .freshness(cache_entry, None)
-            .is_ok_and(Freshness::is_fresh)
-        {
-            return None;
-        }
-
-        let data = match fs::read(cache_entry.path()) {
-            Ok(data) => data,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                return None;
-            }
-            Err(err) => {
-                warn!(
-                    "Broken interpreter cache entry at {}, removing: {err}",
-                    cache_entry.path().user_display()
-                );
-                let _ = fs_err::remove_file(cache_entry.path());
-                return None;
-            }
-        };
-
-        let cached = match rmp_serde::from_slice::<CachedInterpreterInfo>(&data) {
-            Ok(cached) => cached,
-            Err(err) => {
-                warn!(
-                    "Broken interpreter cache entry at {}, removing: {err}",
-                    cache_entry.path().user_display()
-                );
-                let _ = fs_err::remove_file(cache_entry.path());
-                return None;
-            }
-        };
-
-        if cached.timestamp != modified {
-            trace!(
-                "Ignoring stale cached interpreter info for: `{}`",
-                executable.user_display()
-            );
-            return None;
-        }
-
-        if cached.env_vars != PythonEnvVars::from_env() {
-            trace!(
-                "Ignoring cached interpreter info due to changed environment variables for: `{}`",
-                executable.user_display()
-            );
-            return None;
-        }
-
-        trace!(
-            "Cached interpreter info for Python {}, skipping probing: `{}`",
-            cached.data.markers.python_full_version(),
-            executable.user_display()
-        );
-
-        Some(cached.data)
     }
 }
 
@@ -1090,10 +1068,7 @@ fn find_base_python(
             if let Some(parent) = executable.parent() {
                 parent.join(resolved)
             } else {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "Symlink has no parent directory",
-                ));
+                return Err(io::Error::other("Symlink has no parent directory"));
             }
         } else {
             resolved

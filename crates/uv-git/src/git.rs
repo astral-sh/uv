@@ -8,7 +8,7 @@ use std::str::{self};
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
-use cargo_util::{paths, ProcessBuilder};
+use cargo_util::{ProcessBuilder, paths};
 use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, warn};
@@ -16,6 +16,7 @@ use url::Url;
 
 use uv_fs::Simplified;
 use uv_git_types::{GitHubRepository, GitOid, GitReference};
+use uv_redacted::DisplaySafeUrl;
 use uv_static::EnvVars;
 use uv_version::version;
 
@@ -29,13 +30,17 @@ pub enum GitError {
     GitNotFound,
     #[error(transparent)]
     Other(#[from] which::Error),
+    #[error(
+        "Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)"
+    )]
+    TransportNotAllowed,
 }
 
 /// A global cache of the result of `which git`.
 pub static GIT: LazyLock<Result<PathBuf, GitError>> = LazyLock::new(|| {
-    which::which("git").map_err(|e| match e {
+    which::which("git").map_err(|err| match err {
         which::Error::CannotFindBinaryPath => GitError::GitNotFound,
-        e => GitError::Other(e),
+        err => GitError::Other(err),
     })
 });
 
@@ -128,7 +133,7 @@ impl Display for ReferenceOrOid<'_> {
 #[derive(PartialEq, Clone, Debug)]
 pub(crate) struct GitRemote {
     /// URL to a remote repository.
-    url: Url,
+    url: DisplaySafeUrl,
 }
 
 /// A local clone of a remote repository's database. Multiple [`GitCheckout`]s
@@ -201,12 +206,12 @@ impl GitRepository {
 
 impl GitRemote {
     /// Creates an instance for a remote repository URL.
-    pub(crate) fn new(url: &Url) -> Self {
+    pub(crate) fn new(url: &DisplaySafeUrl) -> Self {
         Self { url: url.clone() }
     }
 
     /// Gets the remote repository URL.
-    pub(crate) fn url(&self) -> &Url {
+    pub(crate) fn url(&self) -> &DisplaySafeUrl {
         &self.url
     }
 
@@ -230,6 +235,7 @@ impl GitRemote {
         locked_rev: Option<GitOid>,
         client: &ClientWithMiddleware,
         disable_ssl: bool,
+        offline: bool,
     ) -> Result<(GitDatabase, GitOid)> {
         let reference = locked_rev
             .map(ReferenceOrOid::Oid)
@@ -237,8 +243,15 @@ impl GitRemote {
         let enable_lfs_fetch = env::var(EnvVars::UV_GIT_LFS).is_ok();
 
         if let Some(mut db) = db {
-            fetch(&mut db.repo, &self.url, reference, client, disable_ssl)
-                .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
+            fetch(
+                &mut db.repo,
+                &self.url,
+                reference,
+                client,
+                disable_ssl,
+                offline,
+            )
+            .with_context(|| format!("failed to fetch into: {}", into.user_display()))?;
 
             let resolved_commit_hash = match locked_rev {
                 Some(rev) => db.contains(rev).then_some(rev),
@@ -265,8 +278,15 @@ impl GitRemote {
 
         fs_err::create_dir_all(into)?;
         let mut repo = GitRepository::init(into)?;
-        fetch(&mut repo, &self.url, reference, client, disable_ssl)
-            .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
+        fetch(
+            &mut repo,
+            &self.url,
+            reference,
+            client,
+            disable_ssl,
+            offline,
+        )
+        .with_context(|| format!("failed to clone into: {}", into.user_display()))?;
         let rev = match locked_rev {
             Some(rev) => rev,
             None => reference.resolve(&repo)?,
@@ -441,6 +461,7 @@ fn fetch(
     reference: ReferenceOrOid<'_>,
     client: &ClientWithMiddleware,
     disable_ssl: bool,
+    offline: bool,
 ) -> Result<()> {
     let oid_to_fetch = match github_fast_path(repo, remote_url, reference, client) {
         Ok(FastPathRev::UpToDate) => return Ok(()),
@@ -516,9 +537,14 @@ fn fetch(
 
     debug!("Performing a Git fetch for: {remote_url}");
     let result = match refspec_strategy {
-        RefspecStrategy::All => {
-            fetch_with_cli(repo, remote_url, refspecs.as_slice(), tags, disable_ssl)
-        }
+        RefspecStrategy::All => fetch_with_cli(
+            repo,
+            remote_url,
+            refspecs.as_slice(),
+            tags,
+            disable_ssl,
+            offline,
+        ),
         RefspecStrategy::First => {
             // Try each refspec
             let mut errors = refspecs
@@ -530,6 +556,7 @@ fn fetch(
                         std::slice::from_ref(refspec),
                         tags,
                         disable_ssl,
+                        offline,
                     );
 
                     // Stop after the first success and log failures
@@ -576,15 +603,25 @@ fn fetch_with_cli(
     refspecs: &[String],
     tags: bool,
     disable_ssl: bool,
+    offline: bool,
 ) -> Result<()> {
     let mut cmd = ProcessBuilder::new(GIT.as_ref()?);
+    // Disable interactive prompts in the terminal, as they'll be erased by the progress bar
+    // animation and the process will "hang". Interactive prompts via the GUI like `SSH_ASKPASS`
+    // are still usable.
+    cmd.env(EnvVars::GIT_TERMINAL_PROMPT, "0");
+
     cmd.arg("fetch");
     if tags {
         cmd.arg("--tags");
     }
     if disable_ssl {
-        debug!("Disabling SSL verification for Git fetch");
+        debug!("Disabling SSL verification for Git fetch via `GIT_SSL_NO_VERIFY`");
         cmd.env(EnvVars::GIT_SSL_NO_VERIFY, "true");
+    }
+    if offline {
+        debug!("Disabling remote protocols for Git fetch via `GIT_ALLOW_PROTOCOL=file`");
+        cmd.env(EnvVars::GIT_ALLOW_PROTOCOL, "file");
     }
     cmd.arg("--force") // handle force pushes
         .arg("--update-head-ok") // see discussion in #2078
@@ -606,7 +643,13 @@ fn fetch_with_cli(
     // We capture the output to avoid streaming it to the user's console during clones.
     // The required `on...line` callbacks currently do nothing.
     // The output appears to be included in error messages by default.
-    cmd.exec_with_output()?;
+    cmd.exec_with_output().map_err(|err| {
+        let msg = err.to_string();
+        if msg.contains("transport '") && msg.contains("' not allowed") && offline {
+            return GitError::TransportNotAllowed.into();
+        }
+        err
+    })?;
 
     Ok(())
 }

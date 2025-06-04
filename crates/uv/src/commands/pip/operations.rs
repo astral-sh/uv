@@ -1,9 +1,9 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -13,7 +13,7 @@ use uv_tool::InstalledTools;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClient};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification, DryRun,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, DryRun,
     ExtrasSpecification, Overrides, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
@@ -28,7 +28,7 @@ use uv_distribution_types::{
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
-use uv_normalize::PackageName;
+use uv_normalize::{GroupName, PackageName};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
@@ -45,7 +45,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
-use crate::commands::{compile_bytecode, ChangeEventKind, DryRunEvent};
+use crate::commands::{ChangeEventKind, DryRunEvent, compile_bytecode};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -54,18 +54,16 @@ pub(crate) async fn read_requirements(
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     extras: &ExtrasSpecification,
-    groups: &DevGroupsSpecification,
+    groups: BTreeMap<PathBuf, Vec<GroupName>>,
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<RequirementsSpecification, Error> {
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
-        let hint = if requirements.iter().any(|source| {
-            matches!(
-                source,
-                RequirementsSource::Editable(_) | RequirementsSource::SourceTree(_)
-            )
-        }) {
+        let hint = if requirements
+            .iter()
+            .any(|source| matches!(source, RequirementsSource::Editable(_)))
+        {
             "Use `<dir>[extra]` syntax or `-r <file>` instead."
         } else {
             "Use `package[extra]` syntax instead."
@@ -75,19 +73,13 @@ pub(crate) async fn read_requirements(
         )
         .into());
     }
-    if !groups.is_empty() && !requirements.iter().any(RequirementsSource::allows_groups) {
-        let flags = groups.history().as_flags_pretty().join(" ");
-        return Err(anyhow!(
-            "Requesting groups requires a `pyproject.toml`. Requested via: {flags}"
-        )
-        .into());
-    }
 
     // Read all requirements from the provided sources.
     Ok(RequirementsSpecification::from_sources(
         requirements,
         constraints,
         overrides,
+        groups,
         client_builder,
     )
     .await?)
@@ -98,11 +90,15 @@ pub(crate) async fn read_constraints(
     constraints: &[RequirementsSource],
     client_builder: &BaseClientBuilder<'_>,
 ) -> Result<Vec<NameRequirementSpecification>, Error> {
-    Ok(
-        RequirementsSpecification::from_sources(&[], constraints, &[], client_builder)
-            .await?
-            .constraints,
+    Ok(RequirementsSpecification::from_sources(
+        &[],
+        constraints,
+        &[],
+        BTreeMap::default(),
+        client_builder,
     )
+    .await?
+    .constraints)
 }
 
 /// Resolve a set of requirements, similar to running `pip compile`.
@@ -114,7 +110,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
     extras: &ExtrasSpecification,
-    groups: &DevGroupsSpecification,
+    groups: &BTreeMap<PathBuf, DependencyGroups>,
     preferences: Vec<Preference>,
     installed_packages: InstalledPackages,
     hasher: &HashStrategy,
@@ -187,25 +183,23 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             });
 
             // If any of the extras were unused, surface a warning.
-            if let ExtrasSpecification::Some(extras) = extras {
-                let mut unused_extras = extras
-                    .iter()
-                    .filter(|extra| {
-                        !resolutions
-                            .iter()
-                            .any(|resolution| resolution.extras.contains(extra))
-                    })
-                    .collect::<Vec<_>>();
-                if !unused_extras.is_empty() {
-                    unused_extras.sort_unstable();
-                    unused_extras.dedup();
-                    let s = if unused_extras.len() == 1 { "" } else { "s" };
-                    return Err(anyhow!(
-                        "Requested extra{s} not found: {}",
-                        unused_extras.iter().join(", ")
-                    )
-                    .into());
-                }
+            let mut unused_extras = extras
+                .explicit_names()
+                .filter(|extra| {
+                    !resolutions
+                        .iter()
+                        .any(|resolution| resolution.extras.contains(extra))
+                })
+                .collect::<Vec<_>>();
+            if !unused_extras.is_empty() {
+                unused_extras.sort_unstable();
+                unused_extras.dedup();
+                let s = if unused_extras.len() == 1 { "" } else { "s" };
+                return Err(anyhow!(
+                    "Requested extra{s} not found: {}",
+                    unused_extras.iter().join(", ")
+                )
+                .into());
             }
 
             // Extend the requirements with the resolved source trees.
@@ -440,7 +434,7 @@ pub(crate) async fn install(
         .context("Failed to determine installation plan")?;
 
     if dry_run.enabled() {
-        report_dry_run(resolution, plan, modifications, start, printer)?;
+        report_dry_run(dry_run, resolution, plan, modifications, start, printer)?;
         return Ok(Changelog::default());
     }
 
@@ -516,7 +510,7 @@ pub(crate) async fn install(
                 )) => {
                     warn_user!(
                         "Failed to uninstall package at {} due to missing `RECORD` file. Installation may result in an incomplete environment.",
-                        dist_info.path().user_display().cyan(),
+                        dist_info.install_path().user_display().cyan(),
                     );
                 }
                 Err(uv_installer::UninstallError::Uninstall(
@@ -524,7 +518,7 @@ pub(crate) async fn install(
                 )) => {
                     warn_user!(
                         "Failed to uninstall package at {} due to missing `top-level.txt` file. Installation may result in an incomplete environment.",
-                        dist_info.path().user_display().cyan(),
+                        dist_info.install_path().user_display().cyan(),
                     );
                 }
                 Err(err) => return Err(err.into()),
@@ -554,7 +548,7 @@ pub(crate) async fn install(
     }
 
     if compile {
-        compile_bytecode(venv, cache, printer).await?;
+        compile_bytecode(venv, &concurrency, cache, printer).await?;
     }
 
     // Construct a summary of the changes made to the environment.
@@ -567,6 +561,7 @@ pub(crate) async fn install(
 }
 
 /// Display a message about the interpreter that was selected for the operation.
+#[allow(clippy::result_large_err)]
 pub(crate) fn report_interpreter(
     python: &PythonInstallation,
     dimmed: bool,
@@ -624,6 +619,7 @@ pub(crate) fn report_interpreter(
 }
 
 /// Display a message about the target environment for the operation.
+#[allow(clippy::result_large_err)]
 pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
     cache: &Cache,
@@ -666,7 +662,9 @@ pub(crate) fn report_target_environment(
 }
 
 /// Report on the results of a dry-run installation.
+#[allow(clippy::result_large_err)]
 fn report_dry_run(
+    dry_run: DryRun,
     resolution: &Resolution,
     plan: Plan,
     modifications: Modifications,
@@ -790,10 +788,15 @@ fn report_dry_run(
         }
     }
 
+    if matches!(dry_run, DryRun::Check) {
+        return Err(Error::OutdatedEnvironment);
+    }
+
     Ok(())
 }
 
 /// Report any diagnostics on resolved distributions.
+#[allow(clippy::result_large_err)]
 pub(crate) fn diagnose_resolution(
     diagnostics: &[ResolutionDiagnostic],
     printer: Printer,
@@ -811,6 +814,7 @@ pub(crate) fn diagnose_resolution(
 }
 
 /// Report any diagnostics on installed distributions in the Python environment.
+#[allow(clippy::result_large_err)]
 pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,
@@ -861,4 +865,7 @@ pub(crate) enum Error {
 
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
+
+    #[error("The environment is outdated; run `{}` to update the environment", "uv sync".cyan())]
+    OutdatedEnvironment,
 }

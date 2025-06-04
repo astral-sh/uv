@@ -24,7 +24,7 @@ assert!(version_specifiers.contains(&version));
 
 PEP 440 has a lot of unintuitive features, including:
 
-- An epoch that you can prefix the version which, e.g. `1!1.2.3`. Lower epoch always means lower
+- An epoch that you can prefix the version with, e.g., `1!1.2.3`. Lower epoch always means lower
   version (`1.0 <=2!0.1`)
 
 * post versions, which can be attached to both stable releases and pre-releases
@@ -40,6 +40,6 @@ PEP 440 has a lot of unintuitive features, including:
 * local versions on top of all the others, which are added with a + and have implicitly typed string
   and number segments
 * no semver-caret (`^`), but a pseudo-semver tilde (`~=`)
-* ordering contradicts matching: We have e.g. `1.0+local > 1.0` when sorting, but `==1.0` matches
+* ordering contradicts matching: We have, e.g., `1.0+local > 1.0` when sorting, but `==1.0` matches
   `1.0+local`. While the ordering of versions itself is a total order the version matching needs to
   catch all sorts of special cases

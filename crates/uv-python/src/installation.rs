@@ -8,15 +8,15 @@ use uv_client::BaseClientBuilder;
 use uv_pep440::{Prerelease, Version};
 
 use crate::discovery::{
-    find_best_python_installation, find_python_installation, EnvironmentPreference, PythonRequest,
+    EnvironmentPreference, PythonRequest, find_best_python_installation, find_python_installation,
 };
 use crate::downloads::{DownloadResult, ManagedPythonDownload, PythonDownloadRequest, Reporter};
 use crate::implementation::LenientImplementationName;
 use crate::managed::{ManagedPythonInstallation, ManagedPythonInstallations};
 use crate::platform::{Arch, Libc, Os};
 use crate::{
-    downloads, Error, ImplementationName, Interpreter, PythonDownloads, PythonPreference,
-    PythonSource, PythonVariant, PythonVersion,
+    Error, ImplementationName, Interpreter, PythonDownloads, PythonPreference, PythonSource,
+    PythonVariant, PythonVersion, downloads,
 };
 
 /// A Python interpreter and accompanying tools.
@@ -88,6 +88,7 @@ impl PythonInstallation {
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
+        python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
 
@@ -127,6 +128,7 @@ impl PythonInstallation {
             reporter,
             python_install_mirror,
             pypy_install_mirror,
+            python_downloads_json_url,
         )
         .await
         {
@@ -146,13 +148,14 @@ impl PythonInstallation {
         reporter: Option<&dyn Reporter>,
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
+        python_downloads_json_url: Option<&str>,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
         let scratch_dir = installations.scratch();
         let _lock = installations.lock().await?;
 
-        let download = ManagedPythonDownload::from_request(&request)?;
+        let download = ManagedPythonDownload::from_request(&request, python_downloads_json_url)?;
         let client = client_builder.build();
 
         info!("Fetching requested Python...");
@@ -294,7 +297,7 @@ impl PythonInstallationKey {
         }
     }
 
-    fn new_from_version(
+    pub fn new_from_version(
         implementation: LenientImplementationName,
         version: &PythonVersion,
         os: Os,
@@ -480,8 +483,10 @@ impl Ord for PythonInstallationKey {
             .cmp(&other.implementation)
             .then_with(|| self.version().cmp(&other.version()))
             .then_with(|| self.os.to_string().cmp(&other.os.to_string()))
-            .then_with(|| self.arch.to_string().cmp(&other.arch.to_string()))
+            // Architectures are sorted in preferred order, with native architectures first
+            .then_with(|| self.arch.cmp(&other.arch).reverse())
             .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
-            .then_with(|| self.variant.cmp(&other.variant))
+            // Python variants are sorted in preferred order, with `Default` first
+            .then_with(|| self.variant.cmp(&other.variant).reverse())
     }
 }

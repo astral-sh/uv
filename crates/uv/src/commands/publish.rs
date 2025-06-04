@@ -1,42 +1,42 @@
-use crate::commands::reporters::PublishReporter;
-use crate::commands::{human_readable_bytes, ExitStatus};
-use crate::printer::Printer;
-use anyhow::{bail, Context, Result};
-use console::Term;
-use owo_colors::OwoColorize;
 use std::fmt::Write;
 use std::iter;
 use std::sync::Arc;
 use std::time::Duration;
+
+use anyhow::{Context, Result, bail};
+use console::Term;
+use owo_colors::OwoColorize;
 use tokio::sync::Semaphore;
 use tracing::{debug, info};
-use url::Url;
+use uv_auth::Credentials;
 use uv_cache::Cache;
-use uv_client::{
-    AuthIntegration, BaseClient, BaseClientBuilder, Connectivity, RegistryClientBuilder,
-};
-use uv_configuration::{KeyringProviderType, TrustedHost, TrustedPublishing};
+use uv_client::{AuthIntegration, BaseClient, BaseClientBuilder, RegistryClientBuilder};
+use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_types::{Index, IndexCapabilities, IndexLocations, IndexUrl};
 use uv_publish::{
-    check_trusted_publishing, files_for_publishing, upload, CheckUrlClient, TrustedPublishResult,
+    CheckUrlClient, TrustedPublishResult, check_trusted_publishing, files_for_publishing, upload,
 };
+use uv_redacted::DisplaySafeUrl;
 use uv_warnings::warn_user_once;
+
+use crate::commands::reporters::PublishReporter;
+use crate::commands::{ExitStatus, human_readable_bytes};
+use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 pub(crate) async fn publish(
     paths: Vec<String>,
-    publish_url: Url,
+    publish_url: DisplaySafeUrl,
     trusted_publishing: TrustedPublishing,
     keyring_provider: KeyringProviderType,
-    allow_insecure_host: &[TrustedHost],
+    network_settings: &NetworkSettings,
     username: Option<String>,
     password: Option<String>,
     check_url: Option<IndexUrl>,
     cache: &Cache,
-    connectivity: Connectivity,
-    native_tls: bool,
     printer: Printer,
 ) -> Result<ExitStatus> {
-    if connectivity.is_offline() {
+    if network_settings.connectivity.is_offline() {
         bail!("Unable to publish files in offline mode");
     }
 
@@ -49,7 +49,8 @@ pub(crate) async fn publish(
 
     // * For the uploads themselves, we roll our own retries due to
     //   https://github.com/seanmonstar/reqwest/issues/2416, but for trusted publishing, we want
-    //   the default retries.
+    //   the default retries. We set the retries to 0 here and manually construct the retry policy
+    //   in the upload loop.
     // * We want to allow configuring TLS for the registry, while for trusted publishing we know the
     //   defaults are correct.
     // * For the uploads themselves, we know we need an authorization header and we can't nor
@@ -59,8 +60,8 @@ pub(crate) async fn publish(
     let upload_client = BaseClientBuilder::new()
         .retries(0)
         .keyring(keyring_provider)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec())
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone())
         // Don't try cloning the request to make an unauthenticated request first.
         .auth_integration(AuthIntegration::OnlyAuthenticated)
         // Set a very high timeout for uploads, connections are often 10x slower on upload than
@@ -73,7 +74,7 @@ pub(crate) async fn publish(
     // We're only checking a single URL and one at a time, so 1 permit is sufficient
     let download_concurrency = Arc::new(Semaphore::new(1));
 
-    let (publish_url, username, password) = gather_credentials(
+    let (publish_url, credentials) = gather_credentials(
         publish_url,
         username,
         password,
@@ -88,18 +89,17 @@ pub(crate) async fn publish(
 
     // Initialize the registry client.
     let check_url_client = if let Some(index_url) = &check_url {
-        let index_urls = IndexLocations::new(
+        let index_locations = IndexLocations::new(
             vec![Index::from_index_url(index_url.clone())],
             Vec::new(),
             false,
-        )
-        .index_urls();
+        );
         let registry_client_builder = RegistryClientBuilder::new(cache.clone())
-            .native_tls(native_tls)
-            .connectivity(connectivity)
-            .index_urls(index_urls)
-            .keyring(keyring_provider)
-            .allow_insecure_host(allow_insecure_host.to_vec());
+            .native_tls(network_settings.native_tls)
+            .connectivity(network_settings.connectivity)
+            .allow_insecure_host(network_settings.allow_insecure_host.clone())
+            .index_locations(&index_locations)
+            .keyring(keyring_provider);
         Some(CheckUrlClient {
             index_url: index_url.clone(),
             registry_client_builder,
@@ -136,8 +136,7 @@ pub(crate) async fn publish(
             &filename,
             &publish_url,
             &upload_client,
-            username.as_deref(),
-            password.as_deref(),
+            &credentials,
             check_url_client.as_ref(),
             &download_concurrency,
             // Needs to be an `Arc` because the reqwest `Body` static lifetime requirement
@@ -197,7 +196,7 @@ enum Prompt {
 ///
 /// Returns the publish URL, the username and the password.
 async fn gather_credentials(
-    mut publish_url: Url,
+    mut publish_url: DisplaySafeUrl,
     mut username: Option<String>,
     mut password: Option<String>,
     trusted_publishing: TrustedPublishing,
@@ -206,7 +205,7 @@ async fn gather_credentials(
     check_url: Option<&IndexUrl>,
     prompt: Prompt,
     printer: Printer,
-) -> Result<(Url, Option<String>, Option<String>)> {
+) -> Result<(DisplaySafeUrl, Credentials)> {
     // Support reading username and password from the URL, for symmetry with the index API.
     if let Some(url_password) = publish_url.password() {
         if password.is_some_and(|password| password != url_password) {
@@ -256,8 +255,8 @@ async fn gather_credentials(
     if password.is_some() && username.is_none() {
         bail!(
             "Attempted to publish with a password, but no username. Either provide a username \
-            with `--user` (`UV_PUBLISH_USERNAME`), or use `--token` (`UV_PUBLISH_TOKEN`) instead \
-            of a password."
+            with `--username` (`UV_PUBLISH_USERNAME`), or use `--token` (`UV_PUBLISH_TOKEN`) \
+            instead of a password."
         );
     }
 
@@ -297,7 +296,7 @@ async fn gather_credentials(
             if let Some(username) = &username {
                 debug!("Fetching password from keyring");
                 if let Some(keyring_password) = keyring_provider
-                    .fetch(&publish_url, username)
+                    .fetch(DisplaySafeUrl::ref_cast(&publish_url), Some(username))
                     .await
                     .as_ref()
                     .and_then(|credentials| credentials.password())
@@ -317,7 +316,10 @@ async fn gather_credentials(
             // We may be using the keyring for the simple index.
         }
     }
-    Ok((publish_url, username, password))
+
+    let credentials = Credentials::basic(username, password);
+
+    Ok((publish_url, credentials))
 }
 
 fn prompt_username_and_password() -> Result<(Option<String>, Option<String>)> {
@@ -340,13 +342,14 @@ mod tests {
     use std::str::FromStr;
 
     use insta::assert_snapshot;
-    use url::Url;
 
-    async fn credentials(
-        url: Url,
+    use uv_redacted::DisplaySafeUrl;
+
+    async fn get_credentials(
+        url: DisplaySafeUrl,
         username: Option<String>,
         password: Option<String>,
-    ) -> Result<(Url, Option<String>, Option<String>)> {
+    ) -> Result<(DisplaySafeUrl, Credentials)> {
         let client = BaseClientBuilder::new().build();
         gather_credentials(
             url,
@@ -364,35 +367,35 @@ mod tests {
 
     #[tokio::test]
     async fn username_password_sources() {
-        let example_url = Url::from_str("https://example.com").unwrap();
-        let example_url_username = Url::from_str("https://ferris@example.com").unwrap();
+        let example_url = DisplaySafeUrl::from_str("https://example.com").unwrap();
+        let example_url_username = DisplaySafeUrl::from_str("https://ferris@example.com").unwrap();
         let example_url_username_password =
-            Url::from_str("https://ferris:f3rr1s@example.com").unwrap();
+            DisplaySafeUrl::from_str("https://ferris:f3rr1s@example.com").unwrap();
 
-        let (publish_url, username, password) =
-            credentials(example_url.clone(), None, None).await.unwrap();
+        let (publish_url, credentials) = get_credentials(example_url.clone(), None, None)
+            .await
+            .unwrap();
         assert_eq!(publish_url, example_url);
-        assert_eq!(username, None);
-        assert_eq!(password, None);
+        assert_eq!(credentials.username(), None);
+        assert_eq!(credentials.password(), None);
 
-        let (publish_url, username, password) =
-            credentials(example_url_username.clone(), None, None)
+        let (publish_url, credentials) = get_credentials(example_url_username.clone(), None, None)
+            .await
+            .unwrap();
+        assert_eq!(publish_url, example_url);
+        assert_eq!(credentials.username(), Some("ferris"));
+        assert_eq!(credentials.password(), None);
+
+        let (publish_url, credentials) =
+            get_credentials(example_url_username_password.clone(), None, None)
                 .await
                 .unwrap();
         assert_eq!(publish_url, example_url);
-        assert_eq!(username.as_deref(), Some("ferris"));
-        assert_eq!(password, None);
-
-        let (publish_url, username, password) =
-            credentials(example_url_username_password.clone(), None, None)
-                .await
-                .unwrap();
-        assert_eq!(publish_url, example_url);
-        assert_eq!(username.as_deref(), Some("ferris"));
-        assert_eq!(password.as_deref(), Some("f3rr1s"));
+        assert_eq!(credentials.username(), Some("ferris"));
+        assert_eq!(credentials.password(), Some("f3rr1s"));
 
         // Ok: The username is the same between CLI/env vars and URL
-        let (publish_url, username, password) = credentials(
+        let (publish_url, credentials) = get_credentials(
             example_url_username_password.clone(),
             Some("ferris".to_string()),
             None,
@@ -400,11 +403,11 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(publish_url, example_url);
-        assert_eq!(username.as_deref(), Some("ferris"));
-        assert_eq!(password.as_deref(), Some("f3rr1s"));
+        assert_eq!(credentials.username(), Some("ferris"));
+        assert_eq!(credentials.password(), Some("f3rr1s"));
 
         // Err: There are two different usernames between CLI/env vars and URL
-        let err = credentials(
+        let err = get_credentials(
             example_url_username_password.clone(),
             Some("packaging-platypus".to_string()),
             None,
@@ -417,7 +420,7 @@ mod tests {
         );
 
         // Ok: The username and password are the same between CLI/env vars and URL
-        let (publish_url, username, password) = credentials(
+        let (publish_url, credentials) = get_credentials(
             example_url_username_password.clone(),
             Some("ferris".to_string()),
             Some("f3rr1s".to_string()),
@@ -425,11 +428,11 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(publish_url, example_url);
-        assert_eq!(username.as_deref(), Some("ferris"));
-        assert_eq!(password.as_deref(), Some("f3rr1s"));
+        assert_eq!(credentials.username(), Some("ferris"));
+        assert_eq!(credentials.password(), Some("f3rr1s"));
 
         // Err: There are two different passwords between CLI/env vars and URL
-        let err = credentials(
+        let err = get_credentials(
             example_url_username_password.clone(),
             Some("ferris".to_string()),
             Some("secret".to_string()),

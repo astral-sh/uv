@@ -8,6 +8,12 @@ use uv_pep508::{MarkerEnvironment, StringVersion};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PythonVersion(StringVersion);
 
+impl From<StringVersion> for PythonVersion {
+    fn from(version: StringVersion) -> Self {
+        Self(version)
+    }
+}
+
 impl Deref for PythonVersion {
     type Target = StringVersion;
 
@@ -31,6 +37,27 @@ impl FromStr for PythonVersion {
         if version.epoch() != 0 {
             return Err(format!("Python version `{s}` has a non-zero epoch"));
         }
+        if let Some(major) = version.release().first() {
+            if u8::try_from(*major).is_err() {
+                return Err(format!(
+                    "Python version `{s}` has an invalid major version ({major})"
+                ));
+            }
+        }
+        if let Some(minor) = version.release().get(1) {
+            if u8::try_from(*minor).is_err() {
+                return Err(format!(
+                    "Python version `{s}` has an invalid minor version ({minor})"
+                ));
+            }
+        }
+        if let Some(patch) = version.release().get(2) {
+            if u8::try_from(*patch).is_err() {
+                return Err(format!(
+                    "Python version `{s}` has an invalid patch version ({patch})"
+                ));
+            }
+        }
 
         Ok(Self(version))
     }
@@ -42,7 +69,7 @@ impl schemars::JsonSchema for PythonVersion {
         String::from("PythonVersion")
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
         schemars::schema::SchemaObject {
             instance_type: Some(schemars::schema::InstanceType::String.into()),
             string: Some(Box::new(schemars::schema::StringValidation {
@@ -63,8 +90,21 @@ impl schemars::JsonSchema for PythonVersion {
 
 impl<'de> serde::Deserialize<'de> for PythonVersion {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        PythonVersion::from_str(&s).map_err(serde::de::Error::custom)
+        struct Visitor;
+
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = PythonVersion;
+
+            fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+                f.write_str("a string")
+            }
+
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                PythonVersion::from_str(v).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
     }
 }
 
@@ -140,6 +180,11 @@ impl PythonVersion {
     /// Return the full parsed Python version.
     pub fn version(&self) -> &Version {
         &self.0.version
+    }
+
+    /// Return the full parsed Python version.
+    pub fn into_version(self) -> Version {
+        self.0.version
     }
 
     /// Return the major version of this Python version.

@@ -415,9 +415,8 @@ impl<'b, B: 'b + ?Sized + AsRef<[u8]>, I: Iterator<Item = &'b B>> Iterator
                 self.skip_whitespace();
                 self.maybe_parse_directive_delimiter();
                 let directive = CacheControlDirective { name, value };
-                match self.emit_directive(directive) {
-                    None => continue,
-                    Some(d) => return Some(d),
+                if let Some(d) = self.emit_directive(directive) {
+                    return Some(d);
                 }
             }
         }

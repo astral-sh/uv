@@ -28,7 +28,8 @@ RUN case "$TARGETPLATFORM" in \
 COPY rust-toolchain.toml rust-toolchain.toml
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --target $(cat rust_target.txt) --profile minimal --default-toolchain none
 ENV PATH="$HOME/.cargo/bin:$PATH"
-# Installs the correct toolchain version from rust-toolchain.toml and then the musl target
+# Install the toolchain then the musl target
+RUN rustup toolchain install
 RUN rustup target add $(cat rust_target.txt)
 
 # Build

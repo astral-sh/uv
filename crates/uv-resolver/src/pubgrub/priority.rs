@@ -129,6 +129,7 @@ impl PubGrubPriorities {
             PubGrubPackageInner::Python(PubGrubPython::Target) => {
                 (PubGrubPriority::Root, PubGrubTiebreaker::from(2))
             }
+            PubGrubPackageInner::System(_) => (PubGrubPriority::Root, PubGrubTiebreaker::from(3)),
             PubGrubPackageInner::Marker { name, .. }
             | PubGrubPackageInner::Extra { name, .. }
             | PubGrubPackageInner::Dev { name, .. }
@@ -188,7 +189,7 @@ impl PubGrubPriorities {
                 if matches!(entry.get(), PubGrubPriority::ConflictEarly(_)) {
                     // Already in the right category
                     return false;
-                };
+                }
                 let index = Self::get_index(&entry).unwrap_or(len);
                 entry.insert(PubGrubPriority::ConflictEarly(Reverse(index)));
                 true
@@ -225,7 +226,7 @@ impl PubGrubPriorities {
                 ) {
                     // Already in the right category
                     return false;
-                };
+                }
                 let index = Self::get_index(&entry).unwrap_or(len);
                 entry.insert(PubGrubPriority::ConflictLate(Reverse(index)));
                 true

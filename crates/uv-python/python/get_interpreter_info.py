@@ -34,8 +34,18 @@ if sys.version_info[0] < 3:
     sys.exit(0)
 
 if hasattr(sys, "implementation"):
-    implementation_version = format_full_version(sys.implementation.version)
     implementation_name = sys.implementation.name
+    if implementation_name == "graalpy":
+        # GraalPy reports the CPython version as sys.implementation.version,
+        # so we need to discover the GraalPy version from the cache_tag
+        import re
+        implementation_version = re.sub(
+            r"graalpy(\d)(\d+)-\d+",
+            r"\1.\2",
+            sys.implementation.cache_tag
+        )
+    else:
+        implementation_version = format_full_version(sys.implementation.version)
 else:
     implementation_version = "0"
     implementation_name = ""
@@ -500,6 +510,24 @@ def get_operating_system_and_architecture():
             "major": int(version[0]),
             "minor": int(version[1]),
         }
+    elif operating_system == "emscripten":
+        pyodide_abi_version = sysconfig.get_config_var("PYODIDE_ABI_VERSION")
+        if not pyodide_abi_version:
+            print(
+                json.dumps(
+                    {
+                        "result": "error",
+                        "kind": "emscripten_not_pyodide",
+                    }
+                )
+            )
+            sys.exit(0)
+        version = pyodide_abi_version.split("_")
+        operating_system = {
+            "name": "pyodide",
+            "major": int(version[0]),
+            "minor": int(version[1]),
+        }
     elif operating_system in [
         "freebsd",
         "netbsd",
@@ -605,7 +633,10 @@ def main() -> None:
         "sys_prefix": sys.prefix,
         "sys_base_executable": getattr(sys, "_base_executable", None),
         "sys_executable": sys.executable,
-        "sys_path": sys.path,
+        # We prepend the location with the interpreter discovery script copied to a
+        # temporary path to `sys.path` so we can import it, which we have to strip later
+        # to avoid having this now-deleted path around.
+        "sys_path": sys.path[1:],
         "stdlib": sysconfig.get_path("stdlib"),
         # Prior to the introduction of `sysconfig` patching, python-build-standalone installations would always use
         # "/install" as the prefix. With `sysconfig` patching, we rewrite the prefix to match the actual installation

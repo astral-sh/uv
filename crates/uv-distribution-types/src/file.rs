@@ -3,11 +3,12 @@ use std::str::FromStr;
 
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 use uv_pep440::{VersionSpecifiers, VersionSpecifiersParseError};
 use uv_pep508::split_scheme;
-use uv_pypi_types::{CoreMetadata, HashDigest, Yanked};
+use uv_pypi_types::{CoreMetadata, HashDigests, Yanked};
+use uv_redacted::DisplaySafeUrl;
+use uv_small_str::SmallString;
 
 /// Error converting [`uv_pypi_types::File`] to [`distribution_type::File`].
 #[derive(Debug, thiserror::Error)]
@@ -23,8 +24,8 @@ pub enum FileConversionError {
 #[rkyv(derive(Debug))]
 pub struct File {
     pub dist_info_metadata: bool,
-    pub filename: String,
-    pub hashes: Vec<HashDigest>,
+    pub filename: SmallString,
+    pub hashes: HashDigests,
     pub requires_python: Option<VersionSpecifiers>,
     pub size: Option<u64>,
     // N.B. We don't use a Jiff timestamp here because it's a little
@@ -33,21 +34,22 @@ pub struct File {
     // milliseconds.
     pub upload_time_utc_ms: Option<i64>,
     pub url: FileLocation,
-    pub yanked: Option<Yanked>,
+    pub yanked: Option<Box<Yanked>>,
 }
 
 impl File {
     /// `TryFrom` instead of `From` to filter out files with invalid requires python version specifiers
-    pub fn try_from(file: uv_pypi_types::File, base: &Url) -> Result<Self, FileConversionError> {
+    pub fn try_from(
+        file: uv_pypi_types::File,
+        base: &SmallString,
+    ) -> Result<Self, FileConversionError> {
         Ok(Self {
             dist_info_metadata: file
                 .core_metadata
                 .as_ref()
-                .or(file.dist_info_metadata.as_ref())
-                .or(file.data_dist_info_metadata.as_ref())
                 .is_some_and(CoreMetadata::is_available),
             filename: file.filename,
-            hashes: file.hashes.into_digests(),
+            hashes: HashDigests::from(file.hashes),
             requires_python: file
                 .requires_python
                 .transpose()
@@ -56,7 +58,7 @@ impl File {
             upload_time_utc_ms: file.upload_time.map(Timestamp::as_millisecond),
             url: match split_scheme(&file.url) {
                 Some(..) => FileLocation::AbsoluteUrl(UrlString::new(file.url)),
-                None => FileLocation::RelativeUrl(base.to_string(), file.url),
+                None => FileLocation::RelativeUrl(base.clone(), file.url),
             },
             yanked: file.yanked,
         })
@@ -68,7 +70,7 @@ impl File {
 #[rkyv(derive(Debug))]
 pub enum FileLocation {
     /// URL relative to the base URL.
-    RelativeUrl(String, String),
+    RelativeUrl(SmallString, SmallString),
     /// Absolute URL.
     AbsoluteUrl(UrlString),
 }
@@ -85,32 +87,22 @@ impl FileLocation {
     /// This returns an error if any of the URL parsing fails, or if, for
     /// example, the location is a path and the path isn't valid UTF-8.
     /// (Because URLs must be valid UTF-8.)
-    pub fn to_url(&self) -> Result<Url, ToUrlError> {
+    pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
         match *self {
             FileLocation::RelativeUrl(ref base, ref path) => {
-                let base_url = Url::parse(base).map_err(|err| ToUrlError::InvalidBase {
-                    base: base.clone(),
-                    err,
-                })?;
+                let base_url =
+                    DisplaySafeUrl::parse(base).map_err(|err| ToUrlError::InvalidBase {
+                        base: base.to_string(),
+                        err,
+                    })?;
                 let joined = base_url.join(path).map_err(|err| ToUrlError::InvalidJoin {
-                    base: base.clone(),
-                    path: path.clone(),
+                    base: base.to_string(),
+                    path: path.to_string(),
                     err,
                 })?;
                 Ok(joined)
             }
             FileLocation::AbsoluteUrl(ref absolute) => absolute.to_url(),
-        }
-    }
-
-    /// Convert this location to a URL.
-    ///
-    /// This method is identical to [`FileLocation::to_url`] except it avoids parsing absolute URLs
-    /// as they are already guaranteed to be valid.
-    pub fn to_url_string(&self) -> Result<UrlString, ToUrlError> {
-        match *self {
-            FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.clone()),
-            FileLocation::RelativeUrl(_, _) => Ok(self.to_url()?.into()),
         }
     }
 }
@@ -143,18 +135,18 @@ impl Display for FileLocation {
 )]
 #[serde(transparent)]
 #[rkyv(derive(Debug))]
-pub struct UrlString(String);
+pub struct UrlString(SmallString);
 
 impl UrlString {
     /// Create a new [`UrlString`] from a [`String`].
-    pub fn new(url: String) -> Self {
+    pub fn new(url: SmallString) -> Self {
         Self(url)
     }
 
-    /// Converts a [`UrlString`] to a [`Url`].
-    pub fn to_url(&self) -> Result<Url, ToUrlError> {
-        Url::from_str(&self.0).map_err(|err| ToUrlError::InvalidAbsolute {
-            absolute: self.0.clone(),
+    /// Converts a [`UrlString`] to a [`DisplaySafeUrl`].
+    pub fn to_url(&self) -> Result<DisplaySafeUrl, ToUrlError> {
+        DisplaySafeUrl::from_str(&self.0).map_err(|err| ToUrlError::InvalidAbsolute {
+            absolute: self.0.to_string(),
             err,
         })
     }
@@ -175,8 +167,8 @@ impl UrlString {
             self.as_ref()
                 .split_once('#')
                 .map(|(path, _)| path)
-                .unwrap_or(self.as_ref())
-                .to_string(),
+                .map(SmallString::from)
+                .unwrap_or_else(|| self.0.clone()),
         )
     }
 }
@@ -187,15 +179,15 @@ impl AsRef<str> for UrlString {
     }
 }
 
-impl From<Url> for UrlString {
-    fn from(value: Url) -> Self {
-        UrlString(value.to_string())
+impl From<DisplaySafeUrl> for UrlString {
+    fn from(value: DisplaySafeUrl) -> Self {
+        Self(value.as_str().into())
     }
 }
 
-impl From<&Url> for UrlString {
-    fn from(value: &Url) -> Self {
-        UrlString(value.to_string())
+impl From<&DisplaySafeUrl> for UrlString {
+    fn from(value: &DisplaySafeUrl) -> Self {
+        Self(value.as_str().into())
     }
 }
 
@@ -248,28 +240,28 @@ mod tests {
 
     #[test]
     fn base_str() {
-        let url = UrlString("https://example.com/path?query#fragment".to_string());
+        let url = UrlString("https://example.com/path?query#fragment".into());
         assert_eq!(url.base_str(), "https://example.com/path");
 
-        let url = UrlString("https://example.com/path#fragment".to_string());
+        let url = UrlString("https://example.com/path#fragment".into());
         assert_eq!(url.base_str(), "https://example.com/path");
 
-        let url = UrlString("https://example.com/path".to_string());
+        let url = UrlString("https://example.com/path".into());
         assert_eq!(url.base_str(), "https://example.com/path");
     }
 
     #[test]
     fn without_fragment() {
-        let url = UrlString("https://example.com/path?query#fragment".to_string());
+        let url = UrlString("https://example.com/path?query#fragment".into());
         assert_eq!(
             url.without_fragment(),
-            UrlString("https://example.com/path?query".to_string())
+            UrlString("https://example.com/path?query".into())
         );
 
-        let url = UrlString("https://example.com/path#fragment".to_string());
+        let url = UrlString("https://example.com/path#fragment".into());
         assert_eq!(url.base_str(), "https://example.com/path");
 
-        let url = UrlString("https://example.com/path".to_string());
+        let url = UrlString("https://example.com/path".into());
         assert_eq!(url.base_str(), "https://example.com/path");
     }
 }

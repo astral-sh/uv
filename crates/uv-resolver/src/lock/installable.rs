@@ -1,14 +1,16 @@
-use std::collections::hash_map::Entry;
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
+use std::collections::hash_map::Entry;
 use std::path::Path;
+use std::sync::Arc;
 
 use either::Either;
 use itertools::Itertools;
 use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{BuildOptions, DevGroupsManifest, ExtrasSpecification, InstallOptions};
+use uv_configuration::ExtrasSpecificationWithDefaults;
+use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOptions};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
@@ -36,8 +38,8 @@ pub trait Installable<'lock> {
         &self,
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
-        extras: &ExtrasSpecification,
-        dev: &DevGroupsManifest,
+        extras: &ExtrasSpecificationWithDefaults,
+        dev: &DependencyGroupsWithDefaults,
         build_options: &BuildOptions,
         install_options: &InstallOptions,
     ) -> Result<Resolution, LockError> {
@@ -52,7 +54,45 @@ pub trait Installable<'lock> {
 
         let root = petgraph.add_node(Node::Root);
 
-        // Add the workspace packages to the queue.
+        // Determine the set of activated extras and groups, from the root.
+        //
+        // TODO(charlie): This isn't quite right. Below, when we add the dependency groups to the
+        // graph, we rely on the activated extras and dependency groups, to evaluate the conflict
+        // marker. But at that point, we don't know the full set of activated extras; this is only
+        // computed below. We somehow need to add the dependency groups _after_ we've computed all
+        // enabled extras, but the groups themselves could depend on the set of enabled extras.
+        if !self.lock().conflicts().is_empty() {
+            for root_name in self.roots() {
+                let dist = self
+                    .lock()
+                    .find_by_name(root_name)
+                    .map_err(|_| LockErrorKind::MultipleRootPackages {
+                        name: root_name.clone(),
+                    })?
+                    .ok_or_else(|| LockErrorKind::MissingRootPackage {
+                        name: root_name.clone(),
+                    })?;
+
+                // Track the activated extras.
+                if dev.prod() {
+                    for extra in extras.extra_names(dist.optional_dependencies.keys()) {
+                        activated_extras.push((&dist.id.name, extra));
+                    }
+                }
+
+                // Track the activated groups.
+                for group in dist
+                    .dependency_groups
+                    .keys()
+                    .filter(|group| dev.contains(group))
+                {
+                    activated_groups.push((&dist.id.name, group));
+                }
+            }
+        }
+
+        // Initialize the workspace roots.
+        let mut roots = vec![];
         for root_name in self.roots() {
             let dist = self
                 .lock()
@@ -75,13 +115,17 @@ pub trait Installable<'lock> {
             // Add an edge from the root.
             petgraph.add_edge(root, index, Edge::Prod(MarkerTree::TRUE));
 
+            // Push the package onto the queue.
+            roots.push((dist, index));
+        }
+
+        // Add the workspace dependencies to the queue.
+        for (dist, index) in roots {
             if dev.prod() {
-                // Push its dependencies on the queue and track
-                // activated extras.
+                // Push its dependencies onto the queue.
                 queue.push_back((dist, None));
                 for extra in extras.extra_names(dist.optional_dependencies.keys()) {
                     queue.push_back((dist, Some(extra)));
-                    activated_extras.push((&dist.id.name, extra));
                 }
             }
 
@@ -98,10 +142,13 @@ pub trait Installable<'lock> {
                 })
                 .flatten()
             {
-                if !dep.complexified_marker.evaluate_no_extras(marker_env) {
+                if !dep.complexified_marker.evaluate(
+                    marker_env,
+                    activated_extras.iter().copied(),
+                    activated_groups.iter().copied(),
+                ) {
                     continue;
                 }
-                activated_groups.push((&dist.id.name, group));
 
                 let dep_dist = self.lock().find_by_id(&dep.package_id);
 
@@ -428,10 +475,7 @@ pub trait Installable<'lock> {
                         entry.insert(index);
                         index
                     }
-                    Entry::Occupied(entry) => {
-                        let index = *entry.get();
-                        index
-                    }
+                    Entry::Occupied(entry) => *entry.get(),
                 };
 
                 // Add the edge.
@@ -474,7 +518,10 @@ pub trait Installable<'lock> {
             build_options,
         )?;
         let version = package.version().cloned();
-        let dist = ResolvedDist::Installable { dist, version };
+        let dist = ResolvedDist::Installable {
+            dist: Arc::new(dist),
+            version,
+        };
         let hashes = package.hashes();
         Ok(Node::Dist {
             dist,
@@ -491,7 +538,10 @@ pub trait Installable<'lock> {
             &BuildOptions::default(),
         )?;
         let version = package.version().cloned();
-        let dist = ResolvedDist::Installable { dist, version };
+        let dist = ResolvedDist::Installable {
+            dist: Arc::new(dist),
+            version,
+        };
         let hashes = package.hashes();
         Ok(Node::Dist {
             dist,

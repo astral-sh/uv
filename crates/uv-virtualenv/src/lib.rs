@@ -3,7 +3,6 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use uv_platform_tags::PlatformError;
 use uv_python::{Interpreter, PythonEnvironment};
 
 mod virtualenv;
@@ -12,13 +11,9 @@ mod virtualenv;
 pub enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error("Failed to determine Python interpreter to use")]
-    Discovery(#[from] uv_python::DiscoveryError),
-    #[error("Failed to determine Python interpreter to use")]
-    InterpreterNotFound(#[from] uv_python::PythonNotFound),
-    #[error(transparent)]
-    Platform(#[from] PlatformError),
-    #[error("Could not find a suitable Python executable for the virtual environment based on the interpreter: {0}")]
+    #[error(
+        "Could not find a suitable Python executable for the virtual environment based on the interpreter: {0}"
+    )]
     NotFound(String),
 }
 

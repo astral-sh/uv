@@ -11,10 +11,10 @@ use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
 
-use uv_fs::{symlink_or_copy_file, LockedFile, Simplified};
+use uv_fs::{LockedFile, Simplified, symlink_or_copy_file};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_trampoline_builder::{windows_python_launcher, Launcher};
+use uv_trampoline_builder::{Launcher, windows_python_launcher};
 
 use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
 use crate::implementation::{
@@ -25,7 +25,7 @@ use crate::libc::LibcDetectionError;
 use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
-use crate::{macos_dylib, sysconfig, PythonRequest, PythonVariant};
+use crate::{PythonRequest, PythonVariant, macos_dylib, sysconfig};
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -87,7 +87,7 @@ pub enum Error {
     AbsolutePath(PathBuf, #[source] io::Error),
     #[error(transparent)]
     NameParseError(#[from] installation::PythonInstallationKeyError),
-    #[error(transparent)]
+    #[error("Failed to determine the libc used on the current platform")]
     LibcDetection(#[from] LibcDetectionError),
     #[error(transparent)]
     MacOsDylib(#[from] macos_dylib::Error),
@@ -120,7 +120,9 @@ impl ManagedPythonInstallations {
     pub fn from_settings(install_dir: Option<PathBuf>) -> Result<Self, Error> {
         if let Some(install_dir) = install_dir {
             Ok(Self::from_path(install_dir))
-        } else if let Some(install_dir) = std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR) {
+        } else if let Some(install_dir) =
+            std::env::var_os(EnvVars::UV_PYTHON_INSTALL_DIR).filter(|s| !s.is_empty())
+        {
             Ok(Self::from_path(install_dir))
         } else {
             Ok(Self::from_path(
@@ -189,7 +191,7 @@ impl ManagedPythonInstallations {
     /// This ensures a consistent ordering across all platforms.
     pub fn find_all(
         &self,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
         let dirs = match fs_err::read_dir(&self.root) {
             Ok(installation_dirs) => {
                 // Collect sorted directory paths; `read_dir` is not stable across platforms
@@ -213,7 +215,7 @@ impl ManagedPythonInstallations {
                 return Err(Error::ReadError {
                     dir: self.root.clone(),
                     err,
-                })
+                });
             }
         };
         let scratch = self.scratch();
@@ -241,7 +243,7 @@ impl ManagedPythonInstallations {
     /// Iterate over Python installations that support the current platform.
     pub fn find_matching_current_platform(
         &self,
-    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation>, Error> {
+    ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + use<>, Error> {
         let os = Os::from_env();
         let arch = Arch::from_env();
         let libc = Libc::from_env()?;
@@ -250,7 +252,10 @@ impl ManagedPythonInstallations {
             .find_all()?
             .filter(move |installation| {
                 installation.key.os == os
-                    && installation.key.arch.family == arch.family
+                    && (arch.supports(installation.key.arch)
+                        // TODO(zanieb): Allow inequal variants, as `Arch::supports` does not
+                        // implement this yet. See https://github.com/astral-sh/uv/pull/9788
+                        || arch.family == installation.key.arch.family)
                     && installation.key.libc == libc
             });
 
@@ -264,7 +269,7 @@ impl ManagedPythonInstallations {
     /// - The platform metadata cannot be read
     /// - A directory for the installation cannot be read
     pub fn find_version<'a>(
-        &self,
+        &'a self,
         version: &'a PythonVersion,
     ) -> Result<impl DoubleEndedIterator<Item = ManagedPythonInstallation> + 'a, Error> {
         Ok(self
@@ -344,9 +349,7 @@ impl ManagedPythonInstallation {
         let implementation = match self.implementation() {
             ImplementationName::CPython => "python",
             ImplementationName::PyPy => "pypy",
-            ImplementationName::GraalPy => {
-                unreachable!("Managed installations of GraalPy are not supported")
-            }
+            ImplementationName::GraalPy => "graalpy",
         };
 
         let version = match self.implementation() {
@@ -359,13 +362,14 @@ impl ManagedPythonInstallation {
             }
             // PyPy uses a full version number, even on Windows.
             ImplementationName::PyPy => format!("{}.{}", self.key.major, self.key.minor),
-            ImplementationName::GraalPy => {
-                unreachable!("Managed installations of GraalPy are not supported")
-            }
+            ImplementationName::GraalPy => String::new(),
         };
 
         // On Windows, the executable is just `python.exe` even for alternative variants
-        let variant = if cfg!(unix) {
+        // GraalPy always uses `graalpy.exe` as the main executable
+        let variant = if *self.implementation() == ImplementationName::GraalPy {
+            ""
+        } else if cfg!(unix) {
             self.key.variant.suffix()
         } else if cfg!(windows) && windowed {
             // Use windowed Python that doesn't open a terminal.
@@ -379,10 +383,10 @@ impl ManagedPythonInstallation {
             exe = std::env::consts::EXE_SUFFIX
         );
 
-        let executable = if cfg!(windows) {
-            self.python_dir().join(name)
-        } else if cfg!(unix) {
+        let executable = if cfg!(unix) || *self.implementation() == ImplementationName::GraalPy {
             self.python_dir().join("bin").join(name)
+        } else if cfg!(windows) {
+            self.python_dir().join(name)
         } else {
             unimplemented!("Only Windows and Unix systems are supported.")
         };
@@ -483,7 +487,7 @@ impl ManagedPythonInstallation {
                     );
                 }
                 Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                    return Err(Error::MissingExecutable(python.clone()))
+                    return Err(Error::MissingExecutable(python.clone()));
                 }
                 Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(err) => {
@@ -491,9 +495,9 @@ impl ManagedPythonInstallation {
                         from: executable,
                         to: python,
                         err,
-                    })
+                    });
                 }
-            };
+            }
         }
 
         Ok(())
@@ -665,6 +669,7 @@ impl ManagedPythonInstallation {
     }
 }
 
+// TODO(zanieb): Only used in tests now.
 /// Generate a platform portion of a key from the environment.
 pub fn platform_key_from_env() -> Result<String, Error> {
     let os = Os::from_env();

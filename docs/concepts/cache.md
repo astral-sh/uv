@@ -26,22 +26,31 @@ If you're running into caching issues, uv includes a few escape hatches:
 - To force uv to ignore existing installed versions, pass `--reinstall` to any installation command
   (e.g., `uv sync --reinstall` or `uv pip install --reinstall ...`).
 
+As a special case, uv will always rebuild and reinstall any local directory dependencies passed
+explicitly on the command-line (e.g., `uv pip install .`).
+
 ## Dynamic metadata
 
 By default, uv will _only_ rebuild and reinstall local directory dependencies (e.g., editables) if
-the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the directory root has changed. This is a
-heuristic and, in some cases, may lead to fewer re-installs than desired.
+the `pyproject.toml`, `setup.py`, or `setup.cfg` file in the directory root has changed, or if a
+`src` directory is added or removed. This is a heuristic and, in some cases, may lead to fewer
+re-installs than desired.
 
-To incorporate other information into the cache key for a given package, you can add cache key
-entries under `tool.uv.cache-keys`, which can include both file paths and Git commit hashes.
+To incorporate additional information into the cache key for a given package, you can add cache key
+entries under [`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys),
+which covers both file paths and Git commit hashes. Setting
+[`tool.uv.cache-keys`](https://docs.astral.sh/uv/reference/settings/#cache-keys) will replace
+defaults, so any necessary files (like `pyproject.toml`) should still be included in the
+user-defined cache keys.
 
-For example, if a project uses [`setuptools-scm`](https://pypi.org/project/setuptools-scm/), and
-should be rebuilt whenever the commit hash changes, you can add the following to the project's
-`pyproject.toml`:
+For example, if a project specifies dependencies in `pyproject.toml` but uses
+[`setuptools-scm`](https://pypi.org/project/setuptools-scm/) to manage its version, and should thus
+be rebuilt whenever the commit hash or dependencies change, you can add the following to the
+project's `pyproject.toml`:
 
 ```toml title="pyproject.toml"
 [tool.uv]
-cache-keys = [{ git = { commit = true } }]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true } }]
 ```
 
 If your dynamic metadata incorporates information from the set of Git tags, you can expand the cache
@@ -49,7 +58,7 @@ key to include the tags:
 
 ```toml title="pyproject.toml"
 [tool.uv]
-cache-keys = [{ git = { commit = true, tags = true } }]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
 ```
 
 Similarly, if a project reads from a `requirements.txt` to populate its dependencies, you can add
@@ -57,10 +66,10 @@ the following to the project's `pyproject.toml`:
 
 ```toml title="pyproject.toml"
 [tool.uv]
-cache-keys = [{ file = "requirements.txt" }]
+cache-keys = [{ file = "pyproject.toml" }, { file = "requirements.txt" }]
 ```
 
-Globs are supported, following the syntax of the
+Globs are supported for `file` keys, following the syntax of the
 [`glob`](https://docs.rs/glob/0.3.1/glob/struct.Pattern.html) crate. For example, to invalidate the
 cache whenever a `.toml` file in the project directory or any of its subdirectories is modified, use
 the following:
@@ -80,8 +89,19 @@ project's `pyproject.toml` to invalidate the cache whenever the environment vari
 
 ```toml title="pyproject.toml"
 [tool.uv]
-cache-keys = [{ env = "MY_ENV_VAR" }]
+cache-keys = [{ file = "pyproject.toml" }, { env = "MY_ENV_VAR" }]
 ```
+
+Finally, to invalidate a project whenever a specific directory (like `src`) is created or removed,
+add the following to the project's `pyproject.toml`:
+
+```toml title="pyproject.toml"
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { dir = "src" }]
+```
+
+Note that the `dir` key will only track changes to the directory itself, and not arbitrary changes
+within the directory.
 
 As an escape hatch, if a project uses `dynamic` metadata that isn't covered by `tool.uv.cache-keys`,
 you can instruct uv to _always_ rebuild and reinstall it by adding the project to the

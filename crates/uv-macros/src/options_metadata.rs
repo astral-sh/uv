@@ -291,7 +291,7 @@ fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes>
             return Err(syn::Error::new(
                 meta.path.span(),
                 format!(
-                    "Deprecated meta {:?} is not supported by ruff's option macro.",
+                    "Deprecated meta {:?} is not supported by uv's option macro.",
                     meta.path.get_ident()
                 ),
             ));
@@ -301,15 +301,24 @@ fn parse_field_attributes(attribute: &Attribute) -> syn::Result<FieldAttributes>
     })?;
 
     let Some(default) = default else {
-        return Err(syn::Error::new(attribute.span(), "Mandatory `default` field is missing in `#[option]` attribute. Specify the default using `#[option(default=\"..\")]`."));
+        return Err(syn::Error::new(
+            attribute.span(),
+            "Mandatory `default` field is missing in `#[option]` attribute. Specify the default using `#[option(default=\"..\")]`.",
+        ));
     };
 
     let Some(value_type) = value_type else {
-        return Err(syn::Error::new(attribute.span(), "Mandatory `value_type` field is missing in `#[option]` attribute. Specify the value type using `#[option(value_type=\"..\")]`."));
+        return Err(syn::Error::new(
+            attribute.span(),
+            "Mandatory `value_type` field is missing in `#[option]` attribute. Specify the value type using `#[option(value_type=\"..\")]`.",
+        ));
     };
 
     let Some(example) = example else {
-        return Err(syn::Error::new(attribute.span(), "Mandatory `example` field is missing in `#[option]` attribute. Add an example using `#[option(example=\"..\")]`."));
+        return Err(syn::Error::new(
+            attribute.span(),
+            "Mandatory `example` field is missing in `#[option]` attribute. Add an example using `#[option(example=\"..\")]`.",
+        ));
     };
 
     Ok(FieldAttributes {
@@ -332,7 +341,7 @@ fn parse_deprecated_attribute(attribute: &Attribute) -> syn::Result<DeprecatedAt
             return Err(syn::Error::new(
                 meta.path.span(),
                 format!(
-                    "Deprecated meta {:?} is not supported by ruff's option macro.",
+                    "Deprecated meta {:?} is not supported by uv's option macro.",
                     meta.path.get_ident()
                 ),
             ));

@@ -1,6 +1,7 @@
 use std::{fmt::Display, fmt::Formatter};
 
 use url::Url;
+use uv_small_str::SmallString;
 
 /// Used to determine if authentication information should be retained on a new URL.
 /// Based on the specification defined in RFC 7235 and 7230.
@@ -23,16 +24,16 @@ use url::Url;
 // so we do not need any special handling here.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct Realm {
-    scheme: String,
-    host: Option<String>,
+    scheme: SmallString,
+    host: Option<SmallString>,
     port: Option<u16>,
 }
 
 impl From<&Url> for Realm {
     fn from(url: &Url) -> Self {
         Self {
-            scheme: url.scheme().to_string(),
-            host: url.host_str().map(str::to_string),
+            scheme: SmallString::from(url.scheme()),
+            host: url.host_str().map(SmallString::from),
             port: url.port(),
         }
     }

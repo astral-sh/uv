@@ -72,6 +72,7 @@ Ok(
                             ),
                         ),
                         size: None,
+                        upload_time: None,
                         filename: WheelFilename {
                             name: PackageName(
                                 "anyio",
@@ -124,6 +125,7 @@ Ok(
             dependency_groups: {},
             constraints: {},
             overrides: {},
+            build_constraints: {},
             dependency_metadata: {},
         },
     },

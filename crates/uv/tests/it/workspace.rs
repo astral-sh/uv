@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::env;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
@@ -11,13 +10,7 @@ use indoc::indoc;
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde::{Deserialize, Serialize};
 
-use crate::common::{copy_dir_ignore, make_project, uv_snapshot, TestContext};
-
-fn install_workspace(context: &TestContext, current_dir: &Path) -> Command {
-    let mut command = context.pip_install();
-    command.arg("-e").arg(current_dir);
-    command
-}
+use crate::common::{TestContext, copy_dir_ignore, make_project, uv_snapshot};
 
 fn workspaces_dir() -> PathBuf {
     env::current_dir()
@@ -31,11 +24,11 @@ fn workspaces_dir() -> PathBuf {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_in_examples_bird_feeder() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace
@@ -43,150 +36,176 @@ fn test_albatross_in_examples_bird_feeder() {
         .join("examples")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==4.3.0
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-in-example/examples/bird-feeder)
-     + idna==3.6
-     + sniffio==1.3.1
-    "###
+     + iniconfig==2.0.0
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_in_examples() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace.join("albatross-in-example");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-in-example)
-     + tqdm==4.66.2
-    "###
+     + iniconfig==2.0.0
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
-    );
-
-    context.assert_file(current_dir.join("check_installed_albatross.py"));
-}
-
-#[test]
-fn test_albatross_just_project() {
-    let context = TestContext::new("3.12");
-    let workspace = context.temp_dir.child("workspace");
-
-    // Copy into the temporary directory
-    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
-
-    let current_dir = workspace.join("albatross-just-project");
-
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 2 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
-     + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-just-project)
-     + tqdm==4.66.2
-    "###
-    );
-
-    context.assert_file(current_dir.join("check_installed_albatross.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Audited 2 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
 }
 
 #[test]
+#[cfg(feature = "pypi")]
+fn test_albatross_just_project() {
+    let context = TestContext::new("3.12");
+    let workspace = context.temp_dir.child("workspace");
+
+    copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace.join("albatross-just-project");
+
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-just-project)
+     + iniconfig==2.0.0
+    "
+    );
+
+    context.assert_file(current_dir.join("check_installed_albatross.py"));
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
+    "
+    );
+
+    context.assert_file(current_dir.join("check_installed_albatross.py"));
+}
+
+#[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_project_in_excluded() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
+
+    let current_dir = workspace.join("albatross-project-in-excluded");
+
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-project-in-excluded)
+     + iniconfig==2.0.0
+    "
+    );
 
     let current_dir = workspace
         .join("albatross-project-in-excluded")
         .join("excluded")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 4 packages in [TIME]
-    Installed 4 packages in [TIME]
-     + anyio==4.3.0
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 2 packages in [TIME]
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-project-in-excluded/excluded/bird-feeder)
-     + idna==3.6
-     + sniffio==1.3.1
-    "###
+     + iniconfig==2.0.0
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Resolved 2 packages in [TIME]
+    Audited 2 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
@@ -195,69 +214,67 @@ fn test_albatross_project_in_excluded() {
         .join("albatross-project-in-excluded")
         .join("packages")
         .join("seeds");
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
-    success: true
-    exit_code: 0
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    success: false
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 2 packages in [TIME]
-    Prepared 1 package in [TIME]
-    Installed 1 package in [TIME]
-     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-project-in-excluded/packages/seeds)
-    "###
+    error: The project is marked as unmanaged: `[TEMP_DIR]/workspace/albatross-project-in-excluded/packages/seeds`
+    "
     );
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_root_workspace() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace.join("albatross-root-workspace");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 7 packages in [TIME]
-    Prepared 7 packages in [TIME]
-    Installed 7 packages in [TIME]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace)
-     + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder)
      + idna==3.6
+     + iniconfig==2.0.0
      + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
-     + sniffio==1.3.1
-     + tqdm==4.66.2
-    "###
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Resolved 5 packages in [TIME]
+    Audited 5 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_root_workspace_bird_feeder() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace
@@ -265,43 +282,45 @@ fn test_albatross_root_workspace_bird_feeder() {
         .join("packages")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: [TEMP_DIR]/workspace/albatross-root-workspace/.venv
+    Resolved 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder)
+     + idna==3.6
+     + iniconfig==2.0.0
+     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
+    "
+    );
+
+    context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
-     + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder)
-     + idna==3.6
-     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
-     + sniffio==1.3.1
-    "###
-    );
-
-    context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Audited 4 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_root_workspace_albatross() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace
@@ -309,43 +328,45 @@ fn test_albatross_root_workspace_albatross() {
         .join("packages")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: [TEMP_DIR]/workspace/albatross-root-workspace/.venv
+    Resolved 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder)
+     + idna==3.6
+     + iniconfig==2.0.0
+     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
+    "
+    );
+
+    context.assert_file(current_dir.join("check_installed_albatross.py"));
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
-     + anyio==4.3.0
-     + bird-feeder==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/bird-feeder)
-     + idna==3.6
-     + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-root-workspace/packages/seeds)
-     + sniffio==1.3.1
-    "###
-    );
-
-    context.assert_file(current_dir.join("check_installed_albatross.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Audited 4 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_albatross.py"));
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_virtual_workspace() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
 
-    // Copy into the temporary directory
     copy_dir_ignore(workspaces_dir(), &workspace).unwrap();
 
     let current_dir = workspace
@@ -353,13 +374,15 @@ fn test_albatross_virtual_workspace() {
         .join("packages")
         .join("bird-feeder");
 
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: [TEMP_DIR]/workspace/albatross-virtual-workspace/.venv
+    Resolved 7 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
@@ -367,18 +390,19 @@ fn test_albatross_virtual_workspace() {
      + idna==3.6
      + seeds==1.0.0 (from file://[TEMP_DIR]/workspace/albatross-virtual-workspace/packages/seeds)
      + sniffio==1.3.1
-    "###
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
-    uv_snapshot!(context.filters(), install_workspace(&context, &current_dir), @r###"
+    uv_snapshot!(context.filters(), context.sync().current_dir(&current_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Audited 1 package in [TIME]
-    "###
+    Resolved 7 packages in [TIME]
+    Audited 5 packages in [TIME]
+    "
     );
 
     context.assert_file(current_dir.join("check_installed_bird_feeder.py"));
@@ -386,6 +410,7 @@ fn test_albatross_virtual_workspace() {
 
 /// Check that `uv run --package` works in a virtual workspace.
 #[test]
+#[cfg(feature = "pypi")]
 fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-virtual-workspace");
@@ -407,7 +432,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
         .arg("--package")
         .arg("bird-feeder")
         .arg("packages/bird-feeder/check_installed_bird_feeder.py")
-        .current_dir(&work_dir), @r###"
+        .current_dir(&work_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -417,7 +442,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Resolved 8 packages in [TIME]
+    Resolved 7 packages in [TIME]
     Prepared 5 packages in [TIME]
     Installed 5 packages in [TIME]
      + anyio==4.3.0
@@ -425,15 +450,15 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
      + idna==3.6
      + seeds==1.0.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/seeds)
      + sniffio==1.3.1
-    "###
+    "
     );
 
-    uv_snapshot!(context.filters(), universal_windows_filters=true, context
+    uv_snapshot!(context.filters(), context
         .run()
         .arg("--package")
         .arg("albatross")
         .arg("packages/albatross/check_installed_albatross.py")
-        .current_dir(&work_dir), @r###"
+        .current_dir(&work_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -441,12 +466,12 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
-    Resolved 8 packages in [TIME]
+    Resolved 7 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/albatross)
-     + tqdm==4.66.2
-    "###
+     + iniconfig==2.0.0
+    "
     );
 
     Ok(())
@@ -455,6 +480,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
 /// Check that `uv run` works from a virtual workspace root, which should sync all packages in the
 /// workspace.
 #[test]
+#[cfg(feature = "pypi")]
 fn test_uv_run_virtual_workspace_root() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-virtual-workspace");
@@ -464,10 +490,10 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
         &work_dir,
     )?;
 
-    uv_snapshot!(context.filters(), universal_windows_filters=true, context
+    uv_snapshot!(context.filters(), context
         .run()
         .arg("packages/albatross/check_installed_albatross.py")
-        .current_dir(&work_dir), @r###"
+        .current_dir(&work_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -477,17 +503,17 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Resolved 8 packages in [TIME]
+    Resolved 7 packages in [TIME]
     Prepared 7 packages in [TIME]
     Installed 7 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/albatross)
      + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/bird-feeder)
      + idna==3.6
+     + iniconfig==2.0.0
      + seeds==1.0.0 (from file://[TEMP_DIR]/albatross-virtual-workspace/packages/seeds)
      + sniffio==1.3.1
-     + tqdm==4.66.2
-    "###
+    "
     );
 
     Ok(())
@@ -495,6 +521,7 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
 
 /// Check that `uv run --package` works in a root workspace.
 #[test]
+#[cfg(feature = "pypi")]
 fn test_uv_run_with_package_root_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
@@ -512,7 +539,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
         .arg("--package")
         .arg("bird-feeder")
         .arg("packages/bird-feeder/check_installed_bird_feeder.py")
-        .current_dir(&work_dir), @r###"
+        .current_dir(&work_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -522,23 +549,22 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Resolved 8 packages in [TIME]
-    Prepared 5 packages in [TIME]
-    Installed 5 packages in [TIME]
-     + anyio==4.3.0
+    Resolved 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder)
      + idna==3.6
+     + iniconfig==2.0.0
      + seeds==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/seeds)
-     + sniffio==1.3.1
-    "###
+    "
     );
 
-    uv_snapshot!(context.filters(), universal_windows_filters=true, context
+    uv_snapshot!(context.filters(), context
         .run()
         .arg("--package")
         .arg("albatross")
         .arg("check_installed_albatross.py")
-        .current_dir(&work_dir), @r###"
+        .current_dir(&work_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -546,12 +572,11 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
-    Resolved 8 packages in [TIME]
-    Prepared 2 packages in [TIME]
-    Installed 2 packages in [TIME]
+    Resolved 5 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-root-workspace)
-     + tqdm==4.66.2
-    "###
+    "
     );
 
     Ok(())
@@ -559,6 +584,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
 /// Check that `uv run --isolated` creates isolated virtual environments.
 #[test]
+#[cfg(feature = "pypi")]
 fn test_uv_run_isolate() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
@@ -572,12 +598,12 @@ fn test_uv_run_isolate() -> Result<()> {
     ));
 
     // Install the root package.
-    uv_snapshot!(context.filters(), universal_windows_filters=true, context
+    uv_snapshot!(context.filters(), context
         .run()
         .arg("--package")
         .arg("albatross")
         .arg("check_installed_albatross.py")
-        .current_dir(&work_dir), @r###"
+        .current_dir(&work_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -587,17 +613,15 @@ fn test_uv_run_isolate() -> Result<()> {
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Creating virtual environment at: .venv
-    Resolved 8 packages in [TIME]
-    Prepared 7 packages in [TIME]
-    Installed 7 packages in [TIME]
+    Resolved 5 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
      + albatross==0.1.0 (from file://[TEMP_DIR]/albatross-root-workspace)
-     + anyio==4.3.0
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder)
      + idna==3.6
+     + iniconfig==2.0.0
      + seeds==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/seeds)
-     + sniffio==1.3.1
-     + tqdm==4.66.2
-    "###
+    "
     );
 
     // Run in `bird-feeder`. We shouldn't be able to import `albatross`, but we _can_ due to our
@@ -608,7 +632,7 @@ fn test_uv_run_isolate() -> Result<()> {
         .arg("--package")
         .arg("bird-feeder")
         .arg("check_installed_albatross.py")
-        .current_dir(&work_dir), @r###"
+        .current_dir(&work_dir), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -616,9 +640,9 @@ fn test_uv_run_isolate() -> Result<()> {
 
     ----- stderr -----
     warning: `VIRTUAL_ENV=[VENV]/` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
-    Resolved 8 packages in [TIME]
-    Audited 5 packages in [TIME]
-    "###
+    Resolved 5 packages in [TIME]
+    Audited 4 packages in [TIME]
+    "
     );
 
     // If we `--isolated`, though, we use an isolated virtual environment, so `albatross` is not
@@ -631,24 +655,23 @@ fn test_uv_run_isolate() -> Result<()> {
         .arg("--package")
         .arg("bird-feeder")
         .arg("check_installed_albatross.py")
-        .current_dir(&work_dir), @r###"
+        .current_dir(&work_dir), @r#"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Resolved 8 packages in [TIME]
-    Installed 5 packages in [TIME]
-     + anyio==4.3.0
+    Resolved 5 packages in [TIME]
+    Installed 4 packages in [TIME]
      + bird-feeder==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/bird-feeder)
      + idna==3.6
+     + iniconfig==2.0.0
      + seeds==1.0.0 (from file://[TEMP_DIR]/albatross-root-workspace/packages/seeds)
-     + sniffio==1.3.1
     Traceback (most recent call last):
       File "[TEMP_DIR]/albatross-root-workspace/check_installed_albatross.py", line 1, in <module>
         from albatross import fly
     ModuleNotFoundError: No module named 'albatross'
-    "###
+    "#
     );
 
     Ok(())
@@ -683,6 +706,7 @@ fn workspace_lock_idempotence(workspace: &str, subdirectories: &[&str]) -> Resul
 
 /// Check that the resolution is the same no matter where in the workspace we are.
 #[test]
+#[cfg(feature = "pypi")]
 fn workspace_lock_idempotence_root_workspace() -> Result<()> {
     workspace_lock_idempotence(
         "albatross-root-workspace",
@@ -694,6 +718,7 @@ fn workspace_lock_idempotence_root_workspace() -> Result<()> {
 /// Check that the resolution is the same no matter where in the workspace we are, and that locking
 /// works even if there is no root project.
 #[test]
+#[cfg(feature = "pypi")]
 fn workspace_lock_idempotence_virtual_workspace() -> Result<()> {
     workspace_lock_idempotence(
         "albatross-virtual-workspace",
@@ -1199,9 +1224,9 @@ fn workspace_inherit_sources() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
-        revision = 1
+        revision = 2
         requires-python = ">=3.12"
 
         [options]
@@ -1233,7 +1258,7 @@ fn workspace_inherit_sources() -> Result<()> {
         name = "workspace"
         version = "0.1.0"
         source = { editable = "." }
-        "###
+        "#
         );
     });
 

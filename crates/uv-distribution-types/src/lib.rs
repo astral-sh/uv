@@ -34,7 +34,7 @@
 //! Since we read this information from [`direct_url.json`](https://packaging.python.org/en/latest/specifications/direct-url-data-structure/), it doesn't match the information [`Dist`] exactly.
 use std::borrow::Cow;
 use std::path;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 
 use url::Url;
@@ -50,6 +50,7 @@ use uv_pep508::{Pep508Url, VerbatimUrl};
 use uv_pypi_types::{
     ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitUrl, ParsedPathUrl, ParsedUrl, VerbatimParsedUrl,
 };
+use uv_redacted::DisplaySafeUrl;
 
 pub use crate::annotation::*;
 pub use crate::any::*;
@@ -71,9 +72,11 @@ pub use crate::origin::*;
 pub use crate::pip_index::*;
 pub use crate::prioritized_distribution::*;
 pub use crate::requested::*;
+pub use crate::requirement::*;
 pub use crate::resolution::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
+pub use crate::status_code_strategy::*;
 pub use crate::traits::*;
 
 mod annotation;
@@ -96,9 +99,11 @@ mod origin;
 mod pip_index;
 mod prioritized_distribution;
 mod requested;
+mod requirement;
 mod resolution;
 mod resolved;
 mod specified_requirement;
+mod status_code_strategy;
 mod traits;
 
 #[derive(Debug, Clone)]
@@ -143,12 +148,12 @@ pub enum InstalledVersion<'a> {
     Version(&'a Version),
     /// A URL, used to identify a distribution at an arbitrary location, along with the version
     /// specifier to which it resolved.
-    Url(&'a Url, &'a Version),
+    Url(&'a DisplaySafeUrl, &'a Version),
 }
 
 impl InstalledVersion<'_> {
     /// If it is a URL, return its value.
-    pub fn url(&self) -> Option<&Url> {
+    pub fn url(&self) -> Option<&DisplaySafeUrl> {
         match self {
             InstalledVersion::Version(_) => None,
             InstalledVersion::Url(url, _) => Some(url),
@@ -254,7 +259,7 @@ pub struct DirectUrlBuiltDist {
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
     /// The URL without the subdirectory fragment.
-    pub location: Box<Url>,
+    pub location: Box<DisplaySafeUrl>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -264,7 +269,7 @@ pub struct DirectUrlBuiltDist {
 pub struct PathBuiltDist {
     pub filename: WheelFilename,
     /// The absolute path to the wheel which we use for installing.
-    pub install_path: PathBuf,
+    pub install_path: Box<Path>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -295,9 +300,9 @@ pub struct DirectUrlSourceDist {
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
     /// The URL without the subdirectory fragment.
-    pub location: Box<Url>,
+    pub location: Box<DisplaySafeUrl>,
     /// The subdirectory within the archive in which the source distribution is located.
-    pub subdirectory: Option<PathBuf>,
+    pub subdirectory: Option<Box<Path>>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
     pub ext: SourceDistExtension,
     /// The URL as it was provided by the user, including the subdirectory fragment.
@@ -311,7 +316,7 @@ pub struct GitSourceDist {
     /// The URL without the revision and subdirectory fragment.
     pub git: Box<GitUrl>,
     /// The subdirectory within the Git repository in which the source distribution is located.
-    pub subdirectory: Option<PathBuf>,
+    pub subdirectory: Option<Box<Path>>,
     /// The URL as it was provided by the user, including the revision and subdirectory fragment.
     pub url: VerbatimUrl,
 }
@@ -322,7 +327,7 @@ pub struct PathSourceDist {
     pub name: PackageName,
     pub version: Option<Version>,
     /// The absolute path to the distribution which we use for installing.
-    pub install_path: PathBuf,
+    pub install_path: Box<Path>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
     pub ext: SourceDistExtension,
     /// The URL as it was provided by the user.
@@ -334,7 +339,7 @@ pub struct PathSourceDist {
 pub struct DirectorySourceDist {
     pub name: PackageName,
     /// The absolute path to the distribution which we use for installing.
-    pub install_path: PathBuf,
+    pub install_path: Box<Path>,
     /// Whether the package should be installed in editable mode.
     pub editable: bool,
     /// Whether the package should be built and installed.
@@ -349,8 +354,8 @@ impl Dist {
     pub fn from_http_url(
         name: PackageName,
         url: VerbatimUrl,
-        location: Url,
-        subdirectory: Option<PathBuf>,
+        location: DisplaySafeUrl,
+        subdirectory: Option<Box<Path>>,
         ext: DistExtension,
     ) -> Result<Dist, Error> {
         match ext {
@@ -415,7 +420,7 @@ impl Dist {
                 }
                 Ok(Self::Built(BuiltDist::Path(PathBuiltDist {
                     filename,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     url,
                 })))
             }
@@ -432,7 +437,7 @@ impl Dist {
                 Ok(Self::Source(SourceDist::Path(PathSourceDist {
                     name,
                     version,
-                    install_path,
+                    install_path: install_path.into_boxed_path(),
                     ext,
                     url,
                 })))
@@ -462,7 +467,7 @@ impl Dist {
         // Determine whether the path represents an archive or a directory.
         Ok(Self::Source(SourceDist::Directory(DirectorySourceDist {
             name,
-            install_path,
+            install_path: install_path.into_boxed_path(),
             editable,
             r#virtual,
             url,
@@ -474,7 +479,7 @@ impl Dist {
         name: PackageName,
         url: VerbatimUrl,
         git: GitUrl,
-        subdirectory: Option<PathBuf>,
+        subdirectory: Option<Box<Path>>,
     ) -> Result<Dist, Error> {
         Ok(Self::Source(SourceDist::Git(GitSourceDist {
             name,
@@ -539,6 +544,14 @@ impl Dist {
         match self {
             Self::Built(built) => built.file(),
             Self::Source(source) => source.file(),
+        }
+    }
+
+    /// Return the source tree of the distribution, if available.
+    pub fn source_tree(&self) -> Option<&Path> {
+        match self {
+            Self::Built { .. } => None,
+            Self::Source(source) => source.source_tree(),
         }
     }
 
@@ -629,6 +642,7 @@ impl SourceDist {
         }
     }
 
+    /// Returns the [`Version`] of the distribution, if it is known.
     pub fn version(&self) -> Option<&Version> {
         match self {
             Self::Registry(source_dist) => Some(&source_dist.version),
@@ -636,7 +650,7 @@ impl SourceDist {
         }
     }
 
-    /// Return true if the distribution is editable.
+    /// Returns `true` if the distribution is editable.
     pub fn is_editable(&self) -> bool {
         match self {
             Self::Directory(DirectorySourceDist { editable, .. }) => *editable,
@@ -644,7 +658,15 @@ impl SourceDist {
         }
     }
 
-    /// Return true if the distribution refers to a local file or directory.
+    /// Returns `true` if the distribution is virtual.
+    pub fn is_virtual(&self) -> bool {
+        match self {
+            Self::Directory(DirectorySourceDist { r#virtual, .. }) => *r#virtual,
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if the distribution refers to a local file or directory.
     pub fn is_local(&self) -> bool {
         matches!(self, Self::Directory(_) | Self::Path(_))
     }
@@ -653,6 +675,14 @@ impl SourceDist {
     pub fn as_path(&self) -> Option<&Path> {
         match self {
             Self::Path(dist) => Some(&dist.install_path),
+            Self::Directory(dist) => Some(&dist.install_path),
+            _ => None,
+        }
+    }
+
+    /// Returns the source tree of the distribution, if available.
+    pub fn source_tree(&self) -> Option<&Path> {
+        match self {
             Self::Directory(dist) => Some(&dist.install_path),
             _ => None,
         }
@@ -817,6 +847,28 @@ impl Name for Dist {
     }
 }
 
+impl Name for CompatibleDist<'_> {
+    fn name(&self) -> &PackageName {
+        match self {
+            CompatibleDist::InstalledDist(dist) => dist.name(),
+            CompatibleDist::SourceDist {
+                sdist,
+                prioritized: _,
+            } => sdist.name(),
+            CompatibleDist::CompatibleWheel {
+                wheel,
+                priority: _,
+                prioritized: _,
+            } => wheel.name(),
+            CompatibleDist::IncompatibleWheel {
+                sdist,
+                wheel: _,
+                prioritized: _,
+            } => sdist.name(),
+        }
+    }
+}
+
 impl DistributionMetadata for RegistryBuiltWheel {
     fn version_or_url(&self) -> VersionOrUrlRef {
         VersionOrUrlRef::Version(&self.filename.version)
@@ -915,12 +967,14 @@ impl RemoteSource for File {
 impl RemoteSource for Url {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // Identify the last segment of the URL as the filename.
-        let path_segments = self
+        let mut path_segments = self
             .path_segments()
             .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
 
         // This is guaranteed by the contract of `Url::path_segments`.
-        let last = path_segments.last().expect("path segments is non-empty");
+        let last = path_segments
+            .next_back()
+            .expect("path segments is non-empty");
 
         // Decode the filename, which may be percent-encoded.
         let filename = percent_encoding::percent_decode_str(last).decode_utf8()?;
@@ -939,7 +993,7 @@ impl RemoteSource for UrlString {
         let last = self
             .base_str()
             .split('/')
-            .last()
+            .next_back()
             .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
 
         // Decode the filename, which may be percent-encoded.
@@ -1115,7 +1169,7 @@ impl RemoteSource for Dist {
     }
 }
 
-impl Identifier for Url {
+impl Identifier for DisplaySafeUrl {
     fn distribution_id(&self) -> DistributionId {
         DistributionId::Url(uv_cache_key::CanonicalUrl::new(self))
     }
@@ -1127,19 +1181,19 @@ impl Identifier for Url {
 
 impl Identifier for File {
     fn distribution_id(&self) -> DistributionId {
-        if let Some(hash) = self.hashes.first() {
-            DistributionId::Digest(hash.clone())
-        } else {
-            self.url.distribution_id()
-        }
+        self.hashes
+            .first()
+            .cloned()
+            .map(DistributionId::Digest)
+            .unwrap_or_else(|| self.url.distribution_id())
     }
 
     fn resource_id(&self) -> ResourceId {
-        if let Some(hash) = self.hashes.first() {
-            ResourceId::Digest(hash.clone())
-        } else {
-            self.url.resource_id()
-        }
+        self.hashes
+            .first()
+            .cloned()
+            .map(ResourceId::Digest)
+            .unwrap_or_else(|| self.url.resource_id())
     }
 }
 
@@ -1305,11 +1359,11 @@ impl Identifier for BuiltDist {
 
 impl Identifier for InstalledDist {
     fn distribution_id(&self) -> DistributionId {
-        self.path().distribution_id()
+        self.install_path().distribution_id()
     }
 
     fn resource_id(&self) -> ResourceId {
-        self.path().resource_id()
+        self.install_path().resource_id()
     }
 }
 
@@ -1408,7 +1462,7 @@ impl Identifier for BuildableSource<'_> {
 #[cfg(test)]
 mod test {
     use crate::{BuiltDist, Dist, RemoteSource, SourceDist, UrlString};
-    use url::Url;
+    use uv_redacted::DisplaySafeUrl;
 
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
@@ -1432,7 +1486,7 @@ mod test {
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment",
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment/3",
         ] {
-            let url = Url::parse(url).unwrap();
+            let url = DisplaySafeUrl::parse(url).unwrap();
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
             let url = UrlString::from(url.clone());
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");

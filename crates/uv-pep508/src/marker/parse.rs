@@ -50,7 +50,7 @@ fn parse_marker_operator<T: Pep508Url>(
                     input: cursor.to_string(),
                 });
             }
-        };
+        }
         cursor.eat_whitespace();
         cursor.next_expect_char('i', cursor.pos())?;
         cursor.next_expect_char('n', cursor.pos())?;
@@ -99,7 +99,7 @@ pub(crate) fn parse_marker_value<T: Pep508Url>(
         // ... or it can be a keyword
         Some(_) => {
             let (start, len) = cursor.take_while(|char| {
-                !char.is_whitespace() && !['>', '=', '<', '!', '~', ')'].contains(&char)
+                !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')')
             });
             let key = cursor.slice(start, len);
             MarkerValue::from_str(key)
@@ -607,7 +607,7 @@ pub(crate) fn parse_markers_cursor<T: Pep508Url>(
             len: cursor.remaining(),
             input: cursor.to_string(),
         });
-    };
+    }
 
     Ok(marker)
 }

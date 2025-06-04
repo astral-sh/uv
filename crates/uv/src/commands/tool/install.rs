@@ -1,19 +1,22 @@
+use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::{BaseClientBuilder, Connectivity};
-use uv_configuration::{Concurrency, DryRun, PreviewMode, Reinstall, TrustedHost, Upgrade};
-use uv_distribution_types::{NameRequirementSpecification, UnresolvedRequirementSpecification};
+use uv_client::BaseClientBuilder;
+use uv_configuration::{Concurrency, Constraints, DryRun, PreviewMode, Reinstall, Upgrade};
+use uv_distribution_types::{
+    NameRequirementSpecification, Requirement, RequirementSource,
+    UnresolvedRequirementSpecification,
+};
 use uv_normalize::PackageName;
 use uv_pep440::{VersionSpecifier, VersionSpecifiers};
 use uv_pep508::MarkerTree;
-use uv_pypi_types::{Requirement, RequirementSource};
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -21,20 +24,20 @@ use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_settings::{PythonInstallMirrors, ResolverInstallerOptions, ToolOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
+use uv_workspace::WorkspaceCache;
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
-
-use crate::commands::pip::operations::Modifications;
+use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::project::{
-    resolve_environment, resolve_names, sync_environment, update_environment,
-    EnvironmentSpecification, PlatformState, ProjectError,
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
+    sync_environment, update_environment,
 };
 use crate::commands::tool::common::{install_executables, refine_interpreter, remove_entrypoints};
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::ExitStatus;
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{NetworkSettings, ResolverInstallerSettings, ResolverSettings};
 
 /// Install a tool.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -45,26 +48,25 @@ pub(crate) async fn install(
     with: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    build_constraints: &[RequirementsSource],
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     force: bool,
     options: ResolverInstallerOptions,
     settings: ResolverInstallerSettings,
+    network_settings: NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     installer_metadata: bool,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: Cache,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -82,20 +84,22 @@ pub(crate) async fn install(
         Some(&reporter),
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
     .into_interpreter();
 
     // Initialize any shared state.
     let state = PlatformState::default();
+    let workspace_cache = WorkspaceCache::default();
 
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Parse the input requirement.
-    let request = ToolRequest::parse(&package, from.as_deref());
+    let request = ToolRequest::parse(&package, from.as_deref())?;
 
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
     let cache = if request.is_latest() {
@@ -105,22 +109,29 @@ pub(crate) async fn install(
     };
 
     // Resolve the `--from` requirement.
-    let from = match &request.target {
+    let from = match &request {
         // Ex) `ruff`
-        Target::Unspecified(from) => {
+        ToolRequest::Package {
+            executable,
+            target: Target::Unspecified(from),
+        } => {
             let source = if editable {
-                RequirementsSource::Editable((*from).to_string())
+                RequirementsSource::from_editable(from)?
             } else {
-                RequirementsSource::Package((*from).to_string())
+                RequirementsSource::from_package(from)?
             };
             let requirement = RequirementsSpecification::from_source(&source, &client_builder)
                 .await?
                 .requirements;
 
             // If the user provided an executable name, verify that it matches the `--from` requirement.
-            let executable = if let Some(executable) = request.executable {
+            let executable = if let Some(executable) = executable {
                 let Ok(executable) = PackageName::from_str(executable) else {
-                    bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{executable}`)", from = from.cyan(), executable = executable.cyan())
+                    bail!(
+                        "Package requirement (`{from}`) provided with `--from` conflicts with install request (`{executable}`)",
+                        from = from.cyan(),
+                        executable = executable.cyan()
+                    )
                 };
                 Some(executable)
             } else {
@@ -131,12 +142,11 @@ pub(crate) async fn install(
                 requirement,
                 &interpreter,
                 &settings,
+                &network_settings,
                 &state,
-                connectivity,
                 concurrency,
-                native_tls,
-                allow_insecure_host,
                 &cache,
+                &workspace_cache,
                 printer,
                 preview,
             )
@@ -158,7 +168,10 @@ pub(crate) async fn install(
             requirement
         }
         // Ex) `ruff@0.6.0`
-        Target::Version(.., name, ref extras, ref version) => {
+        ToolRequest::Package {
+            target: Target::Version(.., name, extras, version),
+            ..
+        } => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
@@ -166,7 +179,7 @@ pub(crate) async fn install(
             Requirement {
                 name: name.clone(),
                 extras: extras.clone(),
-                groups: vec![],
+                groups: Box::new([]),
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
                     specifier: VersionSpecifiers::from(VersionSpecifier::equals_version(
@@ -179,7 +192,10 @@ pub(crate) async fn install(
             }
         }
         // Ex) `ruff@latest`
-        Target::Latest(.., name, ref extras) => {
+        ToolRequest::Package {
+            target: Target::Latest(.., name, extras),
+            ..
+        } => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
@@ -187,7 +203,7 @@ pub(crate) async fn install(
             Requirement {
                 name: name.clone(),
                 extras: extras.clone(),
-                groups: vec![],
+                groups: Box::new([]),
                 marker: MarkerTree::default(),
                 source: RequirementSource::Registry {
                     specifier: VersionSpecifiers::empty(),
@@ -197,22 +213,26 @@ pub(crate) async fn install(
                 origin: None,
             }
         }
+        // Ex) `python`
+        ToolRequest::Python { .. } => {
+            return Err(anyhow::anyhow!(
+                "Cannot install Python with `{}`. Did you mean to use `{}`?",
+                "uv tool install".cyan(),
+                "uv python install".cyan(),
+            ));
+        }
     };
-
-    if from.name.as_str().eq_ignore_ascii_case("python") {
-        return Err(anyhow::anyhow!(
-            "Cannot install Python with `{}`. Did you mean to use `{}`?",
-            "uv tool install".cyan(),
-            "uv python install".cyan(),
-        ));
-    }
 
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
     let settings = if request.is_latest() {
         ResolverInstallerSettings {
-            upgrade: settings
-                .upgrade
-                .combine(Upgrade::package(from.name.clone())),
+            resolver: ResolverSettings {
+                upgrade: settings
+                    .resolver
+                    .upgrade
+                    .combine(Upgrade::package(from.name.clone())),
+                ..settings.resolver
+            },
             ..settings
         }
     } else {
@@ -232,9 +252,14 @@ pub(crate) async fn install(
     };
 
     // Read the `--with` requirements.
-    let spec =
-        RequirementsSpecification::from_sources(with, constraints, overrides, &client_builder)
-            .await?;
+    let spec = RequirementsSpecification::from_sources(
+        with,
+        constraints,
+        overrides,
+        BTreeMap::default(),
+        &client_builder,
+    )
+    .await?;
 
     // Resolve the `--from` and `--with` requirements.
     let requirements = {
@@ -245,12 +270,11 @@ pub(crate) async fn install(
                 spec.requirements.clone(),
                 &interpreter,
                 &settings,
+                &network_settings,
                 &state,
-                connectivity,
                 concurrency,
-                native_tls,
-                allow_insecure_host,
                 &cache,
+                &workspace_cache,
                 printer,
                 preview,
             )
@@ -271,16 +295,23 @@ pub(crate) async fn install(
         spec.overrides,
         &interpreter,
         &settings,
+        &network_settings,
         &state,
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         &cache,
+        &workspace_cache,
         printer,
         preview,
     )
     .await?;
+
+    // Resolve the build constraints.
+    let build_constraints: Vec<Requirement> =
+        operations::read_constraints(build_constraints, &client_builder)
+            .await?
+            .into_iter()
+            .map(|constraint| constraint.requirement)
+            .collect();
 
     // Convert to tool options.
     let options = ToolOptions::from(options);
@@ -344,7 +375,9 @@ pub(crate) async fn install(
         .as_ref()
         .filter(|_| {
             // And the user didn't request a reinstall or upgrade...
-            !request.is_latest() && settings.reinstall.is_none() && settings.upgrade.is_none()
+            !request.is_latest()
+                && settings.reinstall.is_none()
+                && settings.resolver.upgrade.is_none()
         })
         .is_some()
     {
@@ -352,6 +385,7 @@ pub(crate) async fn install(
             if requirements == tool_receipt.requirements()
                 && constraints == tool_receipt.constraints()
                 && overrides == tool_receipt.overrides()
+                && build_constraints == tool_receipt.build_constraints()
             {
                 if *tool_receipt.options() != options {
                     // ...but the options differ, we need to update the receipt.
@@ -400,16 +434,16 @@ pub(crate) async fn install(
             environment,
             spec,
             Modifications::Exact,
+            Constraints::from_requirements(build_constraints.iter().cloned()),
             &settings,
+            &network_settings,
             &state,
             Box::new(DefaultResolveLogger),
             Box::new(DefaultInstallLogger),
             installer_metadata,
-            connectivity,
             concurrency,
-            native_tls,
-            allow_insecure_host,
             &cache,
+            workspace_cache,
             DryRun::Disabled,
             printer,
             preview,
@@ -418,9 +452,9 @@ pub(crate) async fn install(
         {
             Ok(update) => update.into_environment(),
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         };
@@ -440,13 +474,11 @@ pub(crate) async fn install(
         let resolution = resolve_environment(
             spec.clone(),
             &interpreter,
-            settings.as_ref().into(),
+            &settings.resolver,
+            &network_settings,
             &state,
             Box::new(DefaultResolveLogger),
-            connectivity,
             concurrency,
-            native_tls,
-            allow_insecure_host,
             &cache,
             printer,
             preview,
@@ -454,8 +486,8 @@ pub(crate) async fn install(
         .await;
 
         // If the resolution failed, retry with the inferred `requires-python` constraint.
-        let resolution = match resolution {
-            Ok(resolution) => resolution,
+        let (resolution, interpreter) = match resolution {
+            Ok(resolution) => (resolution, interpreter),
             Err(err) => match err {
                 ProjectError::Operation(err) => {
                     // If the resolution failed due to the discovered interpreter not satisfying the
@@ -478,9 +510,11 @@ pub(crate) async fn install(
                     .await
                     .ok()
                     .flatten() else {
-                        return diagnostics::OperationDiagnostic::native_tls(native_tls)
-                            .report(err)
-                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                        return diagnostics::OperationDiagnostic::native_tls(
+                            network_settings.native_tls,
+                        )
+                        .report(err)
+                        .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                     };
 
                     debug!(
@@ -492,24 +526,24 @@ pub(crate) async fn install(
                     match resolve_environment(
                         spec,
                         &interpreter,
-                        settings.as_ref().into(),
+                        &settings.resolver,
+                        &network_settings,
                         &state,
                         Box::new(DefaultResolveLogger),
-                        connectivity,
                         concurrency,
-                        native_tls,
-                        allow_insecure_host,
                         &cache,
                         printer,
                         preview,
                     )
                     .await
                     {
-                        Ok(resolution) => resolution,
+                        Ok(resolution) => (resolution, interpreter),
                         Err(ProjectError::Operation(err)) => {
-                            return diagnostics::OperationDiagnostic::native_tls(native_tls)
-                                .report(err)
-                                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+                            return diagnostics::OperationDiagnostic::native_tls(
+                                network_settings.native_tls,
+                            )
+                            .report(err)
+                            .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                         }
                         Err(err) => return Err(err.into()),
                     }
@@ -531,14 +565,13 @@ pub(crate) async fn install(
             environment,
             &resolution.into(),
             Modifications::Exact,
-            settings.as_ref().into(),
+            Constraints::from_requirements(build_constraints.iter().cloned()),
+            (&settings).into(),
+            &network_settings,
             &state,
             Box::new(DefaultInstallLogger),
             installer_metadata,
-            connectivity,
             concurrency,
-            native_tls,
-            allow_insecure_host,
             &cache,
             printer,
             preview,
@@ -551,9 +584,9 @@ pub(crate) async fn install(
         }) {
             Ok(environment) => environment,
             Err(ProjectError::Operation(err)) => {
-                return diagnostics::OperationDiagnostic::native_tls(native_tls)
+                return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         }
@@ -569,6 +602,7 @@ pub(crate) async fn install(
         requirements,
         constraints,
         overrides,
+        build_constraints,
         printer,
     )
 }

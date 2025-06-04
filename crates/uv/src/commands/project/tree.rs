@@ -6,36 +6,35 @@ use futures::StreamExt;
 use tokio::sync::Semaphore;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::{Connectivity, RegistryClientBuilder};
-use uv_configuration::{
-    Concurrency, DevGroupsSpecification, PreviewMode, TargetTriple, TrustedHost,
-};
+use uv_client::RegistryClientBuilder;
+use uv_configuration::{Concurrency, DependencyGroups, PreviewMode, TargetTriple};
 use uv_distribution_types::IndexCapabilities;
+use uv_normalize::DefaultGroups;
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest, PythonVersion};
 use uv_resolver::{PackageMap, TreeDisplay};
 use uv_scripts::{Pep723ItemRef, Pep723Script};
 use uv_settings::PythonInstallMirrors;
-use uv_workspace::{DiscoveryOptions, Workspace};
+use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::resolution_markers;
-use crate::commands::project::lock::{do_safe_lock, LockMode};
+use crate::commands::project::lock::{LockMode, LockOperation};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState, default_dependency_groups,
 };
 use crate::commands::reporters::LatestVersionReporter;
-use crate::commands::{diagnostics, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
-use crate::settings::ResolverSettings;
+use crate::settings::{NetworkSettings, ResolverSettings};
 
 /// Run a command.
 #[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn tree(
     project_dir: &Path,
-    dev: DevGroupsSpecification,
+    dev: DependencyGroups,
     locked: bool,
     frozen: bool,
     universal: bool,
@@ -50,32 +49,35 @@ pub(crate) async fn tree(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverSettings,
+    network_settings: &NetworkSettings,
     script: Option<Pep723Script>,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     cache: &Cache,
     printer: Printer,
     preview: PreviewMode,
 ) -> Result<ExitStatus> {
     // Find the project requirements.
+    let workspace_cache = WorkspaceCache::default();
     let workspace;
     let target = if let Some(script) = script.as_ref() {
         LockTarget::Script(script)
     } else {
-        workspace = Workspace::discover(project_dir, &DiscoveryOptions::default()).await?;
+        workspace =
+            Workspace::discover(project_dir, &DiscoveryOptions::default(), &workspace_cache)
+                .await?;
         LockTarget::Workspace(&workspace)
     };
 
     // Determine the default groups to include.
     let defaults = match target {
         LockTarget::Workspace(workspace) => default_dependency_groups(workspace.pyproject_toml())?,
-        LockTarget::Script(_) => vec![],
+        LockTarget::Script(_) => DefaultGroups::default(),
     };
+
+    let native_tls = network_settings.native_tls;
 
     // Find an interpreter for the project, unless `--frozen` and `--universal` are both set.
     let interpreter = if frozen && universal {
@@ -85,12 +87,11 @@ pub(crate) async fn tree(
             LockTarget::Script(script) => ScriptInterpreter::discover(
                 Pep723ItemRef::Script(script),
                 python.as_deref().map(PythonRequest::parse),
+                network_settings,
                 python_preference,
                 python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
                 &install_mirrors,
+                false,
                 no_config,
                 Some(false),
                 cache,
@@ -102,12 +103,11 @@ pub(crate) async fn tree(
                 workspace,
                 project_dir,
                 python.as_deref().map(PythonRequest::parse),
+                network_settings,
                 python_preference,
                 python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
                 &install_mirrors,
+                false,
                 no_config,
                 Some(false),
                 cache,
@@ -134,27 +134,25 @@ pub(crate) async fn tree(
     let state = UniversalState::default();
 
     // Update the lockfile, if necessary.
-    let lock = match do_safe_lock(
+    let lock = match LockOperation::new(
         mode,
-        target,
-        settings.as_ref(),
+        &settings,
+        network_settings,
         &state,
         Box::new(DefaultResolveLogger),
-        connectivity,
         concurrency,
-        native_tls,
-        allow_insecure_host,
         cache,
         printer,
         preview,
     )
+    .execute(target)
     .await
     {
         Ok(result) => result.into_lock(),
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -175,6 +173,7 @@ pub(crate) async fn tree(
             .packages()
             .iter()
             .filter_map(|package| {
+                // TODO(charlie): We would need to know the format here.
                 let index = match package.index(target.install_path()) {
                     Ok(Some(index)) => index,
                     Ok(None) => return None,
@@ -188,7 +187,7 @@ pub(crate) async fn tree(
             PackageMap::default()
         } else {
             let ResolverSettings {
-                index_locations: _,
+                index_locations,
                 index_strategy: _,
                 keyring_provider,
                 resolution: _,
@@ -211,10 +210,11 @@ pub(crate) async fn tree(
             let client = RegistryClientBuilder::new(
                 cache.clone().with_refresh(Refresh::All(Timestamp::now())),
             )
-            .native_tls(native_tls)
-            .connectivity(connectivity)
+            .native_tls(network_settings.native_tls)
+            .connectivity(network_settings.connectivity)
+            .allow_insecure_host(network_settings.allow_insecure_host.clone())
+            .index_locations(index_locations)
             .keyring(*keyring_provider)
-            .allow_insecure_host(allow_insecure_host.to_vec())
             .build();
             let download_concurrency = Semaphore::new(concurrency.downloads);
 
@@ -233,7 +233,8 @@ pub(crate) async fn tree(
             // Fetch the latest version for each package.
             let download_concurrency = &download_concurrency;
             let mut fetches = futures::stream::iter(packages)
-                .map(|(package, index)| async move {
+                .map(async |(package, index)| {
+                    // This probably already doesn't work for `--find-links`?
                     let Some(filename) = client
                         .find_latest(package.name(), Some(&index), download_concurrency)
                         .await?

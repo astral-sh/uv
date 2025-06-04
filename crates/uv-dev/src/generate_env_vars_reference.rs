@@ -7,8 +7,8 @@ use std::path::PathBuf;
 
 use uv_static::EnvVars;
 
-use crate::generate_all::Mode;
 use crate::ROOT_DIR;
+use crate::generate_all::Mode;
 
 #[derive(clap::Args)]
 pub(crate) struct Args {
@@ -34,7 +34,9 @@ pub(crate) fn main(args: &Args) -> anyhow::Result<()> {
                     anstream::println!("Up-to-date: {filename}");
                 } else {
                     let comparison = StrComparison::new(&current, &reference_string);
-                    bail!("{filename} changed, please run `cargo dev generate-env-vars-reference`:\n{comparison}");
+                    bail!(
+                        "{filename} changed, please run `cargo dev generate-env-vars-reference`:\n{comparison}"
+                    );
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -60,7 +62,9 @@ pub(crate) fn main(args: &Args) -> anyhow::Result<()> {
                 fs_err::write(reference_path, reference_string.as_bytes())?;
             }
             Err(err) => {
-                bail!("{filename} changed, please run `cargo dev generate-env-vars-reference`:\n{err}");
+                bail!(
+                    "{filename} changed, please run `cargo dev generate-env-vars-reference`:\n{err}"
+                );
             }
         },
     }
@@ -109,7 +113,7 @@ mod tests {
 
     use crate::generate_all::Mode;
 
-    use super::{main, Args};
+    use super::{Args, main};
 
     #[test]
     fn test_generate_env_vars_reference() -> Result<()> {

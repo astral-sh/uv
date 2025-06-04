@@ -1,5 +1,5 @@
+use uv_distribution_types::Requirement;
 use uv_normalize::ExtraName;
-use uv_pypi_types::Requirement;
 
 /// A set of requirements as requested by a parent requirement.
 ///
@@ -9,16 +9,16 @@ use uv_pypi_types::Requirement;
 #[derive(Debug, Clone)]
 pub struct RequestedRequirements {
     /// The set of extras included on the originating requirement.
-    extras: Vec<ExtraName>,
+    extras: Box<[ExtraName]>,
     /// The set of requirements that were requested by the originating requirement.
-    requirements: Vec<Requirement>,
+    requirements: Box<[Requirement]>,
     /// Whether the dependencies were direct or transitive.
     direct: bool,
 }
 
 impl RequestedRequirements {
     /// Instantiate a [`RequestedRequirements`] with the given `extras` and `requirements`.
-    pub fn new(extras: Vec<ExtraName>, requirements: Vec<Requirement>, direct: bool) -> Self {
+    pub fn new(extras: Box<[ExtraName]>, requirements: Box<[Requirement]>, direct: bool) -> Self {
         Self {
             extras,
             requirements,

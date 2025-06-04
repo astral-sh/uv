@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display, Formatter};
 
-use petgraph::prelude::EdgeRef;
 use petgraph::Direction;
+use petgraph::prelude::EdgeRef;
 use rustc_hash::FxHashSet;
 use version_ranges::Ranges;
 
@@ -100,7 +100,7 @@ impl DerivationChain {
             else {
                 return false;
             };
-            target == dist.as_ref()
+            target == dist.as_ref().into()
         })?;
 
         // Perform a BFS to find the shortest path to the root.

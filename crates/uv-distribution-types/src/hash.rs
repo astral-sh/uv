@@ -27,7 +27,7 @@ impl HashPolicy<'_> {
         match self {
             HashPolicy::Generate(HashGeneration::Url) => dist.file().is_none(),
             HashPolicy::Generate(HashGeneration::All) => {
-                dist.file().map_or(true, |file| file.hashes.is_empty())
+                dist.file().is_none_or(|file| file.hashes.is_empty())
             }
             HashPolicy::Validate(_) => false,
             HashPolicy::None => false,

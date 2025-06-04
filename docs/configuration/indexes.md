@@ -122,7 +122,7 @@ malicious package to be installed instead of the internal package. See, for exam
 [the `torchtriton` attack](https://pytorch.org/blog/compromised-nightly-dependency/) from
 December 2022.
 
-Users can opt in to alternate index behaviors via the`--index-strategy` command-line option, or the
+To opt in to alternate index behaviors, use the`--index-strategy` command-line option, or the
 `UV_INDEX_STRATEGY` environment variable, which supports the following values:
 
 - `first-index` (default): Search for each package across all indexes, limiting the candidate
@@ -135,13 +135,19 @@ Users can opt in to alternate index behaviors via the`--index-strategy` command-
 While `unsafe-best-match` is the closest to pip's behavior, it exposes users to the risk of
 "dependency confusion" attacks.
 
-## Providing credentials
+## Authentication
 
-Most private registries require authentication to access packages, typically via a username and
+Most private package indexes require authentication to access packages, typically via a username and
 password (or access token).
 
-To authenticate with a provide index, either provide credentials via environment variables or embed
-them in the URL.
+!!! tip
+
+    See the [alternative index guide](../guides/integration/alternative-indexes.md) for details on
+    authenticating with specific private index providers, e.g., from AWS, Azure, or GCP.
+
+### Providing credentials directly
+
+Credentials can be provided directly via environment variables or by embedding them in the URL.
 
 For example, given an index named `internal-proxy` that requires a username (`public`) and password
 (`koala`), define the index (without credentials) in your `pyproject.toml`:
@@ -174,6 +180,88 @@ url = "https://public:koala@pypi-proxy.corp.dev/simple"
 
 For security purposes, credentials are _never_ stored in the `uv.lock` file; as such, uv _must_ have
 access to the authenticated URL at installation time.
+
+### Using credential providers
+
+In addition to providing credentials directly, uv supports discovery of credentials from netrc and
+keyring. See the [HTTP authentication](./authentication.md#http-authentication) documentation for
+details on setting up specific credential providers.
+
+By default, uv will attempt an unauthenticated request before querying providers. If the request
+fails, uv will search for credentials. If credentials are found, an authenticated request will be
+attempted.
+
+!!! note
+
+    If a username is set, uv will search for credentials before making an unauthenticated request.
+
+Some indexes (e.g., GitLab) will forward unauthenticated requests to a public index, like PyPI —
+which means that uv will not search for credentials. This behavior can be changed per-index, using
+the `authenticate` setting. For example, to always search for credentials:
+
+```toml hl_lines="4"
+[[tool.uv.index]]
+name = "example"
+url = "https://example.com/simple"
+authenticate = "always"
+```
+
+When `authenticate` is set to `always`, uv will eagerly search for credentials and error if
+credentials cannot be found.
+
+### Ignoring error codes when searching across indexes
+
+When using the [first-index strategy](#searching-across-multiple-indexes), uv will stop searching
+across indexes if an HTTP 401 Unauthorized or HTTP 403 Forbidden status code is encountered. The one
+exception is that uv will ignore 403s when searching the `pytorch` index (since this index returns a
+403 when a package is not present).
+
+To configure which error codes are ignored for an index, use the `ignored-error-codes` setting. For
+example, to ignore 403s (but not 401s) for a private index:
+
+```toml
+[[tool.uv.index]]
+name = "private-index"
+url = "https://private-index.com/simple"
+authenticate = "always"
+ignore-error-codes = [403]
+```
+
+uv will always continue searching across indexes when it encounters a `404 Not Found`. This cannot
+be overridden.
+
+### Disabling authentication
+
+To prevent leaking credentials, authentication can be disabled for an index:
+
+```toml hl_lines="4"
+[[tool.uv.index]]
+name = "example"
+url = "https://example.com/simple"
+authenticate = "never"
+```
+
+When `authenticate` is set to `never`, uv will never search for credentials for the given index and
+will error if credentials are provided directly.
+
+## "Flat" indexes
+
+By default, `[[tool.uv.index]]` entries are assumed to be PyPI-style registries that implement the
+[PEP 503](https://peps.python.org/pep-0503/) Simple Repository API. However, uv also supports "flat"
+indexes, which are local directories or HTML pages that contain flat lists of wheels and source
+distributions. In pip, such indexes are specified using the `--find-links` option.
+
+To define a flat index in your `pyproject.toml`, use the `format = "flat"` option:
+
+```toml
+[[tool.uv.index]]
+name = "example"
+url = "/path/to/directory"
+format = "flat"
+```
+
+Flat indexes support the same feature set as Simple Repository API indexes (e.g.,
+`explicit = true`); you can also pin a package to a flat index using `tool.uv.sources`.
 
 ## `--index-url` and `--extra-index-url`
 

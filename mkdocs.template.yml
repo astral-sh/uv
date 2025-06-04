@@ -109,6 +109,7 @@ nav:
           - guides/integration/index.md
           - Docker: guides/integration/docker.md
           - Jupyter: guides/integration/jupyter.md
+          - marimo: guides/integration/marimo.md
           - GitHub Actions: guides/integration/github.md
           - GitLab CI/CD: guides/integration/gitlab.md
           - Pre-commit: guides/integration/pre-commit.md
@@ -140,11 +141,12 @@ nav:
       - Authentication: configuration/authentication.md
       - Package indexes: configuration/indexes.md
       - Installer: configuration/installer.md
+      - Build backend: configuration/build-backend.md
   - The pip interface:
       - pip/index.md
       - Using environments: pip/environments.md
       - Managing packages: pip/packages.md
-      - Inspecting packages: pip/inspection.md
+      - Inspecting environments: pip/inspection.md
       - Declaring dependencies: pip/dependencies.md
       - Locking environments: pip/compile.md
       - Compatibility with pip: pip/compatibility.md

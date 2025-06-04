@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
@@ -23,7 +24,7 @@ pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
     // Second, check the files directly.
     if let Ok(value) = same_file::is_same_file(left, right) {
         return Some(value);
-    };
+    }
 
     // Often, one of the directories won't exist yet so perform the comparison up a level.
     if let (Some(left_parent), Some(right_parent), Some(left_name), Some(right_name)) = (
@@ -37,7 +38,7 @@ pub fn is_same_file_allow_missing(left: &Path, right: &Path) -> Option<bool> {
             Ok(false) => return Some(false),
             _ => (),
         }
-    };
+    }
 
     // We couldn't determine if they're the same.
     None
@@ -105,7 +106,7 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
         },
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
         Err(err) => return Err(err),
-    };
+    }
 
     // Replace it with a new symlink.
     junction::create(
@@ -117,18 +118,16 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 /// Create a symlink at `dst` pointing to `src`, replacing any existing symlink if necessary.
 ///
 /// On Unix, this method creates a temporary file, then moves it into place.
-///
-/// TODO(charlie): Consider using the `rust-atomicwrites` crate.
 #[cfg(unix)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // Attempt to create the symlink directly.
-    match std::os::unix::fs::symlink(src.as_ref(), dst.as_ref()) {
+    match fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref()) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
             // Create a symlink, using a temporary file to ensure atomicity.
             let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
             let temp_file = temp_dir.path().join("link");
-            std::os::unix::fs::symlink(src, &temp_file)?;
+            fs_err::os::unix::fs::symlink(src, &temp_file)?;
 
             // Move the symlink into the target location.
             fs_err::rename(&temp_file, dst.as_ref())?;
@@ -256,7 +255,7 @@ pub async fn rename_with_retry(
         let from = from.as_ref();
         let to = to.as_ref();
 
-        let rename = || async { fs_err::rename(from, to) };
+        let rename = async || fs_err::rename(from, to);
 
         rename
             .retry(backoff_file_move())
@@ -313,16 +312,13 @@ pub fn with_retry_sync(
             })
             .call()
             .map_err(|err| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
-                        "Failed {} {} to {}: {}",
-                        operation_name,
-                        from.display(),
-                        to.display(),
-                        err
-                    ),
-                )
+                std::io::Error::other(format!(
+                    "Failed {} {} to {}: {}",
+                    operation_name,
+                    from.display(),
+                    to.display(),
+                    err
+                ))
             })
     }
     #[cfg(not(windows))]
@@ -412,27 +408,21 @@ pub async fn persist_with_retry(
                         to.display(),
                         error_message,
                     );
-                };
+                }
             })
             .await;
 
         match persisted {
             Ok(_) => Ok(()),
-            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to persist temporary file to {}: {}",
-                    to.display(),
-                    error_message,
-                ),
-            )),
-            Err(PersistRetryError::LostState) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to retrieve temporary file while trying to persist to {}",
-                    to.display()
-                ),
-            )),
+            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(format!(
+                "Failed to persist temporary file to {}: {}",
+                to.display(),
+                error_message,
+            ))),
+            Err(PersistRetryError::LostState) => Err(std::io::Error::other(format!(
+                "Failed to retrieve temporary file while trying to persist to {}",
+                to.display()
+            ))),
         }
     }
     #[cfg(not(windows))]
@@ -486,27 +476,21 @@ pub fn persist_with_retry_sync(
                         to.display(),
                         error_message,
                     );
-                };
+                }
             })
             .call();
 
         match persisted {
             Ok(_) => Ok(()),
-            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to persist temporary file to {}: {}",
-                    to.display(),
-                    error_message,
-                ),
-            )),
-            Err(PersistRetryError::LostState) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to retrieve temporary file while trying to persist to {}",
-                    to.display()
-                ),
-            )),
+            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(format!(
+                "Failed to persist temporary file to {}: {}",
+                to.display(),
+                error_message,
+            ))),
+            Err(PersistRetryError::LostState) => Err(std::io::Error::other(format!(
+                "Failed to retrieve temporary file while trying to persist to {}",
+                to.display()
+            ))),
         }
     }
     #[cfg(not(windows))]
@@ -518,60 +502,69 @@ pub fn persist_with_retry_sync(
 /// Iterate over the subdirectories of a directory.
 ///
 /// If the directory does not exist, returns an empty iterator.
-pub fn directories(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
-    path.as_ref()
-        .read_dir()
-        .ok()
+pub fn directories(path: impl AsRef<Path>) -> Result<impl Iterator<Item = PathBuf>, io::Error> {
+    let entries = match path.as_ref().read_dir() {
+        Ok(entries) => Some(entries),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+        Err(err) => return Err(err),
+    };
+    Ok(entries
         .into_iter()
         .flatten()
         .filter_map(|entry| match entry {
             Ok(entry) => Some(entry),
             Err(err) => {
-                warn!("Failed to read entry: {}", err);
+                warn!("Failed to read entry: {err}");
                 None
             }
         })
         .filter(|entry| entry.file_type().is_ok_and(|file_type| file_type.is_dir()))
-        .map(|entry| entry.path())
+        .map(|entry| entry.path()))
 }
 
 /// Iterate over the entries in a directory.
 ///
 /// If the directory does not exist, returns an empty iterator.
-pub fn entries(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
-    path.as_ref()
-        .read_dir()
-        .ok()
+pub fn entries(path: impl AsRef<Path>) -> Result<impl Iterator<Item = PathBuf>, io::Error> {
+    let entries = match path.as_ref().read_dir() {
+        Ok(entries) => Some(entries),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+        Err(err) => return Err(err),
+    };
+    Ok(entries
         .into_iter()
         .flatten()
         .filter_map(|entry| match entry {
             Ok(entry) => Some(entry),
             Err(err) => {
-                warn!("Failed to read entry: {}", err);
+                warn!("Failed to read entry: {err}");
                 None
             }
         })
-        .map(|entry| entry.path())
+        .map(|entry| entry.path()))
 }
 
 /// Iterate over the files in a directory.
 ///
 /// If the directory does not exist, returns an empty iterator.
-pub fn files(path: impl AsRef<Path>) -> impl Iterator<Item = PathBuf> {
-    path.as_ref()
-        .read_dir()
-        .ok()
+pub fn files(path: impl AsRef<Path>) -> Result<impl Iterator<Item = PathBuf>, io::Error> {
+    let entries = match path.as_ref().read_dir() {
+        Ok(entries) => Some(entries),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+        Err(err) => return Err(err),
+    };
+    Ok(entries
         .into_iter()
         .flatten()
         .filter_map(|entry| match entry {
             Ok(entry) => Some(entry),
             Err(err) => {
-                warn!("Failed to read entry: {}", err);
+                warn!("Failed to read entry: {err}");
                 None
             }
         })
         .filter(|entry| entry.file_type().is_ok_and(|file_type| file_type.is_file()))
-        .map(|entry| entry.path())
+        .map(|entry| entry.path()))
 }
 
 /// Returns `true` if a path is a temporary file or directory.
@@ -609,14 +602,11 @@ impl LockedFile {
                 );
                 file.file().lock_exclusive().map_err(|err| {
                     // Not an fs_err method, we need to build our own path context
-                    std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
-                            "Could not acquire lock for `{resource}` at `{}`: {}",
-                            file.path().user_display(),
-                            err
-                        ),
-                    )
+                    std::io::Error::other(format!(
+                        "Could not acquire lock for `{resource}` at `{}`: {}",
+                        file.path().user_display(),
+                        err
+                    ))
                 })?;
 
                 debug!("Acquired lock for `{resource}`");

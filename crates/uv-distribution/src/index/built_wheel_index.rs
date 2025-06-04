@@ -8,9 +8,9 @@ use uv_distribution_types::{
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
-use crate::index::cached_wheel::CachedWheel;
-use crate::source::{HttpRevisionPointer, LocalRevisionPointer, HTTP_REVISION, LOCAL_REVISION};
 use crate::Error;
+use crate::index::cached_wheel::CachedWheel;
+use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
 
 /// A local index of built distributions for a specific source distribution.
 #[derive(Debug)]
@@ -203,7 +203,7 @@ impl<'a> BuiltWheelIndex<'a> {
         let mut candidate: Option<CachedWheel> = None;
 
         // Unzipped wheels are stored as symlinks into the archive directory.
-        for wheel_dir in uv_fs::entries(shard) {
+        for wheel_dir in uv_fs::entries(shard).ok().into_iter().flatten() {
             // Ignore any `.lock` files.
             if wheel_dir
                 .extension()

@@ -1,18 +1,18 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use owo_colors::OwoColorize;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 use uv_cache::Cache;
 use uv_cli::AuthorFrom;
-use uv_client::{BaseClientBuilder, Connectivity};
+use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    PreviewMode, ProjectBuildBackend, TrustedHost, VersionControlError, VersionControlSystem,
+    PreviewMode, ProjectBuildBackend, VersionControlError, VersionControlSystem,
 };
-use uv_fs::{Simplified, CWD};
+use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
 use uv_pep440::Version;
 use uv_pep508::PackageName;
@@ -24,14 +24,16 @@ use uv_python::{
 use uv_resolver::RequiresPython;
 use uv_scripts::{Pep723Script, ScriptTag};
 use uv_settings::PythonInstallMirrors;
+use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceError};
+use uv_workspace::{DiscoveryOptions, MemberDiscovery, Workspace, WorkspaceCache, WorkspaceError};
 
+use crate::commands::ExitStatus;
 use crate::commands::project::{find_requires_python, init_script_python_requirement};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::ExitStatus;
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Add one or more packages to the project requirements.
 #[allow(clippy::single_match_else, clippy::fn_params_excessive_bools)]
@@ -52,11 +54,9 @@ pub(crate) async fn init(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
+    network_settings: &NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     cache: &Cache,
     printer: Printer,
@@ -75,7 +75,7 @@ pub(crate) async fn init(
                 path,
                 python,
                 install_mirrors,
-                connectivity,
+                network_settings,
                 python_preference,
                 python_downloads,
                 cache,
@@ -85,8 +85,6 @@ pub(crate) async fn init(
                 author_from,
                 pin_python,
                 package,
-                native_tls,
-                allow_insecure_host,
                 no_config,
             )
             .await?;
@@ -126,7 +124,7 @@ pub(crate) async fn init(
                     // Pre-normalize the package name by removing any leading or trailing
                     // whitespace, and replacing any internal whitespace with hyphens.
                     let name = name.trim().replace(' ', "-");
-                    PackageName::new(name)?
+                    PackageName::from_owned(name)?
                 }
             };
 
@@ -146,14 +144,13 @@ pub(crate) async fn init(
                 python,
                 install_mirrors,
                 no_workspace,
+                network_settings,
                 python_preference,
                 python_downloads,
-                connectivity,
-                native_tls,
-                allow_insecure_host,
                 no_config,
                 cache,
                 printer,
+                preview,
             )
             .await?;
 
@@ -193,7 +190,7 @@ async fn init_script(
     script_path: &Path,
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
-    connectivity: Connectivity,
+    network_settings: &NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
     cache: &Cache,
@@ -203,8 +200,6 @@ async fn init_script(
     author_from: Option<AuthorFrom>,
     pin_python: bool,
     package: bool,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
 ) -> Result<()> {
     if no_workspace {
@@ -220,9 +215,9 @@ async fn init_script(
         warn_user_once!("`--package` is a no-op for Python scripts, which are standalone");
     }
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     let reporter = PythonDownloadReporter::single(printer);
 
@@ -242,10 +237,12 @@ async fn init_script(
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
         Err(err) => {
-            return Err(anyhow::Error::from(err).context(format!(
-                "Failed to read script at `{}`",
-                script_path.simplified_display().cyan()
-            )));
+            return Err(err).with_context(|| {
+                format!(
+                    "Failed to read script at `{}`",
+                    script_path.simplified_display().cyan()
+                )
+            });
         }
     };
 
@@ -290,24 +287,25 @@ async fn init_project(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     no_workspace: bool,
+    network_settings: &NetworkSettings,
     python_preference: PythonPreference,
     python_downloads: PythonDownloads,
-    connectivity: Connectivity,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     no_config: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<()> {
     // Discover the current workspace, if it exists.
+    let workspace_cache = WorkspaceCache::default();
     let workspace = {
         let parent = path.parent().expect("Project path has no parent");
         match Workspace::discover(
             parent,
             &DiscoveryOptions {
-                members: MemberDiscovery::Ignore(std::iter::once(path).collect()),
+                members: MemberDiscovery::Ignore(std::iter::once(path.to_path_buf()).collect()),
                 ..DiscoveryOptions::default()
             },
+            &workspace_cache,
         )
         .await
         {
@@ -333,10 +331,12 @@ async fn init_project(
                     warn!("Ignoring workspace discovery error due to `--no-workspace`: {err}");
                     None
                 } else {
-                    return Err(anyhow::Error::from(err).context(format!(
-                        "Failed to discover parent workspace; use `{}` to ignore",
-                        "uv init --no-workspace".green()
-                    )));
+                    return Err(err).with_context(|| {
+                        format!(
+                            "Failed to discover parent workspace; use `{}` to ignore",
+                            "uv init --no-workspace".green()
+                        )
+                    });
                 }
             }
         }
@@ -344,9 +344,9 @@ async fn init_project(
 
     let reporter = PythonDownloadReporter::single(printer);
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // First, determine if there is an request for Python
     let python_request = if let Some(request) = python {
@@ -377,11 +377,7 @@ async fn init_project(
         // This can be arbitrary, i.e., not a version — in which case we may need to resolve the
         // interpreter
         match python_request {
-            PythonRequest::Version(VersionRequest::MajorMinor(
-                major,
-                minor,
-                PythonVariant::Default,
-            )) => {
+            PythonRequest::Version(VersionRequest::MajorMinor(major, minor, variant)) => {
                 let requires_python = RequiresPython::greater_than_equal_version(&Version::new([
                     u64::from(major),
                     u64::from(minor),
@@ -389,9 +385,7 @@ async fn init_project(
 
                 let python_request = if pin_python {
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
-                        major,
-                        minor,
-                        PythonVariant::Default,
+                        major, minor, variant,
                     )))
                 } else {
                     None
@@ -403,7 +397,7 @@ async fn init_project(
                 major,
                 minor,
                 patch,
-                PythonVariant::Default,
+                variant,
             )) => {
                 let requires_python = RequiresPython::greater_than_equal_version(&Version::new([
                     u64::from(major),
@@ -413,10 +407,7 @@ async fn init_project(
 
                 let python_request = if pin_python {
                     Some(PythonRequest::Version(VersionRequest::MajorMinorPatch(
-                        major,
-                        minor,
-                        patch,
-                        PythonVariant::Default,
+                        major, minor, patch, variant,
                     )))
                 } else {
                     None
@@ -424,8 +415,10 @@ async fn init_project(
 
                 (requires_python, python_request)
             }
-            ref
-            python_request @ PythonRequest::Version(VersionRequest::Range(ref specifiers, _)) => {
+            ref python_request @ PythonRequest::Version(VersionRequest::Range(
+                ref specifiers,
+                variant,
+            )) => {
                 let requires_python = RequiresPython::from_specifiers(specifiers);
 
                 let python_request = if pin_python {
@@ -439,6 +432,7 @@ async fn init_project(
                         Some(&reporter),
                         install_mirrors.python_install_mirror.as_deref(),
                         install_mirrors.pypy_install_mirror.as_deref(),
+                        install_mirrors.python_downloads_json_url.as_deref(),
                     )
                     .await?
                     .into_interpreter();
@@ -446,7 +440,7 @@ async fn init_project(
                     Some(PythonRequest::Version(VersionRequest::MajorMinor(
                         interpreter.python_major(),
                         interpreter.python_minor(),
-                        PythonVariant::Default,
+                        variant,
                     )))
                 } else {
                     None
@@ -465,6 +459,7 @@ async fn init_project(
                     Some(&reporter),
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
+                    install_mirrors.python_downloads_json_url.as_deref(),
                 )
                 .await?
                 .into_interpreter();
@@ -530,6 +525,7 @@ async fn init_project(
                 Some(&reporter),
                 install_mirrors.python_install_mirror.as_deref(),
                 install_mirrors.pypy_install_mirror.as_deref(),
+                install_mirrors.python_downloads_json_url.as_deref(),
             )
             .await?
             .into_interpreter();
@@ -556,6 +552,7 @@ async fn init_project(
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await?
         .into_interpreter();
@@ -589,6 +586,7 @@ async fn init_project(
         author_from,
         no_readme,
         package,
+        preview,
     )?;
 
     if let Some(workspace) = workspace {
@@ -716,6 +714,7 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
+        preview: PreviewMode,
     ) -> Result<()> {
         match self {
             InitProjectKind::Application => InitProjectKind::init_application(
@@ -730,6 +729,7 @@ impl InitProjectKind {
                 author_from,
                 no_readme,
                 package,
+                preview,
             ),
             InitProjectKind::Library => InitProjectKind::init_library(
                 name,
@@ -743,6 +743,7 @@ impl InitProjectKind {
                 author_from,
                 no_readme,
                 package,
+                preview,
             ),
         }
     }
@@ -761,6 +762,7 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
+        preview: PreviewMode,
     ) -> Result<()> {
         fs_err::create_dir_all(path)?;
 
@@ -793,7 +795,11 @@ impl InitProjectKind {
             }
 
             // Add a build system
-            let build_backend = build_backend.unwrap_or_default();
+            let build_backend = match build_backend {
+                Some(build_backend) => build_backend,
+                None if preview.is_enabled() => ProjectBuildBackend::Uv,
+                None => ProjectBuildBackend::Hatch,
+            };
             pyproject.push('\n');
             pyproject.push_str(&pyproject_build_system(name, build_backend));
             pyproject_build_backend_prerequisites(name, path, build_backend)?;
@@ -843,6 +849,7 @@ impl InitProjectKind {
         author_from: Option<AuthorFrom>,
         no_readme: bool,
         package: bool,
+        preview: PreviewMode,
     ) -> Result<()> {
         if !package {
             return Err(anyhow!("Library projects must be packaged"));
@@ -863,7 +870,11 @@ impl InitProjectKind {
         );
 
         // Always include a build system if the project is packaged.
-        let build_backend = build_backend.unwrap_or_default();
+        let build_backend = match build_backend {
+            Some(build_backend) => build_backend,
+            None if preview.is_enabled() => ProjectBuildBackend::Uv,
+            None => ProjectBuildBackend::Hatch,
+        };
         pyproject.push('\n');
         pyproject.push_str(&pyproject_build_system(name, build_backend));
         pyproject_build_backend_prerequisites(name, path, build_backend)?;
@@ -873,7 +884,7 @@ impl InitProjectKind {
         // Generate `src` files
         if !bare {
             generate_package_scripts(name, path, build_backend, true)?;
-        };
+        }
 
         // Initialize the version control system.
         init_vcs(path, vcs)?;
@@ -943,8 +954,8 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
             let max_version = Version::new([0, min_version.release()[1] + 1]);
             indoc::formatdoc! {r#"
                 [build-system]
-                requires = ["uv>={min_version},<{max_version}"]
-                build-backend = "uv"
+                requires = ["uv_build>={min_version},<{max_version}"]
+                build-backend = "uv_build"
             "#}
         }
         .to_string(),
@@ -971,6 +982,12 @@ fn pyproject_build_system(package: &PackageName, build_backend: ProjectBuildBack
                 [build-system]
                 requires = ["setuptools>=61"]
                 build-backend = "setuptools.build_meta"
+            "#}
+        .to_string(),
+        ProjectBuildBackend::Poetry => indoc::indoc! {r#"
+                [build-system]
+                requires = ["poetry-core>=2,<3"]
+                build-backend = "poetry.core.masonry.api"
             "#}
         .to_string(),
         // Binary build backends
@@ -1143,7 +1160,7 @@ fn generate_package_scripts(
             let pyi_file = pkg_dir.join("_core.pyi");
             if !pyi_file.try_exists()? {
                 fs_err::write(pyi_file, pyi_contents)?;
-            };
+            }
             // Return python script calling binary
             binary_call_script
         }
@@ -1174,7 +1191,7 @@ fn generate_package_scripts(
             let pyi_file = pkg_dir.join("_core.pyi");
             if !pyi_file.try_exists()? {
                 fs_err::write(pyi_file, pyi_contents)?;
-            };
+            }
             // Return python script calling binary
             binary_call_script
         }
@@ -1198,52 +1215,99 @@ fn generate_package_scripts(
     Ok(())
 }
 
-/// Initialize the version control system at the given path.
+#[derive(Debug, Clone)]
+enum GitDiscoveryResult {
+    /// Git is initialized at the path.
+    Repository,
+    /// Git is not initialized at the path.
+    NoRepository,
+    /// There is no `git[.exe]` binary in PATH.
+    NoGit,
+    /// There is a `git[.exe]` binary in PATH, but it returned an unexpected output.
+    BrokenGit,
+}
+
+/// Checks if there is a Git work tree at the given path.
+fn detect_git_repository(path: &Path) -> GitDiscoveryResult {
+    // Determine whether the path is inside a Git work tree.
+    let Ok(git) = GIT.as_ref() else {
+        return GitDiscoveryResult::NoGit;
+    };
+    let Ok(output) = Command::new(git)
+        .arg("rev-parse")
+        .arg("--is-inside-work-tree")
+        .env(EnvVars::LC_ALL, "C")
+        .current_dir(path)
+        .output()
+    else {
+        debug!(
+            "`git rev-parse --is-inside-work-tree` failed to launch for `{}`",
+            path.display()
+        );
+        return GitDiscoveryResult::BrokenGit;
+    };
+    if output.status.success() {
+        if std::str::from_utf8(&output.stdout).map(str::trim) == Ok("true") {
+            debug!("Found a Git repository for `{}`", path.display());
+            GitDiscoveryResult::Repository
+        } else {
+            debug!(
+                "`git rev-parse --is-inside-work-tree` succeeded but didn't return `true` for `{}`",
+                path.display()
+            );
+            trace!(
+                "`git rev-parse --is-inside-work-tree` stdout: {:?}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+            GitDiscoveryResult::BrokenGit
+        }
+    } else {
+        if std::str::from_utf8(&output.stderr).is_ok_and(|err| err.contains("not a git repository"))
+        {
+            debug!("Not a Git repository `{}`", path.display());
+            GitDiscoveryResult::NoRepository
+        } else {
+            debug!(
+                "`git rev-parse --is-inside-work-tree` failed but didn't contain `not a git repository` in stderr for `{}`",
+                path.display()
+            );
+            GitDiscoveryResult::BrokenGit
+        }
+    }
+}
+
+/// Initialize the version control system at the given path, if applicable.
 fn init_vcs(path: &Path, vcs: Option<VersionControlSystem>) -> Result<()> {
-    // Detect any existing version control system.
-    let existing = VersionControlSystem::detect(path);
-
-    let implicit = vcs.is_none();
-
-    let vcs = match (vcs, existing) {
-        // If no version control system was specified, and none was detected, default to Git.
-        (None, None) => VersionControlSystem::default(),
-        // If no version control system was specified, but a VCS was detected, leave it as-is.
-        (None, Some(existing)) => {
-            debug!("Detected existing version control system: {existing}");
-            VersionControlSystem::None
-        }
-        // If the user provides an explicit `--vcs none`,
-        (Some(VersionControlSystem::None), _) => VersionControlSystem::None,
-        // If a version control system was specified, use it.
-        (Some(vcs), None) => vcs,
-        // If a version control system was specified, but a VCS was detected...
-        (Some(vcs), Some(existing)) => {
-            // If they differ, raise an error.
-            if vcs != existing {
-                anyhow::bail!("The project is already in a version control system (`{existing}`); cannot initialize with `--vcs {vcs}`");
-            }
-
-            // Otherwise, ignore the specified VCS, since it's already in use.
-            VersionControlSystem::None
-        }
+    // vcs is None for an existing repository because we don't want to initialize again.
+    let (vcs, implicit) = match vcs {
+        None => match detect_git_repository(path) {
+            GitDiscoveryResult::NoRepository => (VersionControlSystem::Git, true),
+            GitDiscoveryResult::Repository
+            | GitDiscoveryResult::NoGit
+            | GitDiscoveryResult::BrokenGit => (VersionControlSystem::None, false),
+        },
+        Some(VersionControlSystem::None) => (VersionControlSystem::None, false),
+        // The user requested Git explicitly, so the only reason not to invoke it is that Git is
+        // already initialized. In case of an error (broken git), we will raise the real error
+        // when trying to initialize, which should give us a better error message.
+        Some(VersionControlSystem::Git) => match detect_git_repository(path) {
+            GitDiscoveryResult::NoRepository
+            | GitDiscoveryResult::BrokenGit
+            | GitDiscoveryResult::NoGit => (VersionControlSystem::Git, false),
+            GitDiscoveryResult::Repository => (VersionControlSystem::None, false),
+        },
     };
 
     // Attempt to initialize the VCS.
     match vcs.init(path) {
-        Ok(()) => (),
+        Ok(()) => Ok(()),
         // If the VCS isn't installed, only raise an error if a VCS was explicitly specified.
-        Err(err @ VersionControlError::GitNotInstalled) => {
-            if implicit {
-                debug!("Failed to initialize version control: {err}");
-            } else {
-                return Err(err.into());
-            }
+        Err(err @ VersionControlError::GitNotInstalled) if implicit => {
+            debug!("Failed to initialize version control: {err}");
+            Ok(())
         }
-        Err(err) => return Err(err.into()),
+        Err(err) => Err(err.into()),
     }
-
-    Ok(())
 }
 
 /// Try to get the author information.

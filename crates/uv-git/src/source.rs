@@ -9,13 +9,13 @@ use std::sync::Arc;
 use anyhow::Result;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, instrument};
-use url::Url;
 
-use uv_cache_key::{cache_digest, RepositoryUrl};
-use uv_git_types::{GitOid, GitUrl};
+use uv_cache_key::{RepositoryUrl, cache_digest};
+use uv_git_types::GitUrl;
+use uv_redacted::DisplaySafeUrl;
 
-use crate::git::GitRemote;
 use crate::GIT_STORE;
+use crate::git::GitRemote;
 
 /// A remote Git source that can be checked out locally.
 pub struct GitSource {
@@ -25,6 +25,8 @@ pub struct GitSource {
     client: ClientWithMiddleware,
     /// Whether to disable SSL verification.
     disable_ssl: bool,
+    /// Whether to operate without network connectivity.
+    offline: bool,
     /// The path to the Git source database.
     cache: PathBuf,
     /// The reporter to use for this source.
@@ -37,10 +39,12 @@ impl GitSource {
         git: GitUrl,
         client: impl Into<ClientWithMiddleware>,
         cache: impl Into<PathBuf>,
+        offline: bool,
     ) -> Self {
         Self {
             git,
             disable_ssl: false,
+            offline,
             client: client.into(),
             cache: cache.into(),
             reporter: None,
@@ -107,9 +111,10 @@ impl GitSource {
                     &db_path,
                     db,
                     self.git.reference(),
-                    locked_rev.map(GitOid::from),
+                    locked_rev,
                     &self.client,
                     self.disable_ssl,
+                    self.offline,
                 )?;
 
                 (db, actual_rev, task)
@@ -172,8 +177,8 @@ impl Fetch {
 
 pub trait Reporter: Send + Sync {
     /// Callback to invoke when a repository checkout begins.
-    fn on_checkout_start(&self, url: &Url, rev: &str) -> usize;
+    fn on_checkout_start(&self, url: &DisplaySafeUrl, rev: &str) -> usize;
 
     /// Callback to invoke when a repository checkout completes.
-    fn on_checkout_complete(&self, url: &Url, rev: &str, index: usize);
+    fn on_checkout_complete(&self, url: &DisplaySafeUrl, rev: &str, index: usize);
 }

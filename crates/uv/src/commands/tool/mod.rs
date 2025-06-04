@@ -4,6 +4,7 @@ use tracing::debug;
 
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::Version;
+use uv_python::PythonRequest;
 
 mod common;
 pub(crate) mod dir;
@@ -16,44 +17,60 @@ pub(crate) mod upgrade;
 
 /// A request to run or install a tool (e.g., `uvx ruff@latest`).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ToolRequest<'a> {
-    /// The executable name (e.g., `ruff`), if specified explicitly.
-    pub(crate) executable: Option<&'a str>,
-    /// The target to install or run (e.g., `ruff@latest` or `ruff==0.6.0`).
-    pub(crate) target: Target<'a>,
+pub(crate) enum ToolRequest<'a> {
+    // Running the interpreter directly e.g. `uvx python` or `uvx pypy@3.8`
+    Python {
+        /// The executable name (e.g., `bash`), if the interpreter was given via --from.
+        executable: Option<&'a str>,
+        // The interpreter to install or run (e.g., `python@3.8` or `pypy311`.
+        request: PythonRequest,
+    },
+    // Running a Python package
+    Package {
+        /// The executable name (e.g., `ruff`), if the target was given via --from.
+        executable: Option<&'a str>,
+        /// The target to install or run (e.g., `ruff@latest` or `ruff==0.6.0`).
+        target: Target<'a>,
+    },
 }
 
 impl<'a> ToolRequest<'a> {
     /// Parse a tool request into an executable name and a target.
-    pub(crate) fn parse(command: &'a str, from: Option<&'a str>) -> Self {
-        if let Some(from) = from {
-            let target = Target::parse(from);
-            Self {
-                executable: Some(command),
-                target,
-            }
-        } else {
-            let target = Target::parse(command);
-            Self {
-                executable: None,
-                target,
-            }
-        }
-    }
-
-    /// Returns whether the target package is Python.
-    pub(crate) fn is_python(&self) -> bool {
-        let name = match self.target {
-            Target::Unspecified(name) => name,
-            Target::Version(name, ..) => name,
-            Target::Latest(name, ..) => name,
+    pub(crate) fn parse(command: &'a str, from: Option<&'a str>) -> anyhow::Result<Self> {
+        // If --from is used, the command could be an arbitrary binary in the PATH (e.g. `bash`),
+        // and we don't try to parse it.
+        let (component_to_parse, executable) = match from {
+            Some(from) => (from, Some(command)),
+            None => (command, None),
         };
-        name.eq_ignore_ascii_case("python") || cfg!(windows) && name.eq_ignore_ascii_case("pythonw")
+
+        // First try parsing the command as a Python interpreter, like `python`, `python39`, or
+        // `pypy@39`. `pythonw` is also allowed on Windows. This overlaps with how `--python` flag
+        // values are parsed, but see `PythonRequest::parse` vs `PythonRequest::try_from_tool_name`
+        // for the differences.
+        if let Some(python_request) = PythonRequest::try_from_tool_name(component_to_parse)? {
+            Ok(Self::Python {
+                request: python_request,
+                executable,
+            })
+        } else {
+            // Otherwise the command is a Python package, like `ruff` or `ruff@0.6.0`.
+            Ok(Self::Package {
+                target: Target::parse(component_to_parse),
+                executable,
+            })
+        }
     }
 
     /// Returns `true` if the target is `latest`.
     pub(crate) fn is_latest(&self) -> bool {
-        matches!(self.target, Target::Latest(..))
+        matches!(
+            self,
+            Self::Package {
+                target: Target::Latest(..),
+                ..
+            }
+        )
     }
 }
 
@@ -62,9 +79,9 @@ pub(crate) enum Target<'a> {
     /// e.g., `ruff`
     Unspecified(&'a str),
     /// e.g., `ruff[extra]@0.6.0`
-    Version(&'a str, PackageName, Vec<ExtraName>, Version),
+    Version(&'a str, PackageName, Box<[ExtraName]>, Version),
     /// e.g., `ruff[extra]@latest`
-    Latest(&'a str, PackageName, Vec<ExtraName>),
+    Latest(&'a str, PackageName, Box<[ExtraName]>),
 }
 
 impl<'a> Target<'a> {
@@ -105,7 +122,7 @@ impl<'a> Target<'a> {
             .map(str::trim)
             .filter(|extra| !extra.is_empty())
             .map(ExtraName::from_str)
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<Result<Box<_>, _>>()
         else {
             debug!("Ignoring invalid extras `{extras}` in command");
             return Self::Unspecified(target);
@@ -142,7 +159,7 @@ mod tests {
         let expected = Target::Version(
             "flask",
             PackageName::from_str("flask").unwrap(),
-            vec![],
+            Box::new([]),
             Version::new([3, 0, 0]),
         );
         assert_eq!(target, expected);
@@ -151,20 +168,24 @@ mod tests {
         let expected = Target::Version(
             "flask",
             PackageName::from_str("flask").unwrap(),
-            vec![],
+            Box::new([]),
             Version::new([3, 0, 0]),
         );
         assert_eq!(target, expected);
 
         let target = Target::parse("flask@latest");
-        let expected = Target::Latest("flask", PackageName::from_str("flask").unwrap(), vec![]);
+        let expected = Target::Latest(
+            "flask",
+            PackageName::from_str("flask").unwrap(),
+            Box::new([]),
+        );
         assert_eq!(target, expected);
 
         let target = Target::parse("flask[dotenv]@3.0.0");
         let expected = Target::Version(
             "flask",
             PackageName::from_str("flask").unwrap(),
-            vec![ExtraName::from_str("dotenv").unwrap()],
+            Box::new([ExtraName::from_str("dotenv").unwrap()]),
             Version::new([3, 0, 0]),
         );
         assert_eq!(target, expected);
@@ -173,7 +194,7 @@ mod tests {
         let expected = Target::Latest(
             "flask",
             PackageName::from_str("flask").unwrap(),
-            vec![ExtraName::from_str("dotenv").unwrap()],
+            Box::new([ExtraName::from_str("dotenv").unwrap()]),
         );
         assert_eq!(target, expected);
 

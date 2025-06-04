@@ -5,14 +5,14 @@ use std::str::FromStr;
 use itertools::Either;
 use rustc_hash::FxHashSet;
 
-use uv_configuration::{DevGroupsManifest, ExtrasSpecification};
+use uv_configuration::{Constraints, DependencyGroupsWithDefaults, ExtrasSpecification};
 use uv_distribution_types::Index;
 use uv_normalize::PackageName;
-use uv_pypi_types::{LenientRequirement, VerbatimParsedUrl};
+use uv_pypi_types::{DependencyGroupSpecifier, LenientRequirement, VerbatimParsedUrl};
 use uv_resolver::{Installable, Lock, Package};
 use uv_scripts::Pep723Script;
-use uv_workspace::pyproject::{DependencyGroupSpecifier, Source, Sources, ToolUvSources};
 use uv_workspace::Workspace;
+use uv_workspace::pyproject::{Source, Sources, ToolUvSources};
 
 use crate::commands::project::ProjectError;
 
@@ -236,31 +236,21 @@ impl<'lock> InstallTarget<'lock> {
         }
     }
 
+    pub(crate) fn build_constraints(&self) -> Constraints {
+        self.lock().build_constraints(self.install_path())
+    }
+
     /// Validate the extras requested by the [`ExtrasSpecification`].
     #[allow(clippy::result_large_err)]
     pub(crate) fn validate_extras(self, extras: &ExtrasSpecification) -> Result<(), ProjectError> {
-        let extras = match extras {
-            ExtrasSpecification::Some(extras) => {
-                if extras.is_empty() {
-                    return Ok(());
-                }
-                Either::Left(extras.iter())
-            }
-            ExtrasSpecification::Exclude(extras) => {
-                if extras.is_empty() {
-                    return Ok(());
-                }
-                Either::Right(extras.iter())
-            }
-            _ => return Ok(()),
-        };
-
+        if extras.is_empty() {
+            return Ok(());
+        }
         match self {
             Self::Project { lock, .. }
             | Self::Workspace { lock, .. }
             | Self::NonProjectWorkspace { lock, .. } => {
-                // `provides-extra` was added in Version 1 Revision 1.
-                if (lock.version(), lock.revision()) < (1, 1) {
+                if !lock.supports_provides_extra() {
                     return Ok(());
                 }
 
@@ -277,7 +267,7 @@ impl<'lock> InstallTarget<'lock> {
                     .flat_map(|package| package.provides_extras().iter())
                     .collect::<FxHashSet<_>>();
 
-                for extra in extras {
+                for extra in extras.explicit_names() {
                     if !known_extras.contains(extra) {
                         return match self {
                             Self::Project { .. } => {
@@ -290,7 +280,11 @@ impl<'lock> InstallTarget<'lock> {
             }
             Self::Script { .. } => {
                 // We shouldn't get here if the list is empty so we can assume it isn't
-                let extra = extras.into_iter().next().expect("non-empty extras").clone();
+                let extra = extras
+                    .explicit_names()
+                    .next()
+                    .expect("non-empty extras")
+                    .clone();
                 return Err(ProjectError::MissingExtraScript(extra));
             }
         }
@@ -300,7 +294,10 @@ impl<'lock> InstallTarget<'lock> {
 
     /// Validate the dependency groups requested by the [`DependencyGroupSpecifier`].
     #[allow(clippy::result_large_err)]
-    pub(crate) fn validate_groups(self, groups: &DevGroupsManifest) -> Result<(), ProjectError> {
+    pub(crate) fn validate_groups(
+        self,
+        groups: &DependencyGroupsWithDefaults,
+    ) -> Result<(), ProjectError> {
         // If no groups were specified, short-circuit.
         if groups.explicit_names().next().is_none() {
             return Ok(());

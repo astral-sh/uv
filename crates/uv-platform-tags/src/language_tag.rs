@@ -236,8 +236,8 @@ pub enum ParseLanguageTagError {
 mod tests {
     use std::str::FromStr;
 
-    use crate::language_tag::ParseLanguageTagError;
     use crate::LanguageTag;
+    use crate::language_tag::ParseLanguageTagError;
 
     #[test]
     fn none() {

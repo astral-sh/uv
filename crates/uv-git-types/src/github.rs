@@ -20,7 +20,7 @@ impl<'a> GitHubRepository<'a> {
         // The fast path is only available for GitHub repositories.
         if url.host_str() != Some("github.com") {
             return None;
-        };
+        }
 
         // The GitHub URL must take the form: `https://github.com/{user}/{repo}`, e.g.,
         // `https://github.com/astral-sh/uv`.

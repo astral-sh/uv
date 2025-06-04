@@ -1,19 +1,21 @@
+use std::path::Path;
+
 use tracing::debug;
 
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, hash_digest};
-use uv_client::Connectivity;
-use uv_configuration::{Concurrency, PreviewMode, TrustedHost};
+use uv_configuration::{Concurrency, Constraints, PreviewMode};
 use uv_distribution_types::{Name, Resolution};
+use uv_fs::PythonExt;
 use uv_python::{Interpreter, PythonEnvironment};
 
 use crate::commands::pip::loggers::{InstallLogger, ResolveLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
-    resolve_environment, sync_environment, EnvironmentSpecification, PlatformState, ProjectError,
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, sync_environment,
 };
 use crate::printer::Printer;
-use crate::settings::ResolverInstallerSettings;
+use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
 /// A [`PythonEnvironment`] stored in the cache.
 #[derive(Debug)]
@@ -29,16 +31,15 @@ impl CachedEnvironment {
     /// Get or create an [`CachedEnvironment`] based on a given set of requirements.
     pub(crate) async fn from_spec(
         spec: EnvironmentSpecification<'_>,
+        build_constraints: Constraints,
         interpreter: &Interpreter,
         settings: &ResolverInstallerSettings,
+        network_settings: &NetworkSettings,
         state: &PlatformState,
         resolve: Box<dyn ResolveLogger>,
         install: Box<dyn InstallLogger>,
         installer_metadata: bool,
-        connectivity: Connectivity,
         concurrency: Concurrency,
-        native_tls: bool,
-        allow_insecure_host: &[TrustedHost],
         cache: &Cache,
         printer: Printer,
         preview: PreviewMode,
@@ -50,13 +51,11 @@ impl CachedEnvironment {
             resolve_environment(
                 spec,
                 &interpreter,
-                settings.as_ref().into(),
+                &settings.resolver,
+                network_settings,
                 state,
                 resolve,
-                connectivity,
                 concurrency,
-                native_tls,
-                allow_insecure_host,
                 cache,
                 printer,
                 preview,
@@ -104,14 +103,13 @@ impl CachedEnvironment {
             venv,
             &resolution,
             Modifications::Exact,
-            settings.as_ref().into(),
+            build_constraints,
+            settings.into(),
+            network_settings,
             state,
             install,
             installer_metadata,
-            connectivity,
             concurrency,
-            native_tls,
-            allow_insecure_host,
             cache,
             printer,
             preview,
@@ -119,9 +117,7 @@ impl CachedEnvironment {
         .await?;
 
         // Now that the environment is complete, sync it to its content-addressed location.
-        let id = cache
-            .persist(temp_dir.into_path(), cache_entry.path())
-            .await?;
+        let id = cache.persist(temp_dir.keep(), cache_entry.path()).await?;
         let root = cache.archive(&id);
 
         Ok(Self(PythonEnvironment::from_root(root, cache)?))
@@ -154,6 +150,46 @@ impl CachedEnvironment {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => (),
             Err(err) => return Err(ProjectError::OverlayRemoval(err)),
         }
+        Ok(())
+    }
+
+    /// Enable system site packages for a Python environment.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn set_system_site_packages(&self) -> Result<(), ProjectError> {
+        self.0
+            .set_pyvenv_cfg("include-system-site-packages", "true")?;
+        Ok(())
+    }
+
+    /// Disable system site packages for a Python environment.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn clear_system_site_packages(&self) -> Result<(), ProjectError> {
+        self.0
+            .set_pyvenv_cfg("include-system-site-packages", "false")?;
+        Ok(())
+    }
+
+    /// Set the `extends-environment` key in the `pyvenv.cfg` file to the given path.
+    ///
+    /// Ephemeral environments created by `uv run --with` extend a parent (virtual or system)
+    /// environment by adding a `.pth` file to the ephemeral environment's `site-packages`
+    /// directory. The `pth` file contains Python code to dynamically add the parent
+    /// environment's `site-packages` directory to Python's import search paths in addition to
+    /// the ephemeral environment's `site-packages` directory. This works well at runtime, but
+    /// is too dynamic for static analysis tools like ty to understand. As such, we
+    /// additionally write the `sys.prefix` of the parent environment to to the
+    /// `extends-environment` key of the ephemeral environment's `pyvenv.cfg` file, making it
+    /// easier for these tools to statically and reliably understand the relationship between
+    /// the two environments.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn set_parent_environment(
+        &self,
+        parent_environment_sys_prefix: &Path,
+    ) -> Result<(), ProjectError> {
+        self.0.set_pyvenv_cfg(
+            "extends-environment",
+            &parent_environment_sys_prefix.escape_for_python(),
+        )?;
         Ok(())
     }
 

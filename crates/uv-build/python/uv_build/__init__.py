@@ -21,6 +21,11 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence  # noqa:I001
     from typing import Any  # noqa:I001
 
+# Use the `uv build-backend` command rather than `uv-build`. This option is provided
+# for downstream distributions who provide `uv` and wish to avoid building a partially
+# overlapping `uv-build` executable.
+USE_UV_EXECUTABLE = False
+
 
 def warn_config_settings(config_settings: "Mapping[Any, Any] | None" = None) -> None:
     import sys
@@ -38,12 +43,17 @@ def call(
     import sys
 
     warn_config_settings(config_settings)
+
+    uv_bin_name = "uv" if USE_UV_EXECUTABLE else "uv-build"
     # Unlike `find_uv_bin`, this mechanism must work according to PEP 517
-    uv_bin = shutil.which("uv")
+    uv_bin = shutil.which(uv_bin_name)
     if uv_bin is None:
-        raise RuntimeError("uv was not properly installed")
+        raise RuntimeError(f"{uv_bin_name} was not properly installed")
+    build_backend_args = ["build-backend"] if USE_UV_EXECUTABLE else []
     # Forward stderr, capture stdout for the filename
-    result = subprocess.run([uv_bin, *args], stdout=subprocess.PIPE)
+    result = subprocess.run(
+        [uv_bin, *build_backend_args, *args], stdout=subprocess.PIPE
+    )
     if result.returncode != 0:
         sys.exit(result.returncode)
     # If there was extra stdout, forward it (there should not be extra stdout)
@@ -51,7 +61,10 @@ def call(
     sys.stdout.writelines(stdout[:-1])
     # Fail explicitly instead of an irrelevant stacktrace
     if not stdout:
-        print("uv subprocess did not return a filename on stdout", file=sys.stderr)
+        print(
+            f"{uv_bin_name} subprocess did not return a filename on stdout",
+            file=sys.stderr,
+        )
         sys.exit(1)
     return stdout[-1].strip()
 
@@ -60,7 +73,7 @@ def build_sdist(
     sdist_directory: str, config_settings: "Mapping[Any, Any] | None" = None
 ) -> str:
     """PEP 517 hook `build_sdist`."""
-    args = ["build-backend", "build-sdist", sdist_directory]
+    args = ["build-sdist", sdist_directory]
     return call(args, config_settings)
 
 
@@ -70,9 +83,9 @@ def build_wheel(
     metadata_directory: "str | None" = None,
 ) -> str:
     """PEP 517 hook `build_wheel`."""
-    args = ["build-backend", "build-wheel", wheel_directory]
+    args = ["build-wheel", wheel_directory]
     if metadata_directory:
-        args.extend(["--metadata-directory", metadata_directory])
+        args.extend([metadata_directory])
     return call(args, config_settings)
 
 
@@ -96,7 +109,7 @@ def prepare_metadata_for_build_wheel(
     metadata_directory: str, config_settings: "Mapping[Any, Any] | None" = None
 ) -> str:
     """PEP 517 hook `prepare_metadata_for_build_wheel`."""
-    args = ["build-backend", "prepare-metadata-for-build-wheel", metadata_directory]
+    args = ["prepare-metadata-for-build-wheel", metadata_directory]
     return call(args, config_settings)
 
 
@@ -106,9 +119,9 @@ def build_editable(
     metadata_directory: "str | None" = None,
 ) -> str:
     """PEP 660 hook `build_editable`."""
-    args = ["build-backend", "build-editable", wheel_directory]
+    args = ["build-editable", wheel_directory]
     if metadata_directory:
-        args.extend(["--metadata-directory", metadata_directory])
+        args.extend([metadata_directory])
     return call(args, config_settings)
 
 
@@ -124,5 +137,5 @@ def prepare_metadata_for_build_editable(
     metadata_directory: str, config_settings: "Mapping[Any, Any] | None" = None
 ) -> str:
     """PEP 660 hook `prepare_metadata_for_build_editable`."""
-    args = ["build-backend", "prepare-metadata-for-build-editable", metadata_directory]
+    args = ["prepare-metadata-for-build-editable", metadata_directory]
     return call(args, config_settings)

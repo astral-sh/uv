@@ -16,6 +16,7 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-cache-key = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-platform-tags = { workspace = true }

@@ -19,25 +19,26 @@ use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
 use rustc_hash::FxHashMap;
-use serde::de::{value, IntoDeserializer, SeqAccess, Visitor};
-use serde::{de, Deserialize, Deserializer};
+use serde::de::{IntoDeserializer, SeqAccess, Visitor, value};
+use serde::{Deserialize, Deserializer, de};
 use tempfile::TempDir;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio::sync::{Mutex, Semaphore};
-use tracing::{debug, info_span, instrument, Instrument};
+use tracing::{Instrument, debug, info_span, instrument};
 
 use uv_configuration::{BuildKind, BuildOutput, ConfigSettings, SourceStrategy};
 use uv_distribution::BuildRequires;
-use uv_distribution_types::{IndexLocations, Resolution};
+use uv_distribution_types::{IndexLocations, Requirement, Resolution};
 use uv_fs::{PythonExt, Simplified};
 use uv_pep440::Version;
 use uv_pep508::PackageName;
-use uv_pypi_types::{Requirement, VerbatimParsedUrl};
+use uv_pypi_types::VerbatimParsedUrl;
 use uv_python::{Interpreter, PythonEnvironment};
 use uv_static::EnvVars;
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, SourceBuildTrait};
 use uv_warnings::warn_user_once;
+use uv_workspace::WorkspaceCache;
 
 pub use crate::error::{Error, MissingHeaderCause};
 
@@ -269,6 +270,7 @@ impl SourceBuild {
         version_id: Option<&str>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        workspace_cache: &WorkspaceCache,
         config_settings: ConfigSettings,
         build_isolation: BuildIsolation<'_>,
         build_stack: &BuildStack,
@@ -294,6 +296,7 @@ impl SourceBuild {
             fallback_package_name,
             locations,
             source_strategy,
+            workspace_cache,
             &default_backend,
         )
         .await
@@ -396,6 +399,7 @@ impl SourceBuild {
                 version_id,
                 locations,
                 source_strategy,
+                workspace_cache,
                 build_stack,
                 build_kind,
                 level,
@@ -466,6 +470,7 @@ impl SourceBuild {
         package_name: Option<&PackageName>,
         locations: &IndexLocations,
         source_strategy: SourceStrategy,
+        workspace_cache: &WorkspaceCache,
         default_backend: &Pep517Backend,
     ) -> Result<(Pep517Backend, Option<Project>), Box<Error>> {
         match fs::read_to_string(source_tree.join("pyproject.toml")) {
@@ -496,6 +501,7 @@ impl SourceBuild {
                                     install_path,
                                     locations,
                                     source_strategy,
+                                    workspace_cache,
                                 )
                                 .await
                                 .map_err(Error::Lowering)?;
@@ -562,7 +568,7 @@ impl SourceBuild {
                                 nor `setup.cfg` are present in the directory",
                                 source_tree.simplified_display().cyan(),
                             );
-                        };
+                        }
                     }
                     default_backend.clone()
                 };
@@ -857,6 +863,7 @@ async fn create_pep517_build_environment(
     version_id: Option<&str>,
     locations: &IndexLocations,
     source_strategy: SourceStrategy,
+    workspace_cache: &WorkspaceCache,
     build_stack: &BuildStack,
     build_kind: BuildKind,
     level: BuildOutput,
@@ -941,7 +948,7 @@ async fn create_pep517_build_environment(
                 package_name,
                 package_version,
                 version_id,
-            ))
+            ));
         }
     };
 
@@ -957,6 +964,7 @@ async fn create_pep517_build_environment(
                 install_path,
                 locations,
                 source_strategy,
+                workspace_cache,
             )
             .await
             .map_err(Error::Lowering)?;
@@ -1090,7 +1098,7 @@ impl PythonRunner {
                 return Err(Error::CommandFailed(
                     venv.python_executable().to_path_buf(),
                     err,
-                ))
+                ));
             }
         }
 

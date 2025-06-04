@@ -1,9 +1,9 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use uv_cache_info::CacheInfo;
 use uv_distribution_filename::WheelFilename;
 use uv_normalize::PackageName;
-use uv_pypi_types::{HashDigest, VerbatimParsedUrl};
+use uv_pypi_types::{HashDigest, HashDigests, VerbatimParsedUrl};
 
 use crate::{
     BuiltDist, Dist, DistributionMetadata, Hashed, InstalledMetadata, InstalledVersion, Name,
@@ -12,6 +12,7 @@ use crate::{
 
 /// A built distribution (wheel) that exists in the local cache.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum CachedDist {
     /// The distribution exists in a registry, like `PyPI`.
     Registry(CachedRegistryDist),
@@ -22,8 +23,8 @@ pub enum CachedDist {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct CachedRegistryDist {
     pub filename: WheelFilename,
-    pub path: PathBuf,
-    pub hashes: Vec<HashDigest>,
+    pub path: Box<Path>,
+    pub hashes: HashDigests,
     pub cache_info: CacheInfo,
 }
 
@@ -31,8 +32,8 @@ pub struct CachedRegistryDist {
 pub struct CachedDirectUrlDist {
     pub filename: WheelFilename,
     pub url: VerbatimParsedUrl,
-    pub path: PathBuf,
-    pub hashes: Vec<HashDigest>,
+    pub path: Box<Path>,
+    pub hashes: HashDigests,
     pub cache_info: CacheInfo,
 }
 
@@ -41,9 +42,9 @@ impl CachedDist {
     pub fn from_remote(
         remote: Dist,
         filename: WheelFilename,
-        hashes: Vec<HashDigest>,
+        hashes: HashDigests,
         cache_info: CacheInfo,
-        path: PathBuf,
+        path: Box<Path>,
     ) -> Self {
         match remote {
             Dist::Built(BuiltDist::Registry(_dist)) => Self::Registry(CachedRegistryDist {
@@ -156,7 +157,7 @@ impl CachedDist {
 
 impl Hashed for CachedRegistryDist {
     fn hashes(&self) -> &[HashDigest] {
-        &self.hashes
+        self.hashes.as_slice()
     }
 }
 

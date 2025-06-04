@@ -3,13 +3,13 @@ use std::cmp::max;
 use std::path::PathBuf;
 
 use anstream::println;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{Command, CommandFactory};
 use itertools::Itertools;
 use pretty_assertions::StrComparison;
 
-use crate::generate_all::Mode;
 use crate::ROOT_DIR;
+use crate::generate_all::Mode;
 
 use uv_cli::Cli;
 
@@ -24,7 +24,7 @@ const REPLACEMENTS: &[(&str, &str)] = &[
     // TODO(zanieb): In general, we should show all of the environment variables in the reference
     // but this one is non-standard so it's the only one included right now. When we tackle the rest
     // we can fix the formatting.
-    (" [env: &quot;UV<em>PYTHON</em>DOWNLOADS=never&quot;]", ""),
+    (" [env: &quot;UV_PYTHON_DOWNLOADS=never&quot;]", ""),
 ];
 
 const SHOW_HIDDEN_COMMANDS: &[&str] = &["generate-shell-completion"];
@@ -53,7 +53,9 @@ pub(crate) fn main(args: &Args) -> Result<()> {
                     println!("Up-to-date: {filename}");
                 } else {
                     let comparison = StrComparison::new(&current, &reference_string);
-                    bail!("{filename} changed, please run `cargo dev generate-cli-reference`:\n{comparison}");
+                    bail!(
+                        "{filename} changed, please run `cargo dev generate-cli-reference`:\n{comparison}"
+                    );
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -113,6 +115,7 @@ fn generate() -> String {
     output
 }
 
+#[allow(clippy::format_push_string)]
 fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut Vec<&'a Command>) {
     if command.is_hide_set() && !SHOW_HIDDEN_COMMANDS.contains(&command.get_name()) {
         return;
@@ -137,7 +140,7 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
     if let Some(about) = command.get_long_about().or_else(|| command.get_about()) {
         output.push_str(&about.to_string());
         output.push_str("\n\n");
-    };
+    }
 
     // Display the usage
     {
@@ -185,6 +188,8 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
 
     // Do not display options for commands with children
     if !has_subcommands {
+        let name_key = name.replace(' ', "-");
+
         // Display positional arguments
         let mut arguments = command
             .get_positionals()
@@ -196,10 +201,11 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
             output.push_str("<dl class=\"cli-reference\">");
 
             for arg in arguments {
-                output.push_str("<dt>");
+                let id = format!("{name_key}--{}", arg.get_id());
+                output.push_str(&format!("<dt id=\"{id}\">"));
                 output.push_str(&format!(
-                    "<code>{}</code>",
-                    arg.get_id().to_string().to_uppercase()
+                    "<a href=\"#{id}\"<code>{}</code></a>",
+                    arg.get_id().to_string().to_uppercase(),
                 ));
                 output.push_str("</dt>");
                 if let Some(help) = arg.get_long_help().or_else(|| arg.get_help()) {
@@ -225,11 +231,18 @@ fn generate_command<'a>(output: &mut String, command: &'a Command, parents: &mut
             output.push_str("<dl class=\"cli-reference\">");
             for opt in options {
                 let Some(long) = opt.get_long() else { continue };
+                let id = format!("{name_key}--{long}");
 
-                output.push_str("<dt>");
-                output.push_str(&format!("<code>--{long}</code>"));
+                output.push_str(&format!("<dt id=\"{id}\">"));
+                output.push_str(&format!("<a href=\"#{id}\"><code>--{long}</code></a>"));
+                for long_alias in opt.get_all_aliases().into_iter().flatten() {
+                    output.push_str(&format!(", <code>--{long_alias}</code>"));
+                }
                 if let Some(short) = opt.get_short() {
                     output.push_str(&format!(", <code>-{short}</code>"));
+                }
+                for short_alias in opt.get_all_short_aliases().into_iter().flatten() {
+                    output.push_str(&format!(", <code>-{short_alias}</code>"));
                 }
 
                 // Re-implements private `Arg::is_takes_value_set` used in `Command::get_opts`
@@ -340,7 +353,7 @@ mod tests {
 
     use crate::generate_all::Mode;
 
-    use super::{main, Args};
+    use super::{Args, main};
 
     #[test]
     fn test_generate_cli_reference() -> Result<()> {

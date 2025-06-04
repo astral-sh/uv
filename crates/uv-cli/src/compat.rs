@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use clap::{Args, ValueEnum};
 
 use uv_warnings::warn_user;
@@ -75,7 +75,9 @@ impl CompatArgs for PipCompileCompatArgs {
         }
 
         if self.no_allow_unsafe {
-            warn_user!("pip-compile's `--no-allow-unsafe` has no effect (uv can safely pin `pip` and other packages)");
+            warn_user!(
+                "pip-compile's `--no-allow-unsafe` has no effect (uv can safely pin `pip` and other packages)"
+            );
         }
 
         if self.reuse_hashes {
@@ -131,12 +133,6 @@ impl CompatArgs for PipCompileCompatArgs {
             return Err(anyhow!(
                 "pip-compile's `--config` is unsupported (uv does not use a configuration file)"
             ));
-        }
-
-        if self.no_config {
-            warn_user!(
-                "pip-compile's `--no-config` has no effect (uv does not use a configuration file)"
-            );
         }
 
         if self.emit_options {
@@ -250,12 +246,6 @@ impl CompatArgs for PipSyncCompatArgs {
             return Err(anyhow!(
                 "pip-sync's `--config` is unsupported (uv does not use a configuration file)"
             ));
-        }
-
-        if self.no_config {
-            warn_user!(
-                "pip-sync's `--no-config` has no effect (uv does not use a configuration file)"
-            );
         }
 
         if self.pip_args.is_some() {

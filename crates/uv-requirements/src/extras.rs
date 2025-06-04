@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
-use futures::{stream::FuturesOrdered, TryStreamExt};
+use futures::{TryStreamExt, stream::FuturesOrdered};
 
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::DistributionMetadata;
-use uv_pypi_types::Requirement;
+use uv_distribution_types::Requirement;
 use uv_resolver::{InMemoryIndex, MetadataResponse};
 use uv_types::{BuildContext, HashStrategy};
 
-use crate::{required_dist, Error};
+use crate::{Error, required_dist};
 
 /// A resolver to expand the requested extras for a set of requirements to include all defined
 /// extras.
@@ -55,10 +55,8 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
             database,
         } = self;
         requirements
-            .map(|requirement| async {
-                Self::resolve_requirement(requirement, hasher, index, &database)
-                    .await
-                    .map(Requirement::from)
+            .map(async |requirement| {
+                Self::resolve_requirement(requirement, hasher, index, &database).await
             })
             .collect::<FuturesOrdered<_>>()
             .try_collect()
@@ -115,13 +113,13 @@ impl<'a, Context: BuildContext> ExtrasResolver<'a, Context> {
 
         // Sort extras for consistency.
         let extras = {
-            let mut extras = metadata.provides_extras;
+            let mut extras = metadata.provides_extras.to_vec();
             extras.sort_unstable();
             extras
         };
 
         Ok(Requirement {
-            extras,
+            extras: extras.into_boxed_slice(),
             ..requirement
         })
     }

@@ -18,6 +18,7 @@ workspace = true
 [dependencies]
 uv-cache = { workspace = true }
 uv-dirs = { workspace = true }
+uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true }
 uv-install-wheel = { workspace = true }
 uv-installer = { workspace = true }

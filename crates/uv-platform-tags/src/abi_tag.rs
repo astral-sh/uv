@@ -34,7 +34,7 @@ pub enum AbiTag {
         python_version: Option<(u8, u8)>,
         implementation_version: (u8, u8),
     },
-    /// Ex) `graalpy310_graalpy240_310_native`
+    /// Ex) `graalpy240_310_native`
     GraalPy {
         python_version: (u8, u8),
         implementation_version: (u8, u8),
@@ -109,7 +109,7 @@ impl std::fmt::Display for AbiTag {
             } => {
                 write!(
                     f,
-                    "graalpy{py_major}{py_minor}_graalpy{impl_major}{impl_minor}_{py_major}{py_minor}_native"
+                    "graalpy{impl_major}{impl_minor}_{py_major}{py_minor}_native"
                 )
             }
             Self::Pyston {
@@ -237,29 +237,21 @@ impl FromStr for AbiTag {
                 })
             }
         } else if let Some(rest) = s.strip_prefix("graalpy") {
-            // Ex) `graalpy310_graalpy240_310_native`
-            let version_end = rest
-                .find('_')
-                .ok_or_else(|| ParseAbiTagError::InvalidFormat {
-                    implementation: "GraalPy",
-                    tag: s.to_string(),
-                })?;
-            let version_str = &rest[..version_end];
-            let (major, minor) = parse_python_version(version_str, "GraalPy", s)?;
-            let rest = rest[version_end + 1..]
-                .strip_prefix("graalpy")
-                .ok_or_else(|| ParseAbiTagError::InvalidFormat {
-                    implementation: "GraalPy",
-                    tag: s.to_string(),
-                })?;
-            let version_end = rest
-                .find('_')
-                .ok_or_else(|| ParseAbiTagError::InvalidFormat {
-                    implementation: "GraalPy",
-                    tag: s.to_string(),
-                })?;
-            let rest = &rest[..version_end];
-            let (impl_major, impl_minor) = parse_impl_version(rest, "GraalPy", s)?;
+            // Ex) `graalpy240_310_native`
+            let (impl_ver_str, rest) =
+                rest.split_once('_')
+                    .ok_or_else(|| ParseAbiTagError::InvalidFormat {
+                        implementation: "GraalPy",
+                        tag: s.to_string(),
+                    })?;
+            let (impl_major, impl_minor) = parse_impl_version(impl_ver_str, "GraalPy", s)?;
+            let (py_ver_str, _) =
+                rest.split_once('_')
+                    .ok_or_else(|| ParseAbiTagError::InvalidFormat {
+                        implementation: "GraalPy",
+                        tag: s.to_string(),
+                    })?;
+            let (major, minor) = parse_python_version(py_ver_str, "GraalPy", s)?;
             Ok(Self::GraalPy {
                 python_version: (major, minor),
                 implementation_version: (impl_major, impl_minor),
@@ -434,11 +426,8 @@ mod tests {
             python_version: (3, 10),
             implementation_version: (2, 40),
         };
-        assert_eq!(
-            AbiTag::from_str("graalpy310_graalpy240_310_native"),
-            Ok(tag)
-        );
-        assert_eq!(tag.to_string(), "graalpy310_graalpy240_310_native");
+        assert_eq!(AbiTag::from_str("graalpy240_310_native"), Ok(tag));
+        assert_eq!(tag.to_string(), "graalpy240_310_native");
 
         assert_eq!(
             AbiTag::from_str("graalpy310"),

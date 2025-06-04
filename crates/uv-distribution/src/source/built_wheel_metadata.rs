@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use uv_cache::CacheShard;
@@ -9,35 +9,38 @@ use uv_fs::files;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
-use uv_pypi_types::HashDigest;
+use uv_pypi_types::{HashDigest, HashDigests};
 
 /// The information about the wheel we either just built or got from the cache.
 #[derive(Debug, Clone)]
 pub(crate) struct BuiltWheelMetadata {
     /// The path to the built wheel.
-    pub(crate) path: PathBuf,
+    pub(crate) path: Box<Path>,
     /// The expected path to the downloaded wheel's entry in the cache.
-    pub(crate) target: PathBuf,
+    pub(crate) target: Box<Path>,
     /// The parsed filename.
     pub(crate) filename: WheelFilename,
     /// The computed hashes of the source distribution from which the wheel was built.
-    pub(crate) hashes: Vec<HashDigest>,
+    pub(crate) hashes: HashDigests,
     /// The cache information for the underlying source distribution.
     pub(crate) cache_info: CacheInfo,
 }
 
 impl BuiltWheelMetadata {
     /// Find a compatible wheel in the cache.
-    pub(crate) fn find_in_cache(tags: &Tags, cache_shard: &CacheShard) -> Option<Self> {
-        for directory in files(cache_shard) {
-            if let Some(metadata) = Self::from_path(directory, cache_shard) {
+    pub(crate) fn find_in_cache(
+        tags: &Tags,
+        cache_shard: &CacheShard,
+    ) -> Result<Option<Self>, std::io::Error> {
+        for file in files(cache_shard)? {
+            if let Some(metadata) = Self::from_path(file, cache_shard) {
                 // Validate that the wheel is compatible with the target platform.
                 if metadata.filename.is_compatible(tags) {
-                    return Some(metadata);
+                    return Ok(Some(metadata));
                 }
             }
         }
-        None
+        Ok(None)
     }
 
     /// Try to parse a distribution from a cached directory name (like `typing-extensions-4.8.0-py3-none-any.whl`).
@@ -45,29 +48,29 @@ impl BuiltWheelMetadata {
         let filename = path.file_name()?.to_str()?;
         let filename = WheelFilename::from_str(filename).ok()?;
         Some(Self {
-            target: cache_shard.join(filename.stem()),
-            path,
+            target: cache_shard.join(filename.stem()).into_boxed_path(),
+            path: path.into_boxed_path(),
             filename,
             cache_info: CacheInfo::default(),
-            hashes: vec![],
+            hashes: HashDigests::empty(),
         })
     }
 
     #[must_use]
-    pub(crate) fn with_hashes(mut self, hashes: Vec<HashDigest>) -> Self {
+    pub(crate) fn with_hashes(mut self, hashes: HashDigests) -> Self {
         self.hashes = hashes;
         self
     }
 
     /// Returns `true` if the wheel matches the given package name and version.
     pub(crate) fn matches(&self, name: Option<&PackageName>, version: Option<&Version>) -> bool {
-        name.map_or(true, |name| self.filename.name == *name)
-            && version.map_or(true, |version| self.filename.version == *version)
+        name.is_none_or(|name| self.filename.name == *name)
+            && version.is_none_or(|version| self.filename.version == *version)
     }
 }
 
 impl Hashed for BuiltWheelMetadata {
     fn hashes(&self) -> &[HashDigest] {
-        &self.hashes
+        self.hashes.as_slice()
     }
 }

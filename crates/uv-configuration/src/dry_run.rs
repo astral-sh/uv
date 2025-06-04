@@ -2,6 +2,9 @@
 pub enum DryRun {
     /// The operation should execute in dry run mode.
     Enabled,
+    /// The operation should execute in dry run mode and check if the current environment is
+    /// synced.
+    Check,
     /// The operation should execute in normal mode.
     #[default]
     Disabled,
@@ -19,6 +22,6 @@ impl DryRun {
 
     /// Returns `true` if dry run mode is enabled.
     pub const fn enabled(&self) -> bool {
-        matches!(self, DryRun::Enabled)
+        matches!(self, DryRun::Enabled) || matches!(self, DryRun::Check)
     }
 }

@@ -94,6 +94,7 @@ Ok(
                             size: Some(
                                 0,
                             ),
+                            upload_time: None,
                         },
                     },
                 ),
@@ -141,6 +142,7 @@ Ok(
                             size: Some(
                                 0,
                             ),
+                            upload_time: None,
                         },
                     },
                 ),
@@ -220,6 +222,7 @@ Ok(
             dependency_groups: {},
             constraints: {},
             overrides: {},
+            build_constraints: {},
             dependency_metadata: {},
         },
     },

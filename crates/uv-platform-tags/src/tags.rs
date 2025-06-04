@@ -395,7 +395,7 @@ impl Implementation {
                 python_version: Some(python_version),
                 implementation_version,
             },
-            // Ex) `graalpy310_graalpy240_310_native
+            // Ex) `graalpy240_310_native
             Self::GraalPy => AbiTag::GraalPy {
                 python_version,
                 implementation_version,
@@ -466,8 +466,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
         }
         (Os::Musllinux { major, minor }, _) => {
             let mut platform_tags = vec![PlatformTag::Linux { arch }];
-            // musl 1.1 is the lowest supported version in musllinux
-            platform_tags.extend((1..=*minor).map(|minor| PlatformTag::Musllinux {
+            platform_tags.extend((0..=*minor).map(|minor| PlatformTag::Musllinux {
                 major: *major,
                 minor,
                 arch,
@@ -616,6 +615,12 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             vec![PlatformTag::Android {
                 api_level: *api_level,
                 arch,
+            }]
+        }
+        (Os::Pyodide { major, minor }, Arch::Wasm32) => {
+            vec![PlatformTag::Pyodide {
+                major: *major,
+                minor: *minor,
             }]
         }
         _ => {

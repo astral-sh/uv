@@ -2,10 +2,12 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use uv_configuration::SourceStrategy;
-use uv_distribution_types::IndexLocations;
+use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::PackageName;
 use uv_workspace::pyproject::ToolUvSources;
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, ProjectWorkspace, Workspace};
+use uv_workspace::{
+    DiscoveryOptions, MemberDiscovery, ProjectWorkspace, Workspace, WorkspaceCache,
+};
 
 use crate::metadata::{LoweredRequirement, MetadataError};
 
@@ -13,7 +15,7 @@ use crate::metadata::{LoweredRequirement, MetadataError};
 #[derive(Debug, Clone)]
 pub struct BuildRequires {
     pub name: Option<PackageName>,
-    pub requires_dist: Vec<uv_pypi_types::Requirement>,
+    pub requires_dist: Vec<Requirement>,
 }
 
 impl BuildRequires {
@@ -25,7 +27,7 @@ impl BuildRequires {
             requires_dist: metadata
                 .requires_dist
                 .into_iter()
-                .map(uv_pypi_types::Requirement::from)
+                .map(Requirement::from)
                 .collect(),
         }
     }
@@ -37,6 +39,7 @@ impl BuildRequires {
         install_path: &Path,
         locations: &IndexLocations,
         sources: SourceStrategy,
+        cache: &WorkspaceCache,
     ) -> Result<Self, MetadataError> {
         let discovery = match sources {
             SourceStrategy::Enabled => DiscoveryOptions::default(),
@@ -45,10 +48,8 @@ impl BuildRequires {
                 ..Default::default()
             },
         };
-
-        // TODO(konsti): Cache workspace discovery.
         let Some(project_workspace) =
-            ProjectWorkspace::from_maybe_project_root(install_path, &discovery).await?
+            ProjectWorkspace::from_maybe_project_root(install_path, &discovery, cache).await?
         else {
             return Ok(Self::from_metadata23(metadata));
         };
@@ -121,10 +122,7 @@ impl BuildRequires {
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?,
-            SourceStrategy::Disabled => requires_dist
-                .into_iter()
-                .map(uv_pypi_types::Requirement::from)
-                .collect(),
+            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
         };
 
         Ok(Self {
@@ -196,10 +194,7 @@ impl BuildRequires {
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?,
-            SourceStrategy::Disabled => requires_dist
-                .into_iter()
-                .map(uv_pypi_types::Requirement::from)
-                .collect(),
+            SourceStrategy::Disabled => requires_dist.into_iter().map(Requirement::from).collect(),
         };
 
         Ok(Self {

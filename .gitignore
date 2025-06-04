@@ -23,12 +23,15 @@ __pycache__
 *.so
 *.pyd
 *.dll
+/dist
+/crates/uv-build/dist
 
 # Profiling
 flamegraph.svg
 perf.data
 perf.data.old
 profile.json
+profile.json.gz
 
 # MkDocs
 /site

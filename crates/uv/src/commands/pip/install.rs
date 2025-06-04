@@ -1,46 +1,52 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
+use std::path::PathBuf;
 use std::sync::Arc;
 
+use anyhow::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::{debug, enabled, Level};
+use tracing::{Level, debug, enabled};
 
 use uv_cache::Cache;
-use uv_client::{BaseClientBuilder, Connectivity, FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, DevGroupsSpecification, DryRun,
-    ExtrasSpecification, HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy,
-    TrustedHost, Upgrade,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DryRun, ExtrasSpecification,
+    HashCheckingMode, IndexStrategy, PreviewMode, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_configuration::{KeyringProviderType, TargetTriple};
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::{
-    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification, Origin, Resolution,
-    UnresolvedRequirementSpecification,
+    DependencyMetadata, Index, IndexLocations, NameRequirementSpecification, Origin, Requirement,
+    Resolution, UnresolvedRequirementSpecification,
 };
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{SatisfiesResult, SitePackages};
+use uv_normalize::GroupName;
 use uv_pep508::PackageName;
-use uv_pypi_types::{Conflicts, Requirement};
+use uv_pypi_types::Conflicts;
 use uv_python::{
     EnvironmentPreference, Prefix, PythonEnvironment, PythonInstallation, PythonPreference,
     PythonRequest, PythonVersion, Target,
 };
 use uv_requirements::{RequirementsSource, RequirementsSpecification};
 use uv_resolver::{
-    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PythonRequirement,
-    ResolutionMode, ResolverEnvironment,
+    DependencyMode, ExcludeNewer, FlatIndex, OptionsBuilder, PrereleaseMode, PylockToml,
+    PythonRequirement, ResolutionMode, ResolverEnvironment,
 };
+use uv_torch::{TorchMode, TorchStrategy};
 use uv_types::{BuildIsolation, HashStrategy};
+use uv_warnings::warn_user;
+use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, InstallLogger};
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
-use crate::commands::{diagnostics, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Install packages into the current environment.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -53,21 +59,22 @@ pub(crate) async fn pip_install(
     overrides_from_workspace: Vec<Requirement>,
     build_constraints_from_workspace: Vec<Requirement>,
     extras: &ExtrasSpecification,
-    groups: &DevGroupsSpecification,
+    groups: BTreeMap<PathBuf, Vec<GroupName>>,
     resolution_mode: ResolutionMode,
     prerelease_mode: PrereleaseMode,
     dependency_mode: DependencyMode,
     upgrade: Upgrade,
     index_locations: IndexLocations,
     index_strategy: IndexStrategy,
+    torch_backend: Option<TorchMode>,
     dependency_metadata: DependencyMetadata,
     keyring_provider: KeyringProviderType,
+    network_settings: &NetworkSettings,
     reinstall: Reinstall,
     link_mode: LinkMode,
     compile: bool,
     hash_checking: Option<HashCheckingMode>,
     installer_metadata: bool,
-    connectivity: Connectivity,
     config_settings: &ConfigSettings,
     no_build_isolation: bool,
     no_build_isolation_package: Vec<PackageName>,
@@ -85,8 +92,6 @@ pub(crate) async fn pip_install(
     prefix: Option<Prefix>,
     python_preference: PythonPreference,
     concurrency: Concurrency,
-    native_tls: bool,
-    allow_insecure_host: &[TrustedHost],
     cache: Cache,
     dry_run: DryRun,
     printer: Printer,
@@ -95,10 +100,10 @@ pub(crate) async fn pip_install(
     let start = std::time::Instant::now();
 
     let client_builder = BaseClientBuilder::new()
-        .connectivity(connectivity)
-        .native_tls(native_tls)
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
         .keyring(keyring_provider)
-        .allow_insecure_host(allow_insecure_host.to_vec());
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Read all requirements from the provided sources.
     let RequirementsSpecification {
@@ -106,7 +111,9 @@ pub(crate) async fn pip_install(
         requirements,
         constraints,
         overrides,
+        pylock,
         source_trees,
+        groups,
         index_url,
         extra_index_urls,
         no_index,
@@ -123,6 +130,14 @@ pub(crate) async fn pip_install(
         &client_builder,
     )
     .await?;
+
+    if pylock.is_some() {
+        if preview.is_disabled() {
+            warn_user!(
+                "The `--pylock` setting is experimental and may change without warning. Pass `--preview` to disable this warning."
+            );
+        }
+    }
 
     let constraints: Vec<NameRequirementSpecification> = constraints
         .iter()
@@ -148,8 +163,7 @@ pub(crate) async fn pip_install(
     let build_constraints: Vec<NameRequirementSpecification> =
         operations::read_constraints(build_constraints, &client_builder)
             .await?
-            .iter()
-            .cloned()
+            .into_iter()
             .chain(
                 build_constraints_from_workspace
                     .iter()
@@ -240,10 +254,10 @@ pub(crate) async fn pip_install(
     if reinstall.is_none()
         && upgrade.is_none()
         && source_trees.is_empty()
-        && overrides.is_empty()
+        && pylock.is_none()
         && matches!(modifications, Modifications::Sufficient)
     {
-        match site_packages.satisfies(&requirements, &constraints, &marker_env)? {
+        match site_packages.satisfies_spec(&requirements, &constraints, &overrides, &marker_env)? {
             // If the requirements are already satisfied, we're done.
             SatisfiesResult::Fresh {
                 recursive_requirements,
@@ -251,7 +265,7 @@ pub(crate) async fn pip_install(
                 if enabled!(Level::DEBUG) {
                     for requirement in recursive_requirements
                         .iter()
-                        .map(|entry| entry.requirement.to_string())
+                        .map(ToString::to_string)
                         .sorted()
                     {
                         debug!("Requirement satisfied: {requirement}");
@@ -301,9 +315,6 @@ pub(crate) async fn pip_install(
         HashStrategy::None
     };
 
-    // When resolving, don't take any external preferences into account.
-    let preferences = Vec::default();
-
     // Incorporate any index locations from the provided sources.
     let index_locations = index_locations.combine(
         extra_index_urls
@@ -331,11 +342,28 @@ pub(crate) async fn pip_install(
         }
     }
 
+    // Determine the PyTorch backend.
+    let torch_backend = torch_backend.map(|mode| {
+        if preview.is_disabled() {
+            warn_user!("The `--torch-backend` setting is experimental and may change without warning. Pass `--preview` to disable this warning.");
+        }
+
+        TorchStrategy::from_mode(
+            mode,
+            python_platform
+                .map(TargetTriple::platform)
+                .as_ref()
+                .unwrap_or(interpreter.platform())
+                .os(),
+        )
+    }).transpose()?;
+
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_urls(index_locations.index_urls())
+        .index_locations(&index_locations)
         .index_strategy(index_strategy)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -345,9 +373,9 @@ pub(crate) async fn pip_install(
 
     // Resolve the flat indexes from `--find-links`.
     let flat_index = {
-        let client = FlatIndexClient::new(&client, &cache);
+        let client = FlatIndexClient::new(client.cached_client(), client.connectivity(), &cache);
         let entries = client
-            .fetch(index_locations.flat_indexes().map(Index::url))
+            .fetch_all(index_locations.flat_indexes().map(Index::url))
             .await?;
         FlatIndex::from_entries(entries, Some(&tags), &hasher, &build_options)
     };
@@ -402,55 +430,77 @@ pub(crate) async fn pip_install(
         &build_hasher,
         exclude_newer,
         sources,
+        WorkspaceCache::default(),
         concurrency,
         preview,
     );
 
-    let options = OptionsBuilder::new()
-        .resolution_mode(resolution_mode)
-        .prerelease_mode(prerelease_mode)
-        .dependency_mode(dependency_mode)
-        .exclude_newer(exclude_newer)
-        .index_strategy(index_strategy)
-        .build_options(build_options.clone())
-        .build();
+    let (resolution, hasher) = if let Some(pylock) = pylock {
+        // Read the `pylock.toml` from disk, and deserialize it from TOML.
+        let install_path = std::path::absolute(&pylock)?;
+        let install_path = install_path.parent().unwrap();
+        let content = fs_err::tokio::read_to_string(&pylock).await?;
+        let lock = toml::from_str::<PylockToml>(&content)
+            .with_context(|| format!("Not a valid pylock.toml file: {}", pylock.user_display()))?;
 
-    // Resolve the requirements.
-    let resolution = match operations::resolve(
-        requirements,
-        constraints,
-        overrides,
-        source_trees,
-        project,
-        BTreeSet::default(),
-        extras,
-        groups,
-        preferences,
-        site_packages.clone(),
-        &hasher,
-        &reinstall,
-        &upgrade,
-        Some(&tags),
-        ResolverEnvironment::specific(marker_env.clone()),
-        python_requirement,
-        Conflicts::empty(),
-        &client,
-        &flat_index,
-        state.index(),
-        &build_dispatch,
-        concurrency,
-        options,
-        Box::new(DefaultResolveLogger),
-        printer,
-    )
-    .await
-    {
-        Ok(graph) => Resolution::from(graph),
-        Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
-                .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
-        }
+        let resolution =
+            lock.to_resolution(install_path, marker_env.markers(), &tags, &build_options)?;
+        let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
+
+        (resolution, hasher)
+    } else {
+        // When resolving, don't take any external preferences into account.
+        let preferences = Vec::default();
+
+        let options = OptionsBuilder::new()
+            .resolution_mode(resolution_mode)
+            .prerelease_mode(prerelease_mode)
+            .dependency_mode(dependency_mode)
+            .exclude_newer(exclude_newer)
+            .index_strategy(index_strategy)
+            .torch_backend(torch_backend)
+            .build_options(build_options.clone())
+            .build();
+
+        // Resolve the requirements.
+        let resolution = match operations::resolve(
+            requirements,
+            constraints,
+            overrides,
+            source_trees,
+            project,
+            BTreeSet::default(),
+            extras,
+            &groups,
+            preferences,
+            site_packages.clone(),
+            &hasher,
+            &reinstall,
+            &upgrade,
+            Some(&tags),
+            ResolverEnvironment::specific(marker_env.clone()),
+            python_requirement,
+            Conflicts::empty(),
+            &client,
+            &flat_index,
+            state.index(),
+            &build_dispatch,
+            concurrency,
+            options,
+            Box::new(DefaultResolveLogger),
+            printer,
+        )
+        .await
+        {
+            Ok(graph) => Resolution::from(graph),
+            Err(err) => {
+                return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
+                    .report(err)
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
+            }
+        };
+
+        (resolution, hasher)
     };
 
     // Sync the environment.
@@ -479,11 +529,11 @@ pub(crate) async fn pip_install(
     )
     .await
     {
-        Ok(_) => {}
+        Ok(..) => {}
         Err(err) => {
-            return diagnostics::OperationDiagnostic::native_tls(native_tls)
+            return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     }
 

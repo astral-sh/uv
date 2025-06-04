@@ -1,36 +1,36 @@
 #![allow(clippy::disallowed_types)]
-use std::ffi::{c_void, CString};
+use std::ffi::{CString, c_void};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::mem::{size_of, size_of_val};
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 
-use windows::core::{s, PSTR};
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 use windows::Win32::{
     Foundation::{
-        CloseHandle, SetHandleInformation, BOOL, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE,
-        TRUE,
+        CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation, TRUE,
     },
     System::Console::{
-        GetStdHandle, SetConsoleCtrlHandler, SetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+        GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetConsoleCtrlHandler, SetStdHandle,
     },
     System::Environment::GetCommandLineA,
     System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectA, JobObjectExtendedLimitInformation,
-        QueryInformationJobObject, SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK,
+        AssignProcessToJobObject, CreateJobObjectA, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JobObjectExtendedLimitInformation, QueryInformationJobObject, SetInformationJobObject,
     },
     System::Threading::{
-        CreateProcessA, GetExitCodeProcess, GetStartupInfoA, WaitForInputIdle, WaitForSingleObject,
-        INFINITE, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOA,
+        CreateProcessA, GetExitCodeProcess, GetStartupInfoA, INFINITE, PROCESS_CREATION_FLAGS,
+        PROCESS_INFORMATION, STARTF_USESTDHANDLES, STARTUPINFOA, WaitForInputIdle,
+        WaitForSingleObject,
     },
     UI::WindowsAndMessaging::{
-        CreateWindowExA, DestroyWindow, GetMessageA, PeekMessageA, PostMessageA, HWND_MESSAGE, MSG,
-        PEEK_MESSAGE_REMOVE_TYPE, WINDOW_EX_STYLE, WINDOW_STYLE,
+        CreateWindowExA, DestroyWindow, GetMessageA, HWND_MESSAGE, MSG, PEEK_MESSAGE_REMOVE_TYPE,
+        PeekMessageA, PostMessageA, WINDOW_EX_STYLE, WINDOW_STYLE,
     },
 };
+use windows::core::{BOOL, PSTR, s};
 
 use crate::{error, format, warn};
 
@@ -213,7 +213,9 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
         buffer.truncate(read_bytes);
 
         let Some(inner_kind) = TrampolineKind::from_buffer(&buffer) else {
-            error_and_exit("Magic number 'UVSC' or 'UVPY' not found at the end of the file. Did you append the magic number, the length and the path to the python executable at the end of the file?");
+            error_and_exit(
+                "Magic number 'UVSC' or 'UVPY' not found at the end of the file. Did you append the magic number, the length and the path to the python executable at the end of the file?",
+            );
         };
         kind = inner_kind;
 
@@ -227,14 +229,19 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
                 }));
 
                 if path_len > MAX_PATH_LEN {
-                    error_and_exit(&format!("Only paths with a length up to 32KBs are supported but the python path has a length of {}", path_len));
+                    error_and_exit(&format!(
+                        "Only paths with a length up to 32KBs are supported but the python path has a length of {}",
+                        path_len
+                    ));
                 }
 
                 // SAFETY: path len is guaranteed to be less than 32KBs
                 path_len as usize
             }
             None => {
-                error_and_exit("Python executable length missing. Did you write the length of the path to the Python executable before the Magic number?");
+                error_and_exit(
+                    "Python executable length missing. Did you write the length of the path to the Python executable before the Magic number?",
+                );
             }
         };
 
@@ -253,7 +260,9 @@ fn read_trampoline_metadata(executable_name: &Path) -> (TrampolineKind, PathBuf)
             bytes_to_read = (path_len + kind.magic_number().len() + PATH_LEN_SIZE) as u32;
 
             if u64::from(bytes_to_read) > file_size {
-                error_and_exit("The length of the python executable path exceeds the file size. Verify that the path length is appended to the end of the launcher script as a u32 in little endian");
+                error_and_exit(
+                    "The length of the python executable path exceeds the file size. Verify that the path length is appended to the end of the launcher script as a u32 in little endian",
+                );
             }
         }
     };
@@ -523,7 +532,7 @@ pub fn bounce(is_gui: bool) -> ! {
         TRUE
     }
     // See distlib/PC/launcher.c::control_key_handler
-    unsafe { SetConsoleCtrlHandler(Some(Some(control_key_handler)), true) }.unwrap_or_else(|_| {
+    unsafe { SetConsoleCtrlHandler(Some(control_key_handler), true) }.unwrap_or_else(|_| {
         print_last_error_and_exit("Control handler setting failed");
     });
 

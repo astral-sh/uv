@@ -1,0 +1,19 @@
+[package]
+name = "uv-build"
+version = "0.7.10"
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+uv-build-backend = { workspace = true }
+uv-version = { workspace = true }
+
+anyhow = { workspace = true }
+
+[lints]
+workspace = true

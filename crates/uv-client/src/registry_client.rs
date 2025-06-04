@@ -2,24 +2,28 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, StreamExt, TryStreamExt};
-use http::HeaderMap;
+use http::{HeaderMap, StatusCode};
 use itertools::Either;
-use reqwest::{Client, Response, StatusCode};
+use reqwest::{Proxy, Response};
 use reqwest_middleware::ClientWithMiddleware;
-use tokio::sync::Semaphore;
-use tracing::{info_span, instrument, trace, warn, Instrument};
+use rustc_hash::FxHashMap;
+use tokio::sync::{Mutex, Semaphore};
+use tracing::{Instrument, debug, info_span, instrument, trace, warn};
 use url::Url;
 
+use uv_auth::Indexes;
 use uv_cache::{Cache, CacheBucket, CacheEntry, WheelCache};
 use uv_configuration::KeyringProviderType;
 use uv_configuration::{IndexStrategy, TrustedHost};
 use uv_distribution_filename::{DistFilename, SourceDistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, File, FileLocation, Index, IndexCapabilities, IndexUrl, IndexUrls, Name,
+    BuiltDist, File, FileLocation, IndexCapabilities, IndexFormat, IndexLocations,
+    IndexMetadataRef, IndexStatusCodeDecision, IndexStatusCodeStrategy, IndexUrl, IndexUrls, Name,
 };
 use uv_metadata::{read_metadata_async_seek, read_metadata_async_stream};
 use uv_normalize::PackageName;
@@ -27,19 +31,27 @@ use uv_pep440::Version;
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
 use uv_pypi_types::{ResolutionMetadata, SimpleJson};
+use uv_redacted::DisplaySafeUrl;
+use uv_small_str::SmallString;
+use uv_torch::TorchStrategy;
 
 use crate::base_client::{BaseClientBuilder, ExtraMiddleware};
 use crate::cached_client::CacheControl;
+use crate::flat_index::FlatIndexEntry;
 use crate::html::SimpleHtml;
 use crate::remote_metadata::wheel_metadata_from_remote_zip;
 use crate::rkyvutil::OwnedArchive;
-use crate::{BaseClient, CachedClient, CachedClientError, Error, ErrorKind};
+use crate::{
+    BaseClient, CachedClient, CachedClientError, Error, ErrorKind, FlatIndexClient,
+    FlatIndexEntries,
+};
 
 /// A builder for an [`RegistryClient`].
 #[derive(Debug, Clone)]
 pub struct RegistryClientBuilder<'a> {
     index_urls: IndexUrls,
     index_strategy: IndexStrategy,
+    torch_backend: Option<TorchStrategy>,
     cache: Cache,
     base_client_builder: BaseClientBuilder<'a>,
 }
@@ -49,6 +61,7 @@ impl RegistryClientBuilder<'_> {
         Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
+            torch_backend: None,
             cache,
             base_client_builder: BaseClientBuilder::new(),
         }
@@ -57,14 +70,23 @@ impl RegistryClientBuilder<'_> {
 
 impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
-    pub fn index_urls(mut self, index_urls: IndexUrls) -> Self {
-        self.index_urls = index_urls;
+    pub fn index_locations(mut self, index_locations: &IndexLocations) -> Self {
+        self.index_urls = index_locations.index_urls();
+        self.base_client_builder = self
+            .base_client_builder
+            .indexes(Indexes::from(index_locations));
         self
     }
 
     #[must_use]
     pub fn index_strategy(mut self, index_strategy: IndexStrategy) -> Self {
         self.index_strategy = index_strategy;
+        self
+    }
+
+    #[must_use]
+    pub fn torch_backend(mut self, torch_backend: Option<TorchStrategy>) -> Self {
+        self.torch_backend = torch_backend;
         self
     }
 
@@ -107,12 +129,6 @@ impl<'a> RegistryClientBuilder<'a> {
     }
 
     #[must_use]
-    pub fn client(mut self, client: Client) -> Self {
-        self.base_client_builder = self.base_client_builder.client(client);
-        self
-    }
-
-    #[must_use]
     pub fn extra_middleware(mut self, middleware: ExtraMiddleware) -> Self {
         self.base_client_builder = self.base_client_builder.extra_middleware(middleware);
         self
@@ -127,6 +143,12 @@ impl<'a> RegistryClientBuilder<'a> {
     #[must_use]
     pub fn platform(mut self, platform: &'a Platform) -> Self {
         self.base_client_builder = self.base_client_builder.platform(platform);
+        self
+    }
+
+    #[must_use]
+    pub fn proxy(mut self, proxy: Proxy) -> Self {
+        self.base_client_builder = self.base_client_builder.proxy(proxy);
         self
     }
 
@@ -145,10 +167,12 @@ impl<'a> RegistryClientBuilder<'a> {
         RegistryClient {
             index_urls: self.index_urls,
             index_strategy: self.index_strategy,
+            torch_backend: self.torch_backend,
             cache: self.cache,
             connectivity,
             client,
             timeout,
+            flat_indexes: Arc::default(),
         }
     }
 
@@ -166,10 +190,12 @@ impl<'a> RegistryClientBuilder<'a> {
         RegistryClient {
             index_urls: self.index_urls,
             index_strategy: self.index_strategy,
+            torch_backend: self.torch_backend,
             cache: self.cache,
             connectivity,
             client,
             timeout,
+            flat_indexes: Arc::default(),
         }
     }
 }
@@ -181,6 +207,7 @@ impl<'a> TryFrom<BaseClientBuilder<'a>> for RegistryClientBuilder<'a> {
         Ok(Self {
             index_urls: IndexUrls::default(),
             index_strategy: IndexStrategy::default(),
+            torch_backend: None,
             cache: Cache::temp()?,
             base_client_builder: value,
         })
@@ -194,6 +221,8 @@ pub struct RegistryClient {
     index_urls: IndexUrls,
     /// The strategy to use when fetching across multiple indexes.
     index_strategy: IndexStrategy,
+    /// The strategy to use when selecting a PyTorch backend, if any.
+    torch_backend: Option<TorchStrategy>,
     /// The underlying HTTP client.
     client: CachedClient,
     /// Used for the remote wheel METADATA cache.
@@ -202,6 +231,17 @@ pub struct RegistryClient {
     connectivity: Connectivity,
     /// Configured client timeout, in seconds.
     timeout: Duration,
+    /// The flat index entries for each `--find-links`-style index URL.
+    flat_indexes: Arc<Mutex<FlatIndexCache>>,
+}
+
+/// The format of the package metadata returned by querying an index.
+#[derive(Debug)]
+pub enum MetadataFormat {
+    /// The metadata adheres to the Simple Repository API format.
+    Simple(OwnedArchive<SimpleMetadata>),
+    /// The metadata consists of a list of distributions from a "flat" index.
+    Flat(Vec<FlatIndexEntry>),
 }
 
 impl RegistryClient {
@@ -211,12 +251,12 @@ impl RegistryClient {
     }
 
     /// Return the [`BaseClient`] used by this client.
-    pub fn uncached_client(&self, url: &Url) -> &ClientWithMiddleware {
+    pub fn uncached_client(&self, url: &DisplaySafeUrl) -> &ClientWithMiddleware {
         self.client.uncached().for_host(url)
     }
 
     /// Returns `true` if SSL verification is disabled for the given URL.
-    pub fn disable_ssl(&self, url: &Url) -> bool {
+    pub fn disable_ssl(&self, url: &DisplaySafeUrl) -> bool {
         self.client.uncached().disable_ssl(url)
     }
 
@@ -230,64 +270,142 @@ impl RegistryClient {
         self.timeout
     }
 
-    /// Fetch a package from the `PyPI` simple API.
+    /// Return the appropriate index URLs for the given [`PackageName`].
+    fn index_urls_for(&self, package_name: &PackageName) -> impl Iterator<Item = IndexMetadataRef> {
+        self.torch_backend
+            .as_ref()
+            .and_then(|torch_backend| {
+                torch_backend
+                    .applies_to(package_name)
+                    .then(|| torch_backend.index_urls())
+                    .map(|indexes| indexes.map(IndexMetadataRef::from))
+            })
+            .map(Either::Left)
+            .unwrap_or_else(|| Either::Right(self.index_urls.indexes().map(IndexMetadataRef::from)))
+    }
+
+    /// Return the appropriate [`IndexStrategy`] for the given [`PackageName`].
+    fn index_strategy_for(&self, package_name: &PackageName) -> IndexStrategy {
+        self.torch_backend
+            .as_ref()
+            .and_then(|torch_backend| {
+                torch_backend
+                    .applies_to(package_name)
+                    .then_some(IndexStrategy::UnsafeFirstMatch)
+            })
+            .unwrap_or(self.index_strategy)
+    }
+
+    /// Fetch package metadata from an index.
     ///
-    /// "simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
+    /// Supports both the "Simple" API and `--find-links`-style flat indexes.
+    ///
+    /// "Simple" here refers to [PEP 503 – Simple Repository API](https://peps.python.org/pep-0503/)
     /// and [PEP 691 – JSON-based Simple API for Python Package Indexes](https://peps.python.org/pep-0691/),
-    /// which the pypi json api approximately implements.
-    #[instrument("simple_api", skip_all, fields(package = % package_name))]
-    pub async fn simple<'index>(
+    /// which the PyPI JSON API implements.
+    #[instrument(skip_all, fields(package = % package_name))]
+    pub async fn package_metadata<'index>(
         &'index self,
         package_name: &PackageName,
-        index: Option<&'index IndexUrl>,
+        index: Option<IndexMetadataRef<'index>>,
         capabilities: &IndexCapabilities,
         download_concurrency: &Semaphore,
-    ) -> Result<Vec<(&'index IndexUrl, OwnedArchive<SimpleMetadata>)>, Error> {
-        let indexes = if let Some(index) = index {
-            Either::Left(std::iter::once(index))
-        } else {
-            Either::Right(self.index_urls.indexes().map(Index::url))
-        };
-
-        let mut it = indexes.peekable();
-        if it.peek().is_none() {
+    ) -> Result<Vec<(&'index IndexUrl, MetadataFormat)>, Error> {
+        // If `--no-index` is specified, avoid fetching regardless of whether the index is implicit,
+        // explicit, etc.
+        if self.index_urls.no_index() {
             return Err(ErrorKind::NoIndex(package_name.to_string()).into());
         }
 
+        let indexes = if let Some(index) = index {
+            Either::Left(std::iter::once(index))
+        } else {
+            Either::Right(self.index_urls_for(package_name))
+        };
+
         let mut results = Vec::new();
 
-        match self.index_strategy {
+        match self.index_strategy_for(package_name) {
             // If we're searching for the first index that contains the package, fetch serially.
             IndexStrategy::FirstIndex => {
-                for index in it {
+                for index in indexes {
                     let _permit = download_concurrency.acquire().await;
-                    if let Some(metadata) = self
-                        .simple_single_index(package_name, index, capabilities)
-                        .await?
-                    {
-                        results.push((index, metadata));
-                        break;
+                    match index.format {
+                        IndexFormat::Simple => {
+                            let status_code_strategy =
+                                self.index_urls.status_code_strategy_for(index.url);
+                            match self
+                                .simple_single_index(
+                                    package_name,
+                                    index.url,
+                                    capabilities,
+                                    &status_code_strategy,
+                                )
+                                .await?
+                            {
+                                SimpleMetadataSearchOutcome::Found(metadata) => {
+                                    results.push((index.url, MetadataFormat::Simple(metadata)));
+                                    break;
+                                }
+                                // Package not found, so we will continue on to the next index (if there is one)
+                                SimpleMetadataSearchOutcome::NotFound => {}
+                                // The search failed because of an HTTP status code that we don't ignore for
+                                // this index. We end our search here.
+                                SimpleMetadataSearchOutcome::StatusCodeFailure(status_code) => {
+                                    debug!(
+                                        "Indexes search failed because of status code failure: {status_code}"
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+                        IndexFormat::Flat => {
+                            let entries = self.flat_single_index(package_name, index.url).await?;
+                            if !entries.is_empty() {
+                                results.push((index.url, MetadataFormat::Flat(entries)));
+                                break;
+                            }
+                        }
                     }
                 }
             }
 
             // Otherwise, fetch concurrently.
             IndexStrategy::UnsafeBestMatch | IndexStrategy::UnsafeFirstMatch => {
-                results = futures::stream::iter(it)
-                    .map(|index| async move {
+                results = futures::stream::iter(indexes)
+                    .map(async |index| {
                         let _permit = download_concurrency.acquire().await;
-                        let metadata = self
-                            .simple_single_index(package_name, index, capabilities)
-                            .await?;
-                        Ok((index, metadata))
+                        match index.format {
+                            IndexFormat::Simple => {
+                                // For unsafe matches, ignore authentication failures.
+                                let status_code_strategy =
+                                    IndexStatusCodeStrategy::ignore_authentication_error_codes();
+                                let metadata = match self
+                                    .simple_single_index(
+                                        package_name,
+                                        index.url,
+                                        capabilities,
+                                        &status_code_strategy,
+                                    )
+                                    .await?
+                                {
+                                    SimpleMetadataSearchOutcome::Found(metadata) => Some(metadata),
+                                    _ => None,
+                                };
+                                Ok((index.url, metadata.map(MetadataFormat::Simple)))
+                            }
+                            IndexFormat::Flat => {
+                                let entries =
+                                    self.flat_single_index(package_name, index.url).await?;
+                                Ok((index.url, Some(MetadataFormat::Flat(entries))))
+                            }
+                        }
                     })
                     .buffered(8)
-                    .filter_map(|result: Result<_, Error>| async move {
-                        match result {
-                            Ok((index, Some(metadata))) => Some(Ok((index, metadata))),
-                            Ok((_, None)) => None,
-                            Err(err) => Some(Err(err)),
-                        }
+                    .filter_map(async |result: Result<_, Error>| match result {
+                        Ok((index, Some(metadata))) => Some(Ok((index, metadata))),
+                        Ok((_, None)) => None,
+                        Err(err) => Some(Err(err)),
                     })
                     .try_collect::<Vec<_>>()
                     .await?;
@@ -306,22 +424,61 @@ impl RegistryClient {
         Ok(results)
     }
 
+    /// Fetch the [`FlatIndexEntry`] entries for a given package from a single `--find-links` index.
+    async fn flat_single_index(
+        &self,
+        package_name: &PackageName,
+        index: &IndexUrl,
+    ) -> Result<Vec<FlatIndexEntry>, Error> {
+        // Store the flat index entries in a cache, to avoid redundant fetches. A flat index will
+        // typically contain entries for multiple packages; as such, it's more efficient to cache
+        // the entire index rather than re-fetching it for each package.
+        let mut cache = self.flat_indexes.lock().await;
+        if let Some(entries) = cache.get(index) {
+            return Ok(entries.get(package_name).cloned().unwrap_or_default());
+        }
+
+        let client = FlatIndexClient::new(self.cached_client(), self.connectivity, &self.cache);
+
+        // Fetch the entries for the index.
+        let FlatIndexEntries { entries, .. } =
+            client.fetch_index(index).await.map_err(ErrorKind::Flat)?;
+
+        // Index by package name.
+        let mut entries_by_package: FxHashMap<PackageName, Vec<FlatIndexEntry>> =
+            FxHashMap::default();
+        for entry in entries {
+            entries_by_package
+                .entry(entry.filename.name().clone())
+                .or_default()
+                .push(entry);
+        }
+        let package_entries = entries_by_package
+            .get(package_name)
+            .cloned()
+            .unwrap_or_default();
+
+        // Write to the cache.
+        cache.insert(index.clone(), entries_by_package);
+
+        Ok(package_entries)
+    }
+
     /// Fetch the [`SimpleMetadata`] from a single index for a given package.
     ///
     /// The index can either be a PEP 503-compatible remote repository, or a local directory laid
     /// out in the same format.
-    ///
-    /// Returns `Ok(None)` if the package is not found in the index.
     async fn simple_single_index(
         &self,
         package_name: &PackageName,
         index: &IndexUrl,
         capabilities: &IndexCapabilities,
-    ) -> Result<Option<OwnedArchive<SimpleMetadata>>, Error> {
+        status_code_strategy: &IndexStatusCodeStrategy,
+    ) -> Result<SimpleMetadataSearchOutcome, Error> {
         // Format the URL for PyPI.
-        let mut url: Url = index.clone().into();
+        let mut url = index.url().clone();
         url.path_segments_mut()
-            .map_err(|()| ErrorKind::CannotBeABase(index.clone().into()))?
+            .map_err(|()| ErrorKind::CannotBeABase(index.url().clone()))?
             .pop_if_empty()
             .push(package_name.as_ref())
             // The URL *must* end in a trailing slash for proper relative path behavior
@@ -338,7 +495,7 @@ impl RegistryClient {
         let cache_control = match self.connectivity {
             Connectivity::Online => CacheControl::from(
                 self.cache
-                    .freshness(&cache_entry, Some(package_name))
+                    .freshness(&cache_entry, Some(package_name), None)
                     .map_err(ErrorKind::Io)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,
@@ -359,27 +516,31 @@ impl RegistryClient {
         };
 
         match result {
-            Ok(metadata) => Ok(Some(metadata)),
+            Ok(metadata) => Ok(SimpleMetadataSearchOutcome::Found(metadata)),
             Err(err) => match err.into_kind() {
                 // The package could not be found in the remote index.
-                ErrorKind::WrappedReqwestError(url, err) => match err.status() {
-                    Some(StatusCode::NOT_FOUND) => Ok(None),
-                    Some(StatusCode::UNAUTHORIZED) => {
-                        capabilities.set_unauthorized(index.clone());
-                        Ok(None)
+                ErrorKind::WrappedReqwestError(url, err) => {
+                    let Some(status_code) = err.status() else {
+                        return Err(ErrorKind::WrappedReqwestError(url, err).into());
+                    };
+                    let decision =
+                        status_code_strategy.handle_status_code(status_code, index, capabilities);
+                    if let IndexStatusCodeDecision::Fail(status_code) = decision {
+                        if !matches!(
+                            status_code,
+                            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+                        ) {
+                            return Err(ErrorKind::WrappedReqwestError(url, err).into());
+                        }
                     }
-                    Some(StatusCode::FORBIDDEN) => {
-                        capabilities.set_forbidden(index.clone());
-                        Ok(None)
-                    }
-                    _ => Err(ErrorKind::WrappedReqwestError(url, err).into()),
-                },
+                    Ok(SimpleMetadataSearchOutcome::from(decision))
+                }
 
                 // The package is unavailable due to a lack of connectivity.
-                ErrorKind::Offline(_) => Ok(None),
+                ErrorKind::Offline(_) => Ok(SimpleMetadataSearchOutcome::NotFound),
 
                 // The package could not be found in the local index.
-                ErrorKind::FileNotFound(_) => Ok(None),
+                ErrorKind::FileNotFound(_) => Ok(SimpleMetadataSearchOutcome::NotFound),
 
                 err => Err(err.into()),
             },
@@ -390,13 +551,13 @@ impl RegistryClient {
     async fn fetch_remote_index(
         &self,
         package_name: &PackageName,
-        url: &Url,
+        url: &DisplaySafeUrl,
         cache_entry: &CacheEntry,
         cache_control: CacheControl,
     ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
         let simple_request = self
             .uncached_client(url)
-            .get(url.clone())
+            .get(Url::from(url.clone()))
             .header("Accept-Encoding", "gzip")
             .header("Accept", MediaType::accepts())
             .build()
@@ -405,7 +566,7 @@ impl RegistryClient {
             async {
                 // Use the response URL, rather than the request URL, as the base for relative URLs.
                 // This ensures that we handle redirects and other URL transformations correctly.
-                let url = response.url().clone();
+                let url = DisplaySafeUrl::from(response.url().clone());
 
                 let content_type = response
                     .headers()
@@ -465,7 +626,7 @@ impl RegistryClient {
     async fn fetch_local_index(
         &self,
         package_name: &PackageName,
-        url: &Url,
+        url: &DisplaySafeUrl,
     ) -> Result<OwnedArchive<SimpleMetadata>, Error> {
         let path = url
             .to_file_path()
@@ -505,7 +666,7 @@ impl RegistryClient {
                     /// A local file path.
                     Path(PathBuf),
                     /// A remote URL.
-                    Url(Url),
+                    Url(DisplaySafeUrl),
                 }
 
                 let wheel = wheels.best_wheel();
@@ -572,7 +733,7 @@ impl RegistryClient {
                 .await?
             }
             BuiltDist::Path(wheel) => {
-                let file = fs_err::tokio::File::open(&wheel.install_path)
+                let file = fs_err::tokio::File::open(wheel.install_path.as_ref())
                     .await
                     .map_err(ErrorKind::Io)?;
                 let reader = tokio::io::BufReader::new(file);
@@ -606,24 +767,25 @@ impl RegistryClient {
         &self,
         index: &IndexUrl,
         file: &File,
-        url: &Url,
+        url: &DisplaySafeUrl,
         capabilities: &IndexCapabilities,
     ) -> Result<ResolutionMetadata, Error> {
         // If the metadata file is available at its own url (PEP 658), download it from there.
         let filename = WheelFilename::from_str(&file.filename).map_err(ErrorKind::WheelFilename)?;
         if file.dist_info_metadata {
             let mut url = url.clone();
-            url.set_path(&format!("{}.metadata", url.path()));
+            let path = format!("{}.metadata", url.path());
+            url.set_path(&path);
 
             let cache_entry = self.cache.entry(
                 CacheBucket::Wheels,
                 WheelCache::Index(index).wheel_dir(filename.name.as_ref()),
-                format!("{}.msgpack", filename.stem()),
+                format!("{}.msgpack", filename.cache_key()),
             );
             let cache_control = match self.connectivity {
                 Connectivity::Online => CacheControl::from(
                     self.cache
-                        .freshness(&cache_entry, Some(&filename.name))
+                        .freshness(&cache_entry, Some(&filename.name), None)
                         .map_err(ErrorKind::Io)?,
                 ),
                 Connectivity::Offline => CacheControl::AllowStale,
@@ -636,7 +798,7 @@ impl RegistryClient {
                 lock_entry.lock().await.map_err(ErrorKind::CacheWrite)?
             };
 
-            let response_callback = |response: Response| async {
+            let response_callback = async |response: Response| {
                 let bytes = response
                     .bytes()
                     .await
@@ -654,7 +816,7 @@ impl RegistryClient {
             };
             let req = self
                 .uncached_client(&url)
-                .get(url.clone())
+                .get(Url::from(url.clone()))
                 .build()
                 .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
             Ok(self
@@ -680,7 +842,7 @@ impl RegistryClient {
     async fn wheel_metadata_no_pep658<'data>(
         &self,
         filename: &'data WheelFilename,
-        url: &'data Url,
+        url: &'data DisplaySafeUrl,
         index: Option<&'data IndexUrl>,
         cache_shard: WheelCache<'data>,
         capabilities: &'data IndexCapabilities,
@@ -688,12 +850,12 @@ impl RegistryClient {
         let cache_entry = self.cache.entry(
             CacheBucket::Wheels,
             cache_shard.wheel_dir(filename.name.as_ref()),
-            format!("{}.msgpack", filename.stem()),
+            format!("{}.msgpack", filename.cache_key()),
         );
         let cache_control = match self.connectivity {
             Connectivity::Online => CacheControl::from(
                 self.cache
-                    .freshness(&cache_entry, Some(&filename.name))
+                    .freshness(&cache_entry, Some(&filename.name), None)
                     .map_err(ErrorKind::Io)?,
             ),
             Connectivity::Offline => CacheControl::AllowStale,
@@ -707,10 +869,10 @@ impl RegistryClient {
         };
 
         // Attempt to fetch via a range request.
-        if index.map_or(true, |index| capabilities.supports_range_requests(index)) {
+        if index.is_none_or(|index| capabilities.supports_range_requests(index)) {
             let req = self
                 .uncached_client(url)
-                .head(url.clone())
+                .head(Url::from(url.clone()))
                 .header(
                     "accept-encoding",
                     http::HeaderValue::from_static("identity"),
@@ -731,7 +893,7 @@ impl RegistryClient {
                     let mut reader = AsyncHttpRangeReader::from_head_response(
                         self.uncached_client(url).clone(),
                         response,
-                        url.clone(),
+                        Url::from(url.clone()),
                         headers.clone(),
                     )
                     .await
@@ -779,13 +941,13 @@ impl RegistryClient {
                         return Err(err);
                     }
                 }
-            };
+            }
         }
 
         // Create a request to stream the file.
         let req = self
             .uncached_client(url)
-            .get(url.clone())
+            .get(Url::from(url.clone()))
             .header(
                 // `reqwest` defaults to accepting compressed responses.
                 // Specify identity encoding to get consistent .whl downloading
@@ -823,12 +985,54 @@ impl RegistryClient {
             std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 format!(
-                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).", self.timeout().as_secs()
+                    "Failed to download distribution due to network timeout. Try increasing UV_HTTP_TIMEOUT (current value: {}s).",
+                    self.timeout().as_secs()
                 ),
             )
         } else {
-            std::io::Error::new(std::io::ErrorKind::Other, err)
+            std::io::Error::other(err)
         }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum SimpleMetadataSearchOutcome {
+    /// Simple metadata was found
+    Found(OwnedArchive<SimpleMetadata>),
+    /// Simple metadata was not found
+    NotFound,
+    /// A status code failure was encountered when searching for
+    /// simple metadata and our strategy did not ignore it
+    StatusCodeFailure(StatusCode),
+}
+
+impl From<IndexStatusCodeDecision> for SimpleMetadataSearchOutcome {
+    fn from(item: IndexStatusCodeDecision) -> Self {
+        match item {
+            IndexStatusCodeDecision::Ignore => Self::NotFound,
+            IndexStatusCodeDecision::Fail(status_code) => Self::StatusCodeFailure(status_code),
+        }
+    }
+}
+
+/// A map from [`IndexUrl`] to [`FlatIndexEntry`] entries found at the given URL, indexed by
+/// [`PackageName`].
+#[derive(Default, Debug, Clone)]
+struct FlatIndexCache(FxHashMap<IndexUrl, FxHashMap<PackageName, Vec<FlatIndexEntry>>>);
+
+impl FlatIndexCache {
+    /// Get the entries for a given index URL.
+    fn get(&self, index: &IndexUrl) -> Option<&FxHashMap<PackageName, Vec<FlatIndexEntry>>> {
+        self.0.get(index)
+    }
+
+    /// Insert the entries for a given index URL.
+    fn insert(
+        &mut self,
+        index: IndexUrl,
+        entries: FxHashMap<PackageName, Vec<FlatIndexEntry>>,
+    ) -> Option<FxHashMap<PackageName, Vec<FlatIndexEntry>>> {
+        self.0.insert(index, entries)
     }
 }
 
@@ -894,10 +1098,12 @@ impl SimpleMetadata {
     fn from_files(files: Vec<uv_pypi_types::File>, package_name: &PackageName, base: &Url) -> Self {
         let mut map: BTreeMap<Version, VersionFiles> = BTreeMap::default();
 
+        // Convert to a reference-counted string.
+        let base = SmallString::from(base.as_str());
+
         // Group the distributions by version and kind
         for file in files {
-            let Some(filename) =
-                DistFilename::try_from_filename(file.filename.as_str(), package_name)
+            let Some(filename) = DistFilename::try_from_filename(&file.filename, package_name)
             else {
                 warn!("Skipping file for {package_name}: {}", file.filename);
                 continue;
@@ -906,7 +1112,7 @@ impl SimpleMetadata {
                 DistFilename::SourceDistFilename(ref inner) => &inner.version,
                 DistFilename::WheelFilename(ref inner) => &inner.version,
             };
-            let file = match File::try_from(file, base) {
+            let file = match File::try_from(file, &base) {
                 Ok(file) => file,
                 Err(err) => {
                     // Ignore files with unparsable version specifiers.
@@ -933,7 +1139,11 @@ impl SimpleMetadata {
     }
 
     /// Read the [`SimpleMetadata`] from an HTML index.
-    fn from_html(text: &str, package_name: &PackageName, url: &Url) -> Result<Self, Error> {
+    fn from_html(
+        text: &str,
+        package_name: &PackageName,
+        url: &DisplaySafeUrl,
+    ) -> Result<Self, Error> {
         let SimpleHtml { base, files } =
             SimpleHtml::parse(text, url).map_err(|err| Error::from_html_err(err, url.clone()))?;
 
@@ -1012,12 +1222,11 @@ impl Connectivity {
 mod tests {
     use std::str::FromStr;
 
-    use url::Url;
-
     use uv_normalize::PackageName;
     use uv_pypi_types::{JoinRelativeError, SimpleJson};
+    use uv_redacted::DisplaySafeUrl;
 
-    use crate::{html::SimpleHtml, SimpleMetadata, SimpleMetadatum};
+    use crate::{SimpleMetadata, SimpleMetadatum, html::SimpleHtml};
 
     #[test]
     fn ignore_failing_files() {
@@ -1055,7 +1264,7 @@ mod tests {
     }
     "#;
         let data: SimpleJson = serde_json::from_str(response).unwrap();
-        let base = Url::parse("https://pypi.org/simple/pyflyby/").unwrap();
+        let base = DisplaySafeUrl::parse("https://pypi.org/simple/pyflyby/").unwrap();
         let simple_metadata = SimpleMetadata::from_files(
             data.files,
             &PackageName::from_str("pyflyby").unwrap(),
@@ -1092,7 +1301,7 @@ mod tests {
     "#;
 
         // Note the lack of a trailing `/` here is important for coverage of url-join behavior
-        let base = Url::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
+        let base = DisplaySafeUrl::parse("https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/flask")
             .unwrap();
         let SimpleHtml { base, files } = SimpleHtml::parse(text, &base).unwrap();
 
@@ -1101,14 +1310,17 @@ mod tests {
             .iter()
             .map(|file| uv_pypi_types::base_url_join_relative(base.as_url().as_str(), &file.url))
             .collect::<Result<Vec<_>, JoinRelativeError>>()?;
-        let urls = urls.iter().map(Url::as_str).collect::<Vec<_>>();
-        insta::assert_debug_snapshot!(urls, @r###"
-    [
-        "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.1/Flask-0.1.tar.gz#sha256=9da884457e910bf0847d396cb4b778ad9f3c3d17db1c5997cb861937bd284237",
-        "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.10.1/Flask-0.10.1.tar.gz#sha256=4c83829ff83d408b5e1d4995472265411d2c414112298f2eb4b359d9e4563373",
-        "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/3.0.1/flask-3.0.1.tar.gz#sha256=6489f51bb3666def6f314e15f19d50a1869a19ae0e8c9a3641ffe66c77d42403",
-    ]
-    "###);
+        let urls = urls
+            .iter()
+            .map(DisplaySafeUrl::to_string)
+            .collect::<Vec<_>>();
+        insta::assert_debug_snapshot!(urls, @r#"
+        [
+            "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.1/Flask-0.1.tar.gz",
+            "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/0.10.1/Flask-0.10.1.tar.gz",
+            "https://account.d.codeartifact.us-west-2.amazonaws.com/pypi/shared-packages-pypi/simple/3.0.1/flask-3.0.1.tar.gz",
+        ]
+        "#);
 
         Ok(())
     }

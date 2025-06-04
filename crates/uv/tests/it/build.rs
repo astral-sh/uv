@@ -1,4 +1,4 @@
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{DEFAULT_PYTHON_VERSION, TestContext, uv_snapshot};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
@@ -898,7 +898,7 @@ fn build_constraints() -> Result<()> {
 
 #[test]
 fn build_sha() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let filters = context
         .filters()
         .into_iter()
@@ -1411,7 +1411,7 @@ fn build_non_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Workspace does contain any buildable packages. For example, to build `member` with `setuptools`, add a `build-system` to `packages/member/pyproject.toml`:
+    error: Workspace does not contain any buildable packages. For example, to build `member` with `setuptools`, add a `build-system` to `packages/member/pyproject.toml`:
     ```toml
     [build-system]
     requires = ["setuptools"]
@@ -1553,14 +1553,14 @@ fn build_list_files() -> Result<()> {
         .arg(&built_by_uv)
         .arg("--out-dir")
         .arg(context.temp_dir.join("output1"))
-        .arg("--list"), @r###"
+        .arg("--list"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     Building built_by_uv-0.1.0.tar.gz will include the following files:
+    built_by_uv-0.1.0/PKG-INFO (generated)
     built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
     built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
-    built_by_uv-0.1.0/PKG-INFO (generated)
     built_by_uv-0.1.0/README.md (README.md)
     built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
     built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
@@ -1574,25 +1574,25 @@ fn build_list_files() -> Result<()> {
     built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
     built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
     Building built_by_uv-0.1.0-py3-none-any.whl will include the following files:
-    built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
-    built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
-    built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
-    built_by_uv-0.1.0.dist-info/METADATA (generated)
-    built_by_uv-0.1.0.dist-info/WHEEL (generated)
-    built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
-    built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
-    built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
-    built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
     built_by_uv/__init__.py (src/built_by_uv/__init__.py)
     built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
     built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
     built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
     built_by_uv/cli.py (src/built_by_uv/cli.py)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
+    built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+    built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
+    built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
+    built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
+    built_by_uv-0.1.0.dist-info/WHEEL (generated)
+    built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
+    built_by_uv-0.1.0.dist-info/METADATA (generated)
 
     ----- stderr -----
     Building source distribution (uv build backend)...
     Successfully built output1/built_by_uv-0.1.0.tar.gz
-    "###);
+    ");
     context
         .temp_dir
         .child("output1")
@@ -1611,14 +1611,14 @@ fn build_list_files() -> Result<()> {
         .arg(context.temp_dir.join("output2"))
         .arg("--list")
         .arg("--sdist")
-        .arg("--wheel"), @r###"
+        .arg("--wheel"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     Building built_by_uv-0.1.0.tar.gz will include the following files:
+    built_by_uv-0.1.0/PKG-INFO (generated)
     built_by_uv-0.1.0/LICENSE-APACHE (LICENSE-APACHE)
     built_by_uv-0.1.0/LICENSE-MIT (LICENSE-MIT)
-    built_by_uv-0.1.0/PKG-INFO (generated)
     built_by_uv-0.1.0/README.md (README.md)
     built_by_uv-0.1.0/assets/data.csv (assets/data.csv)
     built_by_uv-0.1.0/header/built_by_uv.h (header/built_by_uv.h)
@@ -1632,23 +1632,23 @@ fn build_list_files() -> Result<()> {
     built_by_uv-0.1.0/src/built_by_uv/cli.py (src/built_by_uv/cli.py)
     built_by_uv-0.1.0/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
     Building built_by_uv-0.1.0-py3-none-any.whl will include the following files:
-    built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
-    built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
-    built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
-    built_by_uv-0.1.0.dist-info/METADATA (generated)
-    built_by_uv-0.1.0.dist-info/WHEEL (generated)
-    built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
-    built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
-    built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
-    built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
     built_by_uv/__init__.py (src/built_by_uv/__init__.py)
     built_by_uv/arithmetic/__init__.py (src/built_by_uv/arithmetic/__init__.py)
     built_by_uv/arithmetic/circle.py (src/built_by_uv/arithmetic/circle.py)
     built_by_uv/arithmetic/pi.txt (src/built_by_uv/arithmetic/pi.txt)
     built_by_uv/cli.py (src/built_by_uv/cli.py)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-APACHE (LICENSE-APACHE)
+    built_by_uv-0.1.0.dist-info/licenses/LICENSE-MIT (LICENSE-MIT)
+    built_by_uv-0.1.0.dist-info/licenses/third-party-licenses/PEP-401.txt (third-party-licenses/PEP-401.txt)
+    built_by_uv-0.1.0.data/headers/built_by_uv.h (header/built_by_uv.h)
+    built_by_uv-0.1.0.data/scripts/whoami.sh (scripts/whoami.sh)
+    built_by_uv-0.1.0.data/data/data.csv (assets/data.csv)
+    built_by_uv-0.1.0.dist-info/WHEEL (generated)
+    built_by_uv-0.1.0.dist-info/entry_points.txt (generated)
+    built_by_uv-0.1.0.dist-info/METADATA (generated)
 
     ----- stderr -----
-    "###);
+    ");
     context
         .temp_dir
         .child("output2")
@@ -1765,7 +1765,7 @@ fn build_with_symlink() -> Result<()> {
             requires = ["hatchling"]
             build-backend = "hatchling.build"
     "#})?;
-    std::os::unix::fs::symlink(
+    fs_err::os::unix::fs::symlink(
         context.temp_dir.child("pyproject.toml.real"),
         context.temp_dir.child("pyproject.toml"),
     )?;
@@ -1881,7 +1881,7 @@ fn build_workspace_virtual_root() -> Result<()> {
             members = ["packages/*"]
     "#})?;
 
-    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r###"
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1891,8 +1891,8 @@ fn build_workspace_virtual_root() -> Result<()> {
     warning: `[TEMP_DIR]/` appears to be a workspace root without a Python project; consider using `uv sync` to install the workspace, or add a `[build-system]` table to `pyproject.toml`
     Building wheel from source distribution...
     Successfully built dist/cache-0.0.0.tar.gz
-    Successfully built dist/unknown-0.0.0-py3-none-any.whl
-    "###);
+    Successfully built dist/UNKNOWN-0.0.0-py3-none-any.whl
+    ");
     Ok(())
 }
 
@@ -1910,7 +1910,7 @@ fn build_pyproject_toml_not_a_project() -> Result<()> {
             line-length = 88
     "})?;
 
-    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r###"
+    uv_snapshot!(context.filters(), context.build().arg("--no-build-logs"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -1920,7 +1920,65 @@ fn build_pyproject_toml_not_a_project() -> Result<()> {
     warning: `[TEMP_DIR]/` does not appear to be a Python project, as the `pyproject.toml` does not include a `[build-system]` table, and neither `setup.py` nor `setup.cfg` are present in the directory
     Building wheel from source distribution...
     Successfully built dist/cache-0.0.0.tar.gz
-    Successfully built dist/unknown-0.0.0-py3-none-any.whl
-    "###);
+    Successfully built dist/UNKNOWN-0.0.0-py3-none-any.whl
+    ");
+    Ok(())
+}
+
+#[test]
+fn build_with_nonnormalized_name() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"exit code: 1", "exit status: 1"), (r"\\\.", "")])
+        .collect::<Vec<_>>();
+
+    let project = context.temp_dir.child("project");
+
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "my.PROJECT"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+
+        [build-system]
+        requires = ["setuptools>=42,<69"]
+        build-backend = "setuptools.build_meta"
+        "#,
+    )?;
+
+    project
+        .child("src")
+        .child("my.PROJECT")
+        .child("__init__.py")
+        .touch()?;
+    project.child("README").touch()?;
+
+    // Build the specified path.
+    uv_snapshot!(&filters, context.build().arg("--no-build-logs").current_dir(&project), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Building source distribution...
+    Building wheel from source distribution...
+    Successfully built dist/my.PROJECT-0.1.0.tar.gz
+    Successfully built dist/my.PROJECT-0.1.0-py3-none-any.whl
+    ");
+
+    project
+        .child("dist")
+        .child("my.PROJECT-0.1.0.tar.gz")
+        .assert(predicate::path::is_file());
+    project
+        .child("dist")
+        .child("my.PROJECT-0.1.0-py3-none-any.whl")
+        .assert(predicate::path::is_file());
+
     Ok(())
 }
