@@ -1,7 +1,8 @@
 #![allow(clippy::disallowed_types)]
 
 use crate::common::{
-    READ_ONLY_GITHUB_TOKEN, SSH_DEPLOY_KEY, TestContext, apply_filters, decode_token, uv_snapshot,
+    READ_ONLY_GITHUB_SSH_DEPLOY_KEY, READ_ONLY_GITHUB_TOKEN, TestContext, apply_filters,
+    decode_token, uv_snapshot,
 };
 use anyhow::{Ok, Result};
 use assert_cmd::assert::OutputAssertExt;
@@ -1176,12 +1177,14 @@ fn requirements_txt_https_git_credentials() -> Result<()> {
     Ok(())
 }
 
-/// SSH blocks too permissive key files.
-fn reduce_key_permissions(key_file: &Path) -> Result<()> {
+/// SSH blocks too permissive key files, so we need to scope permissions for the file to the current
+/// user.
+fn reduce_ssh_key_file_permissions(key_file: &Path) -> Result<()> {
     #[cfg(unix)]
     {
         use std::fs::Permissions;
         use std::os::unix::fs::PermissionsExt;
+
         fs_err::set_permissions(key_file, Permissions::from_mode(0o400))?;
     }
     #[cfg(windows)]
@@ -1223,9 +1226,10 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
 
     let fake_deploy_key = context.temp_dir.child("fake_deploy_key");
     fake_deploy_key.write_str("not a key")?;
-    reduce_key_permissions(&fake_deploy_key)?;
+    reduce_ssh_key_file_permissions(&fake_deploy_key)?;
 
-    // Ensure that we're loading the key and fail if it isn't present
+    // Ensure that we fail without passing the correct key (and don't go to the dev machine's
+    // credential helper).
     let failing_git_ssh_command = format!(
         "ssh -i {} -o IdentitiesOnly=yes -F /dev/null -o StrictHostKeyChecking=no",
         fake_deploy_key.portable_display()
@@ -1266,8 +1270,8 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
     "#);
 
     let ssh_deploy_key = context.temp_dir.child("uv_test_key");
-    ssh_deploy_key.write_str((decode_token(&[SSH_DEPLOY_KEY]) + "\n").as_str())?;
-    reduce_key_permissions(&ssh_deploy_key)?;
+    ssh_deploy_key.write_str((decode_token(&[READ_ONLY_GITHUB_SSH_DEPLOY_KEY]) + "\n").as_str())?;
+    reduce_ssh_key_file_permissions(&ssh_deploy_key)?;
 
     // Use the specified SSH key, and only that key, ignore `~/.ssh/config`, disable host key
     // verification for Windows.
