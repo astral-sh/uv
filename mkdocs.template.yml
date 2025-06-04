@@ -176,7 +176,7 @@ nav:
       - Publishing packages: guides/package.md
       - Migration:
           - guides/migration/index.md
-          - Migrating from pip to a uv project: guides/migration/pip-to-project.md
+          - From pip to a uv project: guides/migration/pip-to-project.md
       - Integrations:
           - guides/integration/index.md
           - Docker: guides/integration/docker.md
