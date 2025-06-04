@@ -3,6 +3,25 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.11
+
+### Enhancements
+
+- Add Pyodide support ([#12731](https://github.com/astral-sh/uv/pull/12731))
+
+### Bug fixes
+
+- Downgrade reqwest and hyper-util ([#13835](https://github.com/astral-sh/uv/pull/13835))
+- Prefer `uv`'s binary's version when checking if it's up to date ([#13840](https://github.com/astral-sh/uv/pull/13840))
+
+### Documentation
+
+- Use "terminal driver" instead of "shell" in SIGINT docs ([#13787](https://github.com/astral-sh/uv/pull/13787))
+
+### Other changes
+
+- Better error message for version specifier with missing operator ([#13803](https://github.com/astral-sh/uv/pull/13803))
+
 ## 0.7.10
 
 ### Enhancements
