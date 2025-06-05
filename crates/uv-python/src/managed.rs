@@ -458,6 +458,7 @@ impl ManagedPythonInstallation {
             }
             PythonRequest::Version(version) => version.matches_version(&self.version()),
             PythonRequest::Key(request) => request.satisfied_by_key(self.key()),
+            PythonRequest::Latest => true,
         }
     }
 

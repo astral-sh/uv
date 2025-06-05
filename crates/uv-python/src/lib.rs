@@ -1034,6 +1034,106 @@ mod tests {
     }
 
     #[test]
+    fn find_python_latest() -> Result<()> {
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.8.10", "3.11.5", "3.9.18", "3.10.12"])?;
+
+        let python = context.run(|| {
+            find_python_installation(
+                &PythonRequest::Latest,
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
+
+        assert!(
+            matches!(
+                python,
+                PythonInstallation {
+                    source: PythonSource::SearchPath,
+                    interpreter: _
+                }
+            ),
+            "We should find a python; got {python:?}"
+        );
+        assert_eq!(
+            &python.interpreter().python_full_version().to_string(),
+            "3.11.5",
+            "We should find the latest version (3.11.5)"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_latest_with_prereleases() -> Result<()> {
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.10.1", "3.11.2", "3.12.0rc1", "3.13.0a1"])?;
+
+        let python = context.run(|| {
+            find_python_installation(
+                &PythonRequest::Latest,
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })??;
+
+        assert_eq!(
+            &python.interpreter().python_full_version().to_string(),
+            "3.11.2",
+            "Latest should find the highest stable version"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_latest_no_pythons() -> Result<()> {
+        let context = TestContext::new()?;
+        // Don't add any Python versions
+
+        let result = context.run(|| {
+            find_python_installation(
+                &PythonRequest::Latest,
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })?;
+
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
+            "We should not find any python when none are available; got {result:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn find_python_latest_only_prereleases() -> Result<()> {
+        let mut context = TestContext::new()?;
+        context.add_python_versions(&["3.12.0rc1", "3.13.0a1", "3.11.0b2"])?;
+
+        let result = context.run(|| {
+            find_python_installation(
+                &PythonRequest::Latest,
+                EnvironmentPreference::Any,
+                PythonPreference::OnlySystem,
+                &context.cache,
+            )
+        })?;
+
+        assert!(
+            matches!(result, Err(PythonNotFound { .. })),
+            "We should not find any python when only prereleases are available; got {result:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn find_python_from_conda_prefix() -> Result<()> {
         let context = TestContext::new()?;
         let condaenv = context.tempdir.child("condaenv");

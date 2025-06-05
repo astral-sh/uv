@@ -51,6 +51,8 @@ pub enum PythonRequest {
     /// Any Python installation
     Any,
     /// A Python version without an implementation name e.g. `3.10` or `>=3.12,<3.13`
+    Latest,
+    // Newest resolvable, stable Python version.
     Version(VersionRequest),
     /// A path to a directory containing a Python installation, e.g. `.venv`
     Directory(PathBuf),
@@ -1041,6 +1043,19 @@ pub fn find_python_installations<'a>(
                 .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
+        PythonRequest::Latest => Box::new({
+            debug!("Searching for latest Python interpreter in {sources}");
+            python_interpreters(&VersionRequest::Any, None, environments, preference, cache)
+                .filter_ok(|(_source, interpreter)| interpreter.python_version().pre().is_none())
+                .max_by_key(|result| {
+                    result
+                        .as_ref()
+                        .map(|(_, interpreter)| interpreter.python_version().clone())
+                        .ok()
+                })
+                .into_iter()
+                .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
+        }),
     }
 }
 
@@ -1493,7 +1508,7 @@ impl PythonRequest {
         }
 
         match self {
-            PythonRequest::Default | PythonRequest::Any => true,
+            PythonRequest::Default | PythonRequest::Any | PythonRequest::Latest => true,
             PythonRequest::Version(version_request) => {
                 version_request.matches_interpreter(interpreter)
             }
@@ -1582,7 +1597,7 @@ impl PythonRequest {
     /// Whether this request opts-in to a pre-release Python version.
     pub(crate) fn allows_prereleases(&self) -> bool {
         match self {
-            Self::Default => false,
+            Self::Default | Self::Latest => false,
             Self::Any => true,
             Self::Version(version) => version.allows_prereleases(),
             Self::Directory(_) | Self::File(_) | Self::ExecutableName(_) => true,
@@ -1595,7 +1610,7 @@ impl PythonRequest {
     /// Whether this request opts-in to an alternative Python implementation, e.g., PyPy.
     pub(crate) fn allows_alternative_implementations(&self) -> bool {
         match self {
-            Self::Default => false,
+            Self::Default | Self::Latest => false,
             Self::Any => true,
             Self::Version(_) => false,
             Self::Directory(_) | Self::File(_) | Self::ExecutableName(_) => true,
@@ -1616,6 +1631,7 @@ impl PythonRequest {
         match self {
             Self::Any => "any".to_string(),
             Self::Default => "default".to_string(),
+            Self::Latest => "latest".to_string(),
             Self::Version(version) => version.to_string(),
             Self::Directory(path) => path.display().to_string(),
             Self::File(path) => path.display().to_string(),
@@ -2518,6 +2534,7 @@ impl fmt::Display for PythonRequest {
         match self {
             Self::Default => write!(f, "a default Python"),
             Self::Any => write!(f, "any Python"),
+            Self::Latest => write!(f, "latest stable Python"),
             Self::Version(version) => write!(f, "Python {version}"),
             Self::Directory(path) => write!(f, "directory `{}`", path.user_display()),
             Self::File(path) => write!(f, "path `{}`", path.user_display()),

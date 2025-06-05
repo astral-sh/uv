@@ -636,13 +636,7 @@ async fn get_or_create_environment(
             Target::Version(_, _, _, version) => Some(PythonRequest::Version(
                 VersionRequest::from_str(&version.to_string()).map_err(anyhow::Error::from)?,
             )),
-            // TODO(zanieb): Add `PythonRequest::Latest`
-            Target::Latest(_, _, _) => {
-                return Err(anyhow::anyhow!(
-                    "Requesting the 'latest' Python version is not yet supported"
-                )
-                .into())
-            }
+            Target::Latest(_, _, _) => Some(PythonRequest::Latest),
         };
 
         if let Some(target_request) = &target_request {
