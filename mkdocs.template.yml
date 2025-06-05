@@ -17,6 +17,7 @@ theme:
     - navigation.top
     - content.code.copy
     - content.tabs.link
+    - content.action.edit
   palette:
     # Note: Using the system theme works with the insiders version
     # https://squidfunk.github.io/mkdocs-material/setup/changing-the-colors/#automatic-light-dark-mode
@@ -40,6 +41,7 @@ repo_name: uv
 site_author: charliermarsh
 site_url: https://docs.astral.sh/uv/
 site_dir: site/uv
+edit_uri: blob/main/docs/ # Specify the correct branch and path for docs edit button
 markdown_extensions:
   - admonition
   - pymdownx.details
