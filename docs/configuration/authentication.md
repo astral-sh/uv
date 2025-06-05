@@ -25,32 +25,45 @@ When using a GitHub personal access token, the username is arbitrary. GitHub doe
 logging in with password directly, although other hosts may. If a username is provided without
 credentials, you will be prompted to enter them.
 
+If there are no credentials present in the URL and authentication is needed, the
+[Git credential helper](#git-credential-helpers) will be queried.
+
 !!! important
 
-    If you use `uv add <url>` with a password or token in the URL as above, that credential will
-    _not_ be saved in `pyproject.toml` or `uv.lock`, because those files are often checked-in and
-    published. In that case, uv will probably fail with authentication errors the next time it tries
-    to fetch the new dependency, for example if you delete the lockfile or clone your project on a
-    new machine. It's better to configure Git to use your credential automatically as follows.
+    When using `uv add`, uv will _not_ persist Git credentials to the `pyproject.toml` or `uv.lock`.
+    These files are often included in source control and distributions, so it is generally unsafe
+    to include credentials in them.
 
-If there are no credentials present in the URL and authentication is needed, the
-[Git credential helper](https://git-scm.com/doc/credential-helpers) will be queried. If you're using
-GitHub, the simplest way to set up a credential helper is to
-[install the `gh` utility](https://github.com/cli/cli#installation) and run:
+    If you have a Git credential helper configured, your credentials may be automatically persisted,
+    resulting in successful subsequent fetches of the dependency. However, if you do not have a Git
+    credential helper or the project is used on a machine without credentials seeded, uv will fail to
+    fetch the dependency.
+
+    You _may_ force uv to persist Git credentials by passing the `--raw` option to `uv add`. However,
+    we strongly recommend setting up a [credential helper](#git-credential-helpers) instead.
+
+### Git credential helpers
+
+Git credential helpers are used to store and retrieve Git credentials. See the
+[Git documentation](https://git-scm.com/doc/credential-helpers) to learn more.
+
+If you're using GitHub, the simplest way to set up a credential helper is to
+[install the `gh` CLI](https://github.com/cli/cli#installation) and use:
 
 ```console
 $ gh auth login
 ```
 
-See the [`gh auth login`](https://cli.github.com/manual/gh_auth_login) docs. uv runs Git internally
-when fetching Git dependencies, so it benefits from this configuration automatically.
+See the [`gh auth login`](https://cli.github.com/manual/gh_auth_login) documentation for more
+details.
 
 !!! note
 
-    If you run `gh auth login` interactively, it will set up `~/.gitconfig` for you. But if you use
-    `gh auth login --with-token`, as in our [GitHub Actions integration
-    docs](../guides/integration/github.md#private-repos), you need to run [`gh auth
-    setup-git`](https://cli.github.com/manual/gh_auth_setup-git) explicitly afterwards.
+    When using `gh auth login` interactively, the credential helper will be configured automatically.
+    But when using `gh auth login --with-token`, as in the uv
+    [GitHub Actions guide](../guides/integration/github.md#private-repos), the
+    [`gh auth setup-git`](https://cli.github.com/manual/gh_auth_setup-git) command will need to be
+    run afterwards to configure the credential helper.
 
 ## HTTP authentication
 

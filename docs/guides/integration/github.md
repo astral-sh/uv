@@ -349,19 +349,19 @@ To opt-out again, the `--no-system` flag can be used in any uv invocation.
 
 ## Private repos
 
-If your project has [Git dependencies](../../concepts/projects/dependencies.md#git) that are private
-GitHub repositories, you might need to set up a [personal access token (PAT)][PAT] to allow uv to
-fetch them. After creating a PAT that has read access to the private repos you need, expose it to
-your CI environment as a ["repository secret"]. Let's call it `MY_PAT`. You can then use the
-[`gh`](https://cli.github.com/) tool, which is installed in GitHub Actions runners by default, to
-create or update `~/.gitconfig` such that Git uses your PAT whenever it talks to `github.com`. uv
-runs Git internally when fetching Git dependencies, so it benefits from this configuration
-automatically.
+If your project has [dependencies](../../concepts/projects/dependencies.md#git) on private GitHub
+repositories, you will need to configure a [personal access token (PAT)][PAT] to allow uv to fetch
+them.
 
-[PAT]:
-  https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
-["repository secret"]:
-  https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-a-repository
+After creating a PAT that has read access to the private repositories, add it as a [repository
+secret].
+
+Then, you can use the [`gh`](https://cli.github.com/) CLI (which is installed in GitHub Actions
+runners by default) to configure a
+[credential helper for Git](../../configuration/authentication.md#git-credential-helpers) to use the
+PAT for queries to repositories hosted on `github.com`.
+
+For example, if you called your secret `MY_PAT`:
 
 ```yaml title="example.yml"
 steps:
@@ -370,3 +370,8 @@ steps:
   - name: Configure the Git credential helper
     run: gh auth setup-git
 ```
+
+[PAT]:
+  https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
+["repository secret"]:
+  https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-a-repository
