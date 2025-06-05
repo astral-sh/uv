@@ -16,9 +16,10 @@ We'll start with an overview of developing with `pip`, then discuss migrating to
     If you're familiar with the ecosystem, you can jump ahead to the
     [requirements file import](#importing-requirements-files) instructions.
 
-## Requirements
+## Project dependencies
 
-In the most basic form, when your project requires a package, you can install it with `pip`, e.g.:
+When you want to use a package in your project, you need to install it first. `pip` supports
+imperative installation of packages, e.g.:
 
 ```console
 $ pip install fastapi
@@ -77,7 +78,11 @@ used.
 
 These dependencies can be compiled into a `requirements.txt` file:
 
-```text title="requirements.txt"
+```console
+$ pip compile requirements.in -o requirements.txt
+```
+
+```python title="requirements.txt"
 annotated-types==0.7.0
     # via pydantic
 anyio==4.8.0
@@ -144,7 +149,7 @@ The requirements file format can only describe a single set of dependencies at o
 you have additional _groups_ of dependencies, such as development dependencies, they need separate
 files. For example, we'll create a `-dev` dependency file:
 
-```text title="requirements-dev.in"
+```python title="requirements-dev.in"
 -r requirements.in
 -c requirements.txt
 
@@ -231,20 +236,20 @@ multiple platforms, such as Windows and macOS.
 
 For example, take a simple dependency:
 
-```text title="requirements.in"
+```python title="requirements.in"
 tqdm
 ```
 
 On Linux, this compiles to:
 
-```text title="requirements-linux.txt"
+```python title="requirements-linux.txt"
 tqdm==4.67.1
     # via -r requirements.in
 ```
 
 While on Windows, this compiles to:
 
-```text title="requirements-win.txt"
+```python title="requirements-win.txt"
 colorama==0.4.6
     # via tqdm
 tqdm==4.67.1
@@ -265,7 +270,7 @@ supported platform.
         $ uv pip compile --universal requirements.in
         ```
 
-        ```text title="requirements.txt"
+        ```python title="requirements.txt"
         colorama==0.4.6 ; sys_platform == 'win32'
             # via tqdm
         tqdm==4.67.1
@@ -340,7 +345,7 @@ describing the environment and will consequently conflict.
 To add the necessary markers, use `uv pip compile` to convert your existing files. For example,
 given the following:
 
-```text title="requirements-win.txt"
+```python title="requirements-win.txt"
 colorama==0.4.6
     # via tqdm
 tqdm==4.67.1
@@ -355,7 +360,7 @@ $ uv pip compile requirements.in -o requirements-win.txt --python-platform windo
 
 Notice the resulting output includes a Windows marker on `colorama`:
 
-```text title="requirements-win.txt"
+```python title="requirements-win.txt"
 colorama==0.4.6 ; sys_platform == 'win32'
     # via tqdm
 tqdm==4.67.1
@@ -395,7 +400,7 @@ $ uv add -r requirements-docs.in -c requirements-docs.txt --group docs
 
 ## Project environments
 
-Unlike pip, uv is not centered around the concept of an "active" virtual environment. Instead, uv
+Unlike `pip`, uv is not centered around the concept of an "active" virtual environment. Instead, uv
 uses a dedicated virtual environment for each project in a `.venv` directory. This environment is
 automatically managed, so when you run a command, like `uv add`, the environment is synced with the
 project dependencies.
