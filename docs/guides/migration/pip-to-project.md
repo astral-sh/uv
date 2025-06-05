@@ -49,7 +49,7 @@ We will revisit this topic in the [project environments section](#project-enviro
 When sharing projects with others, it's useful to declare all the packages you require upfront.
 `pip` supports installing requirements from a file, e.g.:
 
-```text title="requirements.txt"
+```python title="requirements.txt"
 fastapi
 ```
 
@@ -66,7 +66,7 @@ dependencies to a specific version — the file extension is used to differentia
 For example, if you require `fastapi` and `pydantic`, you'd specify these in a `requirements.in`
 file:
 
-```text title="requirements.in"
+```python title="requirements.in"
 fastapi
 pydantic>2
 ```
@@ -115,7 +115,7 @@ $ pip install -r requirements.in
 $ pip freeze > requirements.txt
 ```
 
-```text title="requirements.txt"
+```python title="requirements.txt"
 annotated-types==0.7.0
 anyio==4.8.0
 fastapi==0.115.11
@@ -166,7 +166,7 @@ package version to ensure that the `requirements-dev.txt` uses the same versions
 
 The compiled development dependencies look like:
 
-```text title="requirements-dev.txt"
+```python title="requirements-dev.txt"
 annotated-types==0.7.0
     # via
     #   -c requirements.txt
@@ -310,9 +310,9 @@ To learn more, see the [lockfile](../../concepts/projects/layout.md#the-lockfile
 
 ## Importing requirements files
 
-The simpest way to import requirements is with `uv add`:
+The simplest way to import requirements is with `uv add`:
 
-```
+```console
 $ uv add -r requirements.in
 ```
 
@@ -322,9 +322,9 @@ may want to continue using your previously locked versions from your `requiremen
 switching over to uv, none of your dependency versions change.
 
 The solution is to add your locked versions as _constraints_. uv supports using these on `add` to
-preserved locked versions:
+preserve locked versions:
 
-```
+```console
 $ uv add -r requirements.in -c requirements.txt
 ```
 
@@ -377,7 +377,7 @@ $ uv add -r requirements.in -c requirements-win.txt -c requirements-linux.txt
 ### Importing development dependency files
 
 As discussed in the [development dependencies](#development-dependencies) section, it's common to
-have have groups of dependencies for development purposes.
+have groups of dependencies for development purposes.
 
 To import development dependencies, use the `--dev` flag during `uv add`:
 
