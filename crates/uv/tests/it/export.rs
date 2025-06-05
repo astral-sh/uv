@@ -1230,8 +1230,9 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
 
     // Ensure that we fail without passing the correct key (and don't go to the dev machine's
     // credential helper).
+    // Overriding UserKnownHostsFile prevents OpenSSH from writing into user's home directory.
     let failing_git_ssh_command = format!(
-        "ssh -i {} -o IdentitiesOnly=yes -F /dev/null -o StrictHostKeyChecking=no",
+        "ssh -i {} -o IdentitiesOnly=yes -F /dev/null -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
         fake_deploy_key.portable_display()
     );
     let mut filters = context.filters();
@@ -1274,9 +1275,9 @@ fn requirements_txt_ssh_git_username() -> Result<()> {
     reduce_ssh_key_file_permissions(&ssh_deploy_key)?;
 
     // Use the specified SSH key, and only that key, ignore `~/.ssh/config`, disable host key
-    // verification for Windows.
+    // verification for Windows, don't write the accepted host to the user home.
     let git_ssh_command = format!(
-        "ssh -i {} -o IdentitiesOnly=yes -F /dev/null -o StrictHostKeyChecking=no",
+        "ssh -i {} -o IdentitiesOnly=yes -F /dev/null -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
         ssh_deploy_key.portable_display()
     );
 
