@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::sync::OnceLock;
+use std::{env, io};
 
 use configparser::ini::Ini;
 use fs_err as fs;
@@ -17,7 +17,7 @@ use tracing::{debug, trace, warn};
 use uv_cache::{Cache, CacheBucket, CachedByTimestamp, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
-use uv_fs::{PythonExt, Simplified, write_atomic_sync};
+use uv_fs::{LockedFile, PythonExt, Simplified, write_atomic_sync};
 use uv_install_wheel::Layout;
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, StringVersion};
@@ -580,6 +580,31 @@ impl Interpreter {
             .executable_names(None)
             .into_iter()
             .any(|default_name| name == default_name.to_string())
+    }
+
+    /// Grab a file lock for the environment to prevent concurrent writes across processes.
+    pub async fn lock(&self) -> Result<LockedFile, io::Error> {
+        if let Some(target) = self.target() {
+            // If we're installing into a `--target`, use a target-specific lockfile.
+            LockedFile::acquire(target.root().join(".lock"), target.root().user_display()).await
+        } else if let Some(prefix) = self.prefix() {
+            // Likewise, if we're installing into a `--prefix`, use a prefix-specific lockfile.
+            LockedFile::acquire(prefix.root().join(".lock"), prefix.root().user_display()).await
+        } else if self.is_virtualenv() {
+            // If the environment a virtualenv, use a virtualenv-specific lockfile.
+            LockedFile::acquire(
+                self.sys_prefix.join(".lock"),
+                self.sys_prefix.user_display(),
+            )
+            .await
+        } else {
+            // Otherwise, use a global lockfile.
+            LockedFile::acquire(
+                env::temp_dir().join(format!("uv-{}.lock", cache_digest(&self.sys_executable))),
+                self.sys_prefix.user_display(),
+            )
+            .await
+        }
     }
 }
 

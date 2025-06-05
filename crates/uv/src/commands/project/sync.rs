@@ -166,6 +166,8 @@ pub(crate) async fn sync(
         ),
     };
 
+    let _lock = environment.lock().await?;
+
     // Notify the user of any environment changes.
     match &environment {
         SyncEnvironment::Project(ProjectEnvironment::Existing(environment))

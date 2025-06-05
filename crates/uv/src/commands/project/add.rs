@@ -26,7 +26,7 @@ use uv_distribution_types::{
     Index, IndexName, IndexUrls, NameRequirementSpecification, Requirement, RequirementSource,
     UnresolvedRequirement, VersionId,
 };
-use uv_fs::Simplified;
+use uv_fs::{LockedFile, Simplified};
 use uv_git::GIT_STORE;
 use uv_git_types::GitReference;
 use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras, PackageName};
@@ -276,6 +276,8 @@ pub(crate) async fn add(
             AddTarget::Project(project, Box::new(PythonTarget::Environment(environment)))
         }
     };
+
+    let _lock = target.acquire_lock().await?;
 
     let client_builder = BaseClientBuilder::new()
         .connectivity(network_settings.connectivity)
@@ -1152,6 +1154,15 @@ impl<'lock> From<&'lock AddTarget> for LockTarget<'lock> {
 }
 
 impl AddTarget {
+    /// Acquire a file lock mapped to the underlying interpreter to prevent concurrent
+    /// modifications.
+    pub(super) async fn acquire_lock(&self) -> Result<LockedFile, io::Error> {
+        match self {
+            Self::Script(_, interpreter) => interpreter.lock().await,
+            Self::Project(_, python_target) => python_target.interpreter().lock().await,
+        }
+    }
+
     /// Returns the [`Interpreter`] for the target.
     pub(super) fn interpreter(&self) -> &Interpreter {
         match self {
