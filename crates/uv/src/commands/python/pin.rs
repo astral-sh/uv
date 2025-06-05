@@ -60,6 +60,9 @@ pub(crate) async fn pin(
 
     if rm {
         let Some(file) = version_file? else {
+            if global {
+                bail!("No global Python pin found");
+            }
             bail!("No Python version file found");
         };
         fs_err::tokio::remove_file(file.path()).await?;
@@ -87,7 +90,7 @@ pub(crate) async fn pin(
             }
             return Ok(ExitStatus::Success);
         }
-        bail!("No pinned Python version found")
+        bail!("No Python version file found; specify a version to create one")
     };
     let request = PythonRequest::parse(&request);
 
