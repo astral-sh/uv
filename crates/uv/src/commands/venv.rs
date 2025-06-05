@@ -13,14 +13,15 @@ use thiserror::Error;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    BuildOptions, Concurrency, ConfigSettings, Constraints, IndexStrategy, KeyringProviderType,
-    NoBinary, NoBuild, PreviewMode, SourceStrategy,
+    BuildOptions, Concurrency, ConfigSettings, Constraints, DependencyGroups, IndexStrategy,
+    KeyringProviderType, NoBinary, NoBuild, PreviewMode, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_types::Requirement;
 use uv_distribution_types::{DependencyMetadata, Index, IndexLocations};
 use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
+use uv_normalize::DefaultGroups;
 use uv_python::{
     EnvironmentPreference, PythonDownloads, PythonInstallation, PythonPreference, PythonRequest,
 };
@@ -38,6 +39,8 @@ use crate::commands::project::{WorkspacePython, validate_project_requires_python
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
+
+use super::project::default_dependency_groups;
 
 /// Create a virtual environment.
 #[allow(clippy::unnecessary_wraps, clippy::fn_params_excessive_bools)]
@@ -197,6 +200,13 @@ async fn venv_impl(
 
     let reporter = PythonDownloadReporter::single(printer);
 
+    // If the default dependency-groups demand a higher requires-python
+    // we should bias an empty venv to that to avoid churn.
+    let default_groups = match &project {
+        Some(project) => default_dependency_groups(project.pyproject_toml()).into_diagnostic()?,
+        None => DefaultGroups::default(),
+    };
+    let groups = DependencyGroups::default().with_defaults(default_groups);
     let WorkspacePython {
         source,
         python_request,
@@ -204,6 +214,7 @@ async fn venv_impl(
     } = WorkspacePython::from_request(
         python_request.map(PythonRequest::parse),
         project.as_ref().map(VirtualProject::workspace),
+        &groups,
         project_dir,
         no_config,
     )

@@ -313,7 +313,7 @@ pub(crate) struct RunSettings {
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DependencyGroups,
+    pub(crate) groups: DependencyGroups,
     pub(crate) editable: EditableMode,
     pub(crate) modifications: Modifications,
     pub(crate) with: Vec<String>,
@@ -404,7 +404,7 @@ impl RunSettings {
                 vec![],
                 flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
-            dev: DependencyGroups::from_args(
+            groups: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -1098,7 +1098,7 @@ pub(crate) struct SyncSettings {
     pub(crate) script: Option<PathBuf>,
     pub(crate) active: Option<bool>,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DependencyGroups,
+    pub(crate) groups: DependencyGroups,
     pub(crate) editable: EditableMode,
     pub(crate) install_options: InstallOptions,
     pub(crate) modifications: Modifications,
@@ -1180,7 +1180,7 @@ impl SyncSettings {
                 vec![],
                 flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
-            dev: DependencyGroups::from_args(
+            groups: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -1578,7 +1578,7 @@ impl VersionSettings {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone)]
 pub(crate) struct TreeSettings {
-    pub(crate) dev: DependencyGroups,
+    pub(crate) groups: DependencyGroups,
     pub(crate) locked: bool,
     pub(crate) frozen: bool,
     pub(crate) universal: bool,
@@ -1626,7 +1626,7 @@ impl TreeSettings {
             .unwrap_or_default();
 
         Self {
-            dev: DependencyGroups::from_args(
+            groups: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,
@@ -1664,7 +1664,7 @@ pub(crate) struct ExportSettings {
     pub(crate) package: Option<PackageName>,
     pub(crate) prune: Vec<PackageName>,
     pub(crate) extras: ExtrasSpecification,
-    pub(crate) dev: DependencyGroups,
+    pub(crate) groups: DependencyGroups,
     pub(crate) editable: EditableMode,
     pub(crate) hashes: bool,
     pub(crate) install_options: InstallOptions,
@@ -1739,7 +1739,7 @@ impl ExportSettings {
                 vec![],
                 flag(all_extras, no_all_extras).unwrap_or_default(),
             ),
-            dev: DependencyGroups::from_args(
+            groups: DependencyGroups::from_args(
                 dev,
                 no_dev,
                 only_dev,

@@ -16,7 +16,8 @@ use uv_cache::{Cache, CacheBucket};
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     BuildKind, BuildOptions, BuildOutput, Concurrency, ConfigSettings, Constraints,
-    HashCheckingMode, IndexStrategy, KeyringProviderType, PreviewMode, SourceStrategy,
+    DependencyGroupsWithDefaults, HashCheckingMode, IndexStrategy, KeyringProviderType,
+    PreviewMode, SourceStrategy,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution_filename::{
@@ -473,7 +474,8 @@ async fn build_package(
     // (3) `Requires-Python` in `pyproject.toml`
     if interpreter_request.is_none() {
         if let Ok(workspace) = workspace {
-            interpreter_request = find_requires_python(workspace)?
+            let groups = DependencyGroupsWithDefaults::none();
+            interpreter_request = find_requires_python(workspace, &groups)?
                 .as_ref()
                 .map(RequiresPython::specifiers)
                 .map(|specifiers| {

@@ -12,7 +12,8 @@ use tracing::debug;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
-    Concurrency, Constraints, DryRun, ExtrasSpecification, PreviewMode, Reinstall, Upgrade,
+    Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
+    PreviewMode, Reinstall, Upgrade,
 };
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
@@ -142,6 +143,8 @@ pub(crate) async fn lock(
             LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
                 workspace,
                 project_dir,
+                // Don't enable any groups' requires-python for interpretter discovery
+                &DependencyGroupsWithDefaults::none(),
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,
                 python_preference,

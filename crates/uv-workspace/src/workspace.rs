@@ -8,6 +8,7 @@ use glob::{GlobError, PatternError, glob};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace, warn};
 
+use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::{Index, Requirement, RequirementSource};
 use uv_fs::{CWD, Simplified};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
@@ -414,14 +415,49 @@ impl Workspace {
     }
 
     /// Returns an iterator over the `requires-python` values for each member of the workspace.
-    pub fn requires_python(&self) -> impl Iterator<Item = (&PackageName, &VersionSpecifiers)> {
-        self.packages().iter().filter_map(|(name, member)| {
-            member
+    pub fn requires_python(
+        &self,
+        groups: &DependencyGroupsWithDefaults,
+    ) -> impl Iterator<Item = (&PackageName, &VersionSpecifiers)> {
+        self.packages().iter().flat_map(move |(name, member)| {
+            // Get the top-level requires-python for this package, which is always active
+            //
+            // Arguably we could check groups.prod() to disable this, since, the requires-python
+            // of the project is *technically* not relevant if you're doing `--only-group`, but,
+            // that would be a big surprising change so let's *not* do that until someone asks!
+            let top_requires = member
                 .pyproject_toml()
                 .project
                 .as_ref()
                 .and_then(|project| project.requires_python.as_ref())
-                .map(|requires_python| (name, requires_python))
+                .map(|requires_python| (name, requires_python));
+
+            // Get the requires-python for each enabled group on this package
+            let group_requires = member
+                .pyproject_toml()
+                .tool
+                .as_ref()
+                .and_then(|tool| tool.uv.as_ref())
+                .and_then(|uv| uv.dependency_groups.as_ref())
+                .map(move |settings| {
+                    settings
+                        .inner()
+                        .iter()
+                        .filter_map(move |(group_name, settings)| {
+                            if groups.contains(group_name) {
+                                settings
+                                    .requires_python
+                                    .as_ref()
+                                    .map(|requires_python| (name, requires_python))
+                            } else {
+                                None
+                            }
+                        })
+                })
+                .into_iter()
+                .flatten();
+
+            top_requires.into_iter().chain(group_requires)
         })
     }
 

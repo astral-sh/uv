@@ -11,7 +11,8 @@ use uv_cache::Cache;
 use uv_cli::AuthorFrom;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    PreviewMode, ProjectBuildBackend, VersionControlError, VersionControlSystem,
+    DependencyGroupsWithDefaults, PreviewMode, ProjectBuildBackend, VersionControlError,
+    VersionControlSystem,
 };
 use uv_fs::{CWD, Simplified};
 use uv_git::GIT;
@@ -502,7 +503,7 @@ async fn init_project(
         (requires_python, python_request)
     } else if let Some(requires_python) = workspace
         .as_ref()
-        .map(find_requires_python)
+        .map(|workspace| find_requires_python(workspace, &DependencyGroupsWithDefaults::none()))
         .transpose()?
         .flatten()
     {

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use itertools::Either;
 
-use uv_configuration::SourceStrategy;
+use uv_configuration::{DependencyGroupsWithDefaults, SourceStrategy};
 use uv_distribution::LoweredRequirement;
 use uv_distribution_types::{Index, IndexLocations, Requirement, RequiresPython};
 use uv_normalize::{GroupName, PackageName};
@@ -219,7 +219,11 @@ impl<'lock> LockTarget<'lock> {
     #[allow(clippy::result_large_err)]
     pub(crate) fn requires_python(self) -> Result<Option<RequiresPython>, ProjectError> {
         match self {
-            Self::Workspace(workspace) => find_requires_python(workspace),
+            Self::Workspace(workspace) => {
+                // TODO(Gankra): I'm not sure if this should be none of the groups or *all*
+                let groups = DependencyGroupsWithDefaults::none();
+                find_requires_python(workspace, &groups)
+            }
             Self::Script(script) => Ok(script
                 .metadata
                 .requires_python

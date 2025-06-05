@@ -287,7 +287,7 @@ pub(crate) struct ConflictError {
     /// The items from the set that were enabled, and thus create the conflict.
     pub(crate) conflicts: Vec<ConflictPackage>,
     /// Enabled dependency groups with defaults applied.
-    pub(crate) dev: DependencyGroupsWithDefaults,
+    pub(crate) groups: DependencyGroupsWithDefaults,
 }
 
 impl std::fmt::Display for ConflictError {
@@ -339,7 +339,7 @@ impl std::fmt::Display for ConflictError {
                         .iter()
                         .map(|conflict| match conflict {
                             ConflictPackage::Group(group)
-                                if self.dev.contains_because_default(group) =>
+                                if self.groups.contains_because_default(group) =>
                                 format!("`{group}` (enabled by default)"),
                             ConflictPackage::Group(group) => format!("`{group}`"),
                             ConflictPackage::Extra(..) => unreachable!(),
@@ -359,7 +359,7 @@ impl std::fmt::Display for ConflictError {
                             let conflict = match conflict {
                                 ConflictPackage::Extra(extra) => format!("extra `{extra}`"),
                                 ConflictPackage::Group(group)
-                                    if self.dev.contains_because_default(group) =>
+                                    if self.groups.contains_because_default(group) =>
                                 {
                                     format!("group `{group}` (enabled by default)")
                                 }
@@ -430,20 +430,21 @@ impl PlatformState {
 #[allow(clippy::result_large_err)]
 pub(crate) fn find_requires_python(
     workspace: &Workspace,
+    groups: &DependencyGroupsWithDefaults,
 ) -> Result<Option<RequiresPython>, ProjectError> {
     // If there are no `Requires-Python` specifiers in the workspace, return `None`.
-    if workspace.requires_python().next().is_none() {
+    if workspace.requires_python(groups).next().is_none() {
         return Ok(None);
     }
     match RequiresPython::intersection(
         workspace
-            .requires_python()
+            .requires_python(groups)
             .map(|(.., specifiers)| specifiers),
     ) {
         Some(requires_python) => Ok(Some(requires_python)),
         None => Err(ProjectError::DisjointRequiresPython(
             workspace
-                .requires_python()
+                .requires_python(groups)
                 .map(|(name, specifiers)| (name.clone(), specifiers.clone()))
                 .collect(),
         )),
@@ -875,6 +876,7 @@ impl ProjectInterpreter {
     pub(crate) async fn discover(
         workspace: &Workspace,
         project_dir: &Path,
+        groups: &DependencyGroupsWithDefaults,
         python_request: Option<PythonRequest>,
         network_settings: &NetworkSettings,
         python_preference: PythonPreference,
@@ -891,8 +893,14 @@ impl ProjectInterpreter {
             source,
             python_request,
             requires_python,
-        } = WorkspacePython::from_request(python_request, Some(workspace), project_dir, no_config)
-            .await?;
+        } = WorkspacePython::from_request(
+            python_request,
+            Some(workspace),
+            groups,
+            project_dir,
+            no_config,
+        )
+        .await?;
 
         // Read from the virtual environment first.
         let root = workspace.venv(active);
@@ -1082,10 +1090,14 @@ impl WorkspacePython {
     pub(crate) async fn from_request(
         python_request: Option<PythonRequest>,
         workspace: Option<&Workspace>,
+        groups: &DependencyGroupsWithDefaults,
         project_dir: &Path,
         no_config: bool,
     ) -> Result<Self, ProjectError> {
-        let requires_python = workspace.map(find_requires_python).transpose()?.flatten();
+        let requires_python = workspace
+            .map(|workspace| find_requires_python(workspace, groups))
+            .transpose()?
+            .flatten();
 
         let workspace_root = workspace.map(Workspace::install_path);
 
@@ -1166,6 +1178,8 @@ impl ScriptPython {
         } = WorkspacePython::from_request(
             python_request,
             workspace,
+            // Scripts have no groups to hang requires-python settings off of
+            &DependencyGroupsWithDefaults::none(),
             script.path().and_then(Path::parent).unwrap_or(&**CWD),
             no_config,
         )
@@ -1232,6 +1246,7 @@ impl ProjectEnvironment {
     /// Initialize a virtual environment for the current project.
     pub(crate) async fn get_or_init(
         workspace: &Workspace,
+        groups: &DependencyGroupsWithDefaults,
         python: Option<PythonRequest>,
         install_mirrors: &PythonInstallMirrors,
         network_settings: &NetworkSettings,
@@ -1250,6 +1265,7 @@ impl ProjectEnvironment {
         match ProjectInterpreter::discover(
             workspace,
             workspace.install_path().as_ref(),
+            groups,
             python,
             network_settings,
             python_preference,
@@ -2435,7 +2451,7 @@ pub(crate) fn default_dependency_groups(
 pub(crate) fn detect_conflicts(
     lock: &Lock,
     extras: &ExtrasSpecification,
-    dev: &DependencyGroupsWithDefaults,
+    groups: &DependencyGroupsWithDefaults,
 ) -> Result<(), ProjectError> {
     // Note that we need to collect all extras and groups that match in
     // a particular set, since extras can be declared as conflicting with
@@ -2454,7 +2470,7 @@ pub(crate) fn detect_conflicts(
             }
             if item
                 .group()
-                .map(|group| dev.contains(group))
+                .map(|group| groups.contains(group))
                 .unwrap_or(false)
             {
                 conflicts.push(item.conflict().clone());
@@ -2464,7 +2480,7 @@ pub(crate) fn detect_conflicts(
             return Err(ProjectError::Conflict(ConflictError {
                 set: set.clone(),
                 conflicts,
-                dev: dev.clone(),
+                groups: groups.clone(),
             }));
         }
     }
