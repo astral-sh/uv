@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use crate::common::{TestContext, uv_snapshot};
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use insta::assert_snapshot;
 use uv_python::{
@@ -813,4 +814,64 @@ fn python_pin_with_comments() -> Result<()> {
     "###);
 
     Ok(())
+}
+
+#[test]
+fn python_pin_rm() {
+    let context: TestContext = TestContext::new_with_versions(&["3.12"]);
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No Python version file found
+    ");
+
+    // Remove the local pin
+    context.python_pin().arg("3.12").assert().success();
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed Python version file at `.python-version`
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm").arg("--global"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No Python version file found
+    ");
+
+    // Global does not detect the local pin
+    context.python_pin().arg("3.12").assert().success();
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm").arg("--global"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No Python version file found
+    ");
+
+    context
+        .python_pin()
+        .arg("3.12")
+        .arg("--global")
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm").arg("--global"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed Python version file at `[UV_USER_CONFIG_DIR]/.python-version`
+
+    ----- stderr -----
+    ");
 }

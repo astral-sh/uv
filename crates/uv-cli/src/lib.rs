@@ -5032,6 +5032,10 @@ pub struct PythonPinArgs {
     /// directory, this version will be used instead.
     #[arg(long)]
     pub global: bool,
+
+    /// Remove the Python version pin.
+    #[arg(long, conflicts_with = "request", conflicts_with = "resolved")]
+    pub rm: bool,
 }
 
 #[derive(Args)]

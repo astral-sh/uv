@@ -2904,6 +2904,7 @@ uv python pin [OPTIONS] [REQUEST]
 </dd><dt id="uv-python-pin--resolved"><a href="#uv-python-pin--resolved"><code>--resolved</code></a></dt><dd><p>Write the resolved Python interpreter path instead of the request.</p>
 <p>Ensures that the exact same interpreter is used.</p>
 <p>This option is usually not safe to use when committing the <code>.python-version</code> file to version control.</p>
+</dd><dt id="uv-python-pin--rm"><a href="#uv-python-pin--rm"><code>--rm</code></a></dt><dd><p>Remove the Python version pin</p>
 </dd><dt id="uv-python-pin--verbose"><a href="#uv-python-pin--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>

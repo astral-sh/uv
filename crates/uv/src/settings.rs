@@ -1056,6 +1056,7 @@ pub(crate) struct PythonPinSettings {
     pub(crate) resolved: bool,
     pub(crate) no_project: bool,
     pub(crate) global: bool,
+    pub(crate) rm: bool,
 }
 
 impl PythonPinSettings {
@@ -1068,6 +1069,7 @@ impl PythonPinSettings {
             resolved,
             no_project,
             global,
+            rm,
         } = args;
 
         Self {
@@ -1075,6 +1077,7 @@ impl PythonPinSettings {
             resolved: flag(resolved, no_resolved).unwrap_or(false),
             no_project,
             global,
+            rm,
         }
     }
 }
