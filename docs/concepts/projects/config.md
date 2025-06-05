@@ -124,7 +124,7 @@ with the default build system.
 Build systems are used to power the following features:
 
 - Including or excluding files from distributions
-- Editable install behavior
+- Editable installation behavior
 - Dynamic project metadata
 - Compilation of native code
 - Vendoring shared libraries

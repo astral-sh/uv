@@ -239,7 +239,7 @@ $ uv tool upgrade --all
 
 ## Requesting Python versions
 
-By default, uv will use your default Python interpreter (the first it finds) when when running,
+By default, uv will use your default Python interpreter (the first it finds) when running,
 installing, or upgrading tools. You can specify the Python interpreter to use with the `--python`
 option.
 
@@ -262,7 +262,7 @@ $ uv tool upgrade --python 3.10 ruff
 ```
 
 For more details on requesting Python versions, see the
-[Python version](../concepts/python-versions.md#requesting-a-version) concept page..
+[Python version](../concepts/python-versions.md#requesting-a-version) concept page.
 
 ## Legacy Windows Scripts
 
