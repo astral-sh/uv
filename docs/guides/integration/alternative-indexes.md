@@ -8,8 +8,8 @@ description:
 # Using alternative package indexes
 
 While uv uses the official Python Package Index (PyPI) by default, it also supports
-[alternative package indexes](../../configuration/indexes.md). Most alternative indexes require
-various forms of authentication, which require some initial setup.
+[alternative package indexes](../../concepts/indexes.md). Most alternative indexes require various
+forms of authentication, which require some initial setup.
 
 !!! important
 

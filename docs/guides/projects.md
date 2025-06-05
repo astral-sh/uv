@@ -87,8 +87,8 @@ description or license. You can edit this file manually, or use commands like `u
     See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)
     for more details on getting started with the `pyproject.toml` format.
 
-You'll also use this file to specify uv [configuration options](../configuration/files.md) in a
-[`[tool.uv]`](../reference/settings.md) section.
+You'll also use this file to specify uv [configuration options](../concepts/configuration-files.md)
+in a [`[tool.uv]`](../reference/settings.md) section.
 
 ### `.python-version`
 

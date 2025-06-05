@@ -1,4 +1,4 @@
-# Configuring the uv installer
+# The uv installer
 
 ## Changing the install path
 

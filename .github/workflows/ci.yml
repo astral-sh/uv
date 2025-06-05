@@ -39,7 +39,7 @@ jobs:
 
           while IFS= read -r file; do
             # Generated markdown and JSON files are checked during test runs.
-            if [[ "${file}" =~ ^docs/ && ! "${file}" =~ ^docs/reference/(cli|settings).md && ! "${file}" =~ ^docs/configuration/environment.md ]]; then
+            if [[ "${file}" =~ ^docs/ && ! "${file}" =~ ^docs/reference/(cli|settings).md && ! "${file}" =~ ^docs/reference/environment.md ]]; then
               echo "Skipping ${file} (matches docs/ pattern)"
               continue
             fi
