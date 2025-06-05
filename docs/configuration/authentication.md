@@ -30,7 +30,7 @@ If there are no credentials present in the URL and authentication is needed, the
 
 !!! important
 
-    When using `uv add`, uv will _not_ persist Git credentials to the `pyproject.toml` or `uv.lock`.
+    When using `uv add`, uv _will not_ persist Git credentials to the `pyproject.toml` or `uv.lock`.
     These files are often included in source control and distributions, so it is generally unsafe
     to include credentials in them.
 
@@ -98,6 +98,19 @@ authenticating index URLs.
 
 See the [`pip` compatibility guide](../pip/compatibility.md#registry-authentication) for details on
 differences from `pip`.
+
+!!! important
+
+    When using `uv add`, uv _will not_ persist index credentials to the `pyproject.toml` or `uv.lock`.
+    These files are often included in source control and distributions, so it is generally unsafe
+    to include credentials in them. However, uv _will_ persist credentials for direct URLs, i.e.,
+    `package @ https://username:password:example.com/foo.whl`, as there is not currently a way to
+    otherwise provide those credentials.
+
+    If credentials were attached to an index URL during `uv add`, uv may fail to fetch dependencies
+    from indexes which require authentication on subsequent operations. See the
+    [index authentication documentation](./indexes.md#authentication) for details on persistent
+    authentication for indexes.
 
 ## Authentication with alternative package indexes
 
