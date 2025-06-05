@@ -256,6 +256,15 @@ impl EnvVars {
     /// for more details.
     pub const UV_PROJECT_ENVIRONMENT: &'static str = "UV_PROJECT_ENVIRONMENT";
 
+    /// Equivalent to the `--active` command line argument for commands that support it. For
+    /// example, when running inside a project or when running a script with inline metadata,
+    /// `uv run` manages its own virtual environment and ignores the caller's active environment
+    /// (i.e. the `VIRTUAL_ENV` environment variable). Similarly, `uv sync` and `uv add` expect to
+    /// run in a project, and they use the managed virtual environment by default. The active
+    /// option causes these commands to use the caller's active virtual environment instead, if
+    /// there is one.
+    pub const UV_USE_ACTIVE_ENVIRONMENT: &'static str = "UV_USE_ACTIVE_ENVIRONMENT";
+
     /// Specifies the directory to place links to installed, managed Python executables.
     pub const UV_PYTHON_BIN_DIR: &'static str = "UV_PYTHON_BIN_DIR";
 
