@@ -15,14 +15,14 @@ fn python_pin() {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
 
     // Without arguments, we attempt to read the current pin (which does not exist yet)
-    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    uv_snapshot!(context.filters(), context.python_pin(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: No pinned Python version found
-    "###);
+    error: No Python version file found; specify a version to create one
+    ");
 
     // Given an argument, we pin to that version
     uv_snapshot!(context.filters(), context.python_pin().arg("any"), @r###"
@@ -209,14 +209,14 @@ fn python_pin_global_if_no_local() -> Result<()> {
     uv.create_dir_all()?;
 
     // Without arguments, we attempt to read the current pin (which does not exist yet)
-    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    uv_snapshot!(context.filters(), context.python_pin(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: No pinned Python version found
-    "###);
+    error: No Python version file found; specify a version to create one
+    ");
 
     // Given an argument, we globally pin to that version
     uv_snapshot!(context.filters(), context.python_pin().arg("3.11").arg("--global"), @r"
@@ -846,7 +846,7 @@ fn python_pin_rm() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No Python version file found
+    error: No global Python pin found
     ");
 
     // Global does not detect the local pin
@@ -857,7 +857,7 @@ fn python_pin_rm() {
     ----- stdout -----
 
     ----- stderr -----
-    error: No Python version file found
+    error: No global Python pin found
     ");
 
     context
