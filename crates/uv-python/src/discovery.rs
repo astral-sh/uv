@@ -1059,11 +1059,9 @@ pub fn find_python_installations<'a>(
             debug!("Searching for latest Python interpreter in {sources}");
             python_interpreters(&VersionRequest::Any, None, environments, preference, cache)
                 .filter_ok(|(_source, interpreter)| interpreter.python_version().pre().is_none())
-                .max_by_key(|result| {
-                    result
-                        .as_ref()
-                        .map(|(_, interpreter)| interpreter.python_version().clone())
-                        .ok()
+                .max_by(|a, b| match (a.as_ref(), b.as_ref()) {
+                    (Ok((_, interp_a)), Ok((_, interp_b))) => interp_a.key().cmp(&interp_b.key()),
+                    _ => std::cmp::Ordering::Equal,
                 })
                 .into_iter()
                 .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
