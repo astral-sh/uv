@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::fmt::Write;
+use std::path::Path;
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -52,12 +53,14 @@ pub(crate) async fn pip_tree(
     system: bool,
     cache: &Cache,
     printer: Printer,
+    project_dir: &Path,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         cache,
+        project_dir,
     )?;
 
     report_target_environment(&environment, cache, printer)?;

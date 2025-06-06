@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -23,12 +23,14 @@ pub(crate) fn pip_freeze(
     paths: Option<Vec<PathBuf>>,
     cache: &Cache,
     printer: Printer,
+    project_dir: &Path,
 ) -> Result<ExitStatus> {
     // Detect the current Python interpreter.
     let environment = PythonEnvironment::find(
         &python.map(PythonRequest::parse).unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, false),
         cache,
+        project_dir,
     )?;
 
     report_target_environment(&environment, cache, printer)?;

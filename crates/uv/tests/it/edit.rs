@@ -139,6 +139,44 @@ fn add_registry() -> Result<()> {
     Ok(())
 }
 
+/// Add a PyPI requirement from outside the project directory respects --project
+#[test]
+fn add_registry_outside_project() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let project = context.temp_dir.child("project");
+    let pyproject_toml = project.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+    context
+        .venv()
+        .current_dir("project")
+        .arg("--project")
+        .arg("project")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.add().arg("--project").arg("project").arg("anyio==3.7.0"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
 /// Add a Git requirement.
 #[test]
 #[cfg(feature = "git")]

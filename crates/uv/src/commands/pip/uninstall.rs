@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::path::Path;
 
 use anyhow::Result;
 use itertools::{Either, Itertools};
@@ -37,6 +38,7 @@ pub(crate) async fn pip_uninstall(
     network_settings: &NetworkSettings,
     dry_run: DryRun,
     printer: Printer,
+    project_dir: &Path,
 ) -> Result<ExitStatus> {
     let start = std::time::Instant::now();
 
@@ -57,6 +59,7 @@ pub(crate) async fn pip_uninstall(
             .unwrap_or_default(),
         EnvironmentPreference::from_system_flag(system, true),
         &cache,
+        project_dir,
     )?;
 
     report_target_environment(&environment, &cache, printer)?;
