@@ -853,6 +853,77 @@ impl Version {
         // release is equal, so compare the other parts
         sortable_tuple(self).cmp(&sortable_tuple(other))
     }
+
+    /// Bump to `latest` version so it is contained in the same operator.
+    ///
+    /// Returns (bumped, upgraded): `upgraded == false` means downgraded.
+    ///
+    /// | old | latest | new |
+    /// |-|-|-|
+    /// | <0.1     | 0.1.2   | <0.2 |
+    /// | ==0.0.*  | 0.1.2   | ==0.1.* |
+    /// | ==0.2.*  | 0.1.2   | ==0.1.* |
+    /// | <1.0     | 1.2.3   | <1.3 |
+    /// | <1.0     | 2.0.0   | <2.1 |
+    /// | <1.2.3   | 1.2.3   | <1.3.0 |
+    /// | <=1.2.2  | 1.2.3   | <=1.2.3 |
+    /// | <=1.2.0  | 1.2.3   | <=1.3.0 |
+    /// | >=2.0.0  | 1.2.3   | >=1.2.0 |
+    /// | >=2.0.2  | 1.2.3   | >=1.2.3 |
+    /// | <1.2.3.4 | 1.2.3.4 | <1.2.3.5 |
+    pub(crate) fn bump_to(&mut self, latest: &Self, operator: Operator) -> (bool, bool) {
+        let op_equal = operator == Operator::Equal
+            || operator == Operator::EqualStar
+            || operator == Operator::ExactEqual;
+        let ordering = self.cmp_slow(latest);
+        // Special case: Correct if > or >= and value > latest (downgrade)
+        let downgrade = ordering == Ordering::Greater
+            && (operator == Operator::GreaterThan
+                || operator == Operator::GreaterThanEqual
+                || operator == Operator::Equal
+                || operator == Operator::EqualStar);
+
+        let new = &*latest.release();
+        let old = &*self.release();
+        let last = *old.last().unwrap();
+        let zero = last == 0;
+        let opgt = operator == Operator::GreaterThan;
+        let opeq = operator == Operator::Equal;
+        let oplt = operator == Operator::LessThan;
+        let ople = operator == Operator::LessThanEqual;
+        let orle = ordering != Ordering::Greater;
+        let enough_len = old.len() >= new.len();
+        let subtract = downgrade && zero && enough_len && !opeq;
+        // Note: Even if there is no unyanked 1.0.0 downgrade, the constraint will find `latest` 1.0.1
+        let delta = if downgrade {
+            // set version to 0 (negative delta) or don't change it
+            if subtract { *new.last().unwrap() } else { 0 }
+        } else {
+            u64::from(!(op_equal || ople && orle && enough_len || opgt)) // add 1 if operator needs
+        };
+        let addsub = |v: u64| if subtract { v - delta } else { v + delta };
+        if downgrade || orle {
+            let minor = oplt || ople && zero;
+            let upgrade = match old.len() {
+                // <1     to <=1.0.0 : <2
+                1 => Self::new([addsub(new[0])]),
+                // <1.2   to <=1.2.3 : <1.3
+                2 => Self::new([new[0], addsub(new[1])]),
+                // <1.2.3 to <=1.2.3 : <1.2.4
+                3 => Self::new([
+                    new[0],
+                    new[1] + u64::from(minor),
+                    if minor { 0 } else { addsub(new[2]) },
+                ]),
+                // <1.2.3.4 to <=1.2.3.4 : <1.2.3.5
+                4 => Self::new([new[0], new[1], new[2], addsub(new[3])]),
+                _ => latest.clone(),
+            };
+            self.inner = upgrade.inner;
+            return (true, !downgrade);
+        }
+        (false, false)
+    }
 }
 
 impl<'de> Deserialize<'de> for Version {

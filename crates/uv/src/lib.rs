@@ -2387,6 +2387,9 @@ async fn run_project(
             ))
             .await
         }
+        ProjectCommand::Upgrade(args) => {
+            Box::pin(commands::upgrade_project_dependencies(args)).await
+        }
         ProjectCommand::Tree(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::TreeSettings::resolve(args, filesystem, environment);

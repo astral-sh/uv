@@ -411,7 +411,7 @@ pub async fn persist_with_retry(
         // So every time we fail, we need to reset the `NamedTempFile` to try again.
         //
         // Every time we (re)try we call this outer closure (`let persist = ...`), so it needs to
-        // be at least a `FnMut` (as opposed to `Fnonce`). However the closure needs to return a
+        // be at least a `FnMut` (as opposed to `FnOnce`). However the closure needs to return a
         // totally owned `Future` (so effectively it returns a `FnOnce`).
         //
         // But if the `Future` is totally owned it *necessarily* can't write back the `NamedTempFile`

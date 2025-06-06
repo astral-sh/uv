@@ -88,6 +88,7 @@ miette = { workspace = true, features = ["fancy-no-backtrace"] }
 open = { workspace = true }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
+prettytable-rs = "0.10.0"
 reqwest = { workspace = true }
 rkyv = { workspace = true }
 rustc-hash = { workspace = true }
