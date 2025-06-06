@@ -1583,7 +1583,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     client
                         .unmanaged
                         .uncached_client(resource.git.repository())
-                        .clone(),
+                        .raw_client(),
                 )
                 .await
             {
@@ -1866,7 +1866,10 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             .git()
             .github_fast_path(
                 git,
-                client.unmanaged.uncached_client(git.repository()).clone(),
+                client
+                    .unmanaged
+                    .uncached_client(git.repository())
+                    .raw_client(),
             )
             .await?
             .is_some()
@@ -2136,7 +2139,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         // Extract the top-level directory.
         let extracted = match uv_extract::strip_component(temp_dir.path()) {
             Ok(top_level) => top_level,
-            Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.into_path(),
+            Err(uv_extract::Error::NonSingularArchive(_)) => temp_dir.keep(),
             Err(err) => {
                 return Err(Error::Extract(
                     temp_dir.path().to_string_lossy().into_owned(),

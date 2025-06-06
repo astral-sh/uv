@@ -9,33 +9,33 @@ use crate::commands::ExitStatus;
 /// long as the command is the last thing that runs in this process; otherwise, we'd need to restore
 /// the default signal handlers after the command completes.
 pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitStatus> {
-    // On Unix, shells will send SIGINT to the active process group when a user presses `Ctrl-C`. In
-    // general, this means that uv should ignore SIGINT, allowing the child process to cleanly exit
-    // instead. If uv forwarded the SIGINT immediately, the child process would receive _two_ SIGINT
-    // signals which has semantic meaning for some programs, i.e., slow exit on the first signal and
-    // fast exit on the second. The exception to this is if a child process changes its process
-    // group, in which case the shell will _not_ send SIGINT to the child process and uv must take
-    // ownership of forwarding the signal.
+    // On Unix, the terminal driver will send SIGINT to the active process group when a user presses
+    // `Ctrl-C`. In general, this means that uv should ignore SIGINT, allowing the child process to
+    // cleanly exit instead. If uv forwarded the SIGINT immediately, the child process would receive
+    // _two_ SIGINT signals which has semantic meaning for some programs, i.e., slow exit on the
+    // first signal and fast exit on the second. The exception to this is if a child process changes
+    // its process group, in which case the terminal driver will _not_ send SIGINT to the child
+    // process and uv must take ownership of forwarding the signal.
     //
-    // Note this assumes an interactive shell. If a signal is sent directly to the uv parent process
-    // (e.g., `kill -2 <pid>`), the process group is not involved and a signal is not sent to the
-    // child by default. In this context, uv must forward the signal to the child. We work around
-    // this by forwarding SIGINT if it is received more than once. We could attempt to infer if the
-    // parent is a shell using TTY detection(?), but there hasn't been sufficient motivation to
-    // explore alternatives yet.
+    // Note this assumes an interactive terminal. If a signal is sent directly to the uv parent
+    // process (e.g., `kill -2 <pid>`), the process group is not involved and a signal is not sent
+    // to the child by default. In this context, uv must forward the signal to the child. We work
+    // around this by forwarding SIGINT if it is received more than once. We could attempt to infer
+    // if the parent is a terminal using TTY detection(?), but there hasn't been sufficient
+    // motivation to explore alternatives yet.
     //
-    // Use of SIGTERM is also a bit complicated. If a shell receives a SIGTERM, it just waits for
+    // Use of SIGTERM is also a bit complicated. If a terminal receives a SIGTERM, it just waits for
     // its children to exit — multiple SIGTERMs do not have any effect and the signals are not
     // forwarded to the children. Consequently, the description for SIGINT above does not apply to
-    // SIGTERM in shells. It is _possible_ to have a parent process that sends a SIGTERM to the
-    // process group; for example, `tini` supports this via a `-g` option. In this case, it's
-    // possible that uv will improperly send a second SIGTERM to the child process. However,
-    // this seems preferable to not forwarding it in the first place. In the Docker case, if `uv`
-    // is invoked directly (instead of via an init system), it's PID 1 which has a special-cased
-    // default signal handler for SIGTERM by default. Generally, if a process receives a SIGTERM and
-    // does not have a SIGTERM handler, it is terminated. However, if PID 1 receives a SIGTERM, it
-    // is not terminated. In this context, it is essential for uv to forward the SIGTERM to the
-    // child process or the process will not be killable.
+    // SIGTERM in the terminal driver. It is _possible_ to have a parent process that sends a
+    // SIGTERM to the process group; for example, `tini` supports this via a `-g` option. In this
+    // case, it's possible that uv will improperly send a second SIGTERM to the child process.
+    // However, this seems preferable to not forwarding it in the first place. In the Docker case,
+    // if `uv` is invoked directly (instead of via an init system), it's PID 1 which has a
+    // special-cased default signal handler for SIGTERM by default. Generally, if a process receives
+    // a SIGTERM and does not have a SIGTERM handler, it is terminated. However, if PID 1 receives a
+    // SIGTERM, it is not terminated. In this context, it is essential for uv to forward the SIGTERM
+    // to the child process or the process will not be killable.
     #[cfg(unix)]
     let status = {
         use std::ops::Deref;
@@ -162,8 +162,8 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
                         continue;
                     }
 
-                    // The shell may still be forwarding these signals, give the child a moment to
-                    // handle that signal before hitting it with another one
+                    // The terminal may still be forwarding these signals, give the child a moment
+                    // to handle that signal before hitting it with another one
                     debug!("Received SIGINT, forwarding to child at {child_pid} in 200ms");
                     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                     let _ = signal::kill(child_pid, signal::Signal::SIGINT);
@@ -176,7 +176,7 @@ pub(crate) async fn run_to_completion(mut handle: Child) -> anyhow::Result<ExitS
                     };
 
                     // We unconditionally forward SIGTERM to the child process; unlike SIGINT, this
-                    // isn't usually handled by the shell and in cases like
+                    // isn't usually handled by the terminal.
                     debug!("Received SIGTERM, forwarding to child at {child_pid}");
                     let _ = signal::kill(child_pid, signal::Signal::SIGTERM);
                 }

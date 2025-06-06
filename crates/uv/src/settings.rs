@@ -782,6 +782,7 @@ pub(crate) struct ToolListSettings {
     pub(crate) show_paths: bool,
     pub(crate) show_version_specifiers: bool,
     pub(crate) show_with: bool,
+    pub(crate) show_extras: bool,
 }
 
 impl ToolListSettings {
@@ -792,6 +793,7 @@ impl ToolListSettings {
             show_paths,
             show_version_specifiers,
             show_with,
+            show_extras,
             python_preference: _,
             no_python_downloads: _,
         } = args;
@@ -800,6 +802,7 @@ impl ToolListSettings {
             show_paths,
             show_version_specifiers,
             show_with,
+            show_extras,
         }
     }
 }
@@ -1053,6 +1056,7 @@ pub(crate) struct PythonPinSettings {
     pub(crate) resolved: bool,
     pub(crate) no_project: bool,
     pub(crate) global: bool,
+    pub(crate) rm: bool,
 }
 
 impl PythonPinSettings {
@@ -1065,6 +1069,7 @@ impl PythonPinSettings {
             resolved,
             no_project,
             global,
+            rm,
         } = args;
 
         Self {
@@ -1072,6 +1077,7 @@ impl PythonPinSettings {
             resolved: flag(resolved, no_resolved).unwrap_or(false),
             no_project,
             global,
+            rm,
         }
     }
 }

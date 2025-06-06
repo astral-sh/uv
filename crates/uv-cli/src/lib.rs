@@ -4419,6 +4419,10 @@ pub struct ToolListArgs {
     #[arg(long)]
     pub show_with: bool,
 
+    /// Whether to display the extra requirements installed with each tool.
+    #[arg(long)]
+    pub show_extras: bool,
+
     // Hide unused global Python options.
     #[arg(long, hide = true)]
     pub python_preference: Option<PythonPreference>,
@@ -5028,6 +5032,10 @@ pub struct PythonPinArgs {
     /// directory, this version will be used instead.
     #[arg(long)]
     pub global: bool,
+
+    /// Remove the Python version pin.
+    #[arg(long, conflicts_with = "request", conflicts_with = "resolved")]
+    pub rm: bool,
 }
 
 #[derive(Args)]

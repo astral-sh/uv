@@ -24,6 +24,7 @@ fn workspaces_dir() -> PathBuf {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_in_examples_bird_feeder() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -67,6 +68,7 @@ fn test_albatross_in_examples_bird_feeder() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_in_examples() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -107,6 +109,7 @@ fn test_albatross_in_examples() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_just_project() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -147,6 +150,7 @@ fn test_albatross_just_project() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_project_in_excluded() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -222,6 +226,7 @@ fn test_albatross_project_in_excluded() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_root_workspace() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -265,6 +270,7 @@ fn test_albatross_root_workspace() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_root_workspace_bird_feeder() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -310,6 +316,7 @@ fn test_albatross_root_workspace_bird_feeder() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_root_workspace_albatross() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -355,6 +362,7 @@ fn test_albatross_root_workspace_albatross() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn test_albatross_virtual_workspace() {
     let context = TestContext::new("3.12");
     let workspace = context.temp_dir.child("workspace");
@@ -402,6 +410,7 @@ fn test_albatross_virtual_workspace() {
 
 /// Check that `uv run --package` works in a virtual workspace.
 #[test]
+#[cfg(feature = "pypi")]
 fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-virtual-workspace");
@@ -471,6 +480,7 @@ fn test_uv_run_with_package_virtual_workspace() -> Result<()> {
 /// Check that `uv run` works from a virtual workspace root, which should sync all packages in the
 /// workspace.
 #[test]
+#[cfg(feature = "pypi")]
 fn test_uv_run_virtual_workspace_root() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-virtual-workspace");
@@ -511,6 +521,7 @@ fn test_uv_run_virtual_workspace_root() -> Result<()> {
 
 /// Check that `uv run --package` works in a root workspace.
 #[test]
+#[cfg(feature = "pypi")]
 fn test_uv_run_with_package_root_workspace() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
@@ -573,6 +584,7 @@ fn test_uv_run_with_package_root_workspace() -> Result<()> {
 
 /// Check that `uv run --isolated` creates isolated virtual environments.
 #[test]
+#[cfg(feature = "pypi")]
 fn test_uv_run_isolate() -> Result<()> {
     let context = TestContext::new("3.12");
     let work_dir = context.temp_dir.join("albatross-root-workspace");
@@ -694,6 +706,7 @@ fn workspace_lock_idempotence(workspace: &str, subdirectories: &[&str]) -> Resul
 
 /// Check that the resolution is the same no matter where in the workspace we are.
 #[test]
+#[cfg(feature = "pypi")]
 fn workspace_lock_idempotence_root_workspace() -> Result<()> {
     workspace_lock_idempotence(
         "albatross-root-workspace",
@@ -705,6 +718,7 @@ fn workspace_lock_idempotence_root_workspace() -> Result<()> {
 /// Check that the resolution is the same no matter where in the workspace we are, and that locking
 /// works even if there is no root project.
 #[test]
+#[cfg(feature = "pypi")]
 fn workspace_lock_idempotence_virtual_workspace() -> Result<()> {
     workspace_lock_idempotence(
         "albatross-virtual-workspace",

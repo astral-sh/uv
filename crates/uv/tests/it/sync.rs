@@ -7767,9 +7767,8 @@ fn find_links_relative_in_config_works_from_subdir() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "python-managed")]
 fn sync_dry_run() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7846,7 +7845,7 @@ fn sync_dry_run() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = "==3.8.*"
+        requires-python = "==3.9.*"
         dependencies = ["iniconfig"]
         "#,
     )?;
@@ -7857,7 +7856,7 @@ fn sync_dry_run() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Would replace existing virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Would update lockfile at: uv.lock
@@ -7872,7 +7871,7 @@ fn sync_dry_run() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
@@ -8000,7 +7999,7 @@ fn sync_dry_run_and_frozen() -> Result<()> {
 
 #[test]
 fn sync_script() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! { r#"
@@ -8150,7 +8149,7 @@ fn sync_script() -> Result<()> {
 
 #[test]
 fn sync_locked_script() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! { r#"

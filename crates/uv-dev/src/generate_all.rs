@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::{
     generate_cli_reference, generate_env_vars_reference, generate_json_schema,
-    generate_options_reference,
+    generate_options_reference, generate_sysconfig_mappings,
 };
 
 #[derive(clap::Args)]
@@ -26,10 +26,12 @@ pub(crate) enum Mode {
     DryRun,
 }
 
-pub(crate) fn main(args: &Args) -> Result<()> {
+pub(crate) async fn main(args: &Args) -> Result<()> {
     generate_json_schema::main(&generate_json_schema::Args { mode: args.mode })?;
     generate_options_reference::main(&generate_options_reference::Args { mode: args.mode })?;
     generate_cli_reference::main(&generate_cli_reference::Args { mode: args.mode })?;
     generate_env_vars_reference::main(&generate_env_vars_reference::Args { mode: args.mode })?;
+    generate_sysconfig_mappings::main(&generate_sysconfig_mappings::Args { mode: args.mode })
+        .await?;
     Ok(())
 }

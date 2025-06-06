@@ -268,6 +268,8 @@ pub(crate) async fn remove(
         }
     };
 
+    let _lock = target.acquire_lock().await?;
+
     // Determine the lock mode.
     let mode = if locked {
         LockMode::Locked(target.interpreter())

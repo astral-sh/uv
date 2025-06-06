@@ -65,3 +65,4 @@ hyper = { version = "1.4.1", features = ["server", "http1"] }
 hyper-util = { version = "0.1.8", features = ["tokio"] }
 insta = { version = "1.40.0", features = ["filters", "json", "redactions"] }
 tokio = { workspace = true }
+wiremock = { workspace = true }

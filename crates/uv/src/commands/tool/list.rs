@@ -13,10 +13,12 @@ use crate::commands::ExitStatus;
 use crate::printer::Printer;
 
 /// List installed tools.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn list(
     show_paths: bool,
     show_version_specifiers: bool,
     show_with: bool,
+    show_extras: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -80,6 +82,21 @@ pub(crate) async fn list(
             })
             .unwrap_or_default();
 
+        let extra_requirements = show_extras
+            .then(|| {
+                tool.requirements()
+                    .iter()
+                    .filter(|req| req.name == name)
+                    .flat_map(|req| req.extras.iter()) // Flatten the extras from all matching requirements
+                    .peekable()
+            })
+            .take_if(|extras| extras.peek().is_some())
+            .map(|extras| {
+                let extras_str = extras.map(ToString::to_string).join(", ");
+                format!(" [extras: {extras_str}]")
+            })
+            .unwrap_or_default();
+
         let with_requirements = show_with
             .then(|| {
                 tool.requirements()
@@ -100,14 +117,20 @@ pub(crate) async fn list(
             writeln!(
                 printer.stdout(),
                 "{} ({})",
-                format!("{name} v{version}{version_specifier}{with_requirements}").bold(),
+                format!(
+                    "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}"
+                )
+                .bold(),
                 installed_tools.tool_dir(&name).simplified_display().cyan(),
             )?;
         } else {
             writeln!(
                 printer.stdout(),
                 "{}",
-                format!("{name} v{version}{version_specifier}{with_requirements}").bold()
+                format!(
+                    "{name} v{version}{version_specifier}{extra_requirements}{with_requirements}"
+                )
+                .bold()
             )?;
         }
 

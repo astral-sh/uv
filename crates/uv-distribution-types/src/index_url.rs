@@ -79,7 +79,8 @@ impl IndexUrl {
             segment => segment,
         };
 
-        if !last.eq_ignore_ascii_case("simple") {
+        // We also handle `/+simple` as it's used in devpi
+        if !(last.eq_ignore_ascii_case("simple") || last.eq_ignore_ascii_case("+simple")) {
             return None;
         }
 

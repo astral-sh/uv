@@ -3685,7 +3685,7 @@ fn lock_requires_python() -> Result<()> {
            cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
           And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: Pre-releases are available for `pygls` in the requested range (e.g., 2.0.0a3), but pre-releases weren't enabled (try: `--prerelease=allow`)
+          hint: Pre-releases are available for `pygls` in the requested range (e.g., 2.0.0a4), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
           hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
     ");
@@ -4297,10 +4297,13 @@ fn lock_requires_python() -> Result<()> {
     });
 
     // Validate that attempting to install with an unsupported Python version raises an error.
-    let context38 = TestContext::new("3.8").with_filtered_python_sources();
+    let context_unsupported = TestContext::new("3.9").with_filtered_python_sources();
 
-    fs_err::copy(pyproject_toml, context38.temp_dir.join("pyproject.toml"))?;
-    fs_err::copy(&lockfile, context38.temp_dir.join("uv.lock"))?;
+    fs_err::copy(
+        pyproject_toml,
+        context_unsupported.temp_dir.join("pyproject.toml"),
+    )?;
+    fs_err::copy(&lockfile, context_unsupported.temp_dir.join("uv.lock"))?;
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
@@ -4314,7 +4317,7 @@ fn lock_requires_python() -> Result<()> {
 
     // Install from the lockfile.
     // Note we need to disable Python fetches or we'll just download 3.12
-    uv_snapshot!(context38.filters(), context38.sync().arg("--frozen").arg("--no-python-downloads"), @r###"
+    uv_snapshot!(context_unsupported.filters(), context_unsupported.sync().arg("--frozen").arg("--no-python-downloads"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -8352,6 +8355,7 @@ fn lock_redact_url_sources() -> Result<()> {
 
     let lock = context.read("uv.lock");
 
+    // The credentials are for a direct URL, and are included in the lockfile
     insta::with_settings!({
         filters => context.filters(),
     }, {

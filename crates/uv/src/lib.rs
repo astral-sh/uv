@@ -1289,6 +1289,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.show_paths,
                 args.show_version_specifiers,
                 args.show_with,
+                args.show_extras,
                 &cache,
                 printer,
             )
@@ -1465,6 +1466,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_preference,
                 args.no_project,
                 args.global,
+                args.rm,
                 &cache,
                 printer,
             )

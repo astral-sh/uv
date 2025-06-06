@@ -28,12 +28,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Sync Sysconfig Targets
+        run: ${{ github.workspace }}/crates/uv-dev/sync_sysconfig_targets.sh
+        working-directory: ./crates/uv-dev
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: "Create Pull Request"
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
         with:
           commit-message: "Sync latest Python releases"
           add-paths: |
             crates/uv-python/download-metadata.json
+            crates/uv-dev/src/generate_sysconfig_mappings.rs
+            crates/uv-python/src/sysconfig/generated_mappings.rs
           branch: "sync-python-releases"
           title: "Sync latest Python releases"
           body: "Automated update for Python releases."

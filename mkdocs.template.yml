@@ -74,6 +74,12 @@ plugins:
         "reference/versioning.md": "reference/policies/versioning.md"
         "reference/platforms.md": "reference/policies/platforms.md"
         "reference/build_failures.md": "reference/troubleshooting/build-failures.md"
+        "configuration/installer.md": "reference/installer.md"
+        "configuration/authentication.md": "concepts/authentication.md"
+        "configuration/build-backend.md": "concepts/build-backend.md"
+        "configuration/files.md": "concepts/configuration-files.md"
+        "configuration/indexes.md": "concepts/indexes.md"
+        "configuration/environment.md": "reference/environment.md"
 extra_css:
   - stylesheets/extra.css
 extra_javascript:
@@ -132,28 +138,28 @@ nav:
           - Using workspaces: concepts/projects/workspaces.md
       - Tools: concepts/tools.md
       - Python versions: concepts/python-versions.md
+      - Configuration files: concepts/configuration-files.md
+      - Package indexes: concepts/indexes.md
       - Resolution: concepts/resolution.md
+      - Build backend: concepts/build-backend.md
+      - Authentication: concepts/authentication.md
       - Caching: concepts/cache.md
-  - Configuration:
-      - configuration/index.md
-      - Configuration files: configuration/files.md
-      - Environment variables: configuration/environment.md
-      - Authentication: configuration/authentication.md
-      - Package indexes: configuration/indexes.md
-      - Installer: configuration/installer.md
-      - Build backend: configuration/build-backend.md
-  - The pip interface:
-      - pip/index.md
-      - Using environments: pip/environments.md
-      - Managing packages: pip/packages.md
-      - Inspecting environments: pip/inspection.md
-      - Declaring dependencies: pip/dependencies.md
-      - Locking environments: pip/compile.md
-      - Compatibility with pip: pip/compatibility.md
+      # Note:  The `pip` section was moved to the `concepts/` section but the
+      # top-level directory structure was retained to ease the transition.
+      - The pip interface:
+          - pip/index.md
+          - Using environments: pip/environments.md
+          - Managing packages: pip/packages.md
+          - Inspecting environments: pip/inspection.md
+          - Declaring dependencies: pip/dependencies.md
+          - Locking environments: pip/compile.md
+          - Compatibility with pip: pip/compatibility.md
   - Reference:
       - reference/index.md
       - Commands: reference/cli.md
       - Settings: reference/settings.md
+      - Environment variables: reference/environment.md
+      - Installer: reference/installer.md
       - Troubleshooting:
           - reference/troubleshooting/index.md
           - Build failures: reference/troubleshooting/build-failures.md

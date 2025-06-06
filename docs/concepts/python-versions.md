@@ -284,7 +284,7 @@ during `uv python install`.
 !!! tip
 
     The `python-downloads` setting can be set in a
-    [persistent configuration file](../configuration/files.md) to change the default behavior, or
+    [persistent configuration file](./configuration-files.md) to change the default behavior, or
     the `--no-python-downloads` flag can be passed to any uv command.
 
 ## Requiring or disabling managed Python versions

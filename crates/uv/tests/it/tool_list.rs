@@ -452,3 +452,114 @@ fn tool_list_show_with() {
     ----- stderr -----
     "###);
 }
+
+#[test]
+fn tool_list_show_extras() {
+    let context = TestContext::new("3.12").with_filtered_exe_suffix();
+    let tool_dir = context.temp_dir.child("tools");
+    let bin_dir = context.temp_dir.child("bin");
+
+    // Install `black` without extras
+    context
+        .tool_install()
+        .arg("black==24.2.0")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Install `flask` with extras and additional requirements
+    context
+        .tool_install()
+        .arg("flask[async,dotenv]")
+        .arg("--with")
+        .arg("requests")
+        .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+        .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
+        .assert()
+        .success();
+
+    // Test with --show-extras only
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-extras")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0
+    - black
+    - blackd
+    flask v3.0.2 [extras: async, dotenv]
+    - flask
+
+    ----- stderr -----
+    "###);
+
+    // Test with both --show-extras and --show-with
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-extras").arg("--show-with")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0
+    - black
+    - blackd
+    flask v3.0.2 [extras: async, dotenv] [with: requests]
+    - flask
+
+    ----- stderr -----
+    "###);
+
+    // Test with --show-extras and --show-paths
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-extras").arg("--show-paths")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 ([TEMP_DIR]/tools/black)
+    - black ([TEMP_DIR]/bin/black)
+    - blackd ([TEMP_DIR]/bin/blackd)
+    flask v3.0.2 [extras: async, dotenv] ([TEMP_DIR]/tools/flask)
+    - flask ([TEMP_DIR]/bin/flask)
+
+    ----- stderr -----
+    "###);
+
+    // Test with --show-extras and --show-version-specifiers
+    uv_snapshot!(context.filters(), context.tool_list().arg("--show-extras").arg("--show-version-specifiers")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 [required: ==24.2.0]
+    - black
+    - blackd
+    flask v3.0.2 [extras: async, dotenv]
+    - flask
+
+    ----- stderr -----
+    "###);
+
+    // Test with all flags including --show-extras
+    uv_snapshot!(context.filters(), context.tool_list()
+    .arg("--show-extras")
+    .arg("--show-with")
+    .arg("--show-version-specifiers")
+    .arg("--show-paths")
+    .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
+    .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    black v24.2.0 [required: ==24.2.0] ([TEMP_DIR]/tools/black)
+    - black ([TEMP_DIR]/bin/black)
+    - blackd ([TEMP_DIR]/bin/blackd)
+    flask v3.0.2 [extras: async, dotenv] [with: requests] ([TEMP_DIR]/tools/flask)
+    - flask ([TEMP_DIR]/bin/flask)
+
+    ----- stderr -----
+    "###);
+}

@@ -71,6 +71,8 @@ pub enum PlatformTag {
     Illumos { release_arch: SmallString },
     /// Ex) `solaris_11_4_x86_64`
     Solaris { release_arch: SmallString },
+    /// Ex) `pyodide_2024_0_wasm32`
+    Pyodide { major: u16, minor: u16 },
 }
 
 impl PlatformTag {
@@ -97,6 +99,7 @@ impl PlatformTag {
             PlatformTag::Haiku { .. } => Some("Haiku"),
             PlatformTag::Illumos { .. } => Some("Illumos"),
             PlatformTag::Solaris { .. } => Some("Solaris"),
+            PlatformTag::Pyodide { .. } => Some("Pyodide"),
         }
     }
 }
@@ -262,6 +265,7 @@ impl std::fmt::Display for PlatformTag {
             Self::Haiku { release_arch } => write!(f, "haiku_{release_arch}"),
             Self::Illumos { release_arch } => write!(f, "illumos_{release_arch}"),
             Self::Solaris { release_arch } => write!(f, "solaris_{release_arch}_64bit"),
+            Self::Pyodide { major, minor } => write!(f, "pyodide_{major}_{minor}_wasm32"),
         }
     }
 }
@@ -616,6 +620,35 @@ impl FromStr for PlatformTag {
             });
         }
 
+        if let Some(rest) = s.strip_prefix("pyodide_") {
+            let mid =
+                rest.strip_suffix("_wasm32")
+                    .ok_or_else(|| ParsePlatformTagError::InvalidArch {
+                        platform: "pyodide",
+                        tag: s.to_string(),
+                    })?;
+            let underscore = memchr::memchr(b'_', mid.as_bytes()).ok_or_else(|| {
+                ParsePlatformTagError::InvalidFormat {
+                    platform: "pyodide",
+                    tag: s.to_string(),
+                }
+            })?;
+            let major: u16 = mid[..underscore].parse().map_err(|_| {
+                ParsePlatformTagError::InvalidMajorVersion {
+                    platform: "pyodide",
+                    tag: s.to_string(),
+                }
+            })?;
+
+            let minor: u16 = mid[underscore + 1..].parse().map_err(|_| {
+                ParsePlatformTagError::InvalidMinorVersion {
+                    platform: "pyodide",
+                    tag: s.to_string(),
+                }
+            })?;
+            return Ok(Self::Pyodide { major, minor });
+        }
+
         Err(ParsePlatformTagError::UnknownFormat(s.to_string()))
     }
 }
@@ -896,6 +929,27 @@ mod tests {
             Err(ParsePlatformTagError::InvalidArch {
                 platform: "solaris",
                 tag: "solaris_11_4_x86_64".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn pyodide_platform() {
+        let tag = PlatformTag::Pyodide {
+            major: 2024,
+            minor: 0,
+        };
+        assert_eq!(
+            PlatformTag::from_str("pyodide_2024_0_wasm32").as_ref(),
+            Ok(&tag)
+        );
+        assert_eq!(tag.to_string(), "pyodide_2024_0_wasm32");
+
+        assert_eq!(
+            PlatformTag::from_str("pyodide_2024_0_wasm64"),
+            Err(ParsePlatformTagError::InvalidArch {
+                platform: "pyodide",
+                tag: "pyodide_2024_0_wasm64".to_string()
             })
         );
     }

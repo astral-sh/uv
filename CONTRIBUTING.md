@@ -74,7 +74,7 @@ system
 just resolving requirements. To prevent this, there's a Docker container you can run commands in:
 
 ```console
-$ docker buildx build -t uv-builder -f builder.dockerfile --load .
+$ docker build -t uv-builder -f crates/uv-dev/builder.dockerfile --load .
 # Build for musl to avoid glibc errors, might not be required with your OS version
 cargo build --target x86_64-unknown-linux-musl --profile profiling
 docker run --rm -it -v $(pwd):/app uv-builder /app/target/x86_64-unknown-linux-musl/profiling/uv-dev resolve-many --cache-dir /app/cache-docker /app/scripts/popular_packages/pypi_10k_most_dependents.txt

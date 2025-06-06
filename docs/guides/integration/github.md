@@ -47,7 +47,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           # Install a specific version of uv.
-          version: "0.7.9"
+          version: "0.7.11"
 ```
 
 ## Setting up Python
@@ -346,3 +346,32 @@ steps:
 ```
 
 To opt-out again, the `--no-system` flag can be used in any uv invocation.
+
+## Private repos
+
+If your project has [dependencies](../../concepts/projects/dependencies.md#git) on private GitHub
+repositories, you will need to configure a [personal access token (PAT)][PAT] to allow uv to fetch
+them.
+
+After creating a PAT that has read access to the private repositories, add it as a [repository
+secret].
+
+Then, you can use the [`gh`](https://cli.github.com/) CLI (which is installed in GitHub Actions
+runners by default) to configure a
+[credential helper for Git](../../concepts/authentication.md#git-credential-helpers) to use the PAT
+for queries to repositories hosted on `github.com`.
+
+For example, if you called your repository secret `MY_PAT`:
+
+```yaml title="example.yml"
+steps:
+  - name: Register the personal access token
+    run: echo "${{ secrets.MY_PAT }}" | gh auth login --with-token
+  - name: Configure the Git credential helper
+    run: gh auth setup-git
+```
+
+[PAT]:
+  https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
+[repository secret]:
+  https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-a-repository

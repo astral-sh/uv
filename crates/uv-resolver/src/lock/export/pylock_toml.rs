@@ -13,7 +13,8 @@ use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
-    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults, InstallOptions,
+    BuildOptions, DependencyGroupsWithDefaults, EditableMode, ExtrasSpecificationWithDefaults,
+    InstallOptions,
 };
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, SourceDistFilename,
@@ -619,6 +620,7 @@ impl<'lock> PylockToml {
         extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
         annotate: bool,
+        editable: EditableMode,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, PylockTomlErrorKind> {
         // Extract the packages from the lock file.
@@ -733,7 +735,10 @@ impl<'lock> PylockToml {
                             .unwrap_or_else(|_| sdist.install_path.to_path_buf())
                             .into_boxed_path(),
                     ),
-                    editable: Some(sdist.editable),
+                    editable: match editable {
+                        EditableMode::NonEditable => None,
+                        EditableMode::Editable => Some(sdist.editable),
+                    },
                     subdirectory: None,
                 }),
                 _ => None,

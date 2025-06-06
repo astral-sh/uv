@@ -108,7 +108,14 @@ impl std::fmt::Display for RequirementsTxtExport<'_> {
                         subdirectory: direct.subdirectory.clone(),
                         ext: DistExtension::Source(SourceDistExtension::TarGz),
                     });
-                    write!(f, "{} @ {}", package.id.name, url)?;
+                    write!(
+                        f,
+                        "{} @ {}",
+                        package.id.name,
+                        // TODO(zanieb): We should probably omit passwords here by default, but we
+                        // should change it in a breaking release and allow opt-in to include them.
+                        url.displayable_with_credentials()
+                    )?;
                 }
                 Source::Path(path) | Source::Directory(path) => {
                     if path.is_absolute() {

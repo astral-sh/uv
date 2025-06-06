@@ -330,6 +330,7 @@ pub(crate) async fn export(
                 &extras,
                 &dev,
                 include_annotations,
+                editable,
                 &install_options,
             )?;
 

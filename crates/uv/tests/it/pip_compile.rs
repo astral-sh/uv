@@ -6961,7 +6961,7 @@ fn invalid_metadata_requires_python() -> Result<()> {
       ╰─▶ Because validation==2.0.0 has invalid metadata and you require validation==2.0.0, we can conclude that your requirements are unsatisfiable.
 
           hint: Metadata for `validation` (v2.0.0) could not be parsed:
-            Failed to parse version: Unexpected end of version specifier, expected operator:
+            Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==12`?:
             12
             ^^
     "###
