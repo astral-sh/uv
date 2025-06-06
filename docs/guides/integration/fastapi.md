@@ -86,7 +86,7 @@ dependencies = [
 From there, you can run the FastAPI application with:
 
 ```console
-$ uv run fastapi dev
+$ uv run -m fastapi dev
 ```
 
 `uv run` will automatically resolve and lock the project dependencies (i.e., create a `uv.lock`
