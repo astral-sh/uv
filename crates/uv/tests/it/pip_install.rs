@@ -2849,7 +2849,7 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2859,8 +2859,8 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because only setuptools<40.8.0 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
-    "###
+      ╰─▶ Because only setuptools<=40.4.3 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
+    "
     );
 
     Ok(())

@@ -3673,19 +3673,18 @@ fn lock_requires_python() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies for split (python_full_version >= '3.7' and python_full_version < '3.7.9'):
       ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.7.9 and pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4, we can conclude that pygls>=1.1.0,<=1.2.1 cannot be used.
-          And because only pygls<=1.3.0 is available, we can conclude that all of:
-              pygls>=1.1.0,<1.3.0
-              pygls>1.3.0
-           cannot be used. (1)
+          And because only the following versions of pygls are available:
+              pygls<=1.1.0
+              pygls==1.1.1
+              pygls==1.1.2
+              pygls==1.2.0
+              pygls==1.2.1
+              pygls==1.3.0
+          we can conclude that pygls>=1.1.0,<1.3.0 cannot be used. (1)
 
           Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and pygls==1.3.0 depends on Python>=3.8, we can conclude that pygls==1.3.0 cannot be used.
-          And because we know from (1) that all of:
-              pygls>=1.1.0,<1.3.0
-              pygls>1.3.0
-           cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
+          And because we know from (1) that pygls>=1.1.0,<1.3.0 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
           And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
-
-          hint: Pre-releases are available for `pygls` in the requested range (e.g., 2.0.0a4), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
           hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
 
@@ -11734,15 +11733,15 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only datasets<2.19 is available and your project depends on datasets>=2.19, we can conclude that your project's requirements are unsatisfiable.
-    "###);
+      ╰─▶ Because only datasets<=2.18.0 is available and your project depends on datasets>=2.19, we can conclude that your project's requirements are unsatisfiable.
+    ");
 
     Ok(())
 }

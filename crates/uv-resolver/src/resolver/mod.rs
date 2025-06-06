@@ -76,7 +76,10 @@ use crate::resolver::system::SystemDependency;
 pub(crate) use crate::resolver::urls::Urls;
 use crate::universal_marker::{ConflictMarker, UniversalMarker};
 use crate::yanks::AllowedYanks;
-use crate::{DependencyMode, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap, marker};
+use crate::{
+    DependencyMode, ExcludeNewer, Exclusions, FlatIndex, Options, ResolutionMode, VersionMap,
+    marker,
+};
 pub(crate) use provider::MetadataUnavailable;
 use uv_torch::TorchStrategy;
 
@@ -363,6 +366,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     state.fork_indexes,
                                     state.env,
                                     self.current_environment.clone(),
+                                    self.options.exclude_newer,
                                     &visited,
                                 ));
                             }
@@ -2514,6 +2518,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
         current_environment: MarkerEnvironment,
+        exclude_newer: Option<ExcludeNewer>,
         visited: &FxHashSet<PackageName>,
     ) -> ResolveError {
         err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
@@ -2566,10 +2571,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 if let VersionsResponse::Found(ref version_maps) = *response {
                     // Track the available versions, across all indexes.
                     for version_map in version_maps {
-                        available_versions
+                        let package_versions = available_versions
                             .entry(name.clone())
-                            .or_insert_with(BTreeSet::new)
-                            .extend(version_map.versions().cloned());
+                            .or_insert_with(BTreeSet::new);
+
+                        for (version, dists) in version_map.iter(&Ranges::full()) {
+                            // Don't show versions removed by excluded-newer in hints.
+                            if let Some(exclude_newer) = exclude_newer {
+                                let Some(prioritized_dist) = dists.prioritized_dist() else {
+                                    continue;
+                                };
+                                if prioritized_dist.files().all(|file| {
+                                    file.upload_time_utc_ms.is_none_or(|upload_time| {
+                                        upload_time >= exclude_newer.timestamp_millis()
+                                    })
+                                }) {
+                                    continue;
+                                }
+                            }
+
+                            package_versions.insert(version.clone());
+                        }
                     }
 
                     // Track the indexes in which the package is available.

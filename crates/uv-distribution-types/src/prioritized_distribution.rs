@@ -11,7 +11,7 @@ use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagPri
 use uv_pypi_types::{HashDigest, Yanked};
 
 use crate::{
-    InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
+    File, InstalledDist, KnownPlatform, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist,
     ResolvedDistRef,
 };
 
@@ -555,6 +555,20 @@ impl PrioritizedDist {
     /// exists.
     pub fn best_wheel(&self) -> Option<&(RegistryBuiltWheel, WheelCompatibility)> {
         self.0.best_wheel_index.map(|i| &self.0.wheels[i])
+    }
+
+    /// Returns an iterator of all wheels and the source distribution, if any.
+    pub fn files(&self) -> impl Iterator<Item = &File> {
+        self.0
+            .wheels
+            .iter()
+            .map(|(wheel, _)| wheel.file.as_ref())
+            .chain(
+                self.0
+                    .source
+                    .as_ref()
+                    .map(|(source_dist, _)| source_dist.file.as_ref()),
+            )
     }
 
     /// Returns an iterator over all Python tags for the distribution.
