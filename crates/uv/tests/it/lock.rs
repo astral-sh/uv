@@ -27421,10 +27421,40 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies for split (python_full_version >= '3.11'):
-      ╰─▶ Because only numpy{python_full_version >= '3.10'}<=1.26.4 is available and pandas==1.5.3 depends on numpy{python_full_version >= '3.10'}>=1.21.0, we can conclude that pandas==1.5.3 depends on numpy>=1.21.0,<=1.26.4.
+      ╰─▶ Because only the following versions of numpy{python_full_version >= '3.10'} are available:
+              numpy{python_full_version >= '3.10'}<=1.21.0
+              numpy{python_full_version >= '3.10'}==1.21.1
+              numpy{python_full_version >= '3.10'}==1.21.2
+              numpy{python_full_version >= '3.10'}==1.21.3
+              numpy{python_full_version >= '3.10'}==1.21.4
+              numpy{python_full_version >= '3.10'}==1.21.5
+              numpy{python_full_version >= '3.10'}==1.21.6
+              numpy{python_full_version >= '3.10'}==1.22.0
+              numpy{python_full_version >= '3.10'}==1.22.1
+              numpy{python_full_version >= '3.10'}==1.22.2
+              numpy{python_full_version >= '3.10'}==1.22.3
+              numpy{python_full_version >= '3.10'}==1.22.4
+              numpy{python_full_version >= '3.10'}==1.23.0
+              numpy{python_full_version >= '3.10'}==1.23.1
+              numpy{python_full_version >= '3.10'}==1.23.2
+              numpy{python_full_version >= '3.10'}==1.23.3
+              numpy{python_full_version >= '3.10'}==1.23.4
+              numpy{python_full_version >= '3.10'}==1.23.5
+              numpy{python_full_version >= '3.10'}==1.24.0
+              numpy{python_full_version >= '3.10'}==1.24.1
+              numpy{python_full_version >= '3.10'}==1.24.2
+              numpy{python_full_version >= '3.10'}==1.24.3
+              numpy{python_full_version >= '3.10'}==1.24.4
+              numpy{python_full_version >= '3.10'}==1.25.0
+              numpy{python_full_version >= '3.10'}==1.25.1
+              numpy{python_full_version >= '3.10'}==1.25.2
+              numpy{python_full_version >= '3.10'}==1.26.0
+              numpy{python_full_version >= '3.10'}==1.26.1
+              numpy{python_full_version >= '3.10'}==1.26.2
+              numpy{python_full_version >= '3.10'}==1.26.3
+              numpy{python_full_version >= '3.10'}==1.26.4
+          and pandas==1.5.3 depends on numpy{python_full_version >= '3.10'}>=1.21.0, we can conclude that pandas==1.5.3 depends on numpy>=1.21.0.
           And because your project depends on numpy==1.20.3 and pandas==1.5.3, we can conclude that your project's requirements are unsatisfiable.
-
-          hint: Pre-releases are available for `numpy` in the requested range (e.g., 2.3.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
           hint: While the active Python version is 3.9, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
     ");
