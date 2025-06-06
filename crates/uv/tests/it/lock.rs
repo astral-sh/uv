@@ -3673,19 +3673,18 @@ fn lock_requires_python() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies for split (python_full_version >= '3.7' and python_full_version < '3.7.9'):
       ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.7.9 and pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4, we can conclude that pygls>=1.1.0,<=1.2.1 cannot be used.
-          And because only pygls<=1.3.0 is available, we can conclude that all of:
-              pygls>=1.1.0,<1.3.0
-              pygls>1.3.0
-           cannot be used. (1)
+          And because only the following versions of pygls are available:
+              pygls<=1.1.0
+              pygls==1.1.1
+              pygls==1.1.2
+              pygls==1.2.0
+              pygls==1.2.1
+              pygls==1.3.0
+          we can conclude that pygls>=1.1.0,<1.3.0 cannot be used. (1)
 
           Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and pygls==1.3.0 depends on Python>=3.8, we can conclude that pygls==1.3.0 cannot be used.
-          And because we know from (1) that all of:
-              pygls>=1.1.0,<1.3.0
-              pygls>1.3.0
-           cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
+          And because we know from (1) that pygls>=1.1.0,<1.3.0 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
           And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
-
-          hint: Pre-releases are available for `pygls` in the requested range (e.g., 2.0.0a4), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
           hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
 
@@ -11734,15 +11733,15 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only datasets<2.19 is available and your project depends on datasets>=2.19, we can conclude that your project's requirements are unsatisfiable.
-    "###);
+      ╰─▶ Because only datasets<=2.18.0 is available and your project depends on datasets>=2.19, we can conclude that your project's requirements are unsatisfiable.
+    ");
 
     Ok(())
 }
@@ -27422,10 +27421,40 @@ fn lock_conflict_for_disjoint_python_version() -> Result<()> {
 
     ----- stderr -----
       × No solution found when resolving dependencies for split (python_full_version >= '3.11'):
-      ╰─▶ Because only numpy{python_full_version >= '3.10'}<=1.26.4 is available and pandas==1.5.3 depends on numpy{python_full_version >= '3.10'}>=1.21.0, we can conclude that pandas==1.5.3 depends on numpy>=1.21.0,<=1.26.4.
+      ╰─▶ Because only the following versions of numpy{python_full_version >= '3.10'} are available:
+              numpy{python_full_version >= '3.10'}<=1.21.0
+              numpy{python_full_version >= '3.10'}==1.21.1
+              numpy{python_full_version >= '3.10'}==1.21.2
+              numpy{python_full_version >= '3.10'}==1.21.3
+              numpy{python_full_version >= '3.10'}==1.21.4
+              numpy{python_full_version >= '3.10'}==1.21.5
+              numpy{python_full_version >= '3.10'}==1.21.6
+              numpy{python_full_version >= '3.10'}==1.22.0
+              numpy{python_full_version >= '3.10'}==1.22.1
+              numpy{python_full_version >= '3.10'}==1.22.2
+              numpy{python_full_version >= '3.10'}==1.22.3
+              numpy{python_full_version >= '3.10'}==1.22.4
+              numpy{python_full_version >= '3.10'}==1.23.0
+              numpy{python_full_version >= '3.10'}==1.23.1
+              numpy{python_full_version >= '3.10'}==1.23.2
+              numpy{python_full_version >= '3.10'}==1.23.3
+              numpy{python_full_version >= '3.10'}==1.23.4
+              numpy{python_full_version >= '3.10'}==1.23.5
+              numpy{python_full_version >= '3.10'}==1.24.0
+              numpy{python_full_version >= '3.10'}==1.24.1
+              numpy{python_full_version >= '3.10'}==1.24.2
+              numpy{python_full_version >= '3.10'}==1.24.3
+              numpy{python_full_version >= '3.10'}==1.24.4
+              numpy{python_full_version >= '3.10'}==1.25.0
+              numpy{python_full_version >= '3.10'}==1.25.1
+              numpy{python_full_version >= '3.10'}==1.25.2
+              numpy{python_full_version >= '3.10'}==1.26.0
+              numpy{python_full_version >= '3.10'}==1.26.1
+              numpy{python_full_version >= '3.10'}==1.26.2
+              numpy{python_full_version >= '3.10'}==1.26.3
+              numpy{python_full_version >= '3.10'}==1.26.4
+          and pandas==1.5.3 depends on numpy{python_full_version >= '3.10'}>=1.21.0, we can conclude that pandas==1.5.3 depends on numpy>=1.21.0.
           And because your project depends on numpy==1.20.3 and pandas==1.5.3, we can conclude that your project's requirements are unsatisfiable.
-
-          hint: Pre-releases are available for `numpy` in the requested range (e.g., 2.3.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
 
           hint: While the active Python version is 3.9, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
     ");
