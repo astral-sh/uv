@@ -1,10 +1,10 @@
 use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
-use assert_fs::fixture::{FileWriteStr, PathChild};
+use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use flate2::bufread::GzDecoder;
 use fs_err::File;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use std::env;
 use std::io::BufReader;
 use std::path::Path;
@@ -470,7 +470,7 @@ fn build_module_name_normalization() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Missing module directory for `Django_plugin` in `src`. Found: ``
+    error: Expected a Python module at: `src/Django_plugin/__init__.py`
     ");
 
     fs_err::create_dir_all(context.temp_dir.join("src/Django_plugin"))?;
@@ -484,7 +484,7 @@ fn build_module_name_normalization() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module directory at: `src/Django_plugin/__init__.py`
+    error: Expected a Python module at: `src/Django_plugin/__init__.py`
     ");
 
     // Use `Django_plugin` instead of `django_plugin`
@@ -624,7 +624,7 @@ fn sdist_error_without_module() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Missing source directory at: `src`
+    error: Expected a Python module at: `src/foo/__init__.py`
     ");
 
     fs_err::create_dir(context.temp_dir.join("src"))?;
@@ -639,8 +639,147 @@ fn sdist_error_without_module() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Missing module directory for `foo` in `src`. Found: ``
+    error: Expected a Python module at: `src/foo/__init__.py`
     ");
 
+    Ok(())
+}
+
+#[test]
+fn complex_namespace_packages() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let dist = context.temp_dir.child("dist");
+    dist.create_dir_all()?;
+
+    let init_py_a = indoc! {"
+        def one():
+            return 1
+    "};
+
+    let init_py_b = indoc! {"
+        from complex_project.part_a import one
+
+        def two():
+            return one() + one()
+    "};
+
+    let projects = [
+        ("complex-project", "part_a", init_py_a),
+        ("complex-project", "part_b", init_py_b),
+    ];
+
+    for (project_name, part_name, init_py) in projects {
+        let project = context
+            .temp_dir
+            .child(format!("{project_name}-{part_name}"));
+        let project_name_dist_info = project_name.replace('-', "_");
+        let pyproject_toml = formatdoc! {r#"
+            [project]
+            name = "{project_name}-{part_name}"
+            version = "1.0.0"
+
+            [tool.uv.build-backend]
+            module-name = "{project_name_dist_info}.{part_name}"
+
+            [build-system]
+            requires = ["uv_build>=0.5.15,<10000"]
+            build-backend = "uv_build"
+            "#
+        };
+        project.child("pyproject.toml").write_str(&pyproject_toml)?;
+
+        project
+            .child("src")
+            .child(project_name_dist_info)
+            .child(part_name)
+            .child("__init__.py")
+            .write_str(init_py)?;
+
+        context
+            .build()
+            .arg("--preview")
+            .arg(project.path())
+            .arg("--out-dir")
+            .arg(dist.path())
+            .assert()
+            .success();
+    }
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .pip_install()
+            .arg("complex-project-part-a")
+            .arg("complex-project-part-b")
+            .arg("--offline")
+            .arg("--find-links")
+            .arg(dist.path()),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + complex-project-part-a==1.0.0
+     + complex-project-part-b==1.0.0
+    "
+    );
+
+    uv_snapshot!(Command::new(context.interpreter())
+        .arg("-c")
+        .arg("from complex_project.part_b import two; print(two())"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    2
+
+    ----- stderr -----
+    "
+    );
+
+    // Test editable installs
+    uv_snapshot!(
+        context.filters(),
+        context
+            .pip_install()
+            .arg("--preview")
+            .arg("-e")
+            .arg("complex-project-part_a")
+            .arg("-e")
+            .arg("complex-project-part_b")
+            .arg("--offline"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Uninstalled 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     - complex-project-part-a==1.0.0
+     + complex-project-part-a==1.0.0 (from file://[TEMP_DIR]/complex-project-part_a)
+     - complex-project-part-b==1.0.0
+     + complex-project-part-b==1.0.0 (from file://[TEMP_DIR]/complex-project-part_b)
+    "
+    );
+
+    uv_snapshot!(Command::new(context.interpreter())
+        .arg("-c")
+        .arg("from complex_project.part_b import two; print(two())"),
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    2
+
+    ----- stderr -----
+    "
+    );
     Ok(())
 }

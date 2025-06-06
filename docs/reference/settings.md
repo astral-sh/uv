@@ -450,6 +450,9 @@ Package names need to be valid Python identifiers, and the directory needs to co
 `__init__.py`. An exception are stubs packages, whose name ends with `-stubs`, with the stem
 being the module name, and which contain a `__init__.pyi` file.
 
+For namespace packages with a single module, the path can be dotted, e.g., `foo.bar` or
+`foo-stubs.bar`.
+
 Note that using this option runs the risk of creating two packages with different names but
 the same module names. Installing such packages together leads to unspecified behavior,
 often with corrupted files or directory trees.
@@ -483,6 +486,30 @@ Common values are `src` (src layout, the default) or an empty path (flat layout)
 ```toml title="pyproject.toml"
 [tool.uv.build-backend]
 module-root = ""
+```
+
+---
+
+#### [`namespace`](#build-backend_namespace) {: #build-backend_namespace }
+<span id="namespace"></span>
+
+Build a namespace package.
+
+Build a PEP 420 implicit namespace package. Note that this disables most coherence checks,
+but there still needs to be a valid package structure.
+
+Use this option is the namespace package contains multiple root `__init__.py`, for namespace
+packages with a single root `__init__.py` use a dotted `module-name` instead.
+
+**Default value**: `false`
+
+**Type**: `bool`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+namespace = true
 ```
 
 ---
