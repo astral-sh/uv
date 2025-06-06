@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt::Formatter;
-use std::ops::Bound;
+use std::ops::{Bound, DerefMut};
 use std::str::FromStr;
 
 use crate::{
@@ -39,6 +39,12 @@ impl std::ops::Deref for VersionSpecifiers {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl DerefMut for VersionSpecifiers {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -126,6 +132,23 @@ impl VersionSpecifiers {
         specifiers.extend(VersionSpecifier::from_release_only_bounds((start, end)));
 
         Self::from_unsorted(specifiers)
+    }
+
+    /// Bump last constraint if it doesn't contain `latest`
+    pub fn bump_last(&mut self, latest: &Version) -> (bool, bool) {
+        match self.last_mut().filter(|last| !last.contains(latest)) {
+            Some(last) => {
+                let (bumped, upgraded) = last.version.bump_to(latest, last.operator);
+                // Special case: unresolvable requirement has been downgraded to latest
+                // We need to change >2.0 to >=1.2 for latest 1.2.3 (EqualStar and >= stay untouched)
+                if bumped && last.operator == Operator::GreaterThan {
+                    last.operator = Operator::GreaterThanEqual;
+                    return (bumped, false);
+                }
+                (bumped, upgraded)
+            }
+            _ => (false, false),
+        }
     }
 }
 
@@ -1992,5 +2015,125 @@ Failed to parse version: Unexpected end of version specifier, expected operator.
             err.to_string(),
             "The ~= operator requires at least two segments in the release version"
         );
+    }
+
+    #[test]
+    fn test_bump_last() {
+        let success = [
+            ("1.2.3", "<1", "<2", 1), // upgrades
+            ("1.2.3", "<2", "", 0),
+            ("1.2.3", "<2.0", "", 0),
+            ("1.2.3", "<2.0.0", "", 0),
+            ("1.2.3", "<1.0", "<1.3", 1),
+            ("1.2.3", "<1.2", "<1.3", 1),
+            ("2.0.0", "<1.0", "<2.1", 1),
+            ("1.2.3", "<1.3", "", 0),
+            ("1.2.3", "<1.0.0", "<1.3.0", 1),
+            ("1.2.3", "<1.2.0", "<1.3.0", 1),
+            ("1.2.3", "<1.2.3", "<1.3.0", 1),
+            ("1.2.3", "<1.2.4", "", 0),
+            ("1.2.3", "<1.3.0", "", 0),
+            ("1.2.3", "<=1", "<=2", 1),
+            ("1.2.3", "<=1.0", "<=1.3", 1),
+            ("1.2.3", "<=1.2", "<=1.3", 1),
+            ("1.2.3", "<=1.0.0", "<=1.3.0", 1),
+            ("1.2.3", "<=1.2.0", "<=1.3.0", 1),
+            ("1.2.3", "<=1.2.2", "<=1.2.3", 1),
+            ("1.2.3", "==0.*", "==1.*", 1),
+            ("1.2.3", "==1.0.*", "==1.2.*", 1),
+            ("1.2.3", "==1.1.*", "==1.2.*", 1),
+            ("1.2.3", "==0.1.0", "==1.2.3", 1),
+            ("1.2.3", "==0.1.2", "==1.2.3", 1),
+            ("1.2.3", "<=1.2.3", "", 0),
+            ("1.2.3", "<=1.2.4", "", 0),
+            ("1.2.3", ">2", ">=1", 2), // downgrades
+            ("1.2.3", ">2.0", ">=1.2", 2),
+            ("1.2.3", ">2.0.0", ">=1.2.0", 2),
+            ("1.2.3", ">2.0.1", ">=1.2.3", 2),
+            ("1.2.3", ">1.3", ">=1.2", 2),
+            ("1.2.3", ">1.3.0", ">=1.2.0", 2),
+            ("1.2.3", ">1.3.1", ">=1.2.3", 2),
+            ("1.2.3", ">1.2.3", ">=1.2.3", 2), // operator "downgrade"
+            ("1.2.3", ">1.2.4", ">=1.2.3", 2),
+            ("1.2.3", ">=2", ">=1", 2),
+            ("1.2.3", ">=2.0", ">=1.2", 2),
+            ("1.2.3", ">=2.0.0", ">=1.2.0", 2),
+            ("1.2.3", ">=2.0.1", ">=1.2.3", 2),
+            ("1.2.3", ">=1.3", ">=1.2", 2),
+            ("1.2.3", ">=1.3.0", ">=1.2.0", 2),
+            ("1.2.3", ">=1.3.1", ">=1.2.3", 2),
+            ("1.2.3", ">=1.2.4", ">=1.2.3", 2),
+            ("1.2.3", "==2.*", "==1.*", 2),
+            ("1.2.3", "==2.0.*", "==1.2.*", 2),
+            ("1.2.3", "==2.1.*", "==1.2.*", 2),
+            ("1.2.3", "==1.3.*", "==1.2.*", 2),
+            ("1.2.3", "==1.3.0", "==1.2.3", 2),
+            ("1.2.3", "==1.3.2", "==1.2.3", 2),
+            ("1.2.3", ">1", "", 0), // unchanged
+            ("1.2.3", ">1.2", "", 0),
+            ("1.2.3", ">1.2.0", "", 0),
+            ("1.2.3", ">1.2.2", "", 0),
+            ("1.2.3", ">=1", "", 0),
+            ("1.2.3", ">=1.2", "", 0),
+            ("1.2.3", ">=1.2.0", "", 0),
+            ("1.2.3", ">=1.2.3", "", 0),
+            ("1.2.3", "==1.*", "", 0),
+            ("1.2.3", "==1.2.*", "", 0),
+            ("1.2.3", "==1.2.3", "", 0),
+        ];
+        for (i, (latest, old, new, upgrade)) in success.iter().enumerate() {
+            // if i != 0 { continue }
+            let mut modified = VersionSpecifiers::from_str(old).unwrap();
+            let old = VersionSpecifiers::from_str(old).unwrap();
+            let new = VersionSpecifiers::from_str(new).unwrap();
+            let latest = Version::from_str(latest).unwrap();
+            let (bumped, upgraded) = modified.bump_last(&latest);
+            let should_bump = !new.to_string().is_empty();
+            let not = if should_bump { "not " } else { "" };
+            assert_eq!(
+                old.contains(&latest),
+                !bumped && !should_bump,
+                "[{i}]: test data incorrect: old {old} contains {latest} -> should not bump"
+            );
+            assert!(
+                new.contains(&latest),
+                "[{i}]: test data incorrect: new {new} doesn't contain {latest} -> should bump"
+            );
+            assert_eq!(
+                should_bump,
+                *upgrade != 0,
+                "[{i}]: {} and expected 0 (unchanged) but test data = {upgrade}",
+                if should_bump {
+                    "should bump"
+                } else {
+                    "should not bump"
+                }
+            );
+            assert_eq!(
+                bumped, should_bump,
+                "[{i}]: did {not}bump {old} to {modified} for {latest}"
+            );
+            assert_eq!(
+                upgraded,
+                should_bump && *upgrade == 1,
+                "[{i}]: did not {} {old} to {modified} for {latest}",
+                if *upgrade == 1 {
+                    "upgrade"
+                } else {
+                    "downgrade"
+                }
+            );
+            if !should_bump {
+                assert_eq!(
+                    modified, old,
+                    "[{i}]: expected unchanged {old} but got {modified}"
+                );
+                continue;
+            }
+            assert_eq!(
+                modified, new,
+                "[{i}]: expected {old} to become {new} but got {modified}"
+            );
+        }
     }
 }
