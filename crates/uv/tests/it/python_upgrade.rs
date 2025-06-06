@@ -40,8 +40,8 @@ fn python_upgrade() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.17 in [TIME]
-     + cpython-3.10.17-[PLATFORM]
+    Installed Python 3.10.18 in [TIME]
+     + cpython-3.10.18-[PLATFORM]
     ");
 
     // Should be a no-op when already upgraded
@@ -195,8 +195,8 @@ fn python_upgrade_transparent_from_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.17 in [TIME]
-     + cpython-3.10.17-[PLATFORM]
+    Installed Python 3.10.18 in [TIME]
+     + cpython-3.10.18-[PLATFORM]
     ");
 
     // First virtual environment should reflect upgraded patch
@@ -204,7 +204,7 @@ fn python_upgrade_transparent_from_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.17
+    Python 3.10.18
 
     ----- stderr -----
     "
@@ -216,7 +216,7 @@ fn python_upgrade_transparent_from_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.17
+    Python 3.10.18
 
     ----- stderr -----
     "
@@ -265,8 +265,8 @@ fn python_transparent_upgrade_with_preview_installation() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.17 in [TIME]
-     + cpython-3.10.17-[PLATFORM]
+    Installed Python 3.10.18 in [TIME]
+     + cpython-3.10.18-[PLATFORM]
     ");
 
     // TODO(john): Upgrades are not currently reflected for `--preview` bin Python,
@@ -332,8 +332,8 @@ fn python_upgrade_transparent_from_venv_preview() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.17 in [TIME]
-     + cpython-3.10.17-[PLATFORM]
+    Installed Python 3.10.18 in [TIME]
+     + cpython-3.10.18-[PLATFORM]
     ");
 
     // Virtual environment should reflect upgraded patch
@@ -341,7 +341,7 @@ fn python_upgrade_transparent_from_venv_preview() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.17
+    Python 3.10.18
 
     ----- stderr -----
     "
@@ -395,8 +395,8 @@ fn python_upgrade_ignored_with_python_pin() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.17 in [TIME]
-     + cpython-3.10.17-[PLATFORM]
+    Installed Python 3.10.18 in [TIME]
+     + cpython-3.10.18-[PLATFORM]
     ");
 
     // Virtual environment should continue to respect pinned patch version
@@ -460,8 +460,8 @@ fn python_no_transparent_upgrade_with_venv_patch_specification() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.17 in [TIME]
-     + cpython-3.10.17-[PLATFORM]
+    Installed Python 3.10.18 in [TIME]
+     + cpython-3.10.18-[PLATFORM]
     ");
 
     // The virtual environment Python version is transparently upgraded.
@@ -551,8 +551,8 @@ fn python_transparent_upgrade_venv_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.17 in [TIME]
-     + cpython-3.10.17-[PLATFORM]
+    Installed Python 3.10.18 in [TIME]
+     + cpython-3.10.18-[PLATFORM]
     ");
 
     // Should have transparently upgraded in second virtual environment
@@ -562,7 +562,7 @@ fn python_transparent_upgrade_venv_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.17
+    Python 3.10.18
 
     ----- stderr -----
     "
@@ -706,8 +706,8 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.10.17 in [TIME]
-     + cpython-3.10.17-[PLATFORM]
+    Installed Python 3.10.18 in [TIME]
+     + cpython-3.10.18-[PLATFORM]
     "
     );
 
@@ -718,7 +718,7 @@ fn python_upgrade_transparent_from_venv_module_in_venv() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.17
+    Python 3.10.18
 
     ----- stderr -----
     "
