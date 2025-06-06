@@ -8,6 +8,7 @@ use tracing::{debug, info};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
+use uv_configuration::PreviewMode;
 use uv_pep440::{Prerelease, Version};
 
 use crate::discovery::{
@@ -57,8 +58,10 @@ impl PythonInstallation {
         environments: EnvironmentPreference,
         preference: PythonPreference,
         cache: &Cache,
+        preview: PreviewMode,
     ) -> Result<Self, Error> {
-        let installation = find_python_installation(request, environments, preference, cache)??;
+        let installation =
+            find_python_installation(request, environments, preference, cache, preview)??;
         Ok(installation)
     }
 
@@ -69,12 +72,14 @@ impl PythonInstallation {
         environments: EnvironmentPreference,
         preference: PythonPreference,
         cache: &Cache,
+        preview: PreviewMode,
     ) -> Result<Self, Error> {
         Ok(find_best_python_installation(
             request,
             environments,
             preference,
             cache,
+            preview,
         )??)
     }
 
@@ -92,11 +97,12 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
+        preview: PreviewMode,
     ) -> Result<Self, Error> {
         let request = request.unwrap_or(&PythonRequest::Default);
 
         // Search for the installation
-        let err = match Self::find(request, environments, preference, cache) {
+        let err = match Self::find(request, environments, preference, cache, preview) {
             Ok(installation) => return Ok(installation),
             Err(err) => err,
         };
@@ -132,6 +138,7 @@ impl PythonInstallation {
             python_install_mirror,
             pypy_install_mirror,
             python_downloads_json_url,
+            preview,
         )
         .await
         {
@@ -152,6 +159,7 @@ impl PythonInstallation {
         python_install_mirror: Option<&str>,
         pypy_install_mirror: Option<&str>,
         python_downloads_json_url: Option<&str>,
+        preview: PreviewMode,
     ) -> Result<Self, Error> {
         let installations = ManagedPythonInstallations::from_settings(None)?.init()?;
         let installations_dir = installations.root();
@@ -195,7 +203,7 @@ impl PythonInstallation {
             .patch()
             .is_some_and(|p| p >= highest_patch)
         {
-            installed.ensure_minor_version_link()?;
+            installed.ensure_minor_version_link(preview)?;
         }
 
         if let Err(e) = installed.ensure_dylib_patched() {

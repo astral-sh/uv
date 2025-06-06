@@ -99,6 +99,7 @@ pub(crate) async fn upgrade(
                 install_mirrors.python_install_mirror.as_deref(),
                 install_mirrors.pypy_install_mirror.as_deref(),
                 install_mirrors.python_downloads_json_url.as_deref(),
+                preview,
             )
             .await?
             .into_interpreter(),
@@ -308,7 +309,7 @@ async fn upgrade_tool(
         )
         .await?;
 
-        let environment = installed_tools.create_environment(name, interpreter.clone())?;
+        let environment = installed_tools.create_environment(name, interpreter.clone(), preview)?;
 
         let environment = sync_environment(
             environment,

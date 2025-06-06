@@ -237,14 +237,16 @@ async fn do_uninstall(
         .iter()
         .filter(|(minor_version, _)| uninstalled_minor_versions.contains(minor_version))
     {
-        installation.ensure_minor_version_link()?;
+        installation.ensure_minor_version_link(preview)?;
     }
     // For each uninstalled installation, check if there are no remaining installations
     // for its minor version. If there are none remaining, remove the symlink directory
     // (or junction on Windows) if it exists.
     for installation in &matching_installations {
         if !remaining_minor_versions.contains_key(installation.minor_version_key()) {
-            if let Some(directory_symlink) = DirectorySymlink::from_installation(installation) {
+            if let Some(directory_symlink) =
+                DirectorySymlink::from_installation(installation, preview)
+            {
                 if directory_symlink.symlink_exists() {
                     let result = if cfg!(windows) {
                         fs_err::remove_dir(directory_symlink.symlink_directory.as_path())

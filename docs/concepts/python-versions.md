@@ -123,7 +123,7 @@ present, uv will install all of the Python versions listed in the file.
 
 !!! important
 
-    Support for installing Python executables is in _preview_, this means the behavior is experimental
+    Support for installing Python executables is in _preview_. This means the behavior is experimental
     and subject to change.
 
 To install Python executables into your `PATH`, provide the `--preview` option:
@@ -162,7 +162,7 @@ $ uv python install 3.12.8 --preview  # Updates `python3.12` to point to 3.12.8
 
 !!! important
 
-    Support for upgrading Python patch versions is in _preview_, this means the behavior is experimental
+    Support for upgrading Python patch versions is in _preview_. This means the behavior is experimental
     and subject to change.
 
 uv-managed Python minor versions can be upgraded to the latest supported patch release with the

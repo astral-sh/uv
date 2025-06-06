@@ -7,6 +7,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
+use uv_configuration::PreviewMode;
 use uv_dirs::user_uv_config_dir;
 use uv_fs::Simplified;
 use uv_python::{
@@ -31,6 +32,7 @@ pub(crate) async fn pin(
     rm: bool,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let workspace_cache = WorkspaceCache::default();
     let virtual_project = if no_project {
@@ -85,6 +87,7 @@ pub(crate) async fn pin(
                         virtual_project,
                         python_preference,
                         cache,
+                        preview,
                     );
                 }
             }
@@ -103,6 +106,7 @@ pub(crate) async fn pin(
         EnvironmentPreference::OnlySystem,
         python_preference,
         cache,
+        preview,
     ) {
         Ok(python) => Some(python),
         // If no matching Python version is found, don't fail unless `resolved` was requested
@@ -231,6 +235,7 @@ fn warn_if_existing_pin_incompatible_with_project(
     virtual_project: &VirtualProject,
     python_preference: PythonPreference,
     cache: &Cache,
+    preview: PreviewMode,
 ) {
     // Check if the pinned version is compatible with the project.
     if let Some(pin_version) = pep440_version_from_request(pin) {
@@ -255,6 +260,7 @@ fn warn_if_existing_pin_incompatible_with_project(
         EnvironmentPreference::OnlySystem,
         python_preference,
         cache,
+        preview,
     ) {
         Ok(python) => {
             let python_version = python.python_version();

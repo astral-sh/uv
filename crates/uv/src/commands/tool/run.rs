@@ -747,6 +747,7 @@ async fn get_or_create_environment(
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
         install_mirrors.python_downloads_json_url.as_deref(),
+        preview,
     )
     .await?
     .into_interpreter();
@@ -1036,6 +1037,7 @@ async fn get_or_create_environment(
                     python_preference,
                     python_downloads,
                     cache,
+                    preview,
                 )
                 .await
                 .ok()

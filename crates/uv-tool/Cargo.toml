@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 uv-cache = { workspace = true }
+uv-configuration = { workspace = true }
 uv-dirs = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true }

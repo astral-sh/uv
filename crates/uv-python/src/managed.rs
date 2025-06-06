@@ -12,6 +12,7 @@ use itertools::Itertools;
 use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
+use uv_configuration::PreviewMode;
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
@@ -523,8 +524,8 @@ impl ManagedPythonInstallation {
 
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
-    pub fn ensure_minor_version_link(&self) -> Result<(), Error> {
-        if let Some(directory_symlink) = DirectorySymlink::from_installation(self) {
+    pub fn ensure_minor_version_link(&self, preview: PreviewMode) -> Result<(), Error> {
+        if let Some(directory_symlink) = DirectorySymlink::from_installation(self, preview) {
             directory_symlink.create_directory()?;
         }
         Ok(())
@@ -685,7 +686,14 @@ impl DirectorySymlink {
     /// For a Python 3.10.8 installation in `C:\path\to\uv\python\cpython-3.10.8-windows-x86_64-none\python.exe`,
     /// the junction would be `C:\path\to\uv\python\cpython-3.10-windows-x86_64-none` and the executable path including the
     /// junction would be `C:\path\to\uv\python\cpython-3.10-windows-x86_64-none\python.exe`.
-    pub fn from_executable(executable: &Path, key: &PythonInstallationKey) -> Option<Self> {
+    pub fn from_executable(
+        executable: &Path,
+        key: &PythonInstallationKey,
+        preview: PreviewMode,
+    ) -> Option<Self> {
+        if preview.is_disabled() {
+            return None;
+        }
         let implementation = key.implementation();
         if !matches!(
             implementation,
@@ -736,15 +744,19 @@ impl DirectorySymlink {
         })
     }
 
-    pub fn from_installation(installation: &ManagedPythonInstallation) -> Option<Self> {
+    pub fn from_installation(
+        installation: &ManagedPythonInstallation,
+        preview: PreviewMode,
+    ) -> Option<Self> {
         DirectorySymlink::from_executable(
             installation.executable(false).as_path(),
             installation.key(),
+            preview,
         )
     }
 
-    pub fn from_interpreter(interpreter: &Interpreter) -> Option<Self> {
-        DirectorySymlink::from_executable(interpreter.sys_executable(), &interpreter.key())
+    pub fn from_interpreter(interpreter: &Interpreter, preview: PreviewMode) -> Option<Self> {
+        DirectorySymlink::from_executable(interpreter.sys_executable(), &interpreter.key(), preview)
     }
 
     pub fn create_directory(&self) -> Result<(), Error> {
