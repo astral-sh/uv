@@ -14,6 +14,7 @@ workspace = true
 uv-pep440 = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-redacted = { workspace = true }
 uv-settings = { workspace = true }
 uv-workspace = { workspace = true }
 

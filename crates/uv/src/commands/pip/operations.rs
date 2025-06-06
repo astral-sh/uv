@@ -29,6 +29,7 @@ use uv_fs::Simplified;
 use uv_install_wheel::LinkMode;
 use uv_installer::{Plan, Planner, Preparer, SitePackages};
 use uv_normalize::{GroupName, PackageName};
+use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{Conflicts, ResolverMarkerEnvironment};
 use uv_python::{PythonEnvironment, PythonInstallation};
@@ -119,6 +120,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     tags: Option<&Tags>,
     resolver_env: ResolverEnvironment,
     python_requirement: PythonRequirement,
+    current_environment: &MarkerEnvironment,
     conflicts: Conflicts,
     client: &RegistryClient,
     flat_index: &FlatIndex,
@@ -303,6 +305,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             options,
             &python_requirement,
             resolver_env,
+            current_environment,
             conflicts,
             tags,
             flat_index,

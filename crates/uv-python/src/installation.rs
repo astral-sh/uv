@@ -483,8 +483,10 @@ impl Ord for PythonInstallationKey {
             .cmp(&other.implementation)
             .then_with(|| self.version().cmp(&other.version()))
             .then_with(|| self.os.to_string().cmp(&other.os.to_string()))
-            .then_with(|| self.arch.to_string().cmp(&other.arch.to_string()))
+            // Architectures are sorted in preferred order, with native architectures first
+            .then_with(|| self.arch.cmp(&other.arch).reverse())
             .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
-            .then_with(|| self.variant.cmp(&other.variant).reverse()) // we want Default to come first
+            // Python variants are sorted in preferred order, with `Default` first
+            .then_with(|| self.variant.cmp(&other.variant).reverse())
     }
 }

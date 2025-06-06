@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use crate::common::{TestContext, uv_snapshot};
 use anyhow::Result;
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
 use insta::assert_snapshot;
 use uv_python::{
@@ -14,14 +15,14 @@ fn python_pin() {
     let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
 
     // Without arguments, we attempt to read the current pin (which does not exist yet)
-    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    uv_snapshot!(context.filters(), context.python_pin(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: No pinned Python version found
-    "###);
+    error: No Python version file found; specify a version to create one
+    ");
 
     // Given an argument, we pin to that version
     uv_snapshot!(context.filters(), context.python_pin().arg("any"), @r###"
@@ -208,14 +209,14 @@ fn python_pin_global_if_no_local() -> Result<()> {
     uv.create_dir_all()?;
 
     // Without arguments, we attempt to read the current pin (which does not exist yet)
-    uv_snapshot!(context.filters(), context.python_pin(), @r###"
+    uv_snapshot!(context.filters(), context.python_pin(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: No pinned Python version found
-    "###);
+    error: No Python version file found; specify a version to create one
+    ");
 
     // Given an argument, we globally pin to that version
     uv_snapshot!(context.filters(), context.python_pin().arg("3.11").arg("--global"), @r"
@@ -813,4 +814,64 @@ fn python_pin_with_comments() -> Result<()> {
     "###);
 
     Ok(())
+}
+
+#[test]
+fn python_pin_rm() {
+    let context: TestContext = TestContext::new_with_versions(&["3.12"]);
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No Python version file found
+    ");
+
+    // Remove the local pin
+    context.python_pin().arg("3.12").assert().success();
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed Python version file at `.python-version`
+
+    ----- stderr -----
+    ");
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm").arg("--global"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No global Python pin found
+    ");
+
+    // Global does not detect the local pin
+    context.python_pin().arg("3.12").assert().success();
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm").arg("--global"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No global Python pin found
+    ");
+
+    context
+        .python_pin()
+        .arg("3.12")
+        .arg("--global")
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.python_pin().arg("--rm").arg("--global"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Removed Python version file at `[UV_USER_CONFIG_DIR]/.python-version`
+
+    ----- stderr -----
+    ");
 }

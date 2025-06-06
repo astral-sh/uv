@@ -2220,6 +2220,7 @@ fn lock_dependency_extra() -> Result<()> {
 }
 
 /// Lock a project with a dependency that has a conditional extra.
+#[cfg(feature = "python-eol")]
 #[test]
 fn lock_conditional_dependency_extra() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -3672,21 +3673,22 @@ fn lock_requires_python() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies for split (python_full_version >= '3.7' and python_full_version < '3.7.9'):
       ╰─▶ Because the requested Python version (>=3.7) does not satisfy Python>=3.7.9 and pygls>=1.1.0,<=1.2.1 depends on Python>=3.7.9,<4, we can conclude that pygls>=1.1.0,<=1.2.1 cannot be used.
-          And because only pygls<=1.3.0 is available, we can conclude that all of:
-              pygls>=1.1.0,<1.3.0
-              pygls>1.3.0
-           cannot be used. (1)
+          And because only the following versions of pygls are available:
+              pygls<=1.1.0
+              pygls==1.1.1
+              pygls==1.1.2
+              pygls==1.2.0
+              pygls==1.2.1
+              pygls==1.3.0
+          we can conclude that pygls>=1.1.0,<1.3.0 cannot be used. (1)
 
           Because the requested Python version (>=3.7) does not satisfy Python>=3.8 and pygls==1.3.0 depends on Python>=3.8, we can conclude that pygls==1.3.0 cannot be used.
-          And because we know from (1) that all of:
-              pygls>=1.1.0,<1.3.0
-              pygls>1.3.0
-           cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
+          And because we know from (1) that pygls>=1.1.0,<1.3.0 cannot be used, we can conclude that pygls>=1.1.0 cannot be used.
           And because your project depends on pygls>=1.1.0, we can conclude that your project's requirements are unsatisfiable.
 
-          hint: Pre-releases are available for `pygls` in the requested range (e.g., 2.0.0a3), but pre-releases weren't enabled (try: `--prerelease=allow`)
-
           hint: The `requires-python` value (>=3.7) includes Python versions that are not supported by your dependencies (e.g., pygls>=1.1.0,<=1.2.1 only supports >=3.7.9, <4). Consider using a more restrictive `requires-python` value (like >=3.7.9, <4).
+
+          hint: While the active Python version is 3.12, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
     ");
 
     // Require >=3.7, and allow locking to a version of `pygls` that is compatible (==1.0.1).
@@ -4296,10 +4298,13 @@ fn lock_requires_python() -> Result<()> {
     });
 
     // Validate that attempting to install with an unsupported Python version raises an error.
-    let context38 = TestContext::new("3.8").with_filtered_python_sources();
+    let context_unsupported = TestContext::new("3.9").with_filtered_python_sources();
 
-    fs_err::copy(pyproject_toml, context38.temp_dir.join("pyproject.toml"))?;
-    fs_err::copy(&lockfile, context38.temp_dir.join("uv.lock"))?;
+    fs_err::copy(
+        pyproject_toml,
+        context_unsupported.temp_dir.join("pyproject.toml"),
+    )?;
+    fs_err::copy(&lockfile, context_unsupported.temp_dir.join("uv.lock"))?;
 
     // Re-run with `--locked`.
     uv_snapshot!(context.filters(), context.lock().arg("--locked"), @r###"
@@ -4313,7 +4318,7 @@ fn lock_requires_python() -> Result<()> {
 
     // Install from the lockfile.
     // Note we need to disable Python fetches or we'll just download 3.12
-    uv_snapshot!(context38.filters(), context38.sync().arg("--frozen").arg("--no-python-downloads"), @r###"
+    uv_snapshot!(context_unsupported.filters(), context_unsupported.sync().arg("--frozen").arg("--no-python-downloads"), @r###"
     success: false
     exit_code: 2
     ----- stdout -----
@@ -7983,11 +7988,6 @@ fn lock_redact_git_pep508() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
         r#"
@@ -8000,7 +8000,7 @@ fn lock_redact_git_pep508() -> Result<()> {
         token = token,
     })?;
 
-    uv_snapshot!(&filters, context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8012,7 +8012,7 @@ fn lock_redact_git_pep508() -> Result<()> {
     let lock = context.read("uv.lock");
 
     insta::with_settings!({
-        filters => filters.clone(),
+        filters => context.filters(),
     }, {
         assert_snapshot!(
             lock, @r#"
@@ -8043,7 +8043,7 @@ fn lock_redact_git_pep508() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8053,7 +8053,7 @@ fn lock_redact_git_pep508() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(&filters, context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8073,11 +8073,6 @@ fn lock_redact_git_sources() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
         r#"
@@ -8093,7 +8088,7 @@ fn lock_redact_git_sources() -> Result<()> {
         token = token,
     })?;
 
-    uv_snapshot!(&filters, context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8105,7 +8100,7 @@ fn lock_redact_git_sources() -> Result<()> {
     let lock = context.read("uv.lock");
 
     insta::with_settings!({
-        filters => filters.clone(),
+        filters => context.filters(),
     }, {
         assert_snapshot!(
             lock, @r#"
@@ -8136,7 +8131,7 @@ fn lock_redact_git_sources() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8146,7 +8141,7 @@ fn lock_redact_git_sources() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(&filters, context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8166,11 +8161,6 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(&formatdoc! {
         r#"
@@ -8183,7 +8173,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
         token = token,
     })?;
 
-    uv_snapshot!(&filters, context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8196,7 +8186,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     let lock = context.read("uv.lock");
 
     insta::with_settings!({
-        filters => filters.clone(),
+        filters => context.filters(),
     }, {
         assert_snapshot!(
             lock, @r#"
@@ -8221,7 +8211,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8232,7 +8222,7 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(&filters, context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8249,12 +8239,6 @@ fn lock_redact_git_pep508_non_project() -> Result<()> {
 #[test]
 fn lock_redact_index_sources() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
-    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
-
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8274,7 +8258,7 @@ fn lock_redact_index_sources() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(&filters, context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8286,7 +8270,7 @@ fn lock_redact_index_sources() -> Result<()> {
     let lock = context.read("uv.lock");
 
     insta::with_settings!({
-        filters => filters.clone(),
+        filters => context.filters(),
     }, {
         assert_snapshot!(
             lock, @r#"
@@ -8321,7 +8305,7 @@ fn lock_redact_index_sources() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8331,7 +8315,7 @@ fn lock_redact_index_sources() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(&filters, context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8348,12 +8332,6 @@ fn lock_redact_index_sources() -> Result<()> {
 #[test]
 fn lock_redact_url_sources() -> Result<()> {
     let context = TestContext::new("3.12").with_filtered_link_mode_warning();
-    let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
-
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(r#"
@@ -8367,7 +8345,7 @@ fn lock_redact_url_sources() -> Result<()> {
         iniconfig = { url = "https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl" }
         "#)?;
 
-    uv_snapshot!(&filters, context.lock(), @r###"
+    uv_snapshot!(&context.filters(), context.lock(), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8378,8 +8356,9 @@ fn lock_redact_url_sources() -> Result<()> {
 
     let lock = context.read("uv.lock");
 
+    // The credentials are for a direct URL, and are included in the lockfile
     insta::with_settings!({
-        filters => filters.clone(),
+        filters => context.filters(),
     }, {
         assert_snapshot!(
             lock, @r#"
@@ -8413,7 +8392,7 @@ fn lock_redact_url_sources() -> Result<()> {
     });
 
     // Re-run with `--locked`.
-    uv_snapshot!(&filters, context.lock().arg("--locked"), @r###"
+    uv_snapshot!(&context.filters(), context.lock().arg("--locked"), @r###"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8423,7 +8402,7 @@ fn lock_redact_url_sources() -> Result<()> {
     "###);
 
     // Install from the lockfile.
-    uv_snapshot!(&filters, context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r###"
+    uv_snapshot!(&context.filters(), context.sync().arg("--frozen").arg("--reinstall").arg("--no-cache"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8431,8 +8410,8 @@ fn lock_redact_url_sources() -> Result<()> {
     ----- stderr -----
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + iniconfig==2.0.0 (from https://public:heron@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
-    "###);
+     + iniconfig==2.0.0 (from https://public:****@pypi-proxy.fly.dev/basic-auth/files/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl)
+    ");
 
     Ok(())
 }
@@ -11754,15 +11733,98 @@ fn unconditional_overlapping_marker_disjoint_version_constraints() -> Result<()>
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
       × No solution found when resolving dependencies:
-      ╰─▶ Because only datasets<2.19 is available and your project depends on datasets>=2.19, we can conclude that your project's requirements are unsatisfiable.
-    "###);
+      ╰─▶ Because only datasets<=2.18.0 is available and your project depends on datasets>=2.19, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+/// This checks that markers that normalize to 'false', which are serialized
+/// to the lockfile as `python_full_version < '0'`, get read back as false.
+/// Otherwise `uv lock --check` will always fail.
+#[test]
+fn normalize_false_marker_dependency_groups() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        [dependency-groups]
+        dev = [
+            "pytest;python_full_version>'3.8' and python_full_version<'3.6'"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// This checks that markers that normalize to 'false', which are serialized
+/// to the lockfile as `python_full_version < '0'`, get read back as false.
+/// Otherwise `uv lock --check` will always fail.
+#[test]
+fn normalize_false_marker_requires_dist() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "debug"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = [
+            "pytest; python_full_version>'3.8' and python_full_version<'3.6'"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
 
     Ok(())
 }
@@ -15754,7 +15816,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG No workspace root found, using project root
     DEBUG Ignoring existing lockfile due to mismatched requirements for: `project==0.1.0`
       Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([]), index: None, conflict: None }, origin: None }}
-      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: Url { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None }), format: Simple }), conflict: None }, origin: None }}
+      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2.0.0" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: DisplaySafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None }), format: Simple }), conflict: None }, origin: None }}
     DEBUG Solving with installed Python version: 3.12.[X]
     DEBUG Solving with target Python version: >=3.12
     DEBUG Adding direct dependency: project*
@@ -27322,6 +27384,169 @@ fn lock_omit_wheels_exclude_newer() -> Result<()> {
     // Re-run with `--offline`. We shouldn't need a network connection to validate an
     // already-correct lockfile with immutable metadata.
     uv_snapshot!(context.filters(), context.lock().arg("--locked").arg("--offline").arg("--no-cache"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Check that we hint if the resolution failed in a different Python version.
+#[test]
+fn lock_conflict_for_disjoint_python_version() -> Result<()> {
+    let context = TestContext::new("3.9");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "numpy==1.20.3",
+            "pandas==1.5.3",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (python_full_version >= '3.11'):
+      ╰─▶ Because only the following versions of numpy{python_full_version >= '3.10'} are available:
+              numpy{python_full_version >= '3.10'}<=1.21.0
+              numpy{python_full_version >= '3.10'}==1.21.1
+              numpy{python_full_version >= '3.10'}==1.21.2
+              numpy{python_full_version >= '3.10'}==1.21.3
+              numpy{python_full_version >= '3.10'}==1.21.4
+              numpy{python_full_version >= '3.10'}==1.21.5
+              numpy{python_full_version >= '3.10'}==1.21.6
+              numpy{python_full_version >= '3.10'}==1.22.0
+              numpy{python_full_version >= '3.10'}==1.22.1
+              numpy{python_full_version >= '3.10'}==1.22.2
+              numpy{python_full_version >= '3.10'}==1.22.3
+              numpy{python_full_version >= '3.10'}==1.22.4
+              numpy{python_full_version >= '3.10'}==1.23.0
+              numpy{python_full_version >= '3.10'}==1.23.1
+              numpy{python_full_version >= '3.10'}==1.23.2
+              numpy{python_full_version >= '3.10'}==1.23.3
+              numpy{python_full_version >= '3.10'}==1.23.4
+              numpy{python_full_version >= '3.10'}==1.23.5
+              numpy{python_full_version >= '3.10'}==1.24.0
+              numpy{python_full_version >= '3.10'}==1.24.1
+              numpy{python_full_version >= '3.10'}==1.24.2
+              numpy{python_full_version >= '3.10'}==1.24.3
+              numpy{python_full_version >= '3.10'}==1.24.4
+              numpy{python_full_version >= '3.10'}==1.25.0
+              numpy{python_full_version >= '3.10'}==1.25.1
+              numpy{python_full_version >= '3.10'}==1.25.2
+              numpy{python_full_version >= '3.10'}==1.26.0
+              numpy{python_full_version >= '3.10'}==1.26.1
+              numpy{python_full_version >= '3.10'}==1.26.2
+              numpy{python_full_version >= '3.10'}==1.26.3
+              numpy{python_full_version >= '3.10'}==1.26.4
+          and pandas==1.5.3 depends on numpy{python_full_version >= '3.10'}>=1.21.0, we can conclude that pandas==1.5.3 depends on numpy>=1.21.0.
+          And because your project depends on numpy==1.20.3 and pandas==1.5.3, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: While the active Python version is 3.9, the resolution failed for other Python versions supported by your project. Consider limiting your project's supported Python versions using `requires-python`.
+    ");
+
+    // Check that the resolution passes on the restricted Python environment.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = "==3.9.*"
+        dependencies = [
+            "numpy==1.20.3",
+            "pandas==1.5.3",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 6 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Check that we hint if the resolution failed for a different platform.
+#[test]
+fn lock_conflict_for_disjoint_platform() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "numpy>=1.24,<1.26; sys_platform == 'exotic'",
+            "numpy>=1.26",
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies for split (sys_platform == 'exotic'):
+      ╰─▶ Because only the following versions of numpy{sys_platform == 'exotic'} are available:
+              numpy{sys_platform == 'exotic'}<=1.24.0
+              numpy{sys_platform == 'exotic'}==1.24.1
+              numpy{sys_platform == 'exotic'}==1.24.2
+              numpy{sys_platform == 'exotic'}==1.24.3
+              numpy{sys_platform == 'exotic'}==1.24.4
+              numpy{sys_platform == 'exotic'}==1.25.0
+              numpy{sys_platform == 'exotic'}==1.25.1
+              numpy{sys_platform == 'exotic'}==1.25.2
+              numpy{sys_platform == 'exotic'}>1.26
+          and your project depends on numpy{sys_platform == 'exotic'}>=1.24,<1.26, we can conclude that your project depends on numpy>=1.24.0,<=1.25.2.
+          And because your project depends on numpy>=1.26, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: The resolution failed for an environment that is not the current one, consider limiting the environments with `tool.uv.environments`.
+    ");
+
+    // Check that the resolution passes on the restricted environment.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "foo"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "numpy>=1.24,<1.26; sys_platform == 'exotic'",
+            "numpy>=1.26",
+        ]
+
+        [tool.uv]
+        environments = [
+            "sys_platform == 'linux' or sys_platform == 'win32' or sys_platform == 'darwin'"
+        ]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
     ----- stdout -----

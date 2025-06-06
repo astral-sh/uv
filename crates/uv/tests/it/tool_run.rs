@@ -1889,6 +1889,73 @@ fn tool_run_python_at_version() {
     Audited in [TIME]
     "###);
 
+    // The @ is optional.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python3.11")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+
+    // Dotless syntax also works.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("python311")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+
+    // Other implementations like PyPy also work. PyPy isn't currently in the test suite, so
+    // specify CPython and rely on the fact that they go through the same codepath.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("cpython311")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+
+    // But short names don't work in the executable position (as opposed to with -p/--python). We
+    // interpret those as package names.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("cp311")
+        .arg("--version"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because cp311 was not found in the package registry and you require cp311, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    // Bare versions don't work either. Again we interpret them as package names.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("311")
+        .arg("--version"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving tool dependencies:
+      ╰─▶ Because 311 was not found in the package registry and you require 311, we can conclude that your requirements are unsatisfiable.
+    ");
+
     // Request a version via `-p`
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("-p")
@@ -1903,6 +1970,35 @@ fn tool_run_python_at_version() {
     ----- stderr -----
     Resolved in [TIME]
     "###);
+
+    // @ syntax is also allowed here.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("-p")
+        .arg("python@311")
+        .arg("python")
+        .arg("--version"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    "###);
+
+    // But @ with nothing in front of it is not.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("-p")
+        .arg("@311")
+        .arg("python")
+        .arg("--version"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found for executable name `@311` in [PYTHON SOURCES]
+    ");
 
     // Request a version in the tool and `-p`
     uv_snapshot!(context.filters(), context.tool_run()
@@ -1991,16 +2087,47 @@ fn tool_run_python_from() {
 
     uv_snapshot!(context.filters(), context.tool_run()
         .arg("--from")
-        .arg("python>=3.12")
+        .arg("python311")
         .arg("python")
-        .arg("--version"), @r###"
-    success: false
-    exit_code: 2
+        .arg("--version"), @r"
+    success: true
+    exit_code: 0
     ----- stdout -----
+    Python 3.11.[X]
 
     ----- stderr -----
-    error: Using `--from python<specifier>` is not supported. Use `python@<version>` instead.
-    "###);
+    Resolved in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python>3.11,<3.13")
+        .arg("python")
+        .arg("--version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.12.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
+
+    // The executed command isn't necessarily Python, but Python is in the PATH.
+    uv_snapshot!(context.filters(), context.tool_run()
+        .arg("--from")
+        .arg("python@3.11")
+        .arg("bash")
+        .arg("-c")
+        .arg("python --version"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Python 3.11.[X]
+
+    ----- stderr -----
+    Resolved in [TIME]
+    ");
 }
 
 #[test]
@@ -2348,7 +2475,7 @@ fn tool_run_with_script_and_from_script() {
 
 #[test]
 fn tool_run_with_compatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.8")
+    let context = TestContext::new("3.9")
         .with_exclude_newer("2024-05-04T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -2361,7 +2488,7 @@ fn tool_run_with_compatible_build_constraints() -> Result<()> {
         .arg("--build-constraints")
         .arg("build_constraints.txt")
         .arg("pytest")
-        .arg("--version"), @r###"
+        .arg("--version"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2378,14 +2505,14 @@ fn tool_run_with_compatible_build_constraints() -> Result<()> {
      + pytest==8.2.0
      + requests==1.2.0
      + tomli==2.0.1
-    "###);
+    ");
 
     Ok(())
 }
 
 #[test]
 fn tool_run_with_incompatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.8")
+    let context = TestContext::new("3.9")
         .with_exclude_newer("2024-05-04T00:00:00Z")
         .with_filtered_counts()
         .with_filtered_exe_suffix();
@@ -2404,7 +2531,7 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
         .arg("--version")
         .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
         .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str())
-        .env(EnvVars::PATH, bin_dir.as_os_str()), @r###"
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2415,7 +2542,7 @@ fn tool_run_with_incompatible_build_constraints() -> Result<()> {
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
       ╰─▶ Because you require setuptools>=40.8.0 and setuptools==2, we can conclude that your requirements are unsatisfiable.
-    "###);
+    ");
 
     Ok(())
 }

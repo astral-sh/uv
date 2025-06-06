@@ -85,7 +85,7 @@ impl GlobDirFilter {
     /// don't end up including any child.
     pub fn match_directory(&self, path: &Path) -> bool {
         let Some(dfa) = &self.dfa else {
-            return false;
+            return true;
         };
 
         // Allow the root path

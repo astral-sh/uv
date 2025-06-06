@@ -39,7 +39,7 @@ jobs:
 
           while IFS= read -r file; do
             # Generated markdown and JSON files are checked during test runs.
-            if [[ "${file}" =~ ^docs/ && ! "${file}" =~ ^docs/reference/(cli|settings).md && ! "${file}" =~ ^docs/configuration/environment.md ]]; then
+            if [[ "${file}" =~ ^docs/ && ! "${file}" =~ ^docs/reference/(cli|settings).md && ! "${file}" =~ ^docs/reference/environment.md ]]; then
               echo "Skipping ${file} (matches docs/ pattern)"
               continue
             fi
@@ -81,7 +81,7 @@ jobs:
         run: rustup component add rustfmt
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@6b9c6063abd6010835644d4c2e1bef4cf5cd0fca # v6.0.1
+        uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
 
       - name: "rustfmt"
         run: cargo fmt --all --check
@@ -187,7 +187,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: "Install cargo shear"
-        uses: taiki-e/install-action@ab3728c7ba6948b9b429627f4d55a68842b27f18 # v2.50.3
+        uses: taiki-e/install-action@735e5933943122c5ac182670a935f54a949265c1 # v2.52.4
         with:
           tool: cargo-shear
       - run: cargo shear
@@ -212,12 +212,12 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@6b9c6063abd6010835644d4c2e1bef4cf5cd0fca # v6.0.1
+      - uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@ab3728c7ba6948b9b429627f4d55a68842b27f18 # v2.50.3
+        uses: taiki-e/install-action@735e5933943122c5ac182670a935f54a949265c1 # v2.52.4
         with:
           tool: cargo-nextest
 
@@ -229,7 +229,7 @@ jobs:
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
 
   cargo-test-macos:
-    timeout-minutes: 10
+    timeout-minutes: 15
     needs: determine_changes
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: macos-latest-xlarge # github-macos-14-aarch64-6
@@ -244,12 +244,12 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup show
 
-      - uses: astral-sh/setup-uv@6b9c6063abd6010835644d4c2e1bef4cf5cd0fca # v6.0.1
+      - uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
       - name: "Install required Python versions"
         run: uv python install
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@ab3728c7ba6948b9b429627f4d55a68842b27f18 # v2.50.3
+        uses: taiki-e/install-action@735e5933943122c5ac182670a935f54a949265c1 # v2.52.4
         with:
           tool: cargo-nextest
 
@@ -278,7 +278,7 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "${{ env.UV_WORKSPACE }}" -Recurse
 
-      - uses: astral-sh/setup-uv@6b9c6063abd6010835644d4c2e1bef4cf5cd0fca # v6.0.1
+      - uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
       - name: "Install required Python versions"
         run: uv python install
 
@@ -291,11 +291,27 @@ jobs:
         run: rustup show
 
       - name: "Install cargo nextest"
-        uses: taiki-e/install-action@ab3728c7ba6948b9b429627f4d55a68842b27f18 # v2.50.3
+        uses: taiki-e/install-action@735e5933943122c5ac182670a935f54a949265c1 # v2.52.4
         with:
           tool: cargo-nextest
 
+      # Get crash dumps to debug the `exit_code: -1073741819` failures
+      - name: Configure crash dumps
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $dumps = "$env:GITHUB_WORKSPACE\dumps"
+          New-Item -Path $dumps -ItemType Directory -Force
+
+          # https://github.com/microsoft/terminal/wiki/Troubleshooting-Tips#capture-automatically
+          $reg = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps"
+          New-Item -Path $reg -Force | Out-Null
+          Set-ItemProperty -Path $reg -Name "DumpFolder" -Value $dumps
+          Set-ItemProperty -Path $reg -Name "DumpType" -Value 2
+
       - name: "Cargo test"
+        id: test
+        continue-on-error: true
         working-directory: ${{ env.UV_WORKSPACE }}
         env:
           # Avoid permission errors during concurrent tests
@@ -308,6 +324,42 @@ jobs:
             --features python,pypi,python-managed \
             --workspace \
             --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+
+      # Get crash dumps to debug the `exit_code: -1073741819` failures (contd.)
+      - name: Analyze crashes
+        if: steps.test.outcome == 'failure'
+        shell: powershell
+        run: |
+          $dumps = Get-ChildItem "$env:GITHUB_WORKSPACE\dumps\*.dmp" -ErrorAction SilentlyContinue
+          if (!$dumps) { exit 0 }
+
+          Write-Host "Found $($dumps.Count) crash dump(s)"
+
+          # Download cdb if needed
+          $cdb = "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe"
+          if (!(Test-Path $cdb)) {
+            # https://github.com/microsoft/react-native-windows/blob/f1570a5ef1c4fc1e78d0a0ad5af848ab91a4061c/vnext/Scripts/Analyze-Crash.ps1#L44-L56
+            Invoke-WebRequest "https://go.microsoft.com/fwlink/?linkid=2173743" -OutFile "$env:TEMP\sdk.exe"
+            Start-Process "$env:TEMP\sdk.exe" -ArgumentList "/features OptionId.WindowsDesktopDebuggers /quiet" -Wait
+          }
+
+          # Analyze each dump
+          foreach ($dump in $dumps) {
+            Write-Host "`n=== $($dump.Name) ==="
+            & $cdb -z $dump -c "!analyze -v; .ecxr; k; q" 2>&1 | Select-String -Pattern "(ExceptionCode:|SYMBOL_NAME:|IMAGE_NAME:|STACK_TEXT:)" -Context 0,2
+          }
+
+      - name: Upload crash dumps
+        if: steps.test.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: crash-dumps-${{ github.run_number }}
+          path: dumps/*.dmp
+          if-no-files-found: ignore
+
+      - name: Fail if tests failed
+        if: steps.test.outcome == 'failure'
+        run: exit 1
 
   # Separate jobs for the nightly crate
   windows-trampoline-check:
@@ -342,7 +394,7 @@ jobs:
           rustup component add rust-src --target ${{ matrix.target-arch }}-pc-windows-msvc
 
       - name: "Install cargo-bloat"
-        uses: taiki-e/install-action@ab3728c7ba6948b9b429627f4d55a68842b27f18 # v2.50.3
+        uses: taiki-e/install-action@735e5933943122c5ac182670a935f54a949265c1 # v2.52.4
         with:
           tool: cargo-bloat
 
@@ -429,7 +481,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@6b9c6063abd6010835644d4c2e1bef4cf5cd0fca # v6.0.1
+      - uses: astral-sh/setup-uv@f0ec1fc3b38f5e7cd731bb6ce540c5af426746bb # v6.1.0
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
       - name: "Add SSH key"
         if: ${{ env.MKDOCS_INSIDERS_SSH_KEY_EXISTS == 'true' }}
@@ -660,7 +712,7 @@ jobs:
           cross build --target x86_64-unknown-freebsd
 
       - name: Test in Firecracker VM
-        uses: acj/freebsd-firecracker-action@4d93174d9eea32cd2b2650f964af69f8c72eaff2 # v0.3.0
+        uses: acj/freebsd-firecracker-action@5b4c9938e8b5ff1041c58e21515909a0e1500d59 # v0.4.1
         with:
           verbose: false
           checkout: false
@@ -907,7 +959,7 @@ jobs:
           ./uv pip install anyio
 
   integration-test-deadsnakes-39-linux:
-    timeout-minutes: 5
+    timeout-minutes: 15
     needs: build-binary-linux-libc
     name: "integration test | deadsnakes python3.9 on ubuntu"
     runs-on: ubuntu-latest
@@ -949,59 +1001,6 @@ jobs:
       - name: "Check version"
         run: |
           .venv/bin/python --version
-
-      - name: "Check install"
-        run: |
-          ./uv pip install -v anyio
-
-  integration-test-free-threaded-linux:
-    timeout-minutes: 5
-    needs: build-binary-linux-libc
-    name: "integration test | free-threaded on linux"
-    runs-on: ubuntu-latest
-    steps:
-      - name: "Install python3.13-nogil"
-        run: |
-          sudo add-apt-repository ppa:deadsnakes
-          sudo apt-get update
-          sudo apt-get install python3.13-nogil
-
-      - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: uv-linux-libc-${{ github.sha }}
-
-      - name: "Prepare binary"
-        run: chmod +x ./uv
-
-      - name: "Create a virtual environment"
-        run: |
-          ./uv venv -p 3.13t --python-preference only-system
-
-      - name: "Check version"
-        run: |
-          .venv/bin/python --version
-
-      - name: "Check is free-threaded"
-        run: |
-          .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
-
-      - name: "Check install"
-        run: |
-          ./uv pip install -v anyio
-
-      - name: "Install free-threaded Python via uv"
-        run: |
-          ./uv python install -v 3.13t
-          ./uv venv -p 3.13t --managed-python
-
-      - name: "Check version"
-        run: |
-          .venv/bin/python --version
-
-      - name: "Check is free-threaded"
-        run: |
-          .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
 
       - name: "Check install"
         run: |
@@ -1295,6 +1294,45 @@ jobs:
         run: |
           .\uv.exe pip install anyio
 
+  integration-test-pyodide-linux:
+    timeout-minutes: 10
+    needs: build-binary-linux-libc
+    name: "integration test | pyodide on ubuntu"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-libc-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Create a native virtual environment"
+        run: |
+          ./uv venv venv-native -p 3.12
+          # We use features added in 0.30.3 but there is no known breakage in
+          # newer versions.
+          ./uv pip install -p venv-native/bin/python pyodide-build==0.30.3 pip
+
+      - name: "Install pyodide interpreter"
+        run: |
+          source ./venv-native/bin/activate
+          pyodide xbuildenv install 0.27.5
+          PYODIDE_PYTHON=$(pyodide config get interpreter)
+          PYODIDE_INDEX=$(pyodide config get package_index)
+          echo "PYODIDE_PYTHON=$PYODIDE_PYTHON" >> $GITHUB_ENV
+          echo "PYODIDE_INDEX=$PYODIDE_INDEX" >> $GITHUB_ENV
+
+      - name: "Create pyodide virtual environment"
+        run: |
+          ./uv venv -p $PYODIDE_PYTHON venv-pyodide
+          source ./venv-pyodide/bin/activate
+          ./uv pip install --extra-index-url=$PYODIDE_INDEX --no-build numpy
+          python -c 'import numpy'
+
   integration-test-github-actions:
     timeout-minutes: 10
     needs: build-binary-linux-libc
@@ -1384,6 +1422,14 @@ jobs:
         run: |
           ./uv pip install anyio --system --python 3.13t
 
+      - name: "Create a virtual environment"
+        run: |
+          ./uv venv -p 3.13t --python-preference only-system
+
+      - name: "Check is free-threaded"
+        run: |
+          .venv/bin/python -c "import sys; exit(1) if sys._is_gil_enabled() else exit(0)"
+
   integration-test-publish-changed:
     timeout-minutes: 10
     needs: build-binary-linux-libc
@@ -1422,7 +1468,7 @@ jobs:
           echo "code_any_changed=${CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
 
   integration-test-publish:
-    timeout-minutes: 10
+    timeout-minutes: 20
     needs: integration-test-publish-changed
     name: "integration test | uv publish"
     runs-on: ubuntu-latest
@@ -1470,6 +1516,7 @@ jobs:
           # With this GitHub action, we can't do as rigid checks as with our custom Python script, so we publish more
           # leniently
           skip-existing: "true"
+          verbose: "true"
           repository-url: "https://test.pypi.org/legacy/"
           packages-dir: "astral-test-pypa-gh-action/dist"
 
@@ -1667,38 +1714,39 @@ jobs:
       - name: "Validate global Python install"
         run: python scripts/check_system_python.py --uv ./uv
 
-  system-test-opensuse:
-    timeout-minutes: 5
-    needs: build-binary-linux-libc
-    name: "check system | python on opensuse"
-    runs-on: ubuntu-latest
-    container: opensuse/tumbleweed
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+  # Currently failing, see https://github.com/astral-sh/uv/issues/13811
+  # system-test-opensuse:
+  #   timeout-minutes: 5
+  #   needs: build-binary-linux-libc
+  #   name: "check system | python on opensuse"
+  #   runs-on: ubuntu-latest
+  #   container: opensuse/tumbleweed
+  #   steps:
+  #     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: "Install Python"
-        run: >
-          until
-          zypper install -y python310 which && python3.10 -m ensurepip && mv /usr/bin/python3.10 /usr/bin/python3;
-          do sleep 10;
-          done
+  #     - name: "Install Python"
+  #       run: >
+  #         until
+  #         zypper install -y python310 which && python3.10 -m ensurepip && mv /usr/bin/python3.10 /usr/bin/python3;
+  #         do sleep 10;
+  #         done
 
-          # We retry because `zypper` can fail during remote repository updates
-          # The above will not sleep forever due to the job level timeout
+  #         # We retry because `zypper` can fail during remote repository updates
+  #         # The above will not sleep forever due to the job level timeout
 
-      - name: "Download binary"
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: uv-linux-libc-${{ github.sha }}
+  #     - name: "Download binary"
+  #       uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+  #       with:
+  #         name: uv-linux-libc-${{ github.sha }}
 
-      - name: "Prepare binary"
-        run: chmod +x ./uv
+  #     - name: "Prepare binary"
+  #       run: chmod +x ./uv
 
-      - name: "Print Python path"
-        run: echo $(which python3)
+  #     - name: "Print Python path"
+  #       run: echo $(which python3)
 
-      - name: "Validate global Python install"
-        run: python3 scripts/check_system_python.py --uv ./uv
+  #     - name: "Validate global Python install"
+  #       run: python3 scripts/check_system_python.py --uv ./uv
 
   # Note: rockylinux is a 1-1 code compatible distro to rhel
   # rockylinux mimics centos but with added maintenance stability
@@ -1753,7 +1801,7 @@ jobs:
           python-version: "graalpy24.1"
 
       - name: "Download binary"
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -2246,7 +2294,45 @@ jobs:
       - name: "Validate embedded Python install"
         run: python ./scripts/check_embedded_python.py --uv ./uv.exe
 
-  benchmarks:
+  benchmarks-walltime:
+    name: "benchmarks | walltime aarch64 linux"
+    runs-on: codspeed-macro
+    needs: determine_changes
+    if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
+    timeout-minutes: 20
+    steps:
+      - name: "Checkout Branch"
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+
+      - name: "Install Rust toolchain"
+        run: rustup show
+
+      - name: "Install codspeed"
+        uses: taiki-e/install-action@735e5933943122c5ac182670a935f54a949265c1 # v2.52.4
+        with:
+          tool: cargo-codspeed
+
+      - name: "Install requirements and prime cache"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsasl2-dev libldap2-dev libkrb5-dev
+          cargo run --bin uv -- venv --cache-dir .cache
+          cargo run --bin uv -- pip compile scripts/requirements/jupyter.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
+          cargo run --bin uv -- pip compile scripts/requirements/airflow.in --universal --exclude-newer 2024-08-08 --cache-dir .cache
+
+      - name: "Build benchmarks"
+        run: cargo codspeed build --profile profiling --features codspeed -p uv-bench
+
+      - name: "Run benchmarks"
+        uses: CodSpeedHQ/action@0010eb0ca6e89b80c88e8edaaa07cfe5f3e6664d # v3.5.0
+        with:
+          run: cargo codspeed run
+          token: ${{ secrets.CODSPEED_TOKEN }}
+
+  benchmarks-instrumented:
+    name: "benchmarks | instrumented"
     runs-on: ubuntu-latest
     needs: determine_changes
     if: ${{ github.repository == 'astral-sh/uv' && !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
@@ -2261,7 +2347,7 @@ jobs:
         run: rustup show
 
       - name: "Install codspeed"
-        uses: taiki-e/install-action@ab3728c7ba6948b9b429627f4d55a68842b27f18 # v2.50.3
+        uses: taiki-e/install-action@735e5933943122c5ac182670a935f54a949265c1 # v2.52.4
         with:
           tool: cargo-codspeed
 

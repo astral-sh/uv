@@ -97,15 +97,14 @@ fn python_find() {
     let arch = Arch::from_env();
 
     uv_snapshot!(context.filters(), context.python_find()
-    .arg(format!("cpython-3.12-{os}-{arch}"))
-    , @r###"
+        .arg(format!("cpython-3.12-{os}-{arch}")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.12]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Request PyPy (which should be missing)
     uv_snapshot!(context.filters(), context.python_find().arg("pypy"), @r"
@@ -750,24 +749,24 @@ fn python_required_python_major_minor() {
         .unwrap();
 
     // Find `python3.11`, which is `>=3.11.4`.
-    uv_snapshot!(context.filters(), context.python_find().arg(">=3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/child/python3.11
 
     ----- stderr -----
-    "###);
+    ");
 
     // Find `python3.11`, which is `>3.11.4`.
-    uv_snapshot!(context.filters(), context.python_find().arg(">3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/child/python3.11
 
     ----- stderr -----
-    "###);
+    ");
 
     // Fail to find any matching Python interpreter.
     uv_snapshot!(context.filters(), context.python_find().arg(">3.11.255, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"

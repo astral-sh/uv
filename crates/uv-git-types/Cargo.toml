@@ -16,9 +16,9 @@ doctest = false
 workspace = true
 
 [dependencies]
+uv-redacted = { workspace = true }
+
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
-
-uv-redacted = { workspace = true }

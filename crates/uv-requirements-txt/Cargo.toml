@@ -23,6 +23,7 @@ uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-redacted = { workspace = true }
 uv-warnings = { workspace = true }
 
 fs-err = { workspace = true }
