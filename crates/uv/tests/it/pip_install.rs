@@ -11409,7 +11409,7 @@ fn overlapping_packages_warning() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
-    warning: The module built_by_uv exists in two packages! This leads to a race condition and likely to a broken installation. Consider removing either built-by-uv (built_by_uv-0.1.0-py3-none-any.whl) or also-built-by-uv (also_built_by_uv-0.1.0-py3-none-any.whl).
+    warning: The module `built_by_uv` is provided by more than one package, which causes an install race condition and can result in a broken module. Consider removing your dependency on either `built-by-uv` or `also-built-by-uv`.
     Installed 2 packages in [TIME]
      + also-built-by-uv==0.1.0 (from file://[TEMP_DIR]/also_built_by_uv-0.1.0-py3-none-any.whl)
      + built-by-uv==0.1.0 (from file://[TEMP_DIR]/built_by_uv-0.1.0-py3-none-any.whl)
