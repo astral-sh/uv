@@ -5,31 +5,36 @@ use thiserror::Error;
 
 /// Unique identity of any Git object (commit, tree, blob, tag).
 ///
-/// Note this type does not validate whether the input is a valid hash.
+/// This type's `FromStr` implementation validates that it's exactly 40 hex characters, i.e. a
+/// full-length git commit.
+///
+/// If Git's SHA-256 support becomes more widespread in the future (in particular if GitHub ever
+/// adds support), we might need to make this an enum.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct GitOid {
-    len: usize,
     bytes: [u8; 40],
 }
 
 impl GitOid {
     /// Return the string representation of an object ID.
     pub fn as_str(&self) -> &str {
-        str::from_utf8(&self.bytes[..self.len]).unwrap()
+        str::from_utf8(&self.bytes).unwrap()
     }
 
     /// Return a truncated representation, i.e., the first 16 characters of the SHA.
     pub fn as_short_str(&self) -> &str {
-        self.as_str().get(..16).unwrap_or(self.as_str())
+        &self.as_str()[..16]
     }
 }
 
 #[derive(Debug, Error, PartialEq)]
 pub enum OidParseError {
-    #[error("Object ID can be at most 40 hex characters")]
-    TooLong,
     #[error("Object ID cannot be parsed from empty string")]
     Empty,
+    #[error("Object ID must be exactly 40 hex characters")]
+    WrongLength,
+    #[error("Object ID must be valid hex characters")]
+    NotHex,
 }
 
 impl FromStr for GitOid {
@@ -40,17 +45,17 @@ impl FromStr for GitOid {
             return Err(OidParseError::Empty);
         }
 
-        if s.len() > 40 {
-            return Err(OidParseError::TooLong);
+        if s.len() != 40 {
+            return Err(OidParseError::WrongLength);
         }
 
-        let mut out = [0; 40];
-        out[..s.len()].copy_from_slice(s.as_bytes());
+        if !s.chars().all(|ch| ch.is_ascii_hexdigit()) {
+            return Err(OidParseError::NotHex);
+        }
 
-        Ok(GitOid {
-            len: s.len(),
-            bytes: out,
-        })
+        let mut bytes = [0; 40];
+        bytes.copy_from_slice(s.as_bytes());
+        Ok(GitOid { bytes })
     }
 }
 
@@ -101,11 +106,20 @@ mod tests {
     #[test]
     fn git_oid() {
         GitOid::from_str("4a23745badf5bf5ef7928f1e346e9986bd696d82").unwrap();
+        GitOid::from_str("4A23745BADF5BF5EF7928F1E346E9986BD696D82").unwrap();
 
         assert_eq!(GitOid::from_str(""), Err(OidParseError::Empty));
         assert_eq!(
             GitOid::from_str(&str::repeat("a", 41)),
-            Err(OidParseError::TooLong)
+            Err(OidParseError::WrongLength)
+        );
+        assert_eq!(
+            GitOid::from_str(&str::repeat("a", 39)),
+            Err(OidParseError::WrongLength)
+        );
+        assert_eq!(
+            GitOid::from_str(&str::repeat("x", 40)),
+            Err(OidParseError::NotHex)
         );
     }
 }
