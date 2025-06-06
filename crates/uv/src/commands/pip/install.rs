@@ -480,6 +480,7 @@ pub(crate) async fn pip_install(
             Some(&tags),
             ResolverEnvironment::specific(marker_env.clone()),
             python_requirement,
+            interpreter.markers(),
             Conflicts::empty(),
             &client,
             &flat_index,
