@@ -517,9 +517,8 @@ impl<'de> Deserialize<'de> for Index {
         })?;
 
         // Parse the expanded URL
-        let url = IndexUrl::parse(&expanded_url, None).map_err(|e| {
-            D::Error::custom(format!("Failed to parse URL '{expanded_url}': {e}"))
-        })?;
+        let url = IndexUrl::parse(&expanded_url, None)
+            .map_err(|e| D::Error::custom(format!("Failed to parse URL '{expanded_url}': {e}")))?;
 
         // Expand environment variables in publish_url if present
         let publish_url = if let Some(publish_url_str) = raw.publish_url {
