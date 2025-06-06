@@ -223,17 +223,27 @@ fn python_upgrade_transparent_from_venv() {
     );
 }
 
-// TODO(john): Add upgrade support for preview bin Python. After upgrade,
-// the bin Python version should be the latest patch.
+// A bin installation of a minor version should be transparently upgradeable.
 #[test]
-fn python_transparent_upgrade_with_preview_installation() {
+fn python_transparent_upgrade_for_bin_installation() {
     let context: TestContext = TestContext::new_with_versions(&["3.13"])
         .with_filtered_python_keys()
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
 
-    // Install an earlier patch version using `--preview`
-    uv_snapshot!(context.filters(), context.python_install().arg("3.10.8").arg("--preview"), @r"
+    // Install an earlier patch version
+    uv_snapshot!(context.filters(), context.python_install().arg("3.10.8"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Installed Python 3.10.8 in [TIME]
+     + cpython-3.10.8-[PLATFORM]
+    ");
+
+    // Install the minor version in `bin` using `--preview`
+    uv_snapshot!(context.filters(), context.python_install().arg("3.10").arg("--preview"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -247,6 +257,7 @@ fn python_transparent_upgrade_with_preview_installation() {
         .bin_dir
         .child(format!("python3.10{}", std::env::consts::EXE_SUFFIX));
 
+    // Bin installation should be on latest patch
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
         .arg("--version"), @r"
     success: true
@@ -269,14 +280,13 @@ fn python_transparent_upgrade_with_preview_installation() {
      + cpython-3.10.18-[PLATFORM]
     ");
 
-    // TODO(john): Upgrades are not currently reflected for `--preview` bin Python,
-    // so we see the outdated patch version.
+    // Bin installation should reflect upgrade
     uv_snapshot!(context.filters(), Command::new(bin_python.as_os_str())
         .arg("--version"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.10.8
+    Python 3.10.18
 
     ----- stderr -----
     "

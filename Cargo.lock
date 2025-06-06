@@ -4630,6 +4630,7 @@ dependencies = [
  "console",
  "ctrlc",
  "dotenvy",
+ "dunce",
  "etcetera",
  "filetime",
  "flate2",

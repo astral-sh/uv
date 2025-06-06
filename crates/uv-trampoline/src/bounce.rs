@@ -1,7 +1,7 @@
 #![allow(clippy::disallowed_types)]
 use std::ffi::{CString, c_void};
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::mem::size_of;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
@@ -88,6 +88,22 @@ fn make_child_cmdline() -> CString {
                 // (in `launcher.c`). This allows virtual environments to
                 // be correctly detected when using trampolines.
                 std::env::set_var("__PYVENV_LAUNCHER__", &executable_name);
+
+                // If this is not a virtual environment and `PYTHONHOME` has
+                // not been set, then set `PYTHONHOME` to the parent directory of
+                // the executable. This ensures that the correct installation
+                // directories are added to `sys.path` when running with a junction
+                // trampoline.
+                let python_home_set =
+                    std::env::var("PYTHONHOME").is_ok_and(|home| !home.is_empty());
+                if !is_virtualenv(python_exe.as_path()) && !python_home_set {
+                    std::env::set_var(
+                        "PYTHONHOME",
+                        python_exe
+                            .parent()
+                            .expect("Python executable should have a parent directory"),
+                    );
+                }
             }
         }
         TrampolineKind::Script => {
@@ -127,6 +143,32 @@ fn push_quoted_path(path: &Path, command: &mut Vec<u8>) {
         }
     }
     command.extend(br#"""#);
+}
+
+/// Checks if the given executable path is part of a virtual environment according to the procedure
+/// described in PEP 405.
+///
+/// Checks if a `pyvenv.cfg` file exists in the given executable path or that of its parent.
+/// If this file exists, checks for a `home` key.
+fn is_virtualenv(exec_dir: &Path) -> bool {
+    let Some(parent_dir) = exec_dir.parent() else {
+        return false;
+    };
+
+    for dir in &[parent_dir, exec_dir] {
+        let pyvenv_path = dir.join("pyvenv.cfg");
+        if pyvenv_path.exists() {
+            if let Ok(file) = File::open(&pyvenv_path) {
+                let reader = BufReader::new(file);
+                for line in reader.lines().map_while(Result::ok) {
+                    if line.trim().starts_with("home") {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
 }
 
 /// Reads the executable binary from the back to find:
