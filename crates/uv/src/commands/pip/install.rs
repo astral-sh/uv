@@ -254,6 +254,7 @@ pub(crate) async fn pip_install(
     if reinstall.is_none()
         && upgrade.is_none()
         && source_trees.is_empty()
+        && groups.is_empty()
         && pylock.is_none()
         && matches!(modifications, Modifications::Sufficient)
     {

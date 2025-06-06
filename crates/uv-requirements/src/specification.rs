@@ -290,52 +290,18 @@ impl RequirementsSpecification {
         if !groups.is_empty() {
             let mut group_specs = BTreeMap::new();
             for (path, groups) in groups {
-                // Conceptually pip `--group` flags just add the group referred to by the file.
-                // In uv semantics this would be like `--only-group`, however if you do this:
-                //
-                //    uv pip install -r pyproject.toml --group pyproject.toml:foo
-                //
-                // We don't want to discard the package listed by `-r` in the way `--only-group`
-                // would. So we check to see if any other source wants to add this path, and use
-                // that to determine if we're doing `--group` or `--only-group` semantics.
-                //
-                // Note that it's fine if a file gets referred to multiple times by
-                // different-looking paths (like `./pyproject.toml` vs `pyproject.toml`). We're
-                // specifically trying to disambiguate in situations where the `--group` *happens*
-                // to match with an unrelated argument, and `--only-group` would be overzealous!
-                let source_exists_without_group = requirement_sources
-                    .iter()
-                    .any(|source| source.source_trees.contains(&path));
-                let (group, only_group) = if source_exists_without_group {
-                    (groups, Vec::new())
-                } else {
-                    (Vec::new(), groups)
-                };
                 let group_spec = DependencyGroups::from_args(
                     false,
                     false,
                     false,
-                    group,
+                    Vec::new(),
                     Vec::new(),
                     false,
-                    only_group,
+                    groups,
                     false,
                 );
-
-                // If we're doing `--only-group` semantics it's because only `--group` flags referred
-                // to this file, and so we need to make sure to add it to the list of sources!
-                if !source_exists_without_group {
-                    let source = Self::from_source(
-                        &RequirementsSource::PyprojectToml(path.clone()),
-                        client_builder,
-                    )
-                    .await?;
-                    requirement_sources.push(source);
-                }
-
                 group_specs.insert(path, group_spec);
             }
-
             spec.groups = group_specs;
         }
 
