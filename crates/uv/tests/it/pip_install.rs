@@ -2111,6 +2111,50 @@ fn install_git_public_https_missing_commit() {
     "###);
 }
 
+#[test]
+#[cfg(feature = "git")]
+fn install_git_public_https_exact_commit() {
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
+
+    // `uv pip install` a Git dependency with an exact commit.
+    uv_snapshot!(context.filters(), context.pip_install()
+        // Normally Updating/Updated notifications are suppressed in tests (because their order can
+        // be nondeterministic), but here that's exactly what we want to test for.
+        .env_remove(EnvVars::UV_TEST_NO_CLI_PROGRESS)
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")
+        , @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+       Updating https://github.com/astral-test/uv-public-pypackage (b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+        Updated https://github.com/astral-test/uv-public-pypackage (b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+       Building uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
+          Built uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+    ");
+
+    // Run the exact same command again, with that commit now in cache.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_TEST_NO_CLI_PROGRESS)
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")
+        , @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+       Updating https://github.com/astral-test/uv-public-pypackage (b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+        Updated https://github.com/astral-test/uv-public-pypackage (b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    ");
+}
+
 /// Install a package from a private GitHub repository using a PAT
 #[test]
 #[cfg(all(not(windows), feature = "git"))]
