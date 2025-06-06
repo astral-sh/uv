@@ -1096,6 +1096,10 @@ The package indexes to use when resolving dependencies.
 Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)
 (the simple repository API), or a local directory laid out in the same format.
 
+Index URLs support environment variable expansion using `${VARIABLE}` or `${VARIABLE:-default}`
+syntax, as well as tilde (`~`) expansion for home directories. This allows for dynamic
+configuration and secure credential injection.
+
 Indexes are considered in the order in which they're defined, such that the first-defined
 index has the highest priority. Further, the indexes provided by this setting are given
 higher priority than any indexes specified via [`index_url`](#index-url) or
@@ -1131,6 +1135,17 @@ PyPI default index.
     [[tool.uv.index]]
     name = "pytorch"
     url = "https://download.pytorch.org/whl/cu121"
+
+    # With environment variable expansion
+    [[tool.uv.index]]
+    name = "artifactory"
+    url = "https://${ARTIFACTORY_USER}:${ARTIFACTORY_API_TOKEN}@artifactory.company.com/simple"
+    publish-url = "https://${ARTIFACTORY_USER}:${ARTIFACTORY_API_TOKEN}@artifactory.company.com/upload"
+
+    # With default values
+    [[tool.uv.index]]
+    name = "internal"
+    url = "https://${INDEX_HOST:-pypi.internal.company.com}/simple"
     ```
 === "uv.toml"
 
@@ -1138,6 +1153,12 @@ PyPI default index.
     [[tool.uv.index]]
     name = "pytorch"
     url = "https://download.pytorch.org/whl/cu121"
+
+    # With environment variable expansion
+    [[tool.uv.index]]
+    name = "artifactory"
+    url = "https://${ARTIFACTORY_USER}:${ARTIFACTORY_API_TOKEN}@artifactory.company.com/simple"
+    publish-url = "https://${ARTIFACTORY_USER}:${ARTIFACTORY_API_TOKEN}@artifactory.company.com/upload"
     ```
 
 ---
