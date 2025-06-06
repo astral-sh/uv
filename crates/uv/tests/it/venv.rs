@@ -3,10 +3,10 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use predicates::prelude::*;
-use uv_python::{PYTHON_VERSIONS_FILENAME, PYTHON_VERSION_FILENAME};
+use uv_python::{PYTHON_VERSION_FILENAME, PYTHON_VERSIONS_FILENAME};
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn create_venv() {
@@ -579,6 +579,7 @@ fn create_venv_explicit_request_takes_priority_over_python_version_file() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn seed() {
     let context = TestContext::new_with_versions(&["3.12"]);
     uv_snapshot!(context.filters(), context.venv()
@@ -602,6 +603,7 @@ fn seed() {
 }
 
 #[test]
+#[cfg(feature = "pypi")]
 fn seed_older_python_version() {
     let context = TestContext::new_with_versions(&["3.11"]);
     uv_snapshot!(context.filters(), context.venv()
@@ -875,27 +877,27 @@ fn non_empty_dir_exists_allow_existing() -> Result<()> {
 #[test]
 #[cfg(windows)]
 fn windows_shims() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.9", "3.8"]);
+    let context = TestContext::new_with_versions(&["3.10", "3.9"]);
     let shim_path = context.temp_dir.child("shim");
 
-    let py38 = context
+    let py39 = context
         .python_versions
         .last()
         .expect("python_path_with_versions to set up the python versions");
 
-    // We want 3.8 and the first version should be 3.9.
+    // We want 3.9 and the first version should be 3.10.
     // Picking the last is necessary to prove that shims work because the python version selects
     // the python version from the first path segment by default, so we take the last to prove it's not
     // returning that version.
-    assert!(py38.0.to_string().contains("3.8"));
+    assert!(py39.0.to_string().contains("3.9"));
 
-    // Write the shim script that forwards the arguments to the python3.8 installation.
+    // Write the shim script that forwards the arguments to the python3.9 installation.
     fs_err::create_dir(&shim_path)?;
     fs_err::write(
         shim_path.child("python.bat"),
         format!(
             "@echo off\r\n{}/python.exe %*",
-            py38.1.parent().unwrap().display()
+            py39.1.parent().unwrap().display()
         ),
     )?;
 
@@ -908,7 +910,7 @@ fn windows_shims() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "###

@@ -4,15 +4,17 @@ use std::path::PathBuf;
 use url::Url;
 
 use uv_configuration::{
-    ConfigSettings, IndexStrategy, KeyringProviderType, RequiredVersion, TargetTriple,
-    TrustedPublishing,
+    ConfigSettings, ExportFormat, IndexStrategy, KeyringProviderType, RequiredVersion,
+    TargetTriple, TrustedPublishing,
 };
 use uv_distribution_types::{Index, IndexUrl, PipExtraIndex, PipFindLinks, PipIndex};
 use uv_install_wheel::LinkMode;
 use uv_pypi_types::{SchemaConflicts, SupportedEnvironments};
 use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
+use uv_redacted::DisplaySafeUrl;
 use uv_resolver::{AnnotationStyle, ExcludeNewer, ForkStrategy, PrereleaseMode, ResolutionMode};
 use uv_torch::TorchMode;
+use uv_workspace::pyproject_mut::AddBoundsKind;
 
 use crate::{FilesystemOptions, Options, PipOptions};
 
@@ -73,14 +75,17 @@ macro_rules! impl_combine_or {
     };
 }
 
+impl_combine_or!(AddBoundsKind);
 impl_combine_or!(AnnotationStyle);
 impl_combine_or!(ExcludeNewer);
+impl_combine_or!(ExportFormat);
 impl_combine_or!(ForkStrategy);
 impl_combine_or!(Index);
 impl_combine_or!(IndexStrategy);
 impl_combine_or!(IndexUrl);
 impl_combine_or!(KeyringProviderType);
 impl_combine_or!(LinkMode);
+impl_combine_or!(DisplaySafeUrl);
 impl_combine_or!(NonZeroUsize);
 impl_combine_or!(PathBuf);
 impl_combine_or!(PipExtraIndex);

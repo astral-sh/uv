@@ -4,13 +4,14 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
-use uv_distribution_types::IndexUrl;
+use uv_distribution_types::{IndexUrl, InstalledDist};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
-use uv_pep508::{MarkerTree, VersionOrUrl};
+use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl};
 use uv_pypi_types::{HashDigest, HashDigests, HashError};
 use uv_requirements_txt::{RequirementEntry, RequirementsTxtRequirement};
 
+use crate::lock::PylockTomlPackage;
 use crate::universal_marker::UniversalMarker;
 use crate::{LockError, ResolverEnvironment};
 
@@ -91,6 +92,42 @@ impl Preference {
             fork_markers: package.fork_markers().to_vec(),
             hashes: HashDigests::empty(),
         }))
+    }
+
+    /// Create a [`Preference`] from a locked distribution.
+    pub fn from_pylock_toml(package: &PylockTomlPackage) -> Result<Option<Self>, LockError> {
+        let Some(version) = package.version.as_ref() else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
+            name: package.name.clone(),
+            version: version.clone(),
+            marker: MarkerTree::TRUE,
+            index: PreferenceIndex::from(
+                package
+                    .index
+                    .as_ref()
+                    .map(|index| IndexUrl::from(VerbatimUrl::from(index.clone()))),
+            ),
+            // `pylock.toml` doesn't have fork annotations.
+            fork_markers: vec![],
+            hashes: HashDigests::empty(),
+        }))
+    }
+
+    /// Create a [`Preference`] from an installed distribution.
+    pub fn from_installed(dist: &InstalledDist) -> Option<Self> {
+        let InstalledDist::Registry(dist) = dist else {
+            return None;
+        };
+        Some(Self {
+            name: dist.name.clone(),
+            version: dist.version.clone(),
+            marker: MarkerTree::TRUE,
+            index: PreferenceIndex::Any,
+            fork_markers: vec![],
+            hashes: HashDigests::empty(),
+        })
     }
 
     /// Return the [`PackageName`] of the package for this [`Preference`].

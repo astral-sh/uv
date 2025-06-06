@@ -14,7 +14,7 @@ use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::DependencyGroupError;
 use uv_workspace::{Workspace, WorkspaceMember};
 
-use crate::commands::project::{find_requires_python, ProjectError};
+use crate::commands::project::{ProjectError, find_requires_python};
 
 /// A target that can be resolved into a lockfile.
 #[derive(Debug, Copy, Clone)]

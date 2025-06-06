@@ -1,6 +1,6 @@
 //! Common operations shared across the `pip` API and subcommands.
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -45,7 +45,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger, ResolveLogger};
 use crate::commands::reporters::{InstallReporter, PrepareReporter, ResolverReporter};
-use crate::commands::{compile_bytecode, ChangeEventKind, DryRunEvent};
+use crate::commands::{ChangeEventKind, DryRunEvent, compile_bytecode};
 use crate::printer::Printer;
 
 /// Consolidate the requirements for an installation.
@@ -60,12 +60,10 @@ pub(crate) async fn read_requirements(
     // If the user requests `extras` but does not provide a valid source (e.g., a `pyproject.toml`),
     // return an error.
     if !extras.is_empty() && !requirements.iter().any(RequirementsSource::allows_extras) {
-        let hint = if requirements.iter().any(|source| {
-            matches!(
-                source,
-                RequirementsSource::Editable(_) | RequirementsSource::SourceTree(_)
-            )
-        }) {
+        let hint = if requirements
+            .iter()
+            .any(|source| matches!(source, RequirementsSource::Editable(_)))
+        {
             "Use `<dir>[extra]` syntax or `-r <file>` instead."
         } else {
             "Use `package[extra]` syntax instead."
@@ -185,25 +183,23 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             });
 
             // If any of the extras were unused, surface a warning.
-            if let ExtrasSpecification::Some(extras) = extras {
-                let mut unused_extras = extras
-                    .iter()
-                    .filter(|extra| {
-                        !resolutions
-                            .iter()
-                            .any(|resolution| resolution.extras.contains(extra))
-                    })
-                    .collect::<Vec<_>>();
-                if !unused_extras.is_empty() {
-                    unused_extras.sort_unstable();
-                    unused_extras.dedup();
-                    let s = if unused_extras.len() == 1 { "" } else { "s" };
-                    return Err(anyhow!(
-                        "Requested extra{s} not found: {}",
-                        unused_extras.iter().join(", ")
-                    )
-                    .into());
-                }
+            let mut unused_extras = extras
+                .explicit_names()
+                .filter(|extra| {
+                    !resolutions
+                        .iter()
+                        .any(|resolution| resolution.extras.contains(extra))
+                })
+                .collect::<Vec<_>>();
+            if !unused_extras.is_empty() {
+                unused_extras.sort_unstable();
+                unused_extras.dedup();
+                let s = if unused_extras.len() == 1 { "" } else { "s" };
+                return Err(anyhow!(
+                    "Requested extra{s} not found: {}",
+                    unused_extras.iter().join(", ")
+                )
+                .into());
             }
 
             // Extend the requirements with the resolved source trees.
@@ -565,6 +561,7 @@ pub(crate) async fn install(
 }
 
 /// Display a message about the interpreter that was selected for the operation.
+#[allow(clippy::result_large_err)]
 pub(crate) fn report_interpreter(
     python: &PythonInstallation,
     dimmed: bool,
@@ -622,6 +619,7 @@ pub(crate) fn report_interpreter(
 }
 
 /// Display a message about the target environment for the operation.
+#[allow(clippy::result_large_err)]
 pub(crate) fn report_target_environment(
     env: &PythonEnvironment,
     cache: &Cache,
@@ -664,6 +662,7 @@ pub(crate) fn report_target_environment(
 }
 
 /// Report on the results of a dry-run installation.
+#[allow(clippy::result_large_err)]
 fn report_dry_run(
     dry_run: DryRun,
     resolution: &Resolution,
@@ -797,6 +796,7 @@ fn report_dry_run(
 }
 
 /// Report any diagnostics on resolved distributions.
+#[allow(clippy::result_large_err)]
 pub(crate) fn diagnose_resolution(
     diagnostics: &[ResolutionDiagnostic],
     printer: Printer,
@@ -814,6 +814,7 @@ pub(crate) fn diagnose_resolution(
 }
 
 /// Report any diagnostics on installed distributions in the Python environment.
+#[allow(clippy::result_large_err)]
 pub(crate) fn diagnose_environment(
     resolution: &Resolution,
     venv: &PythonEnvironment,

@@ -129,6 +129,7 @@ impl PubGrubPriorities {
             PubGrubPackageInner::Python(PubGrubPython::Target) => {
                 (PubGrubPriority::Root, PubGrubTiebreaker::from(2))
             }
+            PubGrubPackageInner::System(_) => (PubGrubPriority::Root, PubGrubTiebreaker::from(3)),
             PubGrubPackageInner::Marker { name, .. }
             | PubGrubPackageInner::Extra { name, .. }
             | PubGrubPackageInner::Dev { name, .. }

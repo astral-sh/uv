@@ -1,7 +1,9 @@
-use crate::fork_strategy::ForkStrategy;
-use crate::{DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 use uv_configuration::{BuildOptions, IndexStrategy};
 use uv_pypi_types::SupportedEnvironments;
+use uv_torch::TorchStrategy;
+
+use crate::fork_strategy::ForkStrategy;
+use crate::{DependencyMode, ExcludeNewer, PrereleaseMode, ResolutionMode};
 
 /// Options for resolving a manifest.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -15,6 +17,7 @@ pub struct Options {
     pub required_environments: SupportedEnvironments,
     pub flexibility: Flexibility,
     pub build_options: BuildOptions,
+    pub torch_backend: Option<TorchStrategy>,
 }
 
 /// Builder for [`Options`].
@@ -29,6 +32,7 @@ pub struct OptionsBuilder {
     required_environments: SupportedEnvironments,
     flexibility: Flexibility,
     build_options: BuildOptions,
+    torch_backend: Option<TorchStrategy>,
 }
 
 impl OptionsBuilder {
@@ -100,6 +104,13 @@ impl OptionsBuilder {
         self
     }
 
+    /// Sets the [`TorchStrategy`].
+    #[must_use]
+    pub fn torch_backend(mut self, torch_backend: Option<TorchStrategy>) -> Self {
+        self.torch_backend = torch_backend;
+        self
+    }
+
     /// Builds the options.
     pub fn build(self) -> Options {
         Options {
@@ -112,6 +123,7 @@ impl OptionsBuilder {
             required_environments: self.required_environments,
             flexibility: self.flexibility,
             build_options: self.build_options,
+            torch_backend: self.torch_backend,
         }
     }
 }

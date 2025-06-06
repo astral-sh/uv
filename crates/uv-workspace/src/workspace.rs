@@ -4,13 +4,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use glob::{glob, GlobError, PatternError};
+use glob::{GlobError, PatternError, glob};
 use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::{debug, trace, warn};
 
 use uv_distribution_types::{Index, Requirement, RequirementSource};
-use uv_fs::{Simplified, CWD};
-use uv_normalize::{GroupName, PackageName, DEV_DEPENDENCIES};
+use uv_fs::{CWD, Simplified};
+use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl};
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
@@ -1824,7 +1824,8 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "conflicts": null
+                      "conflicts": null,
+                      "build-backend": null
                     }
                   },
                   "dependency-groups": null
@@ -1918,7 +1919,8 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "conflicts": null
+                      "conflicts": null,
+                      "build-backend": null
                     }
                   },
                   "dependency-groups": null
@@ -2060,7 +2062,7 @@ mod tests {
             {
                 ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
             },
-            @r###"
+            @r#"
             {
               "project_root": "[ROOT]",
               "project_name": "albatross",
@@ -2127,14 +2129,15 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "conflicts": null
+                      "conflicts": null,
+                      "build-backend": null
                     }
                   },
                   "dependency-groups": null
                 }
               }
             }
-            "###);
+            "#);
         });
 
         // Rewrite the members to both include and exclude `bird-feeder` by name.
@@ -2165,7 +2168,7 @@ mod tests {
             {
                 ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
             },
-            @r###"
+            @r#"
             {
               "project_root": "[ROOT]",
               "project_name": "albatross",
@@ -2233,14 +2236,15 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "conflicts": null
+                      "conflicts": null,
+                      "build-backend": null
                     }
                   },
                   "dependency-groups": null
                 }
               }
             }
-            "###);
+            "#);
         });
 
         // Rewrite the exclusion to use the top-level directory (`packages`).
@@ -2271,7 +2275,7 @@ mod tests {
             {
                 ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
             },
-            @r###"
+            @r#"
             {
               "project_root": "[ROOT]",
               "project_name": "albatross",
@@ -2352,14 +2356,15 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "conflicts": null
+                      "conflicts": null,
+                      "build-backend": null
                     }
                   },
                   "dependency-groups": null
                 }
               }
             }
-            "###);
+            "#);
         });
 
         // Rewrite the exclusion to use the top-level directory with a glob (`packages/*`).
@@ -2390,7 +2395,7 @@ mod tests {
             {
                 ".workspace.packages.*.pyproject_toml" => "[PYPROJECT_TOML]"
             },
-            @r###"
+            @r#"
             {
               "project_root": "[ROOT]",
               "project_name": "albatross",
@@ -2445,14 +2450,15 @@ mod tests {
                       "build-constraint-dependencies": null,
                       "environments": null,
                       "required-environments": null,
-                      "conflicts": null
+                      "conflicts": null,
+                      "build-backend": null
                     }
                   },
                   "dependency-groups": null
                 }
               }
             }
-            "###);
+            "#);
         });
 
         Ok(())

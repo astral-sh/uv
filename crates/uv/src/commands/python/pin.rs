@@ -2,7 +2,7 @@ use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::debug;
 
@@ -10,16 +10,17 @@ use uv_cache::Cache;
 use uv_dirs::user_uv_config_dir;
 use uv_fs::Simplified;
 use uv_python::{
-    EnvironmentPreference, PythonInstallation, PythonPreference, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions, PYTHON_VERSION_FILENAME,
+    EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonInstallation, PythonPreference,
+    PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::{project::find_requires_python, ExitStatus};
+use crate::commands::{ExitStatus, project::find_requires_python};
 use crate::printer::Printer;
 
 /// Pin to a specific Python version.
+#[allow(clippy::fn_params_excessive_bools)]
 pub(crate) async fn pin(
     project_dir: &Path,
     request: Option<String>,
@@ -27,6 +28,7 @@ pub(crate) async fn pin(
     python_preference: PythonPreference,
     no_project: bool,
     global: bool,
+    rm: bool,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -56,6 +58,22 @@ pub(crate) async fn pin(
         PythonVersionFile::discover(project_dir, &VersionFileDiscoveryOptions::default()).await
     };
 
+    if rm {
+        let Some(file) = version_file? else {
+            if global {
+                bail!("No global Python pin found");
+            }
+            bail!("No Python version file found");
+        };
+        fs_err::tokio::remove_file(file.path()).await?;
+        writeln!(
+            printer.stdout(),
+            "Removed Python version file at `{}`",
+            file.path().user_display()
+        )?;
+        return Ok(ExitStatus::Success);
+    }
+
     let Some(request) = request else {
         // Display the current pinned Python version
         if let Some(file) = version_file? {
@@ -72,9 +90,13 @@ pub(crate) async fn pin(
             }
             return Ok(ExitStatus::Success);
         }
-        bail!("No pinned Python version found")
+        bail!("No Python version file found; specify a version to create one")
     };
     let request = PythonRequest::parse(&request);
+
+    if let PythonRequest::ExecutableName(name) = request {
+        bail!("Requests for arbitrary names (e.g., `{name}`) are not supported in version files");
+    }
 
     let python = match PythonInstallation::find(
         &request,
@@ -182,8 +204,9 @@ pub(crate) async fn pin(
 
 fn pep440_version_from_request(request: &PythonRequest) -> Option<uv_pep440::Version> {
     let version_request = match request {
-        PythonRequest::Version(ref version)
-        | PythonRequest::ImplementationVersion(_, ref version) => version,
+        PythonRequest::Version(version) | PythonRequest::ImplementationVersion(_, version) => {
+            version
+        }
         PythonRequest::Key(download_request) => download_request.version()?,
         _ => {
             return None;

@@ -19,7 +19,7 @@ pub struct Resolution {
 }
 
 impl Resolution {
-    /// Create a new resolution from the given pinned packages.
+    /// Create a [`Resolution`] from the given pinned packages.
     pub fn new(graph: petgraph::graph::DiGraph<Node, Edge>) -> Self {
         Self {
             graph,
@@ -146,7 +146,9 @@ impl Diagnostic for ResolutionDiagnostic {
                 format!("The package `{dist}` does not have an extra named `{extra}`")
             }
             Self::MissingDev { dist, dev } => {
-                format!("The package `{dist}` does not have a development dependency group named `{dev}`")
+                format!(
+                    "The package `{dist}` does not have a development dependency group named `{dev}`"
+                )
             }
             Self::YankedVersion { dist, reason } => {
                 if let Some(reason) = reason {
@@ -206,17 +208,6 @@ pub enum Edge {
     Prod(MarkerTree),
     Optional(ExtraName, MarkerTree),
     Dev(GroupName, MarkerTree),
-}
-
-impl Edge {
-    /// Return the [`MarkerTree`] for this edge.
-    pub fn marker(&self) -> &MarkerTree {
-        match self {
-            Self::Prod(marker) => marker,
-            Self::Optional(_, marker) => marker,
-            Self::Dev(_, marker) => marker,
-        }
-    }
 }
 
 impl From<&ResolvedDist> for RequirementSource {

@@ -1,6 +1,6 @@
-use std::collections::hash_map::Entry;
 use std::collections::BTreeSet;
 use std::collections::VecDeque;
+use std::collections::hash_map::Entry;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -9,9 +9,8 @@ use itertools::Itertools;
 use petgraph::Graph;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
-use uv_configuration::{
-    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecification, InstallOptions,
-};
+use uv_configuration::ExtrasSpecificationWithDefaults;
+use uv_configuration::{BuildOptions, DependencyGroupsWithDefaults, InstallOptions};
 use uv_distribution_types::{Edge, Node, Resolution, ResolvedDist};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep508::MarkerTree;
@@ -39,7 +38,7 @@ pub trait Installable<'lock> {
         &self,
         marker_env: &ResolverMarkerEnvironment,
         tags: &Tags,
-        extras: &ExtrasSpecification,
+        extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
         build_options: &BuildOptions,
         install_options: &InstallOptions,
@@ -92,7 +91,8 @@ pub trait Installable<'lock> {
             }
         }
 
-        // Add the workspace packages to the queue.
+        // Initialize the workspace roots.
+        let mut roots = vec![];
         for root_name in self.roots() {
             let dist = self
                 .lock()
@@ -115,6 +115,12 @@ pub trait Installable<'lock> {
             // Add an edge from the root.
             petgraph.add_edge(root, index, Edge::Prod(MarkerTree::TRUE));
 
+            // Push the package onto the queue.
+            roots.push((dist, index));
+        }
+
+        // Add the workspace dependencies to the queue.
+        for (dist, index) in roots {
             if dev.prod() {
                 // Push its dependencies onto the queue.
                 queue.push_back((dist, None));
@@ -469,10 +475,7 @@ pub trait Installable<'lock> {
                         entry.insert(index);
                         index
                     }
-                    Entry::Occupied(entry) => {
-                        let index = *entry.get();
-                        index
-                    }
+                    Entry::Occupied(entry) => *entry.get(),
                 };
 
                 // Add the edge.

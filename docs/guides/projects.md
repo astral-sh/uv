@@ -29,7 +29,7 @@ $ uv init
 uv will create the following files:
 
 ```text
-.
+├── .gitignore
 ├── .python-version
 ├── README.md
 ├── main.py
@@ -87,8 +87,8 @@ description or license. You can edit this file manually, or use commands like `u
     See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)
     for more details on getting started with the `pyproject.toml` format.
 
-You'll also use this file to specify uv [configuration options](../configuration/files.md) in a
-[`[tool.uv]`](../reference/settings.md) section.
+You'll also use this file to specify uv [configuration options](../concepts/configuration-files.md)
+in a [`[tool.uv]`](../reference/settings.md) section.
 
 ### `.python-version`
 
@@ -203,11 +203,11 @@ executing a command:
 
 === "Windows"
 
-    ```powershell
-    uv sync
-    source .venv\Scripts\activate
-    flask run -p 3000
-    python example.py
+    ```pwsh-session
+    PS> uv sync
+    PS> .venv\Scripts\activate
+    PS> flask run -p 3000
+    PS> python example.py
     ```
 
 !!! note

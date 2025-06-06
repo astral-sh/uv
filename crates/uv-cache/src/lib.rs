@@ -6,13 +6,12 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use rustc_hash::FxHashSet;
+use rustc_hash::FxHashMap;
 use tracing::debug;
 
 pub use archive::ArchiveId;
 use uv_cache_info::Timestamp;
-use uv_distribution_filename::WheelFilename;
-use uv_fs::{cachedir, directories, LockedFile};
+use uv_fs::{LockedFile, cachedir, directories};
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 
@@ -20,7 +19,7 @@ pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
 use crate::removal::Remover;
-pub use crate::removal::{rm_rf, Removal};
+pub use crate::removal::{Removal, rm_rf};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 
@@ -376,7 +375,7 @@ impl Cache {
     /// Returns the number of entries removed from the cache.
     pub fn remove(&self, name: &PackageName) -> Result<Removal, io::Error> {
         // Collect the set of referenced archives.
-        let before = self.find_archive_references()?;
+        let references = self.find_archive_references()?;
 
         // Remove any entries for the package from the cache.
         let mut summary = Removal::default();
@@ -384,18 +383,11 @@ impl Cache {
             summary += bucket.remove(self, name)?;
         }
 
-        // Collect the set of referenced archives after the removal.
-        let after = self.find_archive_references()?;
-
-        if before != after {
-            // Remove any archives that are no longer referenced.
-            for entry in fs_err::read_dir(self.bucket(CacheBucket::Archive))? {
-                let entry = entry?;
-                let path = fs_err::canonicalize(entry.path())?;
-                if !after.contains(&path) && before.contains(&path) {
-                    debug!("Removing dangling cache entry: {}", path.display());
-                    summary += rm_rf(path)?;
-                }
+        // Remove any archives that are no longer referenced.
+        for (target, references) in references {
+            if references.iter().all(|path| !path.exists()) {
+                debug!("Removing dangling cache entry: {}", target.display());
+                summary += rm_rf(target)?;
             }
         }
 
@@ -514,7 +506,7 @@ impl Cache {
                 for entry in entries {
                     let entry = entry?;
                     let path = fs_err::canonicalize(entry.path())?;
-                    if !references.contains(&path) {
+                    if !references.contains_key(&path) {
                         debug!("Removing dangling cache archive: {}", path.display());
                         summary += rm_rf(path)?;
                     }
@@ -531,52 +523,52 @@ impl Cache {
     ///
     /// Archive entries are often referenced by symlinks in other cache buckets. This method
     /// searches for all such references.
-    fn find_archive_references(&self) -> Result<FxHashSet<PathBuf>, io::Error> {
-        let mut references = FxHashSet::default();
-        for bucket in CacheBucket::iter() {
+    ///
+    /// Returns a map from archive path to paths that reference it.
+    fn find_archive_references(&self) -> Result<FxHashMap<PathBuf, Vec<PathBuf>>, io::Error> {
+        let mut references = FxHashMap::<PathBuf, Vec<PathBuf>>::default();
+        for bucket in [CacheBucket::SourceDistributions, CacheBucket::Wheels] {
             let bucket_path = self.bucket(bucket);
             if bucket_path.is_dir() {
-                for entry in walkdir::WalkDir::new(bucket_path) {
+                let walker = walkdir::WalkDir::new(&bucket_path).into_iter();
+                for entry in walker.filter_entry(|entry| {
+                    !(
+                        // As an optimization, ignore any `.lock`, `.whl`, `.msgpack`, `.rev`, or
+                        // `.http` files, along with the `src` directory, which represents the
+                        // unpacked source distribution.
+                        entry.file_name() == "src"
+                            || entry.file_name() == ".lock"
+                            || entry.file_name() == ".gitignore"
+                            || entry.path().extension().is_some_and(|ext| {
+                                ext.eq_ignore_ascii_case("lock")
+                                    || ext.eq_ignore_ascii_case("whl")
+                                    || ext.eq_ignore_ascii_case("http")
+                                    || ext.eq_ignore_ascii_case("rev")
+                                    || ext.eq_ignore_ascii_case("msgpack")
+                            })
+                    )
+                }) {
                     let entry = entry?;
 
-                    // Ignore any `.lock` files.
-                    if entry
-                        .path()
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("lock"))
-                    {
-                        continue;
-                    }
-
-                    let Some(filename) = entry
-                        .path()
-                        .file_name()
-                        .and_then(|file_name| file_name.to_str())
-                    else {
-                        continue;
-                    };
-
-                    if bucket == CacheBucket::Wheels {
-                        // In the `wheels` bucket, we often use a hash of the filename as the
-                        // directory name, so we can't rely on the stem.
-                        //
-                        // Instead, we skip if it contains an extension (e.g., `.whl`, `.http`,
-                        // `.rev`, and `.msgpack` files).
-                        if filename
-                            .rsplit_once('-') // strip version/tags, might contain a dot ('.')
-                            .is_none_or(|(_, suffix)| suffix.contains('.'))
-                        {
+                    // On Unix, archive references use symlinks.
+                    if cfg!(unix) {
+                        if !entry.file_type().is_symlink() {
                             continue;
                         }
-                    } else {
-                        // For other buckets only include entries that match the wheel stem pattern (e.g., `typing-extensions-4.8.0-py3-none-any`).
-                        if WheelFilename::from_stem(filename).is_err() {
+                    }
+
+                    // On Windows, archive references are files containing structured data.
+                    if cfg!(windows) {
+                        if !entry.file_type().is_file() {
                             continue;
                         }
                     }
 
                     if let Ok(target) = self.resolve_link(entry.path()) {
-                        references.insert(target);
+                        references
+                            .entry(target)
+                            .or_default()
+                            .push(entry.path().to_path_buf());
                     }
                 }
             }
@@ -653,13 +645,13 @@ impl Cache {
         let dst = dst.as_ref();
 
         // Attempt to create the symlink directly.
-        match std::os::unix::fs::symlink(&src, dst) {
+        match fs_err::os::unix::fs::symlink(&src, dst) {
             Ok(()) => Ok(()),
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
                 // Create a symlink, using a temporary file to ensure atomicity.
                 let temp_dir = tempfile::tempdir_in(dst.parent().unwrap())?;
                 let temp_file = temp_dir.path().join("link");
-                std::os::unix::fs::symlink(&src, &temp_file)?;
+                fs_err::os::unix::fs::symlink(&src, &temp_file)?;
 
                 // Move the symlink into the target location.
                 fs_err::rename(&temp_file, dst)?;
@@ -1006,7 +998,7 @@ impl CacheBucket {
             Self::Interpreter => "interpreter-v4",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_clean.rs`.
-            Self::Simple => "simple-v15",
+            Self::Simple => "simple-v16",
             // Note that when bumping this, you'll also need to bump it
             // in `crates/uv/tests/it/cache_prune.rs`.
             Self::Wheels => "wheels-v5",
@@ -1116,19 +1108,7 @@ impl CacheBucket {
                 let root = cache.bucket(self);
                 summary += rm_rf(root)?;
             }
-            Self::Git => {
-                // Nothing to do.
-            }
-            Self::Interpreter => {
-                // Nothing to do.
-            }
-            Self::Archive => {
-                // Nothing to do.
-            }
-            Self::Builds => {
-                // Nothing to do.
-            }
-            Self::Environments => {
+            Self::Git | Self::Interpreter | Self::Archive | Self::Builds | Self::Environments => {
                 // Nothing to do.
             }
         }
@@ -1226,11 +1206,7 @@ impl Refresh {
     pub fn combine(self, other: Refresh) -> Self {
         /// Return the maximum of two timestamps.
         fn max(a: Timestamp, b: Timestamp) -> Timestamp {
-            if a > b {
-                a
-            } else {
-                b
-            }
+            if a > b { a } else { b }
         }
 
         match (self, other) {

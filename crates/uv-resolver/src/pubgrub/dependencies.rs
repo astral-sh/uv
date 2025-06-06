@@ -127,10 +127,11 @@ impl PubGrubDependency {
                         url,
                     }
                 }
-                PubGrubPackageInner::Root(_) => unreachable!("root package in dependencies"),
+                PubGrubPackageInner::Root(_) => unreachable!("Root package in dependencies"),
                 PubGrubPackageInner::Python(_) => {
-                    unreachable!("python package in dependencies")
+                    unreachable!("Python package in dependencies")
                 }
+                PubGrubPackageInner::System(_) => unreachable!("System package in dependencies"),
             }
         })
     }

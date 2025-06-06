@@ -13,7 +13,7 @@ use uv_configuration::{
     PreviewMode,
 };
 use uv_fs::Simplified;
-use uv_normalize::DEV_DEPENDENCIES;
+use uv_normalize::{DEV_DEPENDENCIES, DefaultExtras};
 use uv_pep508::PackageName;
 use uv_python::{PythonDownloads, PythonPreference, PythonRequest};
 use uv_scripts::{Pep723ItemRef, Pep723Metadata, Pep723Script};
@@ -30,10 +30,10 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, ProjectEnvironment, ProjectError, ProjectInterpreter,
-    ScriptInterpreter, UniversalState,
+    ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    default_dependency_groups,
 };
-use crate::commands::{diagnostics, project, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
@@ -215,6 +215,7 @@ pub(crate) async fn remove(
                     python_preference,
                     python_downloads,
                     &install_mirrors,
+                    false,
                     no_config,
                     active,
                     cache,
@@ -233,6 +234,7 @@ pub(crate) async fn remove(
                     &network_settings,
                     python_preference,
                     python_downloads,
+                    no_sync,
                     no_config,
                     active,
                     cache,
@@ -253,6 +255,7 @@ pub(crate) async fn remove(
                 python_preference,
                 python_downloads,
                 &install_mirrors,
+                no_sync,
                 no_config,
                 active,
                 cache,
@@ -294,7 +297,7 @@ pub(crate) async fn remove(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -309,13 +312,11 @@ pub(crate) async fn remove(
         return Ok(ExitStatus::Success);
     };
 
-    // Perform a full sync, because we don't know what exactly is affected by the removal.
-    // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
-    let extras = ExtrasSpecification::All;
-    let install_options = InstallOptions::default();
-
     // Determine the default groups to include.
-    let defaults = default_dependency_groups(project.pyproject_toml())?;
+    let default_groups = default_dependency_groups(project.pyproject_toml())?;
+
+    // Determine the default extras to include.
+    let default_extras = DefaultExtras::default();
 
     // Identify the installation target.
     let target = match &project {
@@ -335,10 +336,10 @@ pub(crate) async fn remove(
     match project::sync::do_sync(
         target,
         venv,
-        &extras,
-        &DependencyGroups::default().with_defaults(defaults),
+        &ExtrasSpecification::default().with_defaults(default_extras),
+        &DependencyGroups::default().with_defaults(default_groups),
         EditableMode::Editable,
-        install_options,
+        InstallOptions::default(),
         Modifications::Exact,
         (&settings).into(),
         &network_settings,
@@ -357,7 +358,7 @@ pub(crate) async fn remove(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     }

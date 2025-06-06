@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use clap::{Args, ValueEnum};
 
 use uv_warnings::warn_user;
@@ -75,7 +75,9 @@ impl CompatArgs for PipCompileCompatArgs {
         }
 
         if self.no_allow_unsafe {
-            warn_user!("pip-compile's `--no-allow-unsafe` has no effect (uv can safely pin `pip` and other packages)");
+            warn_user!(
+                "pip-compile's `--no-allow-unsafe` has no effect (uv can safely pin `pip` and other packages)"
+            );
         }
 
         if self.reuse_hashes {

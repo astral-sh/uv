@@ -339,6 +339,11 @@ this Python interpreter for all operations.
 
 Specifies the directory to place links to installed, managed Python executables.
 
+### `UV_PYTHON_CACHE_DIR`
+
+Specifies the directory for caching the archives of managed Python installations before
+installation.
+
 ### `UV_PYTHON_DOWNLOADS`
 
 Equivalent to the

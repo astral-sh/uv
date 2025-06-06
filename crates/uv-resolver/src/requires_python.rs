@@ -4,8 +4,8 @@ use pubgrub::Range;
 
 use uv_distribution_filename::WheelFilename;
 use uv_pep440::{
-    release_specifiers_to_ranges, LowerBound, UpperBound, Version, VersionSpecifier,
-    VersionSpecifiers,
+    LowerBound, UpperBound, Version, VersionSpecifier, VersionSpecifiers,
+    release_specifiers_to_ranges,
 };
 use uv_pep508::{MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_platform_tags::{AbiTag, LanguageTag};
@@ -821,16 +821,20 @@ mod tests {
         // Splitting `>=3.10` on `>=3.9` should return `None`.
         let version_specifiers = VersionSpecifiers::from_str(">=3.10").unwrap();
         let requires_python = RequiresPython::from_specifiers(&version_specifiers);
-        assert!(requires_python
-            .split(Bound::Included(Version::new([3, 9])))
-            .is_none());
+        assert!(
+            requires_python
+                .split(Bound::Included(Version::new([3, 9])))
+                .is_none()
+        );
 
         // Splitting `>=3.10` on `>=3.10` should return `None`.
         let version_specifiers = VersionSpecifiers::from_str(">=3.10").unwrap();
         let requires_python = RequiresPython::from_specifiers(&version_specifiers);
-        assert!(requires_python
-            .split(Bound::Included(Version::new([3, 10])))
-            .is_none());
+        assert!(
+            requires_python
+                .split(Bound::Included(Version::new([3, 10])))
+                .is_none()
+        );
 
         // Splitting `>=3.9, <3.13` on `>=3.11` should result in `>=3.9, <3.11` and `>=3.11, <3.13`.
         let version_specifiers = VersionSpecifiers::from_str(">=3.9, <3.13").unwrap();

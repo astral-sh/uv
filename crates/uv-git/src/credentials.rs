@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, RwLock};
 use tracing::trace;
-use url::Url;
 use uv_auth::Credentials;
 use uv_cache_key::RepositoryUrl;
+use uv_redacted::DisplaySafeUrl;
 
 /// Global authentication cache for a uv invocation.
 ///
@@ -29,7 +29,7 @@ impl GitStore {
 /// Populate the global authentication store with credentials on a Git URL, if there are any.
 ///
 /// Returns `true` if the store was updated.
-pub fn store_credentials_from_url(url: &Url) -> bool {
+pub fn store_credentials_from_url(url: &DisplaySafeUrl) -> bool {
     if let Some(credentials) = Credentials::from_url(url) {
         trace!("Caching credentials for {url}");
         GIT_STORE.insert(RepositoryUrl::new(url), credentials);

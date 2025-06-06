@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use fs_err as fs;
 use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
-use url::Url;
 
 use uv_distribution_types::{
     Diagnostic, InstalledDist, Name, NameRequirementSpecification, Requirement,
@@ -18,6 +17,7 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::VersionOrUrl;
 use uv_pypi_types::{ResolverMarkerEnvironment, VerbatimParsedUrl};
 use uv_python::{Interpreter, PythonEnvironment};
+use uv_redacted::DisplaySafeUrl;
 use uv_types::InstalledPackagesProvider;
 use uv_warnings::warn_user;
 
@@ -38,7 +38,7 @@ pub struct SitePackages {
     /// virtual environment, which we handle gracefully.
     by_name: FxHashMap<PackageName, Vec<usize>>,
     /// The installed editable distributions, keyed by URL.
-    by_url: FxHashMap<Url, Vec<usize>>,
+    by_url: FxHashMap<DisplaySafeUrl, Vec<usize>>,
 }
 
 impl SitePackages {
@@ -55,10 +55,10 @@ impl SitePackages {
 
         for site_packages in interpreter.site_packages() {
             // Read the site-packages directory.
-            let site_packages = match fs::read_dir(site_packages) {
-                Ok(site_packages) => {
+            let site_packages = match fs::read_dir(site_packages.as_ref()) {
+                Ok(read_dir) => {
                     // Collect sorted directory paths; `read_dir` is not stable across platforms
-                    let dist_likes: BTreeSet<_> = site_packages
+                    let dist_likes: BTreeSet<_> = read_dir
                         .filter_map(|read_dir| match read_dir {
                             Ok(entry) => match entry.file_type() {
                                 Ok(file_type) => (file_type.is_dir()
@@ -71,7 +71,13 @@ impl SitePackages {
                             },
                             Err(err) => Some(Err(err)),
                         })
-                        .collect::<Result<_, std::io::Error>>()?;
+                        .collect::<Result<_, std::io::Error>>()
+                        .with_context(|| {
+                            format!(
+                                "Failed to read site-packages directory contents: {}",
+                                site_packages.user_display()
+                            )
+                        })?;
                     dist_likes
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -168,7 +174,7 @@ impl SitePackages {
     }
 
     /// Returns the distributions installed from the given URL, if any.
-    pub fn get_urls(&self, url: &Url) -> Vec<&InstalledDist> {
+    pub fn get_urls(&self, url: &DisplaySafeUrl) -> Vec<&InstalledDist> {
         let Some(indexes) = self.by_url.get(url) else {
             return Vec::new();
         };
@@ -303,7 +309,7 @@ impl SitePackages {
                             [] => {
                                 return Ok(SatisfiesResult::Unsatisfied(
                                     requirement.url.verbatim.raw().to_string(),
-                                ))
+                                ));
                             }
                             [distribution] => {
                                 let requirement = uv_pep508::Requirement {
@@ -320,7 +326,7 @@ impl SitePackages {
                             _ => {
                                 return Ok(SatisfiesResult::Unsatisfied(
                                     requirement.url.verbatim.raw().to_string(),
-                                ))
+                                ));
                             }
                         }
                     }
@@ -343,7 +349,7 @@ impl SitePackages {
                             [] => {
                                 return Ok(SatisfiesResult::Unsatisfied(
                                     requirement.url.verbatim.raw().to_string(),
-                                ))
+                                ));
                             }
                             [distribution] => {
                                 let requirement = uv_pep508::Requirement {
@@ -360,7 +366,7 @@ impl SitePackages {
                             _ => {
                                 return Ok(SatisfiesResult::Unsatisfied(
                                     requirement.url.verbatim.raw().to_string(),
-                                ))
+                                ));
                             }
                         }
                     }
@@ -441,7 +447,7 @@ impl SitePackages {
                             RequirementSatisfaction::Mismatch
                             | RequirementSatisfaction::OutOfDate
                             | RequirementSatisfaction::CacheInvalid => {
-                                return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()))
+                                return Ok(SatisfiesResult::Unsatisfied(requirement.to_string()));
                             }
                             RequirementSatisfaction::Satisfied => {}
                         }
@@ -456,7 +462,7 @@ impl SitePackages {
                                 | RequirementSatisfaction::CacheInvalid => {
                                     return Ok(SatisfiesResult::Unsatisfied(
                                         requirement.to_string(),
-                                    ))
+                                    ));
                                 }
                                 RequirementSatisfaction::Satisfied => {}
                             }
@@ -566,7 +572,8 @@ impl Diagnostic for SitePackagesDiagnostic {
     fn message(&self) -> String {
         match self {
             Self::MetadataUnavailable { package, path } => format!(
-                "The package `{package}` is broken or incomplete (unable to read `METADATA`). Consider recreating the virtualenv, or removing the package directory at: {}.", path.display(),
+                "The package `{package}` is broken or incomplete (unable to read `METADATA`). Consider recreating the virtualenv, or removing the package directory at: {}.",
+                path.display(),
             ),
             Self::IncompatiblePythonVersion {
                 package,
@@ -593,7 +600,8 @@ impl Diagnostic for SitePackagesDiagnostic {
                 paths.sort();
                 format!(
                     "The package `{package}` has multiple installed distributions: {}",
-                    paths.iter().fold(String::new(), |acc, path| acc + &format!("\n  - {}", path.display()))
+                    paths.iter().fold(String::new(), |acc, path| acc
+                        + &format!("\n  - {}", path.display()))
                 )
             }
         }

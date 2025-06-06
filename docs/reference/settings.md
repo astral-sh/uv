@@ -112,7 +112,7 @@ constraint-dependencies = ["grpcio<1.65"]
 
 The list of `dependency-groups` to install by default.
 
-Can also be the literal "all" to default enable all groups.
+Can also be the literal `"all"` to default enable all groups.
 
 **Default value**: `["dev"]`
 
@@ -367,6 +367,183 @@ pydantic = { path = "/path/to/pydantic", editable = true }
 
 ---
 
+### `build-backend`
+
+Settings for the uv build backend (`uv_build`).
+
+!!! note
+
+    The uv build backend is currently in preview and may change in any future release.
+
+Note that those settings only apply when using the `uv_build` backend, other build backends
+(such as hatchling) have their own configuration.
+
+All options that accept globs use the portable glob patterns from
+[PEP 639](https://packaging.python.org/en/latest/specifications/glob-patterns/).
+
+#### [`data`](#build-backend_data) {: #build-backend_data }
+<span id="data"></span>
+
+Data includes for wheels.
+
+Each entry is a directory, whose contents are copied to the matching directory in the wheel
+in `<name>-<version>.data/(purelib|platlib|headers|scripts|data)`. Upon installation, this
+data is moved to its target location, as defined by
+<https://docs.python.org/3.12/library/sysconfig.html#installation-paths>. Usually, small
+data files are included by placing them in the Python module instead of using data includes.
+
+- `scripts`: Installed to the directory for executables, `<venv>/bin` on Unix or
+  `<venv>\Scripts` on Windows. This directory is added to `PATH` when the virtual
+  environment  is activated or when using `uv run`, so this data type can be used to install
+  additional binaries. Consider using `project.scripts` instead for Python entrypoints.
+- `data`: Installed over the virtualenv environment root.
+
+    Warning: This may override existing files!
+
+- `headers`: Installed to the include directory. Compilers building Python packages
+  with this package as build requirement use the include directory to find additional header
+  files.
+- `purelib` and `platlib`: Installed to the `site-packages` directory. It is not recommended
+  to uses these two options.
+
+**Default value**: `{}`
+
+**Type**: `dict[str, str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+data = { "headers": "include/headers", "scripts": "bin" }
+```
+
+---
+
+#### [`default-excludes`](#build-backend_default-excludes) {: #build-backend_default-excludes }
+<span id="default-excludes"></span>
+
+If set to `false`, the default excludes aren't applied.
+
+Default excludes: `__pycache__`, `*.pyc`, and `*.pyo`.
+
+**Default value**: `true`
+
+**Type**: `bool`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+default-excludes = false
+```
+
+---
+
+#### [`module-name`](#build-backend_module-name) {: #build-backend_module-name }
+<span id="module-name"></span>
+
+The name of the module directory inside `module-root`.
+
+The default module name is the package name with dots and dashes replaced by underscores.
+
+Package names need to be valid Python identifiers, and the directory needs to contain a
+`__init__.py`. An exception are stubs packages, whose name ends with `-stubs`, with the stem
+being the module name, and which contain a `__init__.pyi` file.
+
+Note that using this option runs the risk of creating two packages with different names but
+the same module names. Installing such packages together leads to unspecified behavior,
+often with corrupted files or directory trees.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+module-name = "sklearn"
+```
+
+---
+
+#### [`module-root`](#build-backend_module-root) {: #build-backend_module-root }
+<span id="module-root"></span>
+
+The directory that contains the module directory.
+
+Common values are `src` (src layout, the default) or an empty path (flat layout).
+
+**Default value**: `"src"`
+
+**Type**: `str`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+module-root = ""
+```
+
+---
+
+#### [`source-exclude`](#build-backend_source-exclude) {: #build-backend_source-exclude }
+<span id="source-exclude"></span>
+
+Glob expressions which files and directories to exclude from the source distribution.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+source-exclude = ["*.bin"]
+```
+
+---
+
+#### [`source-include`](#build-backend_source-include) {: #build-backend_source-include }
+<span id="source-include"></span>
+
+Glob expressions which files and directories to additionally include in the source
+distribution.
+
+`pyproject.toml` and the contents of the module directory are always included.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+source-include = ["tests/**"]
+```
+
+---
+
+#### [`wheel-exclude`](#build-backend_wheel-exclude) {: #build-backend_wheel-exclude }
+<span id="wheel-exclude"></span>
+
+Glob expressions which files and directories to exclude from the wheel.
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv.build-backend]
+wheel-exclude = ["*.bin"]
+```
+
+---
+
 ### `workspace`
 
 #### [`exclude`](#workspace_exclude) {: #workspace_exclude }
@@ -415,6 +592,44 @@ members = ["member1", "path/to/member2", "libs/*"]
 ---
 
 ## Configuration
+### [`add-bounds`](#add-bounds) {: #add-bounds }
+
+The default version specifier when adding a dependency.
+
+When adding a dependency to the project, if no constraint or URL is provided, a constraint
+is added based on the latest compatible version of the package. By default, a lower bound
+constraint is used, e.g., `>=1.2.3`.
+
+When `--frozen` is provided, no resolution is performed, and dependencies are always added
+without constraints.
+
+This option is in preview and may change in any future release.
+
+**Default value**: `"lower"`
+
+**Possible values**:
+
+- `"lower"`: Only a lower bound, e.g., `>=1.2.3`
+- `"major"`: Allow the same major version, similar to the semver caret, e.g., `>=1.2.3, <2.0.0`
+- `"minor"`: Allow the same minor version, similar to the semver tilde, e.g., `>=1.2.3, <1.3.0`
+- `"exact"`: Pin the exact version, e.g., `==1.2.3`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    add-bounds = "major"
+    ```
+=== "uv.toml"
+
+    ```toml
+    add-bounds = "major"
+    ```
+
+---
+
 ### [`allow-insecure-host`](#allow-insecure-host) {: #allow-insecure-host }
 
 Allow insecure connections to host.
@@ -745,11 +960,11 @@ standard, though only the following fields are respected:
 
 ### [`exclude-newer`](#exclude-newer) {: #exclude-newer }
 
-Limit candidate packages to those that were uploaded prior to the given date.
+Limit candidate packages to those that were uploaded prior to a given point in time.
 
-Accepts both [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) timestamps (e.g.,
-`2006-12-02T02:07:43Z`) and local dates in the same format (e.g., `2006-12-02`) in your
-system's configured time zone.
+Accepts a superset of [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339.html) (e.g.,
+`2006-12-02T02:07:43Z`). A full timestamp is required to ensure that the resolver will
+behave consistently across timezones.
 
 **Default value**: `None`
 
@@ -761,12 +976,12 @@ system's configured time zone.
 
     ```toml
     [tool.uv]
-    exclude-newer = "2006-12-02"
+    exclude-newer = "2006-12-02T02:07:43Z"
     ```
 === "uv.toml"
 
     ```toml
-    exclude-newer = "2006-12-02"
+    exclude-newer = "2006-12-02T02:07:43Z"
     ```
 
 ---
@@ -1478,6 +1693,32 @@ Whether to allow Python downloads.
 
     ```toml
     python-downloads = "manual"
+    ```
+
+---
+
+### [`python-downloads-json-url`](#python-downloads-json-url) {: #python-downloads-json-url }
+
+URL pointing to JSON of custom Python installations.
+
+Note that currently, only local paths are supported.
+
+**Default value**: `None`
+
+**Type**: `str`
+
+**Example usage**:
+
+=== "pyproject.toml"
+
+    ```toml
+    [tool.uv]
+    python-downloads-json-url = "/etc/uv/python-downloads.json"
+    ```
+=== "uv.toml"
+
+    ```toml
+    python-downloads-json-url = "/etc/uv/python-downloads.json"
     ```
 
 ---

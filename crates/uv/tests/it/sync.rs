@@ -4,7 +4,7 @@ use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 
-use crate::common::{download_to_disk, uv_snapshot, venv_bin_path, TestContext};
+use crate::common::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
 use predicates::prelude::predicate;
 use tempfile::tempdir_in;
 use uv_fs::Simplified;
@@ -270,7 +270,7 @@ fn package() -> Result<()> {
 /// Ensure that we use the maximum Python version when a workspace contains mixed requirements.
 #[test]
 fn mixed_requires_python() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     // Create a workspace root with a minimum Python requirement of Python 3.12.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -296,7 +296,7 @@ fn mixed_requires_python() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
-    // Create a child with a minimum Python requirement of Python 3.8.
+    // Create a child with a minimum Python requirement of Python 3.9.
     let child = context.temp_dir.child("packages").child("bird-feeder");
     child.create_dir_all()?;
 
@@ -312,7 +312,7 @@ fn mixed_requires_python() -> Result<()> {
         [project]
         name = "bird-feeder"
         version = "0.1.0"
-        requires-python = ">=3.8"
+        requires-python = ">=3.9"
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -339,15 +339,15 @@ fn mixed_requires_python() -> Result<()> {
     "###);
 
     // Running `uv sync` again should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.8"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.9"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
-    error: The requested interpreter resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.8. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.8.[X]` followed by `uv pip install -e .`.
-    "###);
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
+    error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.9. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.9.[X]` followed by `uv pip install -e .`.
+    ");
 
     Ok(())
 }
@@ -1131,9 +1131,9 @@ fn sync_relative_wheel() -> Result<()> {
         },
         {
             assert_snapshot!(
-                lock, @r###"
+                lock, @r#"
             version = 1
-            revision = 1
+            revision = 2
             requires-python = ">=3.12"
 
             [options]
@@ -1157,7 +1157,7 @@ fn sync_relative_wheel() -> Result<()> {
 
             [package.metadata]
             requires-dist = [{ name = "ok", path = "wheels/ok-1.0.0-py3-none-any.whl" }]
-            "###
+            "#
             );
         }
     );
@@ -2686,9 +2686,9 @@ fn sync_group_legacy_non_project_member() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
-        revision = 1
+        revision = 2
         requires-python = ">=3.12"
 
         [options]
@@ -2720,20 +2720,20 @@ fn sync_group_legacy_non_project_member() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
         name = "typing-extensions"
         version = "4.10.0"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
         ]
-        "###
+        "#
         );
     });
 
@@ -2797,9 +2797,9 @@ fn sync_group_self() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
-        revision = 1
+        revision = 2
         requires-python = ">=3.12"
 
         [options]
@@ -2809,18 +2809,18 @@ fn sync_group_self() -> Result<()> {
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
         ]
 
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
@@ -2863,11 +2863,11 @@ fn sync_group_self() -> Result<()> {
         name = "typing-extensions"
         version = "4.10.0"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+        sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
+            { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
         ]
-        "###
+        "#
         );
     });
 
@@ -3711,9 +3711,9 @@ fn convert_to_virtual() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
-        revision = 1
+        revision = 2
         requires-python = ">=3.12"
 
         [options]
@@ -3723,9 +3723,9 @@ fn convert_to_virtual() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
@@ -3738,7 +3738,7 @@ fn convert_to_virtual() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -3771,9 +3771,9 @@ fn convert_to_virtual() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
-        revision = 1
+        revision = 2
         requires-python = ">=3.12"
 
         [options]
@@ -3783,9 +3783,9 @@ fn convert_to_virtual() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
@@ -3798,7 +3798,7 @@ fn convert_to_virtual() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -3840,9 +3840,9 @@ fn convert_to_package() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
-        revision = 1
+        revision = 2
         requires-python = ">=3.12"
 
         [options]
@@ -3852,9 +3852,9 @@ fn convert_to_package() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
@@ -3867,7 +3867,7 @@ fn convert_to_package() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -3905,9 +3905,9 @@ fn convert_to_package() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
-        revision = 1
+        revision = 2
         requires-python = ">=3.12"
 
         [options]
@@ -3917,9 +3917,9 @@ fn convert_to_package() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
@@ -3932,7 +3932,7 @@ fn convert_to_package() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "iniconfig" }]
-        "###
+        "#
         );
     });
 
@@ -5558,9 +5558,9 @@ fn sync_dynamic_extra() -> Result<()> {
         },
         {
             assert_snapshot!(
-                lock, @r###"
+                lock, @r#"
             version = 1
-            revision = 1
+            revision = 2
             requires-python = ">=3.12"
 
             [options]
@@ -5570,9 +5570,9 @@ fn sync_dynamic_extra() -> Result<()> {
             name = "iniconfig"
             version = "2.0.0"
             source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+            sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
             wheels = [
-                { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+                { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
             ]
 
             [[package]]
@@ -5599,11 +5599,11 @@ fn sync_dynamic_extra() -> Result<()> {
             name = "typing-extensions"
             version = "4.10.0"
             source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+            sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
             wheels = [
-                { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
+                { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
             ]
-            "###
+            "#
             );
         }
     );
@@ -6905,9 +6905,9 @@ fn sync_stale_egg_info() -> Result<()> {
         },
         {
             assert_snapshot!(
-                lock, @r###"
+                lock, @r#"
             version = 1
-            revision = 1
+            revision = 2
             requires-python = ">=3.13"
 
             [options]
@@ -6948,11 +6948,11 @@ fn sync_stale_egg_info() -> Result<()> {
             name = "setuptools"
             version = "69.2.0"
             source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950 }
+            sdist = { url = "https://files.pythonhosted.org/packages/4d/5b/dc575711b6b8f2f866131a40d053e30e962e633b332acf7cd2c24843d83d/setuptools-69.2.0.tar.gz", hash = "sha256:0ff4183f8f42cd8fa3acea16c45205521a4ef28f73c6391d8a25e92893134f2e", size = 2222950, upload-time = "2024-03-13T11:20:59.219Z" }
             wheels = [
-                { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485 },
+                { url = "https://files.pythonhosted.org/packages/92/e1/1c8bb3420105e70bdf357d57dd5567202b4ef8d27f810e98bb962d950834/setuptools-69.2.0-py3-none-any.whl", hash = "sha256:c21c49fb1042386df081cb5d86759792ab89efca84cf114889191cd09aacc80c", size = 821485, upload-time = "2024-03-13T11:20:54.103Z" },
             ]
-            "###
+            "#
             );
         }
     );
@@ -7012,9 +7012,9 @@ fn sync_git_repeated_member_static_metadata() -> Result<()> {
         },
         {
             assert_snapshot!(
-                lock, @r###"
+                lock, @r#"
             version = 1
-            revision = 1
+            revision = 2
             requires-python = ">=3.13"
 
             [options]
@@ -7047,7 +7047,7 @@ fn sync_git_repeated_member_static_metadata() -> Result<()> {
             dependencies = [
                 { name = "uv-git-workspace-in-root" },
             ]
-            "###
+            "#
             );
         }
     );
@@ -7106,9 +7106,9 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
         },
         {
             assert_snapshot!(
-                lock, @r###"
+                lock, @r#"
             version = 1
-            revision = 1
+            revision = 2
             requires-python = ">=3.13"
 
             [options]
@@ -7141,9 +7141,9 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
             name = "iniconfig"
             version = "2.0.0"
             source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+            sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
             wheels = [
-                { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+                { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
             ]
 
             [[package]]
@@ -7159,11 +7159,11 @@ fn sync_git_repeated_member_dynamic_metadata() -> Result<()> {
             name = "typing-extensions"
             version = "4.10.0"
             source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558 }
+            sdist = { url = "https://files.pythonhosted.org/packages/16/3a/0d26ce356c7465a19c9ea8814b960f8a36c3b0d07c323176620b7b483e44/typing_extensions-4.10.0.tar.gz", hash = "sha256:b0abd7c89e8fb96f98db18d86106ff1d90ab692004eb746cf6eda2682f91b3cb", size = 77558, upload-time = "2024-02-25T22:12:49.693Z" }
             wheels = [
-                { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926 },
+                { url = "https://files.pythonhosted.org/packages/f9/de/dc04a3ea60b22624b51c703a84bbe0184abcd1d0b9bc8074b5d6b7ab90bb/typing_extensions-4.10.0-py3-none-any.whl", hash = "sha256:69b1a937c3a517342112fb4c6df7e72fc39a38e7891a5730ed4985b5214b5475", size = 33926, upload-time = "2024-02-25T22:12:47.72Z" },
             ]
-            "###
+            "#
             );
         }
     );
@@ -7224,9 +7224,9 @@ fn sync_git_repeated_member_backwards_path() -> Result<()> {
         },
         {
             assert_snapshot!(
-                lock, @r###"
+                lock, @r#"
             version = 1
-            revision = 1
+            revision = 2
             requires-python = ">=3.13"
 
             [options]
@@ -7259,7 +7259,7 @@ fn sync_git_repeated_member_backwards_path() -> Result<()> {
             dependencies = [
                 { name = "dependency" },
             ]
-            "###
+            "#
             );
         }
     );
@@ -7406,9 +7406,9 @@ fn sync_git_path_dependency() -> Result<()> {
         },
         {
             assert_snapshot!(
-                lock, @r###"
+                lock, @r#"
             version = 1
-            revision = 1
+            revision = 2
             requires-python = ">=3.13"
 
             [options]
@@ -7437,7 +7437,7 @@ fn sync_git_path_dependency() -> Result<()> {
             dependencies = [
                 { name = "package1" },
             ]
-            "###
+            "#
             );
         }
     );
@@ -7514,9 +7514,9 @@ fn sync_build_tag() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
-        revision = 1
+        revision = 2
         requires-python = ">=3.12"
 
         [options]
@@ -7542,7 +7542,7 @@ fn sync_build_tag() -> Result<()> {
 
         [package.metadata]
         requires-dist = [{ name = "build-tag" }]
-        "###
+        "#
         );
     });
 
@@ -7767,9 +7767,8 @@ fn find_links_relative_in_config_works_from_subdir() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "python-managed")]
 fn sync_dry_run() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -7846,7 +7845,7 @@ fn sync_dry_run() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = "==3.8.*"
+        requires-python = "==3.9.*"
         dependencies = ["iniconfig"]
         "#,
     )?;
@@ -7857,7 +7856,7 @@ fn sync_dry_run() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Would replace existing virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Would update lockfile at: uv.lock
@@ -7872,7 +7871,7 @@ fn sync_dry_run() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
@@ -8000,7 +7999,7 @@ fn sync_dry_run_and_frozen() -> Result<()> {
 
 #[test]
 fn sync_script() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! { r#"
@@ -8150,7 +8149,7 @@ fn sync_script() -> Result<()> {
 
 #[test]
 fn sync_locked_script() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! { r#"
@@ -8190,9 +8189,9 @@ fn sync_locked_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
-        revision = 1
+        revision = 2
         requires-python = ">=3.11"
 
         [options]
@@ -8209,29 +8208,29 @@ fn sync_locked_script() -> Result<()> {
             { name = "idna" },
             { name = "sniffio" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
         ]
 
         [[package]]
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
         ]
 
         [[package]]
         name = "sniffio"
         version = "1.3.1"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
         ]
-        "###
+        "#
         );
     });
 
@@ -8295,9 +8294,9 @@ fn sync_locked_script() -> Result<()> {
         filters => context.filters(),
     }, {
         assert_snapshot!(
-            lock, @r###"
+            lock, @r#"
         version = 1
-        revision = 1
+        revision = 2
         requires-python = ">=3.11"
 
         [options]
@@ -8317,38 +8316,38 @@ fn sync_locked_script() -> Result<()> {
             { name = "idna" },
             { name = "sniffio" },
         ]
-        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642 }
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584 },
+            { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
         ]
 
         [[package]]
         name = "idna"
         version = "3.6"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426 }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload-time = "2023-11-25T15:40:54.902Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567 },
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload-time = "2023-11-25T15:40:52.604Z" },
         ]
 
         [[package]]
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
         name = "sniffio"
         version = "1.3.1"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372 }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235 },
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
         ]
-        "###
+        "#
         );
     });
 
@@ -8401,14 +8400,14 @@ fn sync_locked_script() -> Result<()> {
 
 #[test]
 fn sync_script_with_compatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let test_script = context.temp_dir.child("script.py");
 
     // Compatible build constraints.
     test_script.write_str(indoc! { r#"
         # /// script
-        # requires-python = ">=3.8"
+        # requires-python = ">=3.9"
         # dependencies = [
         #   "anyio>=3",
         #   "requests==1.2"
@@ -8454,7 +8453,7 @@ fn sync_script_with_compatible_build_constraints() -> Result<()> {
 
 #[test]
 fn sync_script_with_incompatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let test_script = context.temp_dir.child("script.py");
     let filters = context
@@ -8469,7 +8468,7 @@ fn sync_script_with_incompatible_build_constraints() -> Result<()> {
     // Incompatible build constraints.
     test_script.write_str(indoc! { r#"
         # /// script
-        # requires-python = ">=3.8"
+        # requires-python = ">=3.9"
         # dependencies = [
         #   "anyio>=3",
         #   "requests==1.2"
@@ -9078,7 +9077,7 @@ fn locked_version_coherence() -> Result<()> {
         assert_snapshot!(
             lock, @r#"
         version = 1
-        revision = 1
+        revision = 2
         requires-python = ">=3.12"
 
         [options]
@@ -9088,9 +9087,9 @@ fn locked_version_coherence() -> Result<()> {
         name = "iniconfig"
         version = "2.0.0"
         source = { registry = "https://pypi.org/simple" }
-        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646 }
+        sdist = { url = "https://files.pythonhosted.org/packages/d7/4b/cbd8e699e64a6f16ca3a8220661b5f83792b3017d0f79807cb8708d33913/iniconfig-2.0.0.tar.gz", hash = "sha256:2d91e135bf72d31a410b17c16da610a82cb55f6b0477d1a902134b24a455b8b3", size = 4646, upload-time = "2023-01-07T11:08:11.254Z" }
         wheels = [
-            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892 },
+            { url = "https://files.pythonhosted.org/packages/ef/a6/62565a6e1cf69e10f5727360368e451d4b7f58beeac6173dc9db836a5b46/iniconfig-2.0.0-py3-none-any.whl", hash = "sha256:b6a85871a79d2e3b22d2d1b94ac2824226a63c6b741c88f7ae975f18b6778374", size = 5892, upload-time = "2023-01-07T11:08:09.864Z" },
         ]
 
         [[package]]
@@ -9182,7 +9181,7 @@ fn sync_build_constraints() -> Result<()> {
             assert_snapshot!(
                 lock, @r#"
             version = 1
-            revision = 1
+            revision = 2
             requires-python = ">=3.12"
 
             [options]
@@ -9195,7 +9194,7 @@ fn sync_build_constraints() -> Result<()> {
             name = "json-merge-patch"
             version = "0.2"
             source = { registry = "https://pypi.org/simple" }
-            sdist = { url = "https://files.pythonhosted.org/packages/39/62/3b783faabac9a099877397d8f7a7cc862a03fbf9fb1b90d414ea7c6bb096/json-merge-patch-0.2.tar.gz", hash = "sha256:09898b6d427c08754e2a97c709cf2dfd7e28bd10c5683a538914975eab778d39", size = 3081 }
+            sdist = { url = "https://files.pythonhosted.org/packages/39/62/3b783faabac9a099877397d8f7a7cc862a03fbf9fb1b90d414ea7c6bb096/json-merge-patch-0.2.tar.gz", hash = "sha256:09898b6d427c08754e2a97c709cf2dfd7e28bd10c5683a538914975eab778d39", size = 3081, upload-time = "2017-11-09T11:38:15.773Z" }
 
             [[package]]
             name = "project"
@@ -9376,6 +9375,236 @@ fn sync_when_virtual_environment_incompatible_with_interpreter() -> Result<()> {
         version_info = 3.12.[X]
         "###);
     });
+
+    Ok(())
+}
+
+/// Ensure that existing `uv.lock` files can use `upload_time` or `upload-time` interchangeably.
+#[test]
+fn sync_upload_time() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["anyio==3.7.0"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.lock(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    "###);
+
+    let uv_lock = context.temp_dir.child("uv.lock");
+    uv_lock.write_str(r#"
+        version = 1
+        revision = 2
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "anyio"
+        version = "3.7.0"
+        source = { registry = "https://pypi.org/simple" }
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+        sdist = { url = "https://files.pythonhosted.org/packages/c6/b3/fefbf7e78ab3b805dec67d698dc18dd505af7a18a8dd08868c9b4fa736b5/anyio-3.7.0.tar.gz", hash = "sha256:275d9973793619a5374e1c89a4f4ad3f4b0a5510a2b5b939444bee8f4c4d37ce", size = 142737, upload_time = "2023-05-27T11:12:46.688Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/68/fe/7ce1926952c8a403b35029e194555558514b365ad77d75125f521a2bec62/anyio-3.7.0-py3-none-any.whl", hash = "sha256:eddca883c4175f14df8aedce21054bfca3adb70ffe76a9f607aef9d7fa2ea7f0", size = 80873, upload_time = "2023-05-27T11:12:44.474Z" },
+        ]
+
+        [[package]]
+        name = "idna"
+        version = "3.6"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", hash = "sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca", size = 175426, upload_time = "2023-11-25T15:40:54.902Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", hash = "sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f", size = 61567, upload_time = "2023-11-25T15:40:52.604Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "anyio" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "anyio", specifier = "==3.7.0" }]
+
+        [[package]]
+        name = "sniffio"
+        version = "1.3.1"
+        source = { registry = "https://pypi.org/simple" }
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload_time = "2024-02-25T23:20:04.057Z" }
+        wheels = [
+            { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload_time = "2024-02-25T23:20:01.196Z" },
+        ]
+    "#)?;
+
+    // Install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==3.7.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    // Re-install from the lockfile.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Audited 3 packages in [TIME]
+    "###);
+
+    Ok(())
+}
+
+/// Ensure that workspace members that are also development dependencies are not duplicated with
+/// `--all-packages`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/13673#issuecomment-2912196406>
+#[test]
+fn repeated_dev_member_all_packages() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "first"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["second"]
+
+        [tool.uv.sources]
+        second = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["second"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("first");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    let child = context.temp_dir.child("second");
+    fs_err::create_dir_all(&child)?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "second"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    let src = child.child("src").child("second");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + first==0.1.0 (from file://[TEMP_DIR]/)
+     + iniconfig==2.0.0
+     + second==0.1.0 (from file://[TEMP_DIR]/second)
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that hash checking doesn't fail with dependency metadata.
+#[test]
+fn direct_url_dependency_metadata() -> Result<()> {
+    let context = TestContext::new("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(r#"
+        [project]
+        name = "debug"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "tqdm",
+        ]
+
+        [tool.uv]
+        dependency-metadata = [
+          { name = "tqdm", version = "4.67.1", requires-dist = [] },
+        ]
+
+        [tool.uv.sources]
+        tqdm = { url = "https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl" }
+        "#
+    )?;
+
+    uv_snapshot!(context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==4.67.1 (from https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+    ");
 
     Ok(())
 }

@@ -15,12 +15,11 @@ use std::str::FromStr;
 use glob::Pattern;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxBuildHasher, FxHashSet};
-use serde::{de::IntoDeserializer, de::SeqAccess, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::IntoDeserializer, de::SeqAccess};
 use thiserror::Error;
-use url::Url;
-
+use uv_build_backend::BuildBackendSettings;
 use uv_distribution_types::{Index, IndexName, RequirementSource};
-use uv_fs::{relative_to, PortablePathBuf};
+use uv_fs::{PortablePathBuf, relative_to};
 use uv_git_types::GitReference;
 use uv_macros::OptionsMetadata;
 use uv_normalize::{DefaultGroups, ExtraName, GroupName, PackageName};
@@ -29,6 +28,7 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::{
     Conflicts, DependencyGroups, SchemaConflicts, SupportedEnvironments, VerbatimParsedUrl,
 };
+use uv_redacted::DisplaySafeUrl;
 
 #[derive(Error, Debug)]
 pub enum PyprojectTomlError {
@@ -343,7 +343,7 @@ pub struct ToolUv {
 
     /// The list of `dependency-groups` to install by default.
     ///
-    /// Can also be the literal "all" to default enable all groups.
+    /// Can also be the literal `"all"` to default enable all groups.
     #[option(
         default = r#"["dev"]"#,
         value_type = r#"str | list[str]"#,
@@ -583,6 +583,15 @@ pub struct ToolUv {
         "#
     )]
     pub conflicts: Option<SchemaConflicts>,
+
+    // Only exists on this type for schema and docs generation, the build backend settings are
+    // never merged in a workspace and read separately by the backend code.
+    /// Configuration for the uv build backend.
+    ///
+    /// Note that those settings only apply when using the `uv_build` backend, other build backends
+    /// (such as hatchling) have their own configuration.
+    #[option_group]
+    pub build_backend: Option<BuildBackendSettings>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -882,7 +891,7 @@ pub enum Source {
     /// ```
     Git {
         /// The repository URL (without the `git+` prefix).
-        git: Url,
+        git: DisplaySafeUrl,
         /// The path to the directory with the `pyproject.toml`, if it's not in the archive root.
         subdirectory: Option<PortablePathBuf>,
         // Only one of the three may be used; we'll validate this later and emit a custom error.
@@ -906,7 +915,7 @@ pub enum Source {
     /// flask = { url = "https://files.pythonhosted.org/packages/61/80/ffe1da13ad9300f87c93af113edd0638c75138c42a0994becfacac078c06/flask-3.0.3-py3-none-any.whl" }
     /// ```
     Url {
-        url: Url,
+        url: DisplaySafeUrl,
         /// For source distributions, the path to the directory with the `pyproject.toml`, if it's
         /// not in the archive root.
         subdirectory: Option<PortablePathBuf>,
@@ -980,12 +989,12 @@ impl<'de> Deserialize<'de> for Source {
         #[derive(Deserialize, Debug, Clone)]
         #[serde(rename_all = "kebab-case", deny_unknown_fields)]
         struct CatchAll {
-            git: Option<Url>,
+            git: Option<DisplaySafeUrl>,
             subdirectory: Option<PortablePathBuf>,
             rev: Option<String>,
             tag: Option<String>,
             branch: Option<String>,
-            url: Option<Url>,
+            url: Option<DisplaySafeUrl>,
             path: Option<PortablePathBuf>,
             editable: Option<bool>,
             package: Option<bool>,
@@ -1074,7 +1083,7 @@ impl<'de> Deserialize<'de> for Source {
 
             // If the user prefixed the URL with `git+`, strip it.
             let git = if let Some(git) = git.as_str().strip_prefix("git+") {
-                Url::parse(git).map_err(serde::de::Error::custom)?
+                DisplaySafeUrl::parse(git).map_err(serde::de::Error::custom)?
             } else {
                 git
             };
@@ -1378,9 +1387,38 @@ impl Source {
         tag: Option<String>,
         branch: Option<String>,
         root: &Path,
+        existing_sources: Option<&BTreeMap<PackageName, Sources>>,
     ) -> Result<Option<Source>, SourceError> {
-        // If we resolved to a non-Git source, and the user specified a Git reference, error.
-        if !matches!(source, RequirementSource::Git { .. }) {
+        // If the user specified a Git reference for a non-Git source, try existing Git sources before erroring.
+        if !matches!(source, RequirementSource::Git { .. })
+            && (branch.is_some() || tag.is_some() || rev.is_some())
+        {
+            if let Some(sources) = existing_sources {
+                if let Some(package_sources) = sources.get(name) {
+                    for existing_source in package_sources.iter() {
+                        if let Source::Git {
+                            git,
+                            subdirectory,
+                            marker,
+                            extra,
+                            group,
+                            ..
+                        } = existing_source
+                        {
+                            return Ok(Some(Source::Git {
+                                git: git.clone(),
+                                subdirectory: subdirectory.clone(),
+                                rev,
+                                tag,
+                                branch,
+                                marker: *marker,
+                                extra: extra.clone(),
+                                group: group.clone(),
+                            }));
+                        }
+                    }
+                }
+            }
             if let Some(rev) = rev {
                 return Err(SourceError::UnusedRev(name.to_string(), rev));
             }

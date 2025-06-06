@@ -3,13 +3,15 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::io::stdout;
+#[cfg(feature = "self-update")]
+use std::ops::Bound;
 use std::path::Path;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
 
 use anstream::eprintln;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::error::{ContextKind, ContextValue};
 use clap::{CommandFactory, Parser};
 use futures::FutureExt;
@@ -17,17 +19,20 @@ use owo_colors::OwoColorize;
 use settings::PipTreeSettings;
 use tokio::task::spawn_blocking;
 use tracing::{debug, instrument};
+
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_cli::{
-    compat::CompatArgs, BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands,
-    PipCommand, PipNamespace, ProjectCommand,
-};
-use uv_cli::{PythonCommand, PythonNamespace, ToolCommand, ToolNamespace, TopLevelArgs};
 #[cfg(feature = "self-update")]
-use uv_cli::{SelfCommand, SelfNamespace, SelfUpdateArgs};
+use uv_cli::SelfUpdateArgs;
+use uv_cli::{
+    BuildBackendCommand, CacheCommand, CacheNamespace, Cli, Commands, PipCommand, PipNamespace,
+    ProjectCommand, PythonCommand, PythonNamespace, SelfCommand, SelfNamespace, ToolCommand,
+    ToolNamespace, TopLevelArgs, compat::CompatArgs,
+};
 use uv_configuration::min_stack_size;
-use uv_fs::{Simplified, CWD};
+use uv_fs::{CWD, Simplified};
+#[cfg(feature = "self-update")]
+use uv_pep440::release_specifiers_to_ranges;
 use uv_pep508::VersionOrUrl;
 use uv_pypi_types::{ParsedDirectoryUrl, ParsedUrl};
 use uv_requirements::RequirementsSource;
@@ -88,19 +93,25 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
 
             // `--isolated` moved to `--no-workspace`.
             Commands::Project(command) if matches!(**command, ProjectCommand::Init(_)) => {
-                warn_user!("The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files or `--no-workspace` to prevent uv from adding the initialized project to the containing workspace."
+                );
                 false
             }
 
             // Preview APIs. Ignore `--isolated` and warn.
             Commands::Project(_) | Commands::Tool(_) | Commands::Python(_) => {
-                warn_user!("The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated and has no effect. Instead, use `--no-config` to prevent uv from discovering configuration files."
+                );
                 false
             }
 
             // Non-preview APIs. Continue to support `--isolated`, but warn.
             _ => {
-                warn_user!("The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files.");
+                warn_user!(
+                    "The `--isolated` flag is deprecated. Instead, use `--no-config` to prevent uv from discovering configuration files."
+                );
                 true
             }
         }
@@ -120,7 +131,9 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             .file_name()
             .is_some_and(|file_name| file_name == "pyproject.toml")
         {
-            warn_user!("The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead.");
+            warn_user!(
+                "The `--config-file` argument expects to receive a `uv.toml` file, not a `pyproject.toml`. If you're trying to run a command from another project, use the `--project` argument instead."
+            );
         }
         Some(FilesystemOptions::from_file(config_file)?)
     } else if deprecated_isolated || cli.top_level.no_config {
@@ -297,17 +310,46 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     if let Some(required_version) = globals.required_version.as_ref() {
         let package_version = uv_pep440::Version::from_str(uv_version::version())?;
         if !required_version.contains(&package_version) {
+            #[cfg(feature = "self-update")]
+            let hint = {
+                // If the required version range includes a lower bound that's higher than
+                // the current version, suggest `uv self update`.
+                let ranges = release_specifiers_to_ranges(required_version.specifiers().clone());
+
+                if let Some(singleton) = ranges.as_singleton() {
+                    // E.g., `==1.0.0`
+                    format!(
+                        ". Update `uv` by running `{}`.",
+                        format!("uv self update {singleton}").green()
+                    )
+                } else if ranges
+                    .bounding_range()
+                    .iter()
+                    .any(|(lowest, _highest)| match lowest {
+                        Bound::Included(version) => **version > package_version,
+                        Bound::Excluded(version) => **version > package_version,
+                        Bound::Unbounded => false,
+                    })
+                {
+                    // E.g., `>=1.0.0`
+                    format!(". Update `uv` by running `{}`.", "uv self update".cyan())
+                } else {
+                    String::new()
+                }
+            };
+            #[cfg(not(feature = "self-update"))]
+            let hint = "";
             return Err(anyhow::anyhow!(
-                "Required uv version `{required_version}` does not match the running version `{package_version}`",
+                "Required uv version `{required_version}` does not match the running version `{package_version}`{hint}",
             ));
         }
     }
 
     // Configure the `tracing` crate, which controls internal logging.
     #[cfg(feature = "tracing-durations-export")]
-    let (duration_layer, _duration_guard) = logging::setup_duration()?;
+    let (durations_layer, _duration_guard) = logging::setup_durations()?;
     #[cfg(not(feature = "tracing-durations-export"))]
-    let duration_layer = None::<tracing_subscriber::layer::Identity>;
+    let durations_layer = None::<tracing_subscriber::layer::Identity>;
     logging::setup_logging(
         match globals.verbose {
             0 => logging::Level::Off,
@@ -315,7 +357,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             2 => logging::Level::TraceUv,
             3.. => logging::Level::TraceAll,
         },
-        duration_layer,
+        durations_layer,
         globals.color,
     )?;
 
@@ -359,7 +401,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // Don't initialize the rayon threadpool yet, this is too costly when we're doing a noop sync.
     uv_configuration::RAYON_PARALLELISM.store(globals.concurrency.installs, Ordering::SeqCst);
 
-    debug!("uv {}", uv_cli::version::version());
+    debug!("uv {}", uv_cli::version::uv_self_version());
 
     // Write out any resolved settings.
     macro_rules! show_settings {
@@ -381,7 +423,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
     // Configure the cache.
     let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
 
-    let result = match *cli.command {
+    match *cli.command {
         Commands::Help(args) => commands::help(
             args.command.unwrap_or_default().as_slice(),
             printer,
@@ -407,22 +449,22 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .src_file
                 .into_iter()
                 .map(RequirementsSource::from_requirements_file)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let constraints = args
                 .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let overrides = args
                 .overrides
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             let mut groups = BTreeMap::new();
             for group in args.settings.groups {
@@ -450,6 +492,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.extras,
                 groups,
                 args.settings.output_file.as_deref(),
+                args.format,
                 args.settings.resolution,
                 args.settings.prerelease,
                 args.settings.fork_strategy,
@@ -515,17 +558,17 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .src_file
                 .into_iter()
                 .map(RequirementsSource::from_requirements_file)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let constraints = args
                 .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             commands::pip_sync(
                 &requirements,
@@ -587,23 +630,24 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             requirements.extend(
                 args.requirements
                     .into_iter()
-                    .map(RequirementsSource::from_requirements_file),
+                    .map(RequirementsSource::from_requirements_file)
+                    .collect::<Result<Vec<_>, _>>()?,
             );
             let constraints = args
                 .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let overrides = args
                 .overrides
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             let mut groups = BTreeMap::new();
             for group in args.settings.groups {
@@ -734,7 +778,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             sources.extend(
                 args.requirements
                     .into_iter()
-                    .map(RequirementsSource::from_requirements_file),
+                    .map(RequirementsSource::from_requirements_file)
+                    .collect::<Result<Vec<_>, _>>()?,
             );
             commands::pip_uninstall(
                 &sources,
@@ -907,7 +952,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             commands::build_frontend(
                 &project_dir,
@@ -940,11 +985,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             args.compat_args.validate()?;
 
             if args.no_system {
-                warn_user_once!("The `--no-system` flag has no effect, a system Python interpreter is always used in `uv venv`");
+                warn_user_once!(
+                    "The `--no-system` flag has no effect, a system Python interpreter is always used in `uv venv`"
+                );
             }
 
             if args.system {
-                warn_user_once!("The `--system` flag has no effect, a system Python interpreter is always used in `uv venv`");
+                warn_user_once!(
+                    "The `--system` flag has no effect, a system Python interpreter is always used in `uv venv`"
+                );
             }
 
             // Resolve the settings from the command-line arguments and workspace configuration.
@@ -997,6 +1046,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         }
         Commands::Project(project) => {
             Box::pin(run_project(
+                cli.top_level.global_args.project.is_some(),
                 project,
                 &project_dir,
                 run_command,
@@ -1015,18 +1065,34 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 SelfCommand::Update(SelfUpdateArgs {
                     target_version,
                     token,
+                    dry_run,
                 }),
-        }) => commands::self_update(target_version, token, printer).await,
+        }) => {
+            commands::self_update(
+                target_version,
+                token,
+                dry_run,
+                printer,
+                globals.network_settings,
+            )
+            .await
+        }
+        Commands::Self_(SelfNamespace {
+            command:
+                SelfCommand::Version {
+                    short,
+                    output_format,
+                },
+        }) => {
+            commands::self_version(short, output_format, printer)?;
+            Ok(ExitStatus::Success)
+        }
         #[cfg(not(feature = "self-update"))]
         Commands::Self_(_) => {
             anyhow::bail!(
                 "uv was installed through an external package manager, and self-update \
                 is not available. Please use your package manager to update uv."
             );
-        }
-        Commands::Version { output_format } => {
-            commands::version(output_format, &mut stdout())?;
-            Ok(ExitStatus::Success)
         }
         Commands::GenerateShellCompletion(args) => {
             args.shell.generate(&mut Cli::command(), &mut stdout());
@@ -1036,7 +1102,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             command: run_variant @ (ToolCommand::Uvx(_) | ToolCommand::Run(_)),
         }) => {
             let (args, invocation_source) = match run_variant {
-                ToolCommand::Uvx(args) => (args, ToolRunCommand::Uvx),
+                ToolCommand::Uvx(args) => (args.tool_run, ToolRunCommand::Uvx),
                 ToolCommand::Run(args) => (args, ToolRunCommand::ToolRun),
                 // OK guarded by the outer match statement
                 _ => unreachable!(),
@@ -1050,15 +1116,15 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     .find_subcommand("uvx")
                     .unwrap()
                     .clone()
-                    // Avoid duplicating the `--help` and `--version` flags from the top-level arguments.
+                    // Avoid duplicating the `--help` and `--version` flags from the top-level
+                    // arguments.
                     .disable_help_flag(true)
-                    .disable_version_flag(true)
-                    .version(env!("CARGO_PKG_VERSION"));
+                    .disable_version_flag(true);
 
-                // Copy the top-level arguments into the `uvx` command. (Like `Args::augment_args`, but
-                // expanded to skip collisions.)
+                // Copy the top-level arguments into the `uvx` command, as in `Args::augment_args`,
+                // but expanded to skip collisions.
                 for arg in TopLevelArgs::command().get_arguments() {
-                    if arg.get_id() != "isolated" {
+                    if arg.get_id() != "isolated" && arg.get_id() != "version" {
                         uvx = uvx.arg(arg);
                     }
                 }
@@ -1090,7 +1156,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 requirements.extend(
                     args.with_requirements
                         .into_iter()
-                        .map(RequirementsSource::from_requirements_file),
+                        .map(RequirementsSource::from_requirements_file)
+                        .collect::<Result<Vec<_>, _>>()?,
                 );
                 requirements
             };
@@ -1098,18 +1165,18 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let overrides = args
                 .overrides
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             let build_constraints = args
                 .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             Box::pin(commands::tool_run(
                 args.command,
@@ -1164,24 +1231,25 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             requirements.extend(
                 args.with_requirements
                     .into_iter()
-                    .map(RequirementsSource::from_requirements_file),
+                    .map(RequirementsSource::from_requirements_file)
+                    .collect::<Result<Vec<_>, _>>()?,
             );
 
             let constraints = args
                 .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let overrides = args
                 .overrides
                 .into_iter()
                 .map(RequirementsSource::from_overrides_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let build_constraints = args
                 .build_constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             Box::pin(commands::tool_install(
                 args.package,
@@ -1220,6 +1288,8 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
             commands::tool_list(
                 args.show_paths,
                 args.show_version_specifiers,
+                args.show_with,
+                args.show_extras,
                 &cache,
                 printer,
             )
@@ -1295,6 +1365,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.all_arches,
                 args.show_urls,
                 args.output_format,
+                args.python_downloads_json_url,
                 globals.python_preference,
                 globals.python_downloads,
                 &cache,
@@ -1317,6 +1388,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.force,
                 args.python_install_mirror,
                 args.pypy_install_mirror,
+                args.python_downloads_json_url,
                 globals.network_settings,
                 args.default,
                 globals.python_downloads,
@@ -1394,6 +1466,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_preference,
                 args.no_project,
                 args.global,
+                args.rm,
                 &cache,
                 printer,
             )
@@ -1521,12 +1594,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         })
         .await
         .expect("tokio threadpool exited unexpectedly"),
-    };
-    result
+    }
 }
 
 /// Run a [`ProjectCommand`].
 async fn run_project(
+    project_was_explicit: bool,
     project_command: Box<ProjectCommand>,
     project_dir: &Path,
     command: Option<RunCommand>,
@@ -1608,7 +1681,8 @@ async fn run_project(
             requirements.extend(
                 args.with_requirements
                     .into_iter()
-                    .map(RequirementsSource::from_requirements_file),
+                    .map(RequirementsSource::from_requirements_file)
+                    .collect::<Result<Vec<_>, _>>()?,
             );
 
             Box::pin(commands::run(
@@ -1741,15 +1815,8 @@ async fn run_project(
         }
         ProjectCommand::Add(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::AddSettings::resolve(args, filesystem);
+            let mut args = settings::AddSettings::resolve(args, filesystem);
             show_settings!(args);
-
-            // Initialize the cache.
-            let cache = cache.init()?.with_refresh(
-                args.refresh
-                    .combine(Refresh::from(args.settings.reinstall.clone()))
-                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
-            );
 
             // If the script already exists, use it; otherwise, propagate the file path and we'll
             // initialize it later on.
@@ -1772,15 +1839,63 @@ async fn run_project(
                 .chain(
                     args.requirements
                         .into_iter()
-                        .map(RequirementsSource::from_requirements_file)
-                        .map(Ok),
+                        .map(RequirementsSource::from_requirements_file),
                 )
                 .collect::<Result<Vec<_>>>()?;
+
+            // Special-case: any local source trees specified on the command-line are automatically
+            // reinstalled.
+            for requirement in &requirements {
+                let requirement = match requirement {
+                    RequirementsSource::Package(requirement) => requirement,
+                    RequirementsSource::Editable(requirement) => requirement,
+                    _ => continue,
+                };
+                match requirement {
+                    RequirementsTxtRequirement::Named(requirement) => {
+                        if let Some(VersionOrUrl::Url(url)) = requirement.version_or_url.as_ref() {
+                            if let ParsedUrl::Directory(ParsedDirectoryUrl {
+                                install_path, ..
+                            }) = &url.parsed_url
+                            {
+                                debug!(
+                                    "Marking explicit source tree for reinstall: `{}`",
+                                    install_path.display()
+                                );
+                                args.settings.reinstall = args
+                                    .settings
+                                    .reinstall
+                                    .with_package(requirement.name.clone());
+                            }
+                        }
+                    }
+                    RequirementsTxtRequirement::Unnamed(requirement) => {
+                        if let ParsedUrl::Directory(ParsedDirectoryUrl { install_path, .. }) =
+                            &requirement.url.parsed_url
+                        {
+                            debug!(
+                                "Marking explicit source tree for reinstall: `{}`",
+                                install_path.display()
+                            );
+                            args.settings.reinstall =
+                                args.settings.reinstall.with_path(install_path.clone());
+                        }
+                    }
+                }
+            }
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
+            );
+
             let constraints = args
                 .constraints
                 .into_iter()
                 .map(RequirementsSource::from_constraints_txt)
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
 
             Box::pin(commands::add(
                 project_dir,
@@ -1793,7 +1908,8 @@ async fn run_project(
                 args.marker,
                 args.editable,
                 args.dependency_type,
-                args.raw_sources,
+                args.raw,
+                args.bounds,
                 args.indexes,
                 args.rev,
                 args.tag,
@@ -1849,6 +1965,53 @@ async fn run_project(
                 args.settings,
                 globals.network_settings,
                 script,
+                globals.python_preference,
+                globals.python_downloads,
+                globals.installer_metadata,
+                globals.concurrency,
+                no_config,
+                &cache,
+                printer,
+                globals.preview,
+            ))
+            .await
+        }
+        ProjectCommand::Version(args) => {
+            // Resolve the settings from the command-line arguments and workspace configuration.
+            let args = settings::VersionSettings::resolve(args, filesystem);
+            show_settings!(args);
+
+            // Initialize the cache.
+            let cache = cache.init()?.with_refresh(
+                args.refresh
+                    .combine(Refresh::from(args.settings.reinstall.clone()))
+                    .combine(Refresh::from(args.settings.resolver.upgrade.clone())),
+            );
+
+            // If they specified any of these flags, they probably don't mean `uv self version`
+            let strict = project_was_explicit
+                || globals.preview.is_enabled()
+                || args.dry_run
+                || args.bump.is_some()
+                || args.value.is_some()
+                || args.package.is_some();
+            Box::pin(commands::project_version(
+                args.value,
+                args.bump,
+                args.short,
+                args.output_format,
+                strict,
+                project_dir,
+                args.package,
+                args.dry_run,
+                args.locked,
+                args.frozen,
+                args.active,
+                args.no_sync,
+                args.python,
+                args.install_mirrors,
+                args.settings,
+                globals.network_settings,
                 globals.python_preference,
                 globals.python_downloads,
                 globals.installer_metadata,

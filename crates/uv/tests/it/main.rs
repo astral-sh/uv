@@ -39,6 +39,9 @@ mod lock_conflict;
 
 mod lock_scenarios;
 
+mod version;
+
+#[cfg(all(feature = "python", feature = "pypi"))]
 mod pip_check;
 
 #[cfg(all(feature = "python", feature = "pypi"))]

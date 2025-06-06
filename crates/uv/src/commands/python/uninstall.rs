@@ -3,8 +3,8 @@ use std::fmt::Write;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -13,12 +13,12 @@ use tracing::{debug, warn};
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
-use uv_python::managed::{python_executable_dir, ManagedPythonInstallations};
+use uv_python::managed::{ManagedPythonInstallations, python_executable_dir};
 use uv_python::{PythonInstallationKey, PythonRequest};
 
 use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
-use crate::commands::{elapsed, ExitStatus};
+use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
 
 /// Uninstall managed Python versions.

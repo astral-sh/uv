@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::str::FromStr;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
@@ -26,15 +26,15 @@ use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 use uv_workspace::WorkspaceCache;
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger};
 use crate::commands::pip::operations::{self, Modifications};
 use crate::commands::project::{
-    resolve_environment, resolve_names, sync_environment, update_environment,
-    EnvironmentSpecification, PlatformState, ProjectError,
+    EnvironmentSpecification, PlatformState, ProjectError, resolve_environment, resolve_names,
+    sync_environment, update_environment,
 };
 use crate::commands::tool::common::{install_executables, refine_interpreter, remove_entrypoints};
 use crate::commands::tool::{Target, ToolRequest};
-use crate::commands::ExitStatus;
 use crate::commands::{diagnostics, reporters::PythonDownloadReporter};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings, ResolverSettings};
@@ -84,6 +84,7 @@ pub(crate) async fn install(
         Some(&reporter),
         install_mirrors.python_install_mirror.as_deref(),
         install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
     )
     .await?
     .into_interpreter();
@@ -98,7 +99,7 @@ pub(crate) async fn install(
         .allow_insecure_host(network_settings.allow_insecure_host.clone());
 
     // Parse the input requirement.
-    let request = ToolRequest::parse(&package, from.as_deref());
+    let request = ToolRequest::parse(&package, from.as_deref())?;
 
     // If the user passed, e.g., `ruff@latest`, refresh the cache.
     let cache = if request.is_latest() {
@@ -108,9 +109,12 @@ pub(crate) async fn install(
     };
 
     // Resolve the `--from` requirement.
-    let from = match &request.target {
+    let from = match &request {
         // Ex) `ruff`
-        Target::Unspecified(from) => {
+        ToolRequest::Package {
+            executable,
+            target: Target::Unspecified(from),
+        } => {
             let source = if editable {
                 RequirementsSource::from_editable(from)?
             } else {
@@ -121,9 +125,13 @@ pub(crate) async fn install(
                 .requirements;
 
             // If the user provided an executable name, verify that it matches the `--from` requirement.
-            let executable = if let Some(executable) = request.executable {
+            let executable = if let Some(executable) = executable {
                 let Ok(executable) = PackageName::from_str(executable) else {
-                    bail!("Package requirement (`{from}`) provided with `--from` conflicts with install request (`{executable}`)", from = from.cyan(), executable = executable.cyan())
+                    bail!(
+                        "Package requirement (`{from}`) provided with `--from` conflicts with install request (`{executable}`)",
+                        from = from.cyan(),
+                        executable = executable.cyan()
+                    )
                 };
                 Some(executable)
             } else {
@@ -160,7 +168,10 @@ pub(crate) async fn install(
             requirement
         }
         // Ex) `ruff@0.6.0`
-        Target::Version(.., name, ref extras, ref version) => {
+        ToolRequest::Package {
+            target: Target::Version(.., name, extras, version),
+            ..
+        } => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
@@ -181,7 +192,10 @@ pub(crate) async fn install(
             }
         }
         // Ex) `ruff@latest`
-        Target::Latest(.., name, ref extras) => {
+        ToolRequest::Package {
+            target: Target::Latest(.., name, extras),
+            ..
+        } => {
             if editable {
                 bail!("`--editable` is only supported for local packages");
             }
@@ -199,15 +213,15 @@ pub(crate) async fn install(
                 origin: None,
             }
         }
+        // Ex) `python`
+        ToolRequest::Python { .. } => {
+            return Err(anyhow::anyhow!(
+                "Cannot install Python with `{}`. Did you mean to use `{}`?",
+                "uv tool install".cyan(),
+                "uv python install".cyan(),
+            ));
+        }
     };
-
-    if from.name.as_str().eq_ignore_ascii_case("python") {
-        return Err(anyhow::anyhow!(
-            "Cannot install Python with `{}`. Did you mean to use `{}`?",
-            "uv tool install".cyan(),
-            "uv python install".cyan(),
-        ));
-    }
 
     // If the user passed, e.g., `ruff@latest`, we need to mark it as upgradable.
     let settings = if request.is_latest() {
@@ -440,7 +454,7 @@ pub(crate) async fn install(
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         };
@@ -572,7 +586,7 @@ pub(crate) async fn install(
             Err(ProjectError::Operation(err)) => {
                 return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
             Err(err) => return Err(err.into()),
         }

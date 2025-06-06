@@ -121,13 +121,13 @@ pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io:
 #[cfg(unix)]
 pub fn replace_symlink(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
     // Attempt to create the symlink directly.
-    match std::os::unix::fs::symlink(src.as_ref(), dst.as_ref()) {
+    match fs_err::os::unix::fs::symlink(src.as_ref(), dst.as_ref()) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
             // Create a symlink, using a temporary file to ensure atomicity.
             let temp_dir = tempfile::tempdir_in(dst.as_ref().parent().unwrap())?;
             let temp_file = temp_dir.path().join("link");
-            std::os::unix::fs::symlink(src, &temp_file)?;
+            fs_err::os::unix::fs::symlink(src, &temp_file)?;
 
             // Move the symlink into the target location.
             fs_err::rename(&temp_file, dst.as_ref())?;
@@ -255,7 +255,7 @@ pub async fn rename_with_retry(
         let from = from.as_ref();
         let to = to.as_ref();
 
-        let rename = || async { fs_err::rename(from, to) };
+        let rename = async || fs_err::rename(from, to);
 
         rename
             .retry(backoff_file_move())
@@ -312,16 +312,13 @@ pub fn with_retry_sync(
             })
             .call()
             .map_err(|err| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
-                        "Failed {} {} to {}: {}",
-                        operation_name,
-                        from.display(),
-                        to.display(),
-                        err
-                    ),
-                )
+                std::io::Error::other(format!(
+                    "Failed {} {} to {}: {}",
+                    operation_name,
+                    from.display(),
+                    to.display(),
+                    err
+                ))
             })
     }
     #[cfg(not(windows))]
@@ -417,21 +414,15 @@ pub async fn persist_with_retry(
 
         match persisted {
             Ok(_) => Ok(()),
-            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to persist temporary file to {}: {}",
-                    to.display(),
-                    error_message,
-                ),
-            )),
-            Err(PersistRetryError::LostState) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to retrieve temporary file while trying to persist to {}",
-                    to.display()
-                ),
-            )),
+            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(format!(
+                "Failed to persist temporary file to {}: {}",
+                to.display(),
+                error_message,
+            ))),
+            Err(PersistRetryError::LostState) => Err(std::io::Error::other(format!(
+                "Failed to retrieve temporary file while trying to persist to {}",
+                to.display()
+            ))),
         }
     }
     #[cfg(not(windows))]
@@ -491,21 +482,15 @@ pub fn persist_with_retry_sync(
 
         match persisted {
             Ok(_) => Ok(()),
-            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to persist temporary file to {}: {}",
-                    to.display(),
-                    error_message,
-                ),
-            )),
-            Err(PersistRetryError::LostState) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Failed to retrieve temporary file while trying to persist to {}",
-                    to.display()
-                ),
-            )),
+            Err(PersistRetryError::Persist(error_message)) => Err(std::io::Error::other(format!(
+                "Failed to persist temporary file to {}: {}",
+                to.display(),
+                error_message,
+            ))),
+            Err(PersistRetryError::LostState) => Err(std::io::Error::other(format!(
+                "Failed to retrieve temporary file while trying to persist to {}",
+                to.display()
+            ))),
         }
     }
     #[cfg(not(windows))]
@@ -617,14 +602,11 @@ impl LockedFile {
                 );
                 file.file().lock_exclusive().map_err(|err| {
                     // Not an fs_err method, we need to build our own path context
-                    std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
-                            "Could not acquire lock for `{resource}` at `{}`: {}",
-                            file.path().user_display(),
-                            err
-                        ),
-                    )
+                    std::io::Error::other(format!(
+                        "Could not acquire lock for `{resource}` at `{}`: {}",
+                        file.path().user_display(),
+                        err
+                    ))
                 })?;
 
                 debug!("Acquired lock for `{resource}`");

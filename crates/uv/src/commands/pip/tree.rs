@@ -4,16 +4,15 @@ use std::fmt::Write;
 use anyhow::Result;
 use futures::StreamExt;
 use owo_colors::OwoColorize;
+use petgraph::Direction;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::prelude::EdgeRef;
-use petgraph::Direction;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::Semaphore;
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
-use uv_client::RegistryClientBuilder;
+use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
 use uv_distribution_types::{Diagnostic, IndexCapabilities, IndexLocations, Name};
 use uv_installer::SitePackages;
@@ -24,10 +23,10 @@ use uv_pypi_types::{ResolutionMetadata, ResolverMarkerEnvironment, VerbatimParse
 use uv_python::{EnvironmentPreference, PythonEnvironment, PythonRequest};
 use uv_resolver::{ExcludeNewer, PrereleaseMode, RequiresPython};
 
+use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
 use crate::commands::pip::operations::report_target_environment;
 use crate::commands::reporters::LatestVersionReporter;
-use crate::commands::ExitStatus;
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
@@ -84,19 +83,20 @@ pub(crate) async fn pip_tree(
     let latest = if outdated && !packages.is_empty() {
         let capabilities = IndexCapabilities::default();
 
+        let client_builder = BaseClientBuilder::new()
+            .connectivity(network_settings.connectivity)
+            .native_tls(network_settings.native_tls)
+            .keyring(keyring_provider)
+            .allow_insecure_host(network_settings.allow_insecure_host.clone());
+
         // Initialize the registry client.
-        let client =
-            RegistryClientBuilder::new(cache.clone().with_refresh(Refresh::All(Timestamp::now())))
-                .native_tls(network_settings.native_tls)
-                .connectivity(network_settings.connectivity)
-                .allow_insecure_host(network_settings.allow_insecure_host.clone())
-                .index_urls(index_locations.index_urls())
-                .index_strategy(index_strategy)
-                .url_auth_policies(UrlAuthPolicies::from(&index_locations))
-                .keyring(keyring_provider)
-                .markers(environment.interpreter().markers())
-                .platform(environment.interpreter().platform())
-                .build();
+        let client = RegistryClientBuilder::try_from(client_builder)?
+            .cache(cache.clone().with_refresh(Refresh::All(Timestamp::now())))
+            .index_locations(&index_locations)
+            .index_strategy(index_strategy)
+            .markers(environment.interpreter().markers())
+            .platform(environment.interpreter().platform())
+            .build();
         let download_concurrency = Semaphore::new(concurrency.downloads);
 
         // Determine the platform tags.
@@ -119,7 +119,7 @@ pub(crate) async fn pip_tree(
 
         // Fetch the latest version for each package.
         let mut fetches = futures::stream::iter(&packages)
-            .map(|(name, ..)| async {
+            .map(async |(name, ..)| {
                 let Some(filename) = client
                     .find_latest(name, None, &download_concurrency)
                     .await?
