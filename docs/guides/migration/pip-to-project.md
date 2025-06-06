@@ -387,7 +387,15 @@ have groups of dependencies for development purposes.
 To import development dependencies, use the `--dev` flag during `uv add`:
 
 ```console
-$ uv add -r requirements-dev.in -c requirements-dev.txt --dev
+$ uv add --dev -r requirements-dev.in -c requirements-dev.txt
+```
+
+If the `requirements-dev.in` includes the parent `requirements.in` via `-r`, it will need to be
+stripped to avoid adding the base requirements to the `dev` dependency group. The following example
+uses `sed` to strip lines that start with `-r`, then pipes the result to `uv add`:
+
+```console
+$ sed '/^-r /d' requirements-dev.in | uv add --dev -r - -c requirements-dev.txt
 ```
 
 In addition to the `dev` dependency group, uv supports arbitrary group names. For example, if you
