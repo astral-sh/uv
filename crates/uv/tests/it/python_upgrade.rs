@@ -108,8 +108,8 @@ fn python_upgrade_without_version() {
 
     ----- stderr -----
     Installed 2 versions in [TIME]
-     + cpython-3.11.12-[PLATFORM]
-     + cpython-3.12.10-[PLATFORM]
+     + cpython-3.11.13-[PLATFORM]
+     + cpython-3.12.11-[PLATFORM]
     ");
 
     // Should be a no-op when every version is already upgraded
@@ -620,8 +620,8 @@ fn python_upgrade_transparent_from_venv_module() {
     ----- stdout -----
 
     ----- stderr -----
-    Installed Python 3.12.10 in [TIME]
-     + cpython-3.12.10-[PLATFORM]
+    Installed Python 3.12.11 in [TIME]
+     + cpython-3.12.11-[PLATFORM]
     "
     );
 
@@ -630,7 +630,7 @@ fn python_upgrade_transparent_from_venv_module() {
     success: true
     exit_code: 0
     ----- stdout -----
-    Python 3.12.10
+    Python 3.12.11
 
     ----- stderr -----
     "
