@@ -608,6 +608,32 @@ pub struct VersionArgs {
     pub python: Option<Maybe<String>>,
 }
 
+#[derive(Args)]
+pub struct UpgradeProjectArgs {
+    /// Run without performing the upgrade.
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// The Python interpreter to use during resolution (overrides pyproject.toml).
+    ///
+    /// A Python interpreter is required for building source distributions to determine package
+    /// metadata when there are not wheels.
+    ///
+    /// The interpreter is also used as the fallback value for the minimum Python version if
+    /// `requires-python` is not set.
+    ///
+    /// See `uv help python` for details on Python discovery and supported request formats.
+    #[arg(
+        long,
+        short,
+        env = EnvVars::UV_PYTHON,
+        verbatim_doc_comment,
+        help_heading = "Python options",
+        value_parser = parse_maybe_string,
+    )]
+    pub python: Option<Maybe<String>>,
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, clap::ValueEnum)]
 pub enum VersionBump {
     /// Increase the major version (1.2.3 => 2.0.0)
@@ -871,6 +897,8 @@ pub enum ProjectCommand {
     Remove(RemoveArgs),
     /// Read or update the project's version.
     Version(VersionArgs),
+    /// Upgrade the project's dependency constraints.
+    Upgrade(UpgradeProjectArgs),
     /// Update the project's environment.
     ///
     /// Syncing ensures that all project dependencies are installed and up-to-date with the
