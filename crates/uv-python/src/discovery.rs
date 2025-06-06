@@ -1060,7 +1060,9 @@ pub fn find_python_installations<'a>(
             python_interpreters(&VersionRequest::Any, None, environments, preference, cache)
                 .filter_ok(|(_source, interpreter)| interpreter.python_version().pre().is_none())
                 .max_by(|a, b| match (a.as_ref(), b.as_ref()) {
-                    (Ok((_, interp_a)), Ok((_, interp_b))) => interp_a.key().cmp(&interp_b.key()),
+                    (Ok((_, interpreter_a)), Ok((_, interpreter_b))) => {
+                        interpreter_a.key().cmp(&interpreter_b.key())
+                    }
                     _ => std::cmp::Ordering::Equal,
                 })
                 .into_iter()
