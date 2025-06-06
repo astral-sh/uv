@@ -31,7 +31,9 @@ use uv_distribution_types::{
 use uv_git::GitResolver;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_ranges};
-use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+use uv_pep508::{
+    MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+};
 use uv_platform_tags::Tags;
 use uv_pypi_types::{ConflictItem, ConflictItemRef, Conflicts, VerbatimParsedUrl};
 use uv_types::{BuildContext, HashStrategy, InstalledPackagesProvider};
@@ -115,6 +117,8 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     dependency_mode: DependencyMode,
     hasher: HashStrategy,
     env: ResolverEnvironment,
+    // The environment of the current Python interpreter.
+    current_environment: MarkerEnvironment,
     tags: Option<Tags>,
     python_requirement: PythonRequirement,
     conflicts: Conflicts,
@@ -158,6 +162,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
         options: Options,
         python_requirement: &'a PythonRequirement,
         env: ResolverEnvironment,
+        current_environment: &MarkerEnvironment,
         conflicts: Conflicts,
         tags: Option<&'a Tags>,
         flat_index: &'a FlatIndex,
@@ -184,6 +189,7 @@ impl<'a, Context: BuildContext, InstalledPackages: InstalledPackagesProvider>
             options,
             hasher,
             env,
+            current_environment,
             tags.cloned(),
             python_requirement,
             conflicts,
@@ -206,6 +212,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
         options: Options,
         hasher: &HashStrategy,
         env: ResolverEnvironment,
+        current_environment: &MarkerEnvironment,
         tags: Option<Tags>,
         python_requirement: &PythonRequirement,
         conflicts: Conflicts,
@@ -234,6 +241,7 @@ impl<Provider: ResolverProvider, InstalledPackages: InstalledPackagesProvider>
             hasher: hasher.clone(),
             locations: locations.clone(),
             env,
+            current_environment: current_environment.clone(),
             tags,
             python_requirement: python_requirement.clone(),
             conflicts,
@@ -354,6 +362,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                                     state.fork_urls,
                                     state.fork_indexes,
                                     state.env,
+                                    self.current_environment.clone(),
                                     &visited,
                                 ));
                             }
@@ -2504,6 +2513,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         fork_urls: ForkUrls,
         fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
+        current_environment: MarkerEnvironment,
         visited: &FxHashSet<PackageName>,
     ) -> ResolveError {
         err = NoSolutionError::collapse_local_version_segments(NoSolutionError::collapse_proxies(
@@ -2589,6 +2599,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             fork_urls,
             fork_indexes,
             env,
+            current_environment,
             self.tags.clone(),
             self.workspace_members.clone(),
             self.options.clone(),
