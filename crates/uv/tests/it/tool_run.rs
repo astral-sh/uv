@@ -2047,7 +2047,6 @@ fn tool_run_python_at_version() {
 
     ----- stderr -----
     Resolved in [TIME]
-    Audited in [TIME]
     ");
 }
 
