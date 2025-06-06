@@ -39,14 +39,12 @@ impl Locks {
                 (wheel_a, &wheel_b)
             };
             warn_user!(
-                "The module {} exists in two packages! \
-                This leads to a race condition and likely to a broken installation. \
-                Consider removing either {} ({}) or {} ({}).",
-                module.simplified_display(),
-                wheel_a.name,
-                wheel_a,
-                wheel_b.name,
-                wheel_b,
+                "The module `{}` is provided by more than one package, \
+                which causes an install race condition and can result in a broken module. \
+                Consider removing your dependency on either `{}` or `{}`.",
+                module.simplified_display().green(),
+                wheel_a.name.cyan(),
+                wheel_b.name.cyan(),
             );
         }
     }
