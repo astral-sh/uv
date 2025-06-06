@@ -162,6 +162,7 @@ pub enum VersionRequest {
     Default,
     /// Allow any Python version.
     Any,
+    Latest,
     Major(u8, PythonVariant),
     MajorMinor(u8, u8, PythonVariant),
     MajorMinorPatch(u8, u8, u8, PythonVariant),
@@ -574,6 +575,7 @@ fn find_all_minor(
     match version_request {
         &VersionRequest::Any
         | VersionRequest::Default
+        | VersionRequest::Latest
         | VersionRequest::Major(_, _)
         | VersionRequest::Range(_, _) => {
             let regex = if let Some(implementation) = implementation {
@@ -1599,9 +1601,7 @@ impl PythonRequest {
         // parsing errors are raised to the caller.
         if let Some(after_at) = rest.strip_prefix('@') {
             if after_at == "latest" {
-                // Handle `@latest` as a special case. It's still an error for now, but we plan to
-                // support it. TODO(zanieb): Add `PythonRequest::Latest`
-                return Err(Error::LatestVersionRequest);
+                return Ok(Some(VersionRequest::Latest));
             }
             return after_at.parse().map(Some);
         }
@@ -2142,7 +2142,7 @@ impl VersionRequest {
     /// Return the major version segment of the request, if any.
     pub(crate) fn major(&self) -> Option<u8> {
         match self {
-            Self::Any | Self::Default | Self::Range(_, _) => None,
+            Self::Any | Self::Default | Self::Latest | Self::Range(_, _) => None,
             Self::Major(major, _) => Some(*major),
             Self::MajorMinor(major, _, _) => Some(*major),
             Self::MajorMinorPatch(major, _, _, _) => Some(*major),
@@ -2153,7 +2153,7 @@ impl VersionRequest {
     /// Return the minor version segment of the request, if any.
     pub(crate) fn minor(&self) -> Option<u8> {
         match self {
-            Self::Any | Self::Default | Self::Range(_, _) => None,
+            Self::Any | Self::Default | Self::Latest | Self::Range(_, _) => None,
             Self::Major(_, _) => None,
             Self::MajorMinor(_, minor, _) => Some(*minor),
             Self::MajorMinorPatch(_, minor, _, _) => Some(*minor),
@@ -2164,7 +2164,7 @@ impl VersionRequest {
     /// Return the patch version segment of the request, if any.
     pub(crate) fn patch(&self) -> Option<u8> {
         match self {
-            Self::Any | Self::Default | Self::Range(_, _) => None,
+            Self::Any | Self::Default | Self::Latest | Self::Range(_, _) => None,
             Self::Major(_, _) => None,
             Self::MajorMinor(_, _, _) => None,
             Self::MajorMinorPatch(_, _, patch, _) => Some(*patch),
@@ -2177,7 +2177,7 @@ impl VersionRequest {
     /// If not, an `Err` is returned with an explanatory message.
     pub(crate) fn check_supported(&self) -> Result<(), String> {
         match self {
-            Self::Any | Self::Default => (),
+            Self::Any | Self::Latest | Self::Default => (),
             Self::Major(major, _) => {
                 if *major < 3 {
                     return Err(format!(
@@ -2252,6 +2252,7 @@ impl VersionRequest {
     pub(crate) fn matches_interpreter(&self, interpreter: &Interpreter) -> bool {
         match self {
             Self::Any => true,
+            Self::Latest => interpreter.python_version().pre().is_none(),
             // Do not use free-threaded interpreters by default
             Self::Default => PythonVariant::Default.matches_interpreter(interpreter),
             Self::Major(major, variant) => {
@@ -2295,6 +2296,7 @@ impl VersionRequest {
     pub(crate) fn matches_version(&self, version: &PythonVersion) -> bool {
         match self {
             Self::Any | Self::Default => true,
+            Self::Latest => version.pre().is_none(),
             Self::Major(major, _) => version.major() == *major,
             Self::MajorMinor(major, minor, _) => {
                 (version.major(), version.minor()) == (*major, *minor)
@@ -2317,7 +2319,7 @@ impl VersionRequest {
     /// avoid querying interpreters if it's clear it cannot fulfill the request.
     fn matches_major_minor(&self, major: u8, minor: u8) -> bool {
         match self {
-            Self::Any | Self::Default => true,
+            Self::Any | Self::Latest | Self::Default => true,
             Self::Major(self_major, _) => *self_major == major,
             Self::MajorMinor(self_major, self_minor, _) => {
                 (*self_major, *self_minor) == (major, minor)
@@ -2364,6 +2366,7 @@ impl VersionRequest {
     ) -> bool {
         match self {
             Self::Any | Self::Default => true,
+            Self::Latest => prerelease.is_none(),
             Self::Major(self_major, _) => *self_major == major,
             Self::MajorMinor(self_major, self_minor, _) => {
                 (*self_major, *self_minor) == (major, minor)
@@ -2386,7 +2389,7 @@ impl VersionRequest {
     /// Whether a patch version segment is present in the request.
     fn has_patch(&self) -> bool {
         match self {
-            Self::Any | Self::Default => false,
+            Self::Any | Self::Default | Self::Latest => false,
             Self::Major(..) => false,
             Self::MajorMinor(..) => false,
             Self::MajorMinorPatch(..) => true,
@@ -2403,6 +2406,7 @@ impl VersionRequest {
         match self {
             Self::Default => Self::Default,
             Self::Any => Self::Any,
+            Self::Latest => Self::Latest,
             Self::Major(major, variant) => Self::Major(major, variant),
             Self::MajorMinor(major, minor, variant) => Self::MajorMinor(major, minor, variant),
             Self::MajorMinorPatch(major, minor, _, variant) => {
@@ -2418,7 +2422,7 @@ impl VersionRequest {
     /// Whether this request should allow selection of pre-release versions.
     pub(crate) fn allows_prereleases(&self) -> bool {
         match self {
-            Self::Default => false,
+            Self::Default | Self::Latest => false,
             Self::Any => true,
             Self::Major(..) => false,
             Self::MajorMinor(..) => false,
@@ -2431,7 +2435,7 @@ impl VersionRequest {
     /// Whether this request is for a free-threaded Python variant.
     pub(crate) fn is_freethreaded(&self) -> bool {
         match self {
-            Self::Any | Self::Default => false,
+            Self::Any | Self::Default | Self::Latest => false,
             Self::Major(_, variant)
             | Self::MajorMinor(_, _, variant)
             | Self::MajorMinorPatch(_, _, _, variant)
@@ -2448,7 +2452,7 @@ impl VersionRequest {
         // TODO(zanieb): Replace this entire function with a utility that casts this to a version
         // without using `VersionRequest::to_string`.
         match self {
-            Self::Any | Self::Default => self,
+            Self::Any | Self::Default | Self::Latest => self,
             Self::Major(major, _) => Self::Major(major, PythonVariant::Default),
             Self::MajorMinor(major, minor, _) => {
                 Self::MajorMinor(major, minor, PythonVariant::Default)
@@ -2467,7 +2471,7 @@ impl VersionRequest {
     pub(crate) fn variant(&self) -> Option<PythonVariant> {
         match self {
             Self::Any => None,
-            Self::Default => Some(PythonVariant::Default),
+            Self::Default | Self::Latest => Some(PythonVariant::Default),
             Self::Major(_, variant)
             | Self::MajorMinor(_, _, variant)
             | Self::MajorMinorPatch(_, _, _, variant)
@@ -2622,6 +2626,7 @@ impl fmt::Display for VersionRequest {
         match self {
             Self::Any => f.write_str("any"),
             Self::Default => f.write_str("default"),
+            Self::Latest => f.write_str("latest"),
             Self::Major(major, PythonVariant::Default) => write!(f, "{major}"),
             Self::Major(major, PythonVariant::Freethreaded) => write!(f, "{major}t"),
             Self::MajorMinor(major, minor, PythonVariant::Default) => write!(f, "{major}.{minor}"),
