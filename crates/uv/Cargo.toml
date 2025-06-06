@@ -86,6 +86,7 @@ h2 = { workspace = true }
 miette = { workspace = true, features = ["fancy-no-backtrace"] }
 owo-colors = { workspace = true }
 petgraph = { workspace = true }
+prettytable-rs = "0.10.0"
 regex = { workspace = true }
 reqwest = { workspace = true }
 rkyv = { workspace = true }
