@@ -9483,3 +9483,71 @@ fn sync_upload_time() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(unix)]
+#[test]
+fn sync_required_environment_hint() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.13.2"
+        dependencies = ["wheel_tag_test"]
+        "#,
+    )?;
+
+    // Populate the `--find-links` entries.
+    fs_err::create_dir_all(context.temp_dir.join("links"))?;
+
+    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.starts_with("wheel_tag_test-"))
+        {
+            let dest = context
+                .temp_dir
+                .join("links")
+                .join(path.file_name().unwrap());
+            fs_err::copy(&path, &dest)?;
+        }
+    }
+
+    uv_snapshot!(context.filters(), context.lock()
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg(context.temp_dir.join("links")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let mut filters = context.filters();
+    filters.push((r"(macOS|Linux) \(`.*`\)", "[PLATFORM] (`[TAG]`)"));
+
+    uv_snapshot!(filters, context.sync()
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg(context.temp_dir.join("links")), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Distribution `wheel-tag-test==0.1.0 @ registry+links` can't be installed because it doesn't have a source distribution or wheel for the current platform
+
+    hint: You're on [PLATFORM] (`[TAG]`), but `wheel-tag-test` (v0.1.0) only has wheels for the following platform: `win_amd64`; consider adding your platform to `tool.uv.required-environments` to ensure uv resolves to a version with compatible wheels
+    ");
+
+    Ok(())
+}

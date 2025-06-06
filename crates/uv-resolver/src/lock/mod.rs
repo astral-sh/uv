@@ -5047,21 +5047,15 @@ impl std::fmt::Display for WheelTagHint {
                     };
                     writeln!(
                         f,
-                        "{}{} You're on {}, but there are no wheels for the current platform, consider configuring `{}`.",
+                        "{}{} You're on {}, but {} only has wheels for the following platform{s}: {}; consider adding your platform to `{}` to ensure uv resolves to a version with compatible wheels",
                         "hint".bold().cyan(),
                         ":".bold(),
                         best,
-                        "tool.uv.required-environments".green()
-                    )?;
-                    write!(
-                        f,
-                        "{}{} {} only has wheels for the following platform{s}: {}.",
-                        "hint".bold().cyan(),
-                        ":".bold(),
                         package_ref,
                         tags.iter()
                             .map(|tag| format!("`{}`", tag.cyan()))
                             .join(", "),
+                        "tool.uv.required-environments".green()
                     )
                 } else {
                     if let Some(version) = version {
