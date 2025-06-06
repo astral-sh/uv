@@ -28,7 +28,7 @@ use thiserror::Error;
 use url::Url;
 
 use uv_cache_key::{CacheKey, CacheKeyHasher};
-use uv_normalize::{ExtraName, PackageName};
+pub use uv_normalize::{ExtraName, PackageName};
 
 use crate::cursor::Cursor;
 pub use crate::marker::{
@@ -224,10 +224,10 @@ impl<'de, T: Pep508Url> Deserialize<'de> for Requirement<T> {
     {
         struct RequirementVisitor<T>(std::marker::PhantomData<T>);
 
-        impl<T: Pep508Url> serde::de::Visitor<'_> for RequirementVisitor<T> {
+        impl<T: Pep508Url> de::Visitor<'_> for RequirementVisitor<T> {
             type Value = Requirement<T>;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
                 formatter.write_str("a string containing a PEP 508 requirement")
             }
 
