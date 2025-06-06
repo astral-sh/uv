@@ -20,9 +20,9 @@ url = "https://download.pytorch.org/whl/cpu"
 
 ### Environment variable expansion
 
-Index URLs support environment variable expansion using `${VARIABLE}` or `${VARIABLE:-default}` syntax,
-as well as tilde (`~`) expansion for home directories. This is particularly useful for injecting
-authentication credentials or configuring different environments:
+Index URLs support environment variable expansion using `${VARIABLE}` or `${VARIABLE:-default}`
+syntax, as well as tilde (`~`) expansion for home directories. This is particularly useful for
+injecting authentication credentials or configuring different environments:
 
 ```toml
 [[tool.uv.index]]
@@ -40,9 +40,9 @@ url = "file://${HOME}/my-packages"
 url = "file://~/my-packages"
 ```
 
-The `${VARIABLE:-default}` syntax provides a fallback value when the environment variable is not set.
-If an environment variable is referenced without a default (e.g., `${REQUIRED_VAR}`) and is not set,
-uv will return an error when parsing the configuration.
+The `${VARIABLE:-default}` syntax provides a fallback value when the environment variable is not
+set. If an environment variable is referenced without a default (e.g., `${REQUIRED_VAR}`) and is not
+set, uv will return an error when parsing the configuration.
 
 Indexes are prioritized in the order in which they're defined, such that the first index listed in
 the configuration file is the first index consulted when resolving dependencies, with indexes
