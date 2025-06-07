@@ -3596,6 +3596,10 @@ pub struct AddArgs {
     #[arg(long, env = EnvVars::UV_NO_SYNC, value_parser = clap::builder::BoolishValueParser::new(), conflicts_with = "frozen")]
     pub no_sync: bool,
 
+    /// Disable file locking (flock) operations 
+    #[arg(long, env = EnvVars::UV_UNSAGE_IGNORE_FLOCK, value_parser = clap::builder::BoolishValueParser::new())]
+    pub unsage_ignore_flock: bool,
+
     /// Assert that the `uv.lock` will remain unchanged.
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
