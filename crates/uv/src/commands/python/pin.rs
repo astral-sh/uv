@@ -7,6 +7,7 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
+use uv_configuration::DependencyGroupsWithDefaults;
 use uv_dirs::user_uv_config_dir;
 use uv_fs::Simplified;
 use uv_python::{
@@ -294,6 +295,9 @@ struct Pin<'a> {
 
 /// Checks if the pinned Python version is compatible with the workspace/project's `Requires-Python`.
 fn assert_pin_compatible_with_project(pin: &Pin, virtual_project: &VirtualProject) -> Result<()> {
+    // Don't factor in requires-python settings on dependency-groups
+    let groups = DependencyGroupsWithDefaults::none();
+
     let (requires_python, project_type) = match virtual_project {
         VirtualProject::Project(project_workspace) => {
             debug!(
@@ -301,7 +305,8 @@ fn assert_pin_compatible_with_project(pin: &Pin, virtual_project: &VirtualProjec
                 project_workspace.project_name(),
                 project_workspace.workspace().install_path().display()
             );
-            let requires_python = find_requires_python(project_workspace.workspace())?;
+
+            let requires_python = find_requires_python(project_workspace.workspace(), &groups)?;
             (requires_python, "project")
         }
         VirtualProject::NonProject(workspace) => {
@@ -309,7 +314,7 @@ fn assert_pin_compatible_with_project(pin: &Pin, virtual_project: &VirtualProjec
                 "Discovered virtual workspace at: {}",
                 workspace.install_path().display()
             );
-            let requires_python = find_requires_python(workspace)?;
+            let requires_python = find_requires_python(workspace, &groups)?;
             (requires_python, "workspace")
         }
     };

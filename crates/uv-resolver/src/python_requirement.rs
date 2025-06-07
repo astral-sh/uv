@@ -1,10 +1,9 @@
 use std::collections::Bound;
 
+use uv_distribution_types::{RequiresPython, RequiresPythonRange};
 use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
 use uv_python::{Interpreter, PythonVersion};
-
-use crate::{RequiresPython, RequiresPythonRange};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PythonRequirement {

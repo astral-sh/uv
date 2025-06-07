@@ -5,9 +5,12 @@ use std::str::FromStr;
 use thiserror::Error;
 use tracing::error;
 
+use uv_distribution_types::RequiresPython;
 use uv_normalize::{DEV_DEPENDENCIES, GroupName};
 use uv_pep508::Pep508Error;
 use uv_pypi_types::{DependencyGroupSpecifier, VerbatimParsedUrl};
+
+use crate::pyproject::DependencyGroupSettings;
 
 /// PEP 735 dependency groups, with any `include-group` entries resolved.
 #[derive(Debug, Default, Clone)]
@@ -20,10 +23,12 @@ impl FlatDependencyGroups {
     /// lists of requirements.
     pub fn from_dependency_groups(
         groups: &BTreeMap<&GroupName, &Vec<DependencyGroupSpecifier>>,
+        settings: &BTreeMap<GroupName, DependencyGroupSettings>,
     ) -> Result<Self, DependencyGroupError> {
         fn resolve_group<'data>(
             resolved: &mut BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
             groups: &'data BTreeMap<&GroupName, &Vec<DependencyGroupSpecifier>>,
+            settings: &BTreeMap<GroupName, DependencyGroupSettings>,
             name: &'data GroupName,
             parents: &mut Vec<&'data GroupName>,
         ) -> Result<(), DependencyGroupError> {
@@ -69,7 +74,7 @@ impl FlatDependencyGroups {
                         }
                     }
                     DependencyGroupSpecifier::IncludeGroup { include_group } => {
-                        resolve_group(resolved, groups, include_group, parents)?;
+                        resolve_group(resolved, groups, settings, include_group, parents)?;
                         requirements
                             .extend(resolved.get(include_group).into_iter().flatten().cloned());
                     }
@@ -81,6 +86,19 @@ impl FlatDependencyGroups {
                     }
                 }
             }
+
+            let empty_settings = DependencyGroupSettings::default();
+            let DependencyGroupSettings { requires_python } =
+                settings.get(name).unwrap_or(&empty_settings);
+            // requires-python should get splatted onto everything
+            if let Some(requires_python) = requires_python {
+                for requirement in &mut requirements {
+                    let extra_markers =
+                        RequiresPython::from_specifiers(requires_python).to_marker_tree();
+                    requirement.marker.and(extra_markers);
+                }
+            }
+
             parents.pop();
 
             resolved.insert(name.clone(), requirements);
@@ -90,7 +108,7 @@ impl FlatDependencyGroups {
         let mut resolved = BTreeMap::new();
         for name in groups.keys() {
             let mut parents = Vec::new();
-            resolve_group(&mut resolved, groups, name, &mut parents)?;
+            resolve_group(&mut resolved, groups, settings, name, &mut parents)?;
         }
         Ok(Self(resolved))
     }

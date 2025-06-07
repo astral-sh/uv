@@ -263,6 +263,14 @@ pub struct ExtrasSpecificationWithDefaults {
 }
 
 impl ExtrasSpecificationWithDefaults {
+    /// Do not enable any extras
+    ///
+    /// Many places in the code need to know what extras are active,
+    /// but various commands or subsystems never enable any extras,
+    /// in which case they want this.
+    pub fn none() -> Self {
+        ExtrasSpecification::default().with_defaults(DefaultExtras::default())
+    }
     /// Returns `true` if the specification was enabled, and *only* because it was a default
     pub fn contains_because_default(&self, extra: &ExtraName) -> bool {
         self.cur.contains(extra) && !self.prev.contains(extra)
