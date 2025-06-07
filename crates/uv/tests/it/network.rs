@@ -54,7 +54,8 @@ async fn simple_http_500() {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch: `[SERVER]/tqdm/`
+    error: Request failed after 3 retries
+      Caused by: Failed to fetch: `[SERVER]/tqdm/`
       Caused by: HTTP status server error (500 Internal Server Error) for url ([SERVER]/tqdm/)
     ");
 }
@@ -105,6 +106,7 @@ async fn find_links_http_500() {
 
     ----- stderr -----
     error: Failed to read `--find-links` URL: [SERVER]/
+      Caused by: Request failed after 3 retries
       Caused by: Failed to fetch: `[SERVER]/`
       Caused by: HTTP status server error (500 Internal Server Error) for url ([SERVER]/)
     ");
@@ -159,6 +161,7 @@ async fn direct_url_http_500() {
 
     ----- stderr -----
       × Failed to download `tqdm @ [SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
+      ├─▶ Request failed after 3 retries
       ├─▶ Failed to fetch: `[SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl`
       ╰─▶ HTTP status server error (500 Internal Server Error) for url ([SERVER]/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
     ");
@@ -243,6 +246,7 @@ async fn python_install_http_500() {
 
     ----- stderr -----
     error: Failed to install cpython-3.10.0-macos-aarch64-none
+      Caused by: Request failed after 3 retries
       Caused by: Failed to download [SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst
       Caused by: HTTP status server error (500 Internal Server Error) for url ([SERVER]/astral-sh/python-build-standalone/releases/download/20211017/cpython-3.10.0-aarch64-apple-darwin-pgo%2Blto-20211017T1616.tar.zst)
     ");

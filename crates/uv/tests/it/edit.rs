@@ -11351,7 +11351,8 @@ async fn add_unexpected_error_code() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to fetch: `http://[LOCALHOST]/anyio/`
+    error: Request failed after 3 retries
+      Caused by: Failed to fetch: `http://[LOCALHOST]/anyio/`
       Caused by: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
     "
     );

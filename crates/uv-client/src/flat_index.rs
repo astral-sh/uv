@@ -246,7 +246,7 @@ impl<'a> FlatIndexClient<'a> {
                     .collect();
                 Ok(FlatIndexEntries::from_entries(files))
             }
-            Err(CachedClientError::Client(err)) if err.is_offline() => {
+            Err(CachedClientError::Client { err, .. }) if err.is_offline() => {
                 Ok(FlatIndexEntries::offline())
             }
             Err(err) => Err(err.into()),
