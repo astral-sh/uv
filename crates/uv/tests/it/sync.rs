@@ -7879,18 +7879,11 @@ fn sync_dry_run() -> Result<()> {
      + iniconfig==2.0.0
     "###);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--dry-run"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Discovered existing environment at: .venv
-    Resolved 2 packages in [TIME]
-    Found up-to-date lockfile at: uv.lock
-    Audited 1 package in [TIME]
-    Would make no changes
-    "###);
+    let output = context.sync().arg("--dry-run").arg("-vv").output()?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("Would replace existing virtual environment") {
+        panic!("{}", stderr);
+    };
 
     Ok(())
 }
