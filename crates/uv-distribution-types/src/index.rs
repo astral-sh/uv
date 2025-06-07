@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 use uv_auth::{AuthPolicy, Credentials};
@@ -11,9 +11,8 @@ use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
 use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError, SerializableStatusCode};
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-#[serde(rename_all = "kebab-case")]
 pub struct Index {
     /// The name of the index.
     ///
@@ -82,6 +81,7 @@ pub struct Index {
     /// url = "https://pypi.org/simple"
     /// publish-url = "https://upload.pypi.org/legacy/"
     /// ```
+    #[serde(rename = "publish-url")]
     pub publish_url: Option<DisplaySafeUrl>,
     /// When uv should use authentication for requests to the index.
     ///
@@ -102,7 +102,7 @@ pub struct Index {
     /// url = "https://<omitted>/simple"
     /// ignore-error-codes = [401, 403]
     /// ```
-    #[serde(default)]
+    #[serde(default, rename = "ignore-error-codes")]
     pub ignore_error_codes: Option<Vec<SerializableStatusCode>>,
 }
 
@@ -293,6 +293,102 @@ impl FromStr for Index {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_index_environment_variable_expansion() {
+        // Test URL with environment variables that have defaults
+        // This way we don't need to set environment variables
+        let toml_content = r#"
+            name = "test-index"
+            url = "https://${TEST_INDEX_HOST:-example.com}:${TEST_INDEX_PORT:-8080}/simple"
+            publish-url = "https://${TEST_PUBLISH_HOST:-upload.example.com}/upload"
+            explicit = true
+        "#;
+
+        let index: Index = toml::from_str(toml_content).expect("Failed to deserialize index");
+
+        assert_eq!(index.name.as_ref().unwrap().as_ref(), "test-index");
+        assert_eq!(index.url.to_string(), "https://example.com:8080/simple");
+        assert_eq!(
+            index.publish_url.as_ref().unwrap().to_string(),
+            "https://upload.example.com/upload"
+        );
+        assert!(index.explicit);
+    }
+
+    #[test]
+    fn test_index_without_environment_variables() {
+        // Test normal URL without environment variables
+        let toml_content = r#"
+            name = "normal-index"
+            url = "https://pypi.org/simple"
+            default = true
+        "#;
+
+        let index: Index = toml::from_str(toml_content).expect("Failed to deserialize index");
+
+        assert_eq!(index.name.as_ref().unwrap().as_ref(), "normal-index");
+        assert_eq!(index.url.to_string(), "https://pypi.org/simple");
+        assert!(index.default);
+        assert!(!index.explicit);
+    }
+
+    #[test]
+    fn test_index_missing_environment_variable() {
+        // Test with missing environment variable - should fail gracefully
+        let toml_content = r#"
+            name = "missing-var-index"
+            url = "https://${MISSING_VAR}/simple"
+        "#;
+
+        let result: Result<Index, _> = toml::from_str(toml_content);
+        assert!(result.is_err());
+
+        let error_message = result.unwrap_err().to_string();
+        assert!(error_message.contains("Failed to expand environment variables"));
+    }
+
+    #[test]
+    fn test_index_tilde_expansion() {
+        // Test tilde expansion for local paths
+        let toml_content = r#"
+            name = "local-index"
+            url = "~/my-index"
+        "#;
+
+        let index: Index = toml::from_str(toml_content).expect("Failed to deserialize index");
+
+        assert_eq!(index.name.as_ref().unwrap().as_ref(), "local-index");
+        // The URL should have tilde expanded to the home directory
+        let url_str = index.url.to_string();
+        assert!(
+            !url_str.contains('~'),
+            "Tilde should be expanded: {url_str}"
+        );
+    }
+
+    #[test]
+    fn test_index_home_environment_variable() {
+        // Test using HOME environment variable which should always exist
+        let toml_content = r#"
+            name = "home-index"
+            url = "file://${HOME}/my-local-packages"
+        "#;
+
+        let index: Index = toml::from_str(toml_content).expect("Failed to deserialize index");
+
+        assert_eq!(index.name.as_ref().unwrap().as_ref(), "home-index");
+        // The URL should have HOME expanded to the actual home directory
+        let url_str = index.url.to_string();
+        assert!(url_str.starts_with("file://"));
+        assert!(!url_str.contains("${HOME}"));
+        assert!(url_str.contains("/my-local-packages"));
+    }
+}
+
 /// An [`IndexUrl`] along with the metadata necessary to query the index.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct IndexMetadata {
@@ -383,4 +479,74 @@ pub enum IndexSourceError {
     IndexName(#[from] IndexNameError),
     #[error("Index included a name, but the name was empty")]
     EmptyName,
+}
+
+impl<'de> Deserialize<'de> for Index {
+    fn deserialize<D>(deserializer: D) -> Result<Index, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        #[derive(Deserialize)]
+        #[serde(rename_all = "kebab-case")]
+        struct IndexRaw {
+            name: Option<IndexName>,
+            url: String,
+            #[serde(default)]
+            explicit: bool,
+            #[serde(default)]
+            default: bool,
+            #[serde(default)]
+            format: IndexFormat,
+            publish_url: Option<String>,
+            #[serde(default)]
+            authenticate: AuthPolicy,
+            #[serde(default)]
+            ignore_error_codes: Option<Vec<SerializableStatusCode>>,
+        }
+
+        let raw = IndexRaw::deserialize(deserializer)?;
+
+        // Expand environment variables in the URL
+        let expanded_url = shellexpand::full(&raw.url).map_err(|e| {
+            D::Error::custom(format!(
+                "Failed to expand environment variables in URL '{}': {}",
+                raw.url, e
+            ))
+        })?;
+
+        // Parse the expanded URL
+        let url = IndexUrl::parse(&expanded_url, None)
+            .map_err(|e| D::Error::custom(format!("Failed to parse URL '{expanded_url}': {e}")))?;
+
+        // Expand environment variables in publish_url if present
+        let publish_url = if let Some(publish_url_str) = raw.publish_url {
+            let expanded_publish_url = shellexpand::full(&publish_url_str).map_err(|e| {
+                D::Error::custom(format!(
+                    "Failed to expand environment variables in publish URL '{publish_url_str}': {e}"
+                ))
+            })?;
+
+            Some(expanded_publish_url.parse().map_err(|e| {
+                D::Error::custom(format!(
+                    "Failed to parse publish URL '{expanded_publish_url}': {e}"
+                ))
+            })?)
+        } else {
+            None
+        };
+
+        Ok(Index {
+            name: raw.name,
+            url,
+            explicit: raw.explicit,
+            default: raw.default,
+            origin: None,
+            format: raw.format,
+            publish_url,
+            authenticate: raw.authenticate,
+            ignore_error_codes: raw.ignore_error_codes,
+        })
+    }
 }

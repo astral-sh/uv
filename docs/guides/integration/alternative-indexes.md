@@ -34,6 +34,29 @@ name = "private-registry"
 url = "https://pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pypi/simple/"
 ```
 
+### Environment variable expansion for authentication
+
+Instead of embedding credentials directly in URLs, you can use environment variable expansion to
+inject authentication tokens dynamically. This approach is more secure and flexible:
+
+```toml title="pyproject.toml"
+[[tool.uv.index]]
+name = "private-registry"
+# Use environment variables for secure authentication
+url = "https://${AZURE_USER:-dummy}:${AZURE_TOKEN}@pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pypi/simple/"
+publish-url = "https://${AZURE_USER:-dummy}:${AZURE_TOKEN}@pkgs.dev.azure.com/<ORGANIZATION>/<PROJECT>/_packaging/<FEED>/pypi/upload/"
+```
+
+Then set your credentials via environment variables:
+
+```bash
+export AZURE_USER="dummy"  # or any username, Azure doesn't validate this
+export AZURE_TOKEN="your-personal-access-token"
+```
+
+This eliminates the need to use the separate `UV_INDEX_*` environment variables, as the credentials
+are expanded directly into the URL.
+
 ### Authenticate with an Azure access token
 
 If there is a personal access token (PAT) available (e.g.,
@@ -143,6 +166,11 @@ To use Google Artifact Registry, add the index to your project:
 [[tool.uv.index]]
 name = "private-registry"
 url = "https://<REGION>-python.pkg.dev/<PROJECT>/<REPOSITORY>"
+
+# Or with environment variables for dynamic configuration
+[[tool.uv.index]]
+name = "private-registry"
+url = "https://oauth2accesstoken:${GCP_ACCESS_TOKEN}@${GCP_REGION:-us-central1}-python.pkg.dev/${GCP_PROJECT}/${GCP_REPOSITORY}"
 ```
 
 ### Authenticate with a Google access token
@@ -262,6 +290,12 @@ The index can be declared like so:
 [[tool.uv.index]]
 name = "private-registry"
 url = "https://<DOMAIN>-<ACCOUNT_ID>.d.codeartifact.<REGION>.amazonaws.com/pypi/<REPOSITORY>/simple/"
+
+# Or with environment variables for dynamic configuration
+[[tool.uv.index]]
+name = "private-registry"
+url = "https://aws:${AWS_CODEARTIFACT_TOKEN}@${AWS_DOMAIN}-${AWS_ACCOUNT_ID}.d.codeartifact.${AWS_REGION:-us-east-1}.amazonaws.com/pypi/${AWS_REPOSITORY}/simple/"
+publish-url = "https://aws:${AWS_CODEARTIFACT_TOKEN}@${AWS_DOMAIN}-${AWS_ACCOUNT_ID}.d.codeartifact.${AWS_REGION:-us-east-1}.amazonaws.com/pypi/${AWS_REPOSITORY}/"
 ```
 
 ### Authenticate with an AWS access token
