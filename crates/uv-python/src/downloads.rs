@@ -53,6 +53,12 @@ pub enum Error {
     TooManyParts(String),
     #[error("Failed to download {0}")]
     NetworkError(DisplaySafeUrl, #[source] WrappedReqwestError),
+    #[error("Request failed after {retries} retries")]
+    NetworkErrorWithRetries {
+        #[source]
+        err: Box<Error>,
+        retries: u32,
+    },
     #[error("Failed to download {0}")]
     NetworkMiddlewareError(DisplaySafeUrl, #[source] anyhow::Error),
     #[error("Failed to extract archive: {0}")]
@@ -1143,8 +1149,20 @@ fn parse_json_downloads(
 }
 
 impl Error {
-    pub(crate) fn from_reqwest(url: DisplaySafeUrl, err: reqwest::Error) -> Self {
-        Self::NetworkError(url, WrappedReqwestError::from(err))
+    pub(crate) fn from_reqwest(
+        url: DisplaySafeUrl,
+        err: reqwest::Error,
+        retries: Option<u32>,
+    ) -> Self {
+        let err = Self::NetworkError(url, WrappedReqwestError::from(err));
+        if let Some(retries) = retries {
+            Self::NetworkErrorWithRetries {
+                err: Box::new(err),
+                retries,
+            }
+        } else {
+            err
+        }
     }
 
     pub(crate) fn from_reqwest_middleware(
@@ -1260,10 +1278,16 @@ async fn read_url(
             .await
             .map_err(|err| Error::from_reqwest_middleware(url.clone(), err))?;
 
+        // Check if middleware did any retries.
+        let retry_count = response
+            .extensions()
+            .get::<reqwest_retry::RetryCount>()
+            .map(|retries| retries.value());
+
         // Ensure the request was successful.
-        response
-            .error_for_status_ref()
-            .map_err(|err| Error::from_reqwest(url, err))?;
+        if let Err(status_error) = response.error_for_status_ref() {
+            return Err(Error::from_reqwest(url, status_error, retry_count));
+        }
 
         let size = response.content_length();
         let stream = response
