@@ -5595,6 +5595,7 @@ dependencies = [
  "assert_fs",
  "clap",
  "configparser",
+ "dunce",
  "fs-err 3.1.0",
  "futures",
  "goblin",
