@@ -39,6 +39,12 @@ use crate::managed::ManagedPythonInstallation;
 use crate::platform::{self, Arch, Libc, Os};
 use crate::{Interpreter, PythonRequest, PythonVersion, VersionRequest};
 
+/// Retry context for download operations.
+#[derive(Clone, Copy)]
+pub struct RetryContext {
+    pub retries: Option<u32>,
+}
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
@@ -827,6 +833,10 @@ impl ManagedPythonDownload {
                 };
 
             // Extract the downloaded archive into a temporary directory.
+            let retry_context = RetryContext {
+                // Cached files don't have retries
+                retries: None,
+            };
             self.extract_reader(
                 reader,
                 temp_dir.path(),
@@ -835,6 +845,7 @@ impl ManagedPythonDownload {
                 size,
                 reporter,
                 Direction::Extract,
+                &retry_context,
             )
             .await?;
         } else {
@@ -845,7 +856,7 @@ impl ManagedPythonDownload {
                 temp_dir.path().simplified_display()
             );
 
-            let (reader, size) = read_url(&url, client).await?;
+            let (reader, size, retry_context) = read_url(&url, client).await?;
             self.extract_reader(
                 reader,
                 temp_dir.path(),
@@ -854,6 +865,7 @@ impl ManagedPythonDownload {
                 size,
                 reporter,
                 Direction::Download,
+                &retry_context,
             )
             .await?;
         }
@@ -918,7 +930,7 @@ impl ManagedPythonDownload {
             target_cache_file.simplified_display()
         );
 
-        let (mut reader, size) = read_url(url, client).await?;
+        let (mut reader, size, retry_context) = read_url(url, client).await?;
         let temp_dir = tempfile::tempdir_in(python_builds_dir)?;
         let temp_file = temp_dir.path().join("download");
 
@@ -933,10 +945,13 @@ impl ManagedPythonDownload {
                     &mut ProgressReader::new(reader, key, reporter),
                     &mut archive_writer,
                 )
-                .await?;
+                .await
+                .map_err(|err| Error::Io(err).with_retries(retry_context.retries))?;
                 reporter.on_request_complete(Direction::Download, key);
             } else {
-                tokio::io::copy(&mut reader, &mut archive_writer).await?;
+                tokio::io::copy(&mut reader, &mut archive_writer)
+                    .await
+                    .map_err(|err| Error::Io(err).with_retries(retry_context.retries))?;
             }
 
             archive_writer.flush().await?;
@@ -957,6 +972,7 @@ impl ManagedPythonDownload {
         size: Option<u64>,
         reporter: Option<&dyn Reporter>,
         direction: Direction,
+        retry_context: &RetryContext,
     ) -> Result<(), Error> {
         let mut hashers = self
             .sha256
@@ -977,7 +993,10 @@ impl ManagedPythonDownload {
                 .await
                 .map_err(|err| Error::ExtractError(filename.to_string(), err))?;
         }
-        hasher.finish().await.map_err(Error::HashExhaustion)?;
+        hasher
+            .finish()
+            .await
+            .map_err(|err| Error::HashExhaustion(err).with_retries(retry_context.retries))?;
 
         // Check the hash
         if let Some(expected) = self.sha256 {
@@ -1178,6 +1197,17 @@ impl Error {
             }
         }
     }
+
+    pub(crate) fn with_retries(self, retries: Option<u32>) -> Self {
+        if let Some(retries) = retries {
+            Self::NetworkErrorWithRetries {
+                err: Box::new(self),
+                retries,
+            }
+        } else {
+            self
+        }
+    }
 }
 
 impl Display for ManagedPythonDownload {
@@ -1258,7 +1288,7 @@ where
 async fn read_url(
     url: &Url,
     client: &BaseClient,
-) -> Result<(impl AsyncRead + Unpin, Option<u64>), Error> {
+) -> Result<(impl AsyncRead + Unpin, Option<u64>, RetryContext), Error> {
     let url = DisplaySafeUrl::from(url.clone());
     if url.scheme() == "file" {
         // Loads downloaded distribution from the given `file://` URL.
@@ -1269,7 +1299,12 @@ async fn read_url(
         let size = fs_err::tokio::metadata(&path).await?.len();
         let reader = fs_err::tokio::File::open(&path).await?;
 
-        Ok((Either::Left(reader), Some(size)))
+        let retry_context = RetryContext {
+            // File URLs don't have retries
+            retries: None,
+        };
+
+        Ok((Either::Left(reader), Some(size), retry_context))
     } else {
         let response = client
             .for_host(&url)
@@ -1295,6 +1330,10 @@ async fn read_url(
             .map_err(io::Error::other)
             .into_async_read();
 
-        Ok((Either::Right(stream.compat()), size))
+        let retry_context = RetryContext {
+            retries: retry_count,
+        };
+
+        Ok((Either::Right(stream.compat()), size, retry_context))
     }
 }
