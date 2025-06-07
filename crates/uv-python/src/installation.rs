@@ -484,7 +484,33 @@ impl Ord for PythonInstallationKey {
             .then_with(|| self.version().cmp(&other.version()))
             .then_with(|| self.os.to_string().cmp(&other.os.to_string()))
             // Architectures are sorted in preferred order, with native architectures first
-            .then_with(|| self.arch.cmp(&other.arch).reverse())
+            .then_with(|| {
+                // For the time being, manually sort windows to make aarch64 windows disfavored
+                // on its own host platform, because most packages don't have wheels for
+                // aarch64 windows, making emulation more useful than native execution!
+                //
+                // In the future we'll need to make this configurable
+                // (probably at that point we don't impl Ord for PythonInstallationKey
+                // and instead sort_with so that state can be included.)
+                //
+                // The reason we do this in "sorting" and not "supports" is so that we don't
+                // *refuse* to use an aarch64 windows pythons if they happen to be installed
+                // and nothing else is available.
+                if cfg!(all(windows, target_arch = "aarch64")) {
+                    let windows = Os::from_env();
+                    let aarch64 = Arch::from_env().family;
+                    if self.os == windows && other.os == windows {
+                        match (self.arch.family == aarch64, other.arch.family == aarch64) {
+                            (true, false) => return std::cmp::Ordering::Less,
+                            (false, true) => return std::cmp::Ordering::Greater,
+                            (true, true) | (false, false) => {
+                                // Fall through to normal logic
+                            }
+                        }
+                    }
+                }
+                self.arch.cmp(&other.arch).reverse()
+            })
             .then_with(|| self.libc.to_string().cmp(&other.libc.to_string()))
             // Python variants are sorted in preferred order, with `Default` first
             .then_with(|| self.variant.cmp(&other.variant).reverse())
