@@ -414,6 +414,24 @@ pub struct ToolUv {
     )]
     pub override_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
 
+    /// Exclude
+    #[cfg_attr(
+        feature = "schemars",
+        schemars(
+            with = "Option<Vec<String>>",
+            description = "PEP 508-style requirements, e.g., `ruff==0.5.0`, or `ruff @ https://...`."
+        )
+    )]
+    #[option(
+        default = "[]",
+        value_type = "list[str]",
+        example = r#"
+            # Exclude numpy from being installed, even if other dependencies require it
+            exclude-dependencies = ["numpy"]
+        "#
+    )]
+    pub excluded_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+
     /// Constraints to apply when resolving the project's dependencies.
     ///
     /// Constraints are used to restrict the versions of dependencies that are selected during

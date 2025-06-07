@@ -1785,6 +1785,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         ..
     } = spec.requirements;
@@ -1911,6 +1912,7 @@ pub(crate) async fn resolve_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),
@@ -2154,6 +2156,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         ..
     } = spec;
@@ -2284,6 +2287,7 @@ pub(crate) async fn update_environment(
         requirements,
         constraints,
         overrides,
+        excludes,
         source_trees,
         project,
         BTreeSet::default(),
@@ -2569,11 +2573,32 @@ pub(crate) fn script_specification(
             .map_ok(LoweredRequirement::into_inner)
         })
         .collect::<Result<Vec<_>, _>>()?;
+    let excludes = script
+        .metadata()
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref())
+        .and_then(|uv| uv.exclude_dependencies.as_ref())
+        .into_iter()
+        .flatten()
+        .cloned()
+        .flat_map(|requirement| {
+            LoweredRequirement::from_non_workspace_requirement(
+                requirement,
+                script_dir.as_ref(),
+                script_sources,
+                script_indexes,
+                &settings.index_locations,
+            )
+            .map_ok(LoweredRequirement::into_inner)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(Some(RequirementsSpecification::from_overrides(
         requirements,
         constraints,
         overrides,
+        excludes,
     )))
 }
 
