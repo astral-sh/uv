@@ -616,8 +616,8 @@ impl RegistryClient {
             )
             .await
             .map_err(|err| match err {
-                CachedClientError::Client(err) => err,
-                CachedClientError::Callback(err) => err,
+                CachedClientError::Client { err, .. } => err,
+                CachedClientError::Callback { err, .. } => err,
             })
     }
 
@@ -900,15 +900,13 @@ impl RegistryClient {
                     .map_err(|err| ErrorKind::AsyncHttpRangeReader(url.clone(), err))?;
                     trace!("Getting metadata for {filename} by range request");
                     let text = wheel_metadata_from_remote_zip(filename, url, &mut reader).await?;
-                    let metadata =
-                        ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
-                            Error::from(ErrorKind::MetadataParseError(
-                                filename.clone(),
-                                url.to_string(),
-                                Box::new(err),
-                            ))
-                        })?;
-                    Ok::<ResolutionMetadata, CachedClientError<Error>>(metadata)
+                    ResolutionMetadata::parse_metadata(text.as_bytes()).map_err(|err| {
+                        Error::from(ErrorKind::MetadataParseError(
+                            filename.clone(),
+                            url.to_string(),
+                            Box::new(err),
+                        ))
+                    })
                 }
                 .boxed_local()
                 .instrument(info_span!("read_metadata_range_request", wheel = %filename))

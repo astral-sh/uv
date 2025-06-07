@@ -1,4 +1,3 @@
-use std::fmt::{Debug, Display, Formatter};
 use std::time::{Duration, SystemTime};
 use std::{borrow::Cow, path::Path};
 
@@ -100,44 +99,42 @@ where
     }
 }
 
-/// Either a cached client error or a (user specified) error from the callback
+/// Dispatch type: Either a cached client error or a (user specified) error from the callback
 pub enum CachedClientError<CallbackError: std::error::Error + 'static> {
-    Client(Error),
-    Callback(CallbackError),
+    Client {
+        retries: Option<u32>,
+        err: Error,
+    },
+    Callback {
+        retries: Option<u32>,
+        err: CallbackError,
+    },
 }
 
-impl<CallbackError: std::error::Error + 'static> Display for CachedClientError<CallbackError> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl<CallbackError: std::error::Error + 'static> CachedClientError<CallbackError> {
+    fn retries(&self) -> Option<u32> {
         match self {
-            CachedClientError::Client(err) => write!(f, "{err}"),
-            CachedClientError::Callback(err) => write!(f, "{err}"),
+            CachedClientError::Client { retries, .. } => *retries,
+            CachedClientError::Callback { retries, .. } => *retries,
         }
     }
 }
 
-impl<CallbackError: std::error::Error + 'static> Debug for CachedClientError<CallbackError> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl<CallbackError: std::error::Error + 'static> CachedClientError<CallbackError> {
+    fn error(&self) -> &dyn std::error::Error {
         match self {
-            CachedClientError::Client(err) => write!(f, "{err:?}"),
-            CachedClientError::Callback(err) => write!(f, "{err:?}"),
-        }
-    }
-}
-
-impl<CallbackError: std::error::Error + 'static> std::error::Error
-    for CachedClientError<CallbackError>
-{
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            CachedClientError::Client(err) => Some(err),
-            CachedClientError::Callback(err) => Some(err),
+            CachedClientError::Client { err, .. } => err,
+            CachedClientError::Callback { err, .. } => err,
         }
     }
 }
 
 impl<CallbackError: std::error::Error + 'static> From<Error> for CachedClientError<CallbackError> {
     fn from(error: Error) -> Self {
-        Self::Client(error)
+        Self::Client {
+            retries: None,
+            err: error,
+        }
     }
 }
 
@@ -145,15 +142,35 @@ impl<CallbackError: std::error::Error + 'static> From<ErrorKind>
     for CachedClientError<CallbackError>
 {
     fn from(error: ErrorKind) -> Self {
-        Self::Client(error.into())
+        Self::Client {
+            retries: None,
+            err: error.into(),
+        }
     }
 }
 
 impl<E: Into<Self> + std::error::Error + 'static> From<CachedClientError<E>> for Error {
+    /// Attach retry error context, if there were retries.
     fn from(error: CachedClientError<E>) -> Self {
         match error {
-            CachedClientError::Client(error) => error,
-            CachedClientError::Callback(error) => error.into(),
+            CachedClientError::Client {
+                retries: Some(retries),
+                err,
+            } => ErrorKind::RequestWithRetries {
+                source: Box::new(err.into_kind()),
+                retries,
+            }
+            .into(),
+            CachedClientError::Client { retries: None, err } => err,
+            CachedClientError::Callback {
+                retries: Some(retries),
+                err,
+            } => ErrorKind::RequestWithRetries {
+                source: Box::new(err.into().into_kind()),
+                retries,
+            }
+            .into(),
+            CachedClientError::Callback { retries: None, err } => err.into(),
         }
     }
 }
@@ -385,7 +402,7 @@ impl CachedClient {
         let data = response_callback(response)
             .boxed_local()
             .await
-            .map_err(|err| CachedClientError::Callback(err))?;
+            .map_err(|err| CachedClientError::Callback { retries: None, err })?;
         let Some(cache_policy) = cache_policy else {
             return Ok(data.into_target());
         };
@@ -530,9 +547,21 @@ impl CachedClient {
             .for_host(&url)
             .execute(req)
             .await
-            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?
-            .error_for_status()
-            .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
+            .map_err(|err| ErrorKind::from_reqwest_middleware(url.clone(), err))?;
+
+        let retry_count = response
+            .extensions()
+            .get::<reqwest_retry::RetryCount>()
+            .map(|retries| retries.value());
+
+        if let Err(status_error) = response.error_for_status_ref() {
+            return Err(CachedClientError::<Error>::Client {
+                retries: retry_count,
+                err: ErrorKind::from_reqwest(url, status_error).into(),
+            }
+            .into());
+        }
+
         let cache_policy = cache_policy_builder.build(&response);
         let cache_policy = if cache_policy.to_archived().is_storable() {
             Some(Box::new(cache_policy))
@@ -587,11 +616,20 @@ impl CachedClient {
             let result = self
                 .get_cacheable(fresh_req, cache_entry, cache_control, &response_callback)
                 .await;
+
+            // Check if the middleware already performed retries
+            let middleware_retries = match &result {
+                Err(err) => err.retries().unwrap_or_default(),
+                Ok(_) => 0,
+            };
+
             if result
                 .as_ref()
-                .is_err_and(|err| is_extended_transient_error(err))
+                .is_err_and(|err| is_extended_transient_error(err.error()))
             {
-                let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
+                // If middleware already retried, consider that in our retry budget
+                let total_retries = n_past_retries + middleware_retries;
+                let retry_decision = retry_policy.should_retry(start_time, total_retries);
                 if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
                     debug!(
                         "Transient failure while handling response from {}; retrying...",
@@ -605,6 +643,29 @@ impl CachedClient {
                     continue;
                 }
             }
+
+            // If we attempted retries, wrap the error with retry information
+            if n_past_retries > 0 {
+                return result.map_err(|err| match err {
+                    CachedClientError::Client {
+                        retries: None,
+                        err: source,
+                    } => CachedClientError::Client {
+                        retries: Some(n_past_retries),
+                        err: source,
+                    },
+                    CachedClientError::Callback {
+                        retries: None,
+                        err: source,
+                    } => CachedClientError::Callback {
+                        retries: Some(n_past_retries),
+                        err: source,
+                    },
+                    // If already wrapped with retries, don't double-wrap
+                    other => other,
+                });
+            }
+
             return result;
         }
     }
@@ -630,12 +691,27 @@ impl CachedClient {
             let result = self
                 .skip_cache(fresh_req, cache_entry, &response_callback)
                 .await;
+
+            // Check if the middleware already performed retries
+            let middleware_retries = match &result {
+                Err(CachedClientError::Client {
+                    retries: Some(retries),
+                    ..
+                }) => *retries,
+                Err(CachedClientError::Callback {
+                    retries: Some(retries),
+                    ..
+                }) => *retries,
+                _ => 0,
+            };
+
             if result
                 .as_ref()
                 .err()
-                .is_some_and(|err| is_extended_transient_error(err))
+                .is_some_and(|err| is_extended_transient_error(err.error()))
             {
-                let retry_decision = retry_policy.should_retry(start_time, n_past_retries);
+                let total_retries = n_past_retries + middleware_retries;
+                let retry_decision = retry_policy.should_retry(start_time, total_retries);
                 if let reqwest_retry::RetryDecision::Retry { execute_after } = retry_decision {
                     debug!(
                         "Transient failure while handling response from {}; retrying...",
@@ -649,6 +725,28 @@ impl CachedClient {
                     continue;
                 }
             }
+
+            // Attach the retries as error context
+            if n_past_retries > 0 {
+                return result.map_err(|err| match err {
+                    CachedClientError::Client {
+                        retries: None,
+                        err: source,
+                    } => CachedClientError::Client {
+                        retries: Some(n_past_retries),
+                        err: source,
+                    },
+                    CachedClientError::Callback {
+                        retries: None,
+                        err: source,
+                    } => CachedClientError::Callback {
+                        retries: Some(n_past_retries),
+                        err: source,
+                    },
+                    err => err,
+                });
+            }
+
             return result;
         }
     }

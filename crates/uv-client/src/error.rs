@@ -197,6 +197,13 @@ pub enum ErrorKind {
     #[error("Failed to fetch: `{0}`")]
     WrappedReqwestError(DisplaySafeUrl, #[source] WrappedReqwestError),
 
+    /// Add the number of failed retries to the error.
+    #[error("Request failed after {retries} retries")]
+    RequestWithRetries {
+        source: Box<ErrorKind>,
+        retries: u32,
+    },
+
     #[error("Received some unexpected JSON from {}", url)]
     BadJson {
         source: serde_json::Error,
