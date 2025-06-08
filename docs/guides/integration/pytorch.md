@@ -37,7 +37,7 @@ To start, consider the following (default) configuration, which would be generat
 `uv init --python 3.12` followed by `uv add torch torchvision`.
 
 In this case, PyTorch would be installed from PyPI, which hosts CPU-only wheels for Windows and
-macOS, and GPU-accelerated wheels on Linux (targeting CUDA 12.4):
+macOS, and GPU-accelerated wheels on Linux (targeting CUDA 12.6):
 
 ```toml
 [project]
