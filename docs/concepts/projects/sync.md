@@ -41,13 +41,11 @@ version is excluded, the lockfile will be considered outdated. However, if you c
 constraints such that the existing locked version is still included, the lockfile will still be
 considered up-to-date.
 
-You can check if the lockfile is up-to-date by passing the `--check` flag to `uv lock`:
+You can check if the lockfile is up-to-date by passing the `--locked` flag to `uv lock`:
 
 ```console
-$ uv lock --check
+$ uv lock --locked
 ```
-
-This is equivalent to the `--locked` flag for other commands.
 
 !!! important
 
