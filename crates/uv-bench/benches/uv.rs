@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use uv_bench::criterion::black_box;
+use std::hint::black_box;
 use uv_bench::criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
