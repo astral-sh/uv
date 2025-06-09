@@ -131,6 +131,41 @@ pub enum ArchRequest {
     Environment(Arch),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlatformRequest {
+    pub(crate) os: Option<Os>,
+    pub(crate) arch: Option<ArchRequest>,
+    pub(crate) libc: Option<Libc>,
+}
+
+impl PlatformRequest {
+    /// Check if this platform request could potentially be satisfied by an installation key.
+    ///
+    /// This is a lightweight check that can be done before querying the interpreter
+    /// to avoid expensive subprocess calls when the platform clearly doesn't match.
+    pub fn could_be_satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
+        if let Some(os) = self.os {
+            if key.os != os {
+                return false;
+            }
+        }
+
+        if let Some(arch) = self.arch {
+            if !arch.satisfied_by(key.arch) {
+                return false;
+            }
+        }
+
+        if let Some(libc) = self.libc {
+            if key.libc != libc {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
 impl Display for ArchRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -411,6 +446,19 @@ impl PythonDownloadRequest {
             }
         }
         true
+    }
+
+    /// Extract the platform components as a `PlatformRequest` for early filtering.
+    pub fn platform_request(&self) -> Option<PlatformRequest> {
+        if self.os.is_some() || self.arch.is_some() || self.libc.is_some() {
+            Some(PlatformRequest {
+                os: self.os,
+                arch: self.arch,
+                libc: self.libc,
+            })
+        } else {
+            None
+        }
     }
 }
 
