@@ -479,7 +479,7 @@ pub(crate) async fn add(
         if let IndexUrl::Path(url) = &index.url {
             let path = url
                 .to_file_path()
-                .map_err(|()| anyhow::anyhow!("Invalid file path in index URL"))?;
+                .map_err(|()| anyhow::anyhow!("Invalid file path in index URL: {url}"))?;
             if !path.is_dir() {
                 bail!("Directory not found for index: {url}");
             }
