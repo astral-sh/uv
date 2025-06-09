@@ -9368,6 +9368,36 @@ fn add_index_with_non_existent_relative_path() -> Result<()> {
     Ok(())
 }
 
+/// Add an index with a non-existent relative path with the same name as a defined index.
+#[test]
+fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Directory not found for index: file://[TEMP_DIR]/test-index
+    ");
+
+    Ok(())
+}
+
 /// Add a PyPI requirement.
 #[test]
 fn add_group_comment() -> Result<()> {
