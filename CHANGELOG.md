@@ -11,7 +11,6 @@
 - Don't hint at versions removed by `excluded-newer` ([#13884](https://github.com/astral-sh/uv/pull/13884))
 - Add hint to use `tool.uv.environments` on resolution error ([#13455](https://github.com/astral-sh/uv/pull/13455))
 - Add hint to use `tool.uv.required-environments` on resolution error ([#13575](https://github.com/astral-sh/uv/pull/13575))
-
 - Improve `python pin` error messages ([#13862](https://github.com/astral-sh/uv/pull/13862))
 
 ### Bug fixes
