@@ -320,6 +320,10 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         resolver.resolve().await?
     };
 
+    println!(
+        "JACK thread {:?}: resolution complete",
+        std::thread::current().id()
+    );
     logger.on_complete(resolution.len(), start, printer)?;
 
     Ok(resolution)

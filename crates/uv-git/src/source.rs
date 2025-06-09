@@ -72,6 +72,10 @@ impl GitSource {
     /// Fetch the underlying Git repository at the given revision.
     #[instrument(skip(self), fields(repository = %self.git.repository(), rev = ?self.git.precise()))]
     pub fn fetch(self) -> Result<Fetch> {
+        println!(
+            "JACK thread {:?}: inside fetch task",
+            std::thread::current().id()
+        );
         // Compute the canonical URL for the repository.
         let canonical = RepositoryUrl::new(self.git.repository());
 
@@ -111,6 +115,10 @@ impl GitSource {
                             // This reference is an exact commit. Treat it like it's
                             // locked.
                             debug!("Using existing Git source `{}`", self.git.repository());
+                            println!(
+                                "JACK thread {:?}: skip checkout",
+                                std::thread::current().id()
+                            );
                             return Ok((maybe_db.unwrap(), oid, None));
                         }
                     }
@@ -124,6 +132,10 @@ impl GitSource {
 
             // Report the checkout operation to the reporter.
             let task = self.reporter.as_ref().map(|reporter| {
+                println!(
+                    "JACK thread {:?}: on checkout start",
+                    std::thread::current().id()
+                );
                 reporter.on_checkout_start(git_remote.url(), self.git.reference().as_rev())
             });
 
@@ -159,6 +171,10 @@ impl GitSource {
         if let Some(task) = maybe_task {
             if let Some(reporter) = self.reporter.as_ref() {
                 reporter.on_checkout_complete(remote.as_ref(), actual_rev.as_str(), task);
+                println!(
+                    "JACK thread {:?}: on checkout complete",
+                    std::thread::current().id()
+                );
             }
         }
 

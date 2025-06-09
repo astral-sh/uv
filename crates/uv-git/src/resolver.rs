@@ -156,9 +156,17 @@ impl GitResolver {
             source
         };
 
+        println!(
+            "JACK thread {:?}: start fetch task",
+            std::thread::current().id()
+        );
         let fetch = tokio::task::spawn_blocking(move || source.fetch())
             .await?
             .map_err(GitResolverError::Git)?;
+        println!(
+            "JACK thread {:?}: join fetch task",
+            std::thread::current().id()
+        );
 
         // Insert the resolved URL into the in-memory cache. This ensures that subsequent fetches
         // resolve to the same precise commit.
