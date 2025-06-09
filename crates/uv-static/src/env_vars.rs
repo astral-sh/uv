@@ -727,4 +727,7 @@ impl EnvVars {
 
     /// Equivalent to the `--project` command-line argument.
     pub const UV_PROJECT: &'static str = "UV_PROJECT";
+
+    /// Disable GitHub-specific requests that allow uv to skip `git fetch` in some circumstances.
+    pub const UV_NO_GITHUB_FAST_PATH: &'static str = "UV_NO_GITHUB_FAST_PATH";
 }
