@@ -9303,6 +9303,32 @@ fn add_index_without_trailing_slash() -> Result<()> {
     Ok(())
 }
 
+/// Add an index with a non-existent relative path.
+#[test]
+fn add_index_with_non_existent_relative_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Directory not found for index: file://[TEMP_DIR]/test
+    ");
+
+    Ok(())
+}
+
 /// Add a PyPI requirement.
 #[test]
 fn add_group_comment() -> Result<()> {
