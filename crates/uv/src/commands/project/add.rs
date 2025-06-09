@@ -23,8 +23,8 @@ use uv_configuration::{
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
 use uv_distribution_types::{
-    Index, IndexName, IndexUrls, NameRequirementSpecification, Requirement, RequirementSource,
-    UnresolvedRequirement, VersionId,
+    Index, IndexName, IndexUrl, IndexUrls, NameRequirementSpecification, Requirement,
+    RequirementSource, UnresolvedRequirement, VersionId,
 };
 use uv_fs::{LockedFile, Simplified};
 use uv_git::GIT_STORE;
@@ -472,6 +472,19 @@ pub(crate) async fn add(
         index,
         &mut toml,
     )?;
+
+    // Validate any indexes that were provided on the command-line to ensure
+    // they point to existing directories when using path URLs.
+    for index in &indexes {
+        if let IndexUrl::Path(url) = &index.url {
+            let path = url
+                .to_file_path()
+                .map_err(|()| anyhow::anyhow!("Invalid file path in index URL: {url}"))?;
+            if !path.is_dir() {
+                bail!("Directory not found for index: {url}");
+            }
+        }
+    }
 
     // Add any indexes that were provided on the command-line, in priority order.
     if !raw {
