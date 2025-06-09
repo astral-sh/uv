@@ -5,18 +5,26 @@ Test `uv add` against multiple Python package registries.
 This script looks for environment variables that configure registries for testing.
 To configure a registry, set the following environment variables:
 
-    UV_TEST_<registry_name>_URL         URL for the registry
-    UV_TEST_<registry_name>_TOKEN       authentication token
+    `UV_TEST_<registry_name>_URL`         URL for the registry
+    `UV_TEST_<registry_name>_TOKEN`       authentication token
+
+The username defaults to "__token__" but can be optionally set with:
+    `UV_TEST_<registry_name>_USERNAME`
 
 The package to install defaults to "astral-registries-test-pkg" but can be optionally
 set with:
-    UV_TEST_<registry_name>_PKG
-
-The username defaults to "__token__" but can be optionally set with:
-    UV_TEST_<registry_name>_USERNAME
+    `UV_TEST_<registry_name>_PKG`
 
 Keep in mind that some registries can fall back to PyPI internally, so make sure
 you choose a package that only exists in the registry you are testing.
+
+You can also use the 1Password CLI to fetch registry credentials from a vault by passing
+the `--use-op` flag. For each item in the vault named `UV_TEST_XXX`, the script will set
+env vars for any of the following fields, if present:
+    `UV_TEST_<registry_name>_USERNAME` from the `username` field
+    `UV_TEST_<registry_name>_TOKEN` from the `password` field
+    `UV_TEST_<registry_name>_URL` from a field with the label `url`
+    `UV_TEST_<registry_name>_PKG` from a field with the label `pkg`
 
 # /// script
 # requires-python = ">=3.12"
@@ -25,6 +33,7 @@ you choose a package that only exists in the registry you are testing.
 """
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -54,6 +63,75 @@ KNOWN_REGISTRIES = [
 ]
 
 
+def fetch_op_items(vault_name: str, env: Dict[str, str]) -> Dict[str, str]:
+    """Fetch items from the specified 1Password vault and add them to the environment.
+
+    For each item named UV_TEST_XXX in the vault:
+    - Set `UV_TEST_XXX_USERNAME` to the `username` field
+    - Set `UV_TEST_XXX_TOKEN` to the `password` field
+    - Set `UV_TEST_XXX_URL` to the `url` field
+
+    Raises exceptions for any 1Password CLI errors so they can be handled by the caller.
+    """
+    # Run 'op item list' to get all items in the vault
+    result = subprocess.run(
+        ["op", "item", "list", "--vault", vault_name, "--format", "json"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    items = json.loads(result.stdout)
+    updated_env = env.copy()
+
+    for item in items:
+        item_id = item["id"]
+        item_title = item["title"]
+
+        # Only process items that match the registry naming pattern
+        if item_title.startswith("UV_TEST_"):
+            # Extract the registry name (e.g., "AWS" from "UV_TEST_AWS")
+            registry_name = item_title[8:]  # Remove "UV_TEST_" prefix
+
+            # Get the item details
+            item_details = subprocess.run(
+                ["op", "item", "get", item_id, "--format", "json"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            item_data = json.loads(item_details.stdout)
+
+            username = None
+            password = None
+            url = None
+            pkg = None
+
+            if "fields" in item_data:
+                for field in item_data["fields"]:
+                    if field.get("id") == "username":
+                        username = field.get("value")
+                    elif field.get("id") == "password":
+                        password = field.get("value")
+                    elif field.get("label") == "url":
+                        url = field.get("value")
+                    elif field.get("label") == "pkg":
+                        pkg = field.get("value")
+            if username:
+                updated_env[f"UV_TEST_{registry_name}_USERNAME"] = username
+            if password:
+                updated_env[f"UV_TEST_{registry_name}_TOKEN"] = password
+            if url:
+                updated_env[f"UV_TEST_{registry_name}_URL"] = url
+            if pkg:
+                updated_env[f"UV_TEST_{registry_name}_PKG"] = pkg
+
+            print(f"Added 1Password credentials for {registry_name}")
+
+    return updated_env
+
+
 def get_registries(env: Dict[str, str]) -> Dict[str, str]:
     pattern = re.compile(r"^UV_TEST_(.+)_URL$")
     registries: Dict[str, str] = {}
@@ -79,7 +157,6 @@ name = "{registry_name}"
 url = "{registry_url}"
 default = true
 """
-
     pyproject_file = Path(project_dir) / "pyproject.toml"
     pyproject_file.write_text(pyproject_content, encoding="utf-8")
 
@@ -115,8 +192,6 @@ def run_test(
             uv,
             "add",
             package,
-            "--index",
-            registry_name,
             "--directory",
             project_dir,
         ]
@@ -198,12 +273,35 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="increase verbosity (-v for debug, -vv for trace)",
     )
+    parser.add_argument(
+        "--use-op",
+        action="store_true",
+        help="use 1Password CLI to fetch registry credentials from the specified vault",
+    )
+    parser.add_argument(
+        "--op-vault",
+        type=str,
+        default="RegistryTests",
+        help="name of the 1Password vault to use (default: RegistryTests)",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     env = os.environ.copy()
+
+    # If using 1Password, fetch credentials from the vault
+    if args.use_op:
+        print(f"Fetching credentials from 1Password vault '{args.op_vault}'...")
+        try:
+            env = fetch_op_items(args.op_vault, env)
+        except Exception as e:
+            print(f"{Fore.RED}Error accessing 1Password: {e}{Fore.RESET}")
+            print(
+                f"{Fore.YELLOW}Hint: If you're not authenticated, run 'op signin' first.{Fore.RESET}"
+            )
+            sys.exit(1)
 
     if args.uv:
         # We change the working directory for the subprocess calls, so we have to
