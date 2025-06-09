@@ -7881,9 +7881,11 @@ fn sync_dry_run() -> Result<()> {
 
     let output = context.sync().arg("--dry-run").arg("-vv").output()?;
     let stderr = String::from_utf8_lossy(&output.stderr);
-    if stderr.contains("Would replace existing virtual environment") {
-        panic!("{}", stderr);
-    };
+    assert!(
+        !stderr.contains("Would replace existing virtual environment"),
+        "{}",
+        stderr
+    );
 
     Ok(())
 }
