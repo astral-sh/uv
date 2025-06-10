@@ -41,7 +41,7 @@ async fn io_error_server() -> (MockServer, String) {
 async fn simple_http_500() {
     let context = TestContext::new("3.12");
 
-    let (_server, mock_server_uri) = http_error_server().await;
+    let (_server_drop_guard, mock_server_uri) = http_error_server().await;
 
     let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
     uv_snapshot!(filters, context
@@ -64,7 +64,7 @@ async fn simple_http_500() {
 async fn simple_io_err() {
     let context = TestContext::new("3.12");
 
-    let (_server, mock_server_uri) = io_error_server().await;
+    let (_server_drop_guard, mock_server_uri) = io_error_server().await;
 
     let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
     uv_snapshot!(filters, context
@@ -90,7 +90,7 @@ async fn simple_io_err() {
 async fn find_links_http_500() {
     let context = TestContext::new("3.12");
 
-    let (_server, mock_server_uri) = http_error_server().await;
+    let (_server_drop_guard, mock_server_uri) = http_error_server().await;
 
     let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
     uv_snapshot!(filters, context
@@ -115,7 +115,7 @@ async fn find_links_http_500() {
 async fn find_links_io_error() {
     let context = TestContext::new("3.12");
 
-    let (_server, mock_server_uri) = io_error_server().await;
+    let (_server_drop_guard, mock_server_uri) = io_error_server().await;
 
     let filters = vec![(mock_server_uri.as_str(), "[SERVER]")];
     uv_snapshot!(filters, context
@@ -144,7 +144,7 @@ async fn find_links_io_error() {
 async fn direct_url_http_500() {
     let context = TestContext::new("3.12");
 
-    let (_server, mock_server_uri) = http_error_server().await;
+    let (_server_drop_guard, mock_server_uri) = http_error_server().await;
 
     let tqdm_url = format!(
         "{mock_server_uri}/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl"
@@ -169,7 +169,7 @@ async fn direct_url_http_500() {
 async fn direct_url_io_error() {
     let context = TestContext::new("3.12");
 
-    let (_server, mock_server_uri) = io_error_server().await;
+    let (_server_drop_guard, mock_server_uri) = io_error_server().await;
 
     let tqdm_url = format!(
         "{mock_server_uri}/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl"
@@ -227,7 +227,7 @@ async fn python_install_http_500() {
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
 
-    let (_server, mock_server_uri) = http_error_server().await;
+    let (_server_drop_guard, mock_server_uri) = http_error_server().await;
 
     let python_downloads_json = write_python_downloads_json(&context, &mock_server_uri);
 
@@ -256,7 +256,7 @@ async fn python_install_io_error() {
         .with_filtered_exe_suffix()
         .with_managed_python_dirs();
 
-    let (_server, mock_server_uri) = io_error_server().await;
+    let (_server_drop_guard, mock_server_uri) = io_error_server().await;
 
     let python_downloads_json = write_python_downloads_json(&context, &mock_server_uri);
 
