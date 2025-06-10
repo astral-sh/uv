@@ -13,7 +13,7 @@ use tracing::debug;
 use uv_configuration::PreviewMode;
 use uv_fs::{CWD, Simplified, cachedir};
 use uv_pypi_types::Scheme;
-use uv_python::managed::{MinorVersionLink, create_bin_link};
+use uv_python::managed::{PythonMinorVersionLink, create_bin_link};
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
@@ -148,9 +148,11 @@ pub(crate) fn create(
     fs::write(location.join(".gitignore"), "*")?;
 
     let executable_target = if upgradeable && interpreter.is_standalone() {
-        if let Some(minor_version_link) =
-            MinorVersionLink::from_executable(base_python.as_path(), &interpreter.key(), preview)
-        {
+        if let Some(minor_version_link) = PythonMinorVersionLink::from_executable(
+            base_python.as_path(),
+            &interpreter.key(),
+            preview,
+        ) {
             if tracing::enabled!(tracing::Level::DEBUG) {
                 let debug_symlink_term = if cfg!(windows) {
                     "junction"

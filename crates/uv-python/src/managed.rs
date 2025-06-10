@@ -525,7 +525,7 @@ impl ManagedPythonInstallation {
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
     pub fn ensure_minor_version_link(&self, preview: PreviewMode) -> Result<(), Error> {
-        if let Some(minor_version_link) = MinorVersionLink::from_installation(self, preview) {
+        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self, preview) {
             minor_version_link.create_directory()?;
         }
         Ok(())
@@ -658,7 +658,7 @@ impl ManagedPythonInstallation {
 /// A representation of a minor version symlink directory (or junction on Windows)
 /// linking to the home directory of a Python installation.
 #[derive(Clone, Debug)]
-pub struct MinorVersionLink {
+pub struct PythonMinorVersionLink {
     /// The symlink directory (or junction on Windows)
     pub symlink_directory: PathBuf,
     /// The full path to the executable including the symlink directory
@@ -669,7 +669,7 @@ pub struct MinorVersionLink {
     pub target_directory: PathBuf,
 }
 
-impl MinorVersionLink {
+impl PythonMinorVersionLink {
     /// Attempt to derive a path from an executable path that substitutes a minor
     /// version symlink directory (or junction on Windows) for the patch version
     /// directory.
@@ -757,7 +757,7 @@ impl MinorVersionLink {
         installation: &ManagedPythonInstallation,
         preview: PreviewMode,
     ) -> Option<Self> {
-        MinorVersionLink::from_executable(
+        PythonMinorVersionLink::from_executable(
             installation.executable(false).as_path(),
             installation.key(),
             preview,
@@ -765,7 +765,11 @@ impl MinorVersionLink {
     }
 
     pub fn from_interpreter(interpreter: &Interpreter, preview: PreviewMode) -> Option<Self> {
-        MinorVersionLink::from_executable(interpreter.sys_executable(), &interpreter.key(), preview)
+        PythonMinorVersionLink::from_executable(
+            interpreter.sys_executable(),
+            &interpreter.key(),
+            preview,
+        )
     }
 
     pub fn create_directory(&self) -> Result<(), Error> {

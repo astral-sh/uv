@@ -13,7 +13,9 @@ use tracing::{debug, warn};
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
-use uv_python::managed::{ManagedPythonInstallations, MinorVersionLink, python_executable_dir};
+use uv_python::managed::{
+    ManagedPythonInstallations, PythonMinorVersionLink, python_executable_dir,
+};
 use uv_python::{PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest};
 
 use crate::commands::python::install::format_executables;
@@ -245,7 +247,7 @@ async fn do_uninstall(
     for installation in &matching_installations {
         if !remaining_minor_versions.contains_key(installation.minor_version_key()) {
             if let Some(minor_version_link) =
-                MinorVersionLink::from_installation(installation, preview)
+                PythonMinorVersionLink::from_installation(installation, preview)
             {
                 if minor_version_link.symlink_exists() {
                     let result = if cfg!(windows) {

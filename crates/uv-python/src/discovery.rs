@@ -26,7 +26,7 @@ use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
 use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
-use crate::managed::{ManagedPythonInstallations, MinorVersionLink};
+use crate::managed::{ManagedPythonInstallations, PythonMinorVersionLink};
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
 use crate::virtualenv::Error as VirtualEnvError;
@@ -348,8 +348,8 @@ fn python_executables_from_installed<'a>(
                                 // If this is a CPython implementation, it's a minor version request, and a
                                 // minor version symlink directory (or junction on Windows) exists,
                                 // use an executable path containing that directory.
-                                MinorVersionLink::from_installation(&installation, preview)
-                                    .filter(MinorVersionLink::symlink_exists)
+                                PythonMinorVersionLink::from_installation(&installation, preview)
+                                    .filter(PythonMinorVersionLink::symlink_exists)
                                     .map(|minor_version_link| {
                                         minor_version_link.symlink_executable.clone()
                                     })
