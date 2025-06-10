@@ -122,20 +122,25 @@ documentation for more details.
 
 ## Upgrading Python patch versions
 
-To upgrade a uv-managed Python minor version to the latest patch:
+!!! important
+
+    Support for upgrading Python patch versions is in _preview_. This means the behavior is experimental
+    and subject to change.
+
+To upgrade a uv-managed Python minor version:
 
 ```console
-$ uv python upgrade 3.12
+$ uv python upgrade 3.12 --preview
 ```
 
 To upgrade all uv-managed Python minor versions to their latest patch versions:
 
 ```console
-$ uv python upgrade
+$ uv python upgrade --preview
 ```
 
-All virtual environments created by uv on a managed minor version will transparently upgrade when
-that minor version is upgraded.
+All virtual environments created by uv on a minor version that was installed or upgraded with the
+`--preview` flag will transparently upgrade when that minor version is upgraded.
 
 ## Next steps
 

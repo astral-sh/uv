@@ -1,6 +1,7 @@
 use core::fmt;
 use fs_err as fs;
 
+use uv_configuration::PreviewMode;
 use uv_dirs::user_executable_directory;
 use uv_pep440::Version;
 use uv_pep508::{InvalidNameError, PackageName};
@@ -257,6 +258,7 @@ impl InstalledTools {
         &self,
         name: &PackageName,
         interpreter: Interpreter,
+        preview: PreviewMode,
     ) -> Result<PythonEnvironment, Error> {
         let environment_path = self.tool_dir(name);
 
@@ -287,6 +289,7 @@ impl InstalledTools {
             false,
             false,
             false,
+            preview,
         )?;
 
         Ok(venv)

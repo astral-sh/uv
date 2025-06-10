@@ -2,6 +2,7 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::fmt::Write;
 use uv_cli::PythonListFormat;
+use uv_configuration::PreviewMode;
 use uv_pep440::Version;
 
 use anyhow::Result;
@@ -64,6 +65,7 @@ pub(crate) async fn list(
     python_downloads: PythonDownloads,
     cache: &Cache,
     printer: Printer,
+    preview: PreviewMode,
 ) -> Result<ExitStatus> {
     let request = request.as_deref().map(PythonRequest::parse);
     let base_download_request = if python_preference == PythonPreference::OnlySystem {
@@ -124,6 +126,7 @@ pub(crate) async fn list(
                 EnvironmentPreference::OnlySystem,
                 python_preference,
                 cache,
+                preview,
             )
             // Raise discovery errors if critical
             .filter(|result| {
