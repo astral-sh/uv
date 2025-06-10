@@ -1353,7 +1353,7 @@ uv upgrade [OPTIONS]
 <p>Can be provided multiple times.</p>
 <p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
 <p>WARNING: Hosts included in this list will not be verified against the system's certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
-<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-upgrade--cache-dir"><a href="#uv-upgrade--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-upgrade--build-constraints"><a href="#uv-upgrade--build-constraints"><code>--build-constraints</code></a>, <code>--build-constraint</code>, <code>-b</code> <i>build-constraints</i></dt><dt id="uv-upgrade--cache-dir"><a href="#uv-upgrade--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-upgrade--color"><a href="#uv-upgrade--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
@@ -1399,7 +1399,8 @@ metadata when there are not wheels.</p>
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-upgrade--quiet"><a href="#uv-upgrade--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-upgrade--recursive"><a href="#uv-upgrade--recursive"><code>--recursive</code></a></dt><dd><p>Search recursively for pyproject.toml files</p>
-<p>May also be set with the <code>UV_UPGRADE_RECURSIVE</code> environment variable.</p></dd><dt id="uv-upgrade--verbose"><a href="#uv-upgrade--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>May also be set with the <code>UV_UPGRADE_RECURSIVE</code> environment variable.</p></dd><dt id="uv-upgrade--types"><a href="#uv-upgrade--types"><code>--types</code></a> <i>types</i></dt><dd><p>Only search specific tables in pyproject.toml (case-insensitive). * <code>prod,dev,optional,groups</code> (default) * <code>prod,dev,opt,group</code> or <code>p,d,o,g</code> (abbreviated) * <code>prd,dev,extra,group</code> or <code>p,d,e,g</code> (optional / extra)</p>
+<p>May also be set with the <code>UV_UPGRADE_TYPES</code> environment variable.</p></dd><dt id="uv-upgrade--verbose"><a href="#uv-upgrade--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>
 
