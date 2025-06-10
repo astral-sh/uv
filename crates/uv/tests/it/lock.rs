@@ -21077,7 +21077,8 @@ fn lock_group_include_cycle() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Detected a cycle in `dependency-groups`: `bar` -> `foobar` -> `foo` -> `bar`
+    error: `project` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `bar` -> `foobar` -> `foo` -> `bar`
     ");
 
     Ok(())
@@ -21110,7 +21111,8 @@ fn lock_group_include_dev() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `foo` includes the `dev` group (`include = "dev"`), but only `tool.uv.dev-dependencies` was found. To reference the `dev` group via an `include`, remove the `tool.uv.dev-dependencies` section and add any development dependencies to the `dev` entry in the `[dependency-groups]` table instead.
+    error: `project` has malformed dependency groups
+      Caused by: Group `foo` includes the `dev` group (`include = "dev"`), but only `tool.uv.dev-dependencies` was found. To reference the `dev` group via an `include`, remove the `tool.uv.dev-dependencies` section and add any development dependencies to the `dev` entry in the `[dependency-groups]` table instead.
     "#);
 
     Ok(())
@@ -21140,7 +21142,8 @@ fn lock_group_include_missing() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to find group `bar` included by `foo`
+    error: `project` has malformed dependency groups
+      Caused by: Failed to find group `bar` included by `foo`
     ");
 
     Ok(())
@@ -21170,7 +21173,8 @@ fn lock_group_invalid_entry_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse entry in group `foo`: `invalid!`
+    error: `project` has malformed dependency groups
+      Caused by: Failed to parse entry in group `foo`: `invalid!`
       Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
     invalid!
            ^
@@ -21182,7 +21186,8 @@ fn lock_group_invalid_entry_package() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Failed to parse entry in group `foo`: `invalid!`
+    error: `project` has malformed dependency groups
+      Caused by: Failed to parse entry in group `foo`: `invalid!`
       Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
     invalid!
            ^
@@ -21287,7 +21292,8 @@ fn lock_group_invalid_entry_table() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Group `foo` contains an unknown dependency object specifier: {"bar": "unknown"}
+    error: `project` has malformed dependency groups
+      Caused by: Group `foo` contains an unknown dependency object specifier: {"bar": "unknown"}
     "#);
 
     Ok(())

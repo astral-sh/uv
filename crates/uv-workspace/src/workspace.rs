@@ -438,7 +438,7 @@ impl Workspace {
             // Get the requires-python for each enabled group on this package
             // We need to do full flattening here because include-group can transfer requires-python
             let dependency_groups =
-                FlatDependencyGroups::from_pyproject_toml(&member.pyproject_toml)?;
+                FlatDependencyGroups::from_pyproject_toml(member.root(), &member.pyproject_toml)?;
             let group_requires =
                 dependency_groups
                     .into_iter()
@@ -484,8 +484,10 @@ impl Workspace {
             Ok(BTreeMap::default())
         } else {
             // Otherwise, return the dependency groups in the non-project workspace root.
-            let dependency_groups =
-                FlatDependencyGroups::from_pyproject_toml(&self.pyproject_toml)?;
+            let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
+                &self.install_path,
+                &self.pyproject_toml,
+            )?;
             Ok(dependency_groups.into_inner())
         }
     }

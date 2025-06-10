@@ -1,11 +1,12 @@
-use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 use std::str::FromStr;
+use std::{collections::BTreeMap, path::Path};
 
 use thiserror::Error;
 use tracing::error;
 
 use uv_distribution_types::RequiresPython;
+use uv_fs::Simplified;
 use uv_normalize::{DEV_DEPENDENCIES, GroupName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::Pep508Error;
@@ -25,6 +26,7 @@ pub struct FlatDependencyGroup {
 
 impl FlatDependencyGroups {
     pub fn from_pyproject_toml(
+        path: &Path,
         pyproject_toml: &PyProjectToml,
     ) -> Result<Self, DependencyGroupError> {
         // Otherwise, return the dependency groups in the non-project workspace root.
@@ -56,7 +58,15 @@ impl FlatDependencyGroups {
             &dependency_groups,
             group_settings.inner(),
         )
-        .map_err(|err| err.with_dev_dependencies(dev_dependencies))?;
+        .map_err(|err| DependencyGroupError {
+            package: pyproject_toml
+                .project
+                .as_ref()
+                .map(|project| project.name.to_string())
+                .unwrap_or_default(),
+            path: path.user_display().to_string(),
+            error: err.with_dev_dependencies(dev_dependencies),
+        })?;
 
         // Add the `dev` group, if `dev-dependencies` is defined.
         if let Some(dev_dependencies) = dev_dependencies {
@@ -75,14 +85,14 @@ impl FlatDependencyGroups {
     fn from_dependency_groups(
         groups: &BTreeMap<&GroupName, &Vec<DependencyGroupSpecifier>>,
         settings: &BTreeMap<GroupName, DependencyGroupSettings>,
-    ) -> Result<Self, DependencyGroupError> {
+    ) -> Result<Self, DependencyGroupErrorInner> {
         fn resolve_group<'data>(
             resolved: &mut BTreeMap<GroupName, FlatDependencyGroup>,
             groups: &'data BTreeMap<&GroupName, &Vec<DependencyGroupSpecifier>>,
             settings: &BTreeMap<GroupName, DependencyGroupSettings>,
             name: &'data GroupName,
             parents: &mut Vec<&'data GroupName>,
-        ) -> Result<(), DependencyGroupError> {
+        ) -> Result<(), DependencyGroupErrorInner> {
             let Some(specifiers) = groups.get(name) else {
                 // Missing group
                 let parent_name = parents
@@ -90,7 +100,7 @@ impl FlatDependencyGroups {
                     .last()
                     .copied()
                     .expect("parent when group is missing");
-                return Err(DependencyGroupError::GroupNotFound(
+                return Err(DependencyGroupErrorInner::GroupNotFound(
                     name.clone(),
                     parent_name.clone(),
                 ));
@@ -98,7 +108,7 @@ impl FlatDependencyGroups {
 
             // "Dependency Group Includes MUST NOT include cycles, and tools SHOULD report an error if they detect a cycle."
             if parents.contains(&name) {
-                return Err(DependencyGroupError::DependencyGroupCycle(Cycle(
+                return Err(DependencyGroupErrorInner::DependencyGroupCycle(Cycle(
                     parents.iter().copied().cloned().collect(),
                 )));
             }
@@ -117,7 +127,7 @@ impl FlatDependencyGroups {
                         match uv_pep508::Requirement::<VerbatimParsedUrl>::from_str(requirement) {
                             Ok(requirement) => requirements.push(requirement),
                             Err(err) => {
-                                return Err(DependencyGroupError::GroupParseError(
+                                return Err(DependencyGroupErrorInner::GroupParseError(
                                     name.clone(),
                                     requirement.clone(),
                                     Box::new(err),
@@ -140,10 +150,12 @@ impl FlatDependencyGroups {
                         }
                     }
                     DependencyGroupSpecifier::Object(map) => {
-                        return Err(DependencyGroupError::DependencyObjectSpecifierNotSupported(
-                            name.clone(),
-                            map.clone(),
-                        ));
+                        return Err(
+                            DependencyGroupErrorInner::DependencyObjectSpecifierNotSupported(
+                                name.clone(),
+                                map.clone(),
+                            ),
+                        );
                     }
                 }
             }
@@ -223,7 +235,24 @@ impl IntoIterator for FlatDependencyGroups {
 }
 
 #[derive(Debug, Error)]
-pub enum DependencyGroupError {
+#[error("{} has malformed dependency groups", if path.is_empty() && package.is_empty() {
+    "project".to_string()
+} else if path.is_empty() {
+    format!("`{package}`")
+} else if package.is_empty() {
+    format!("`{path}`")
+} else {
+    format!("`{package} @ {path}")
+})]
+pub struct DependencyGroupError {
+    package: String,
+    path: String,
+    #[source]
+    error: DependencyGroupErrorInner,
+}
+
+#[derive(Debug, Error)]
+pub enum DependencyGroupErrorInner {
     #[error("Failed to parse entry in group `{0}`: `{1}`")]
     GroupParseError(
         GroupName,
@@ -242,7 +271,7 @@ pub enum DependencyGroupError {
     DependencyObjectSpecifierNotSupported(GroupName, BTreeMap<String, String>),
 }
 
-impl DependencyGroupError {
+impl DependencyGroupErrorInner {
     /// Enrich a [`DependencyGroupError`] with the `tool.uv.dev-dependencies` metadata, if applicable.
     #[must_use]
     pub fn with_dev_dependencies(
@@ -250,10 +279,10 @@ impl DependencyGroupError {
         dev_dependencies: Option<&Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
     ) -> Self {
         match self {
-            DependencyGroupError::GroupNotFound(group, parent)
+            Self::GroupNotFound(group, parent)
                 if dev_dependencies.is_some() && group == *DEV_DEPENDENCIES =>
             {
-                DependencyGroupError::DevGroupInclude(parent)
+                Self::DevGroupInclude(parent)
             }
             _ => self,
         }

@@ -4727,16 +4727,29 @@ fn run_groups_requires_python() -> Result<()> {
     ");
 
     // Enabling foo we can't find an interpreter
-    uv_snapshot!(context.filters(), context.run()
-        .arg("--group").arg("foo")
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
+    if cfg!(windows) {
+        uv_snapshot!(context.filters(), context.run()
+            .arg("--group").arg("foo")
+            .arg("python").arg("-c").arg("import typing_extensions"), @r"
+        success: false
+        exit_code: 2
+        ----- stdout -----
 
-    ----- stderr -----
-    error: No interpreter found for Python >=3.14 in managed installations or search path
-    ");
+        ----- stderr -----
+        error: No interpreter found for Python >=3.14 in managed installations, search path, or registry
+        ");
+    } else {
+        uv_snapshot!(context.filters(), context.run()
+            .arg("--group").arg("foo")
+            .arg("python").arg("-c").arg("import typing_extensions"), @r"
+        success: false
+        exit_code: 2
+        ----- stdout -----
+
+        ----- stderr -----
+        error: No interpreter found for Python >=3.14 in managed installations or search path
+        ");
+    }
 
     Ok(())
 }

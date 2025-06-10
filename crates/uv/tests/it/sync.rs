@@ -8944,7 +8944,8 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: `example` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @r"
@@ -8953,7 +8954,8 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: `example` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("test"), @r"
@@ -8962,7 +8964,8 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: `example` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("test").arg("--group").arg("magic"), @r"
@@ -8971,7 +8974,8 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: `example` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("magic"), @r"
@@ -8980,7 +8984,8 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: `example` has malformed dependency groups
+      Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     Ok(())

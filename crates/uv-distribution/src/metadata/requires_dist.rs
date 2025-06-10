@@ -108,6 +108,7 @@ impl RequiresDist {
         };
 
         let dependency_groups = FlatDependencyGroups::from_pyproject_toml(
+            project_workspace.current_project().root(),
             project_workspace.current_project().pyproject_toml(),
         )?;
 
