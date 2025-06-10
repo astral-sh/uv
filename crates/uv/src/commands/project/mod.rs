@@ -195,8 +195,14 @@ pub(crate) enum ProjectError {
     #[error("Environment markers `{0}` don't overlap with Python requirement `{1}`")]
     DisjointEnvironment(MarkerTreeContents, VersionSpecifiers),
 
-    #[error("The workspace contains conflicting Python requirements:\n{}", _0.iter().map(|(name, specifiers)| format!("- `{name}`: `{specifiers}`")).join("\n"))]
-    DisjointRequiresPython(BTreeMap<PackageName, VersionSpecifiers>),
+    #[error("The workspace contains conflicting Python requirements:\n{}", _0.iter().map(|((package, group), specifiers)| {
+        if let Some(group) = group {
+            format!("- `{package} --group {group}`: `{specifiers}`")
+        } else {
+            format!("- `{package}`: `{specifiers}`")
+        }
+    }).join("\n"))]
+    DisjointRequiresPython(BTreeMap<(PackageName, Option<GroupName>), VersionSpecifiers>),
 
     #[error("Environment marker is empty")]
     EmptyEnvironment,
@@ -432,20 +438,17 @@ pub(crate) fn find_requires_python(
     workspace: &Workspace,
     groups: &DependencyGroupsWithDefaults,
 ) -> Result<Option<RequiresPython>, ProjectError> {
+    let requires_python = workspace.requires_python(groups)?;
     // If there are no `Requires-Python` specifiers in the workspace, return `None`.
-    if workspace.requires_python(groups).next().is_none() {
+    if requires_python.is_empty() {
         return Ok(None);
     }
-    match RequiresPython::intersection(
-        workspace
-            .requires_python(groups)
-            .map(|(.., specifiers)| specifiers),
-    ) {
+    match RequiresPython::intersection(requires_python.iter().map(|(.., specifiers)| specifiers)) {
         Some(requires_python) => Ok(Some(requires_python)),
         None => Err(ProjectError::DisjointRequiresPython(
-            workspace
-                .requires_python(groups)
-                .map(|(name, specifiers)| (name.clone(), specifiers.clone()))
+            requires_python
+                .into_iter()
+                .map(|(package, group, specifiers)| ((package.clone(), group), specifiers))
                 .collect(),
         )),
     }

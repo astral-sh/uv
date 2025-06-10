@@ -440,8 +440,8 @@ async fn do_lock(
     let build_constraints = target.lower(build_constraints, index_locations, *sources)?;
     let dependency_groups = dependency_groups
         .into_iter()
-        .map(|(name, requirements)| {
-            let requirements = target.lower(requirements, index_locations, *sources)?;
+        .map(|(name, group)| {
+            let requirements = target.lower(group.requirements, index_locations, *sources)?;
             Ok((name, requirements))
         })
         .collect::<Result<BTreeMap<_, _>, ProjectError>>()?;

@@ -165,11 +165,18 @@ impl<'lock> InstallTarget<'lock> {
                         .requirements()
                         .into_iter()
                         .map(Cow::Owned)
-                        .chain(workspace.dependency_groups().ok().into_iter().flat_map(
-                            |dependency_groups| {
-                                dependency_groups.into_values().flatten().map(Cow::Owned)
-                            },
-                        ))
+                        .chain(
+                            workspace
+                                .workspace_dependency_groups()
+                                .ok()
+                                .into_iter()
+                                .flat_map(|dependency_groups| {
+                                    dependency_groups
+                                        .into_values()
+                                        .flat_map(|group| group.requirements)
+                                        .map(Cow::Owned)
+                                }),
+                        )
                         .chain(workspace.packages().values().flat_map(|member| {
                             // Iterate over all dependencies in each member.
                             let dependencies = member
@@ -316,9 +323,15 @@ impl<'lock> InstallTarget<'lock> {
                 let known_groups = member_packages
                     .iter()
                     .flat_map(|package| package.dependency_groups().keys().map(Cow::Borrowed))
-                    .chain(workspace.dependency_groups().ok().into_iter().flat_map(
-                        |dependency_groups| dependency_groups.into_keys().map(Cow::Owned),
-                    ))
+                    .chain(
+                        workspace
+                            .workspace_dependency_groups()
+                            .ok()
+                            .into_iter()
+                            .flat_map(|dependency_groups| {
+                                dependency_groups.into_keys().map(Cow::Owned)
+                            }),
+                    )
                     .collect::<FxHashSet<_>>();
 
                 for group in groups.explicit_names() {

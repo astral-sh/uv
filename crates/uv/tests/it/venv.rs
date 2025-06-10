@@ -509,49 +509,22 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
     );
 
     // With `requires-python = ">=3.10"` on the default group, we pick 3.10
+    // However non-default groups should not be consulted!
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
         name = "foo"
         version = "1.0.0"
-        requires-python = "<3.11"
+        requires-python = "<3.13"
         dependencies = []
         
         [dependency-groups]
         dev = ["sortedcontainers"]
+        other = ["sniffio"]
 
         [tool.uv.dependency-groups]
         dev = {requires-python = ">=3.10"}
-        "#
-    })?;
-
-    uv_snapshot!(context.filters(), context.venv(), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
-    Creating virtual environment at: .venv
-    Activate with: source .venv/[BIN]/activate
-    "
-    );
-
-    // When the top-level requires-python and default group requires-python
-    // both apply, their intersection is used.
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
-        [project]
-        name = "foo"
-        version = "1.0.0"
-        requires-python = ">=3.11"
-        dependencies = []
-        
-        [dependency-groups]
-        dev = ["sortedcontainers"]
-
-        [tool.uv.dependency-groups]
-        dev = {requires-python = ">=3.10"}
+        other = {requires-python = ">=3.12"}
         "#
     })?;
 
@@ -568,7 +541,41 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
     );
 
     // When the top-level requires-python and default group requires-python
-    // both apply, their intersection is used.
+    // both apply, their intersection is used. However non-default groups
+    // should not be consulted!
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11"
+        dependencies = []
+        
+        [dependency-groups]
+        dev = ["sortedcontainers"]
+        other = ["sniffio"]
+
+        [tool.uv.dependency-groups]
+        dev = {requires-python = ">=3.10"}
+        other = {requires-python = ">=3.12"}
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    "
+    );
+
+    // When the top-level requires-python and default group requires-python
+    // both apply, their intersection is used. However non-default groups
+    // should not be consulted!
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
@@ -579,9 +586,11 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         
         [dependency-groups]
         dev = ["sortedcontainers"]
+        other = ["sniffio"]
 
         [tool.uv.dependency-groups]
         dev = {requires-python = ">=3.11"}
+        other = {requires-python = ">=3.12"}
         "#
     })?;
 
@@ -624,6 +633,38 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "###
+    );
+
+    // We error if there's no compatible version
+    // non-default groups are not consulted here!
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = "<3.12"
+        dependencies = []
+        
+        [dependency-groups]
+        dev = ["sortedcontainers"]
+        other = ["sniffio"]
+
+        [tool.uv.dependency-groups]
+        dev = {requires-python = ">=3.12"}
+        other = {requires-python = ">=3.11"}
+        "#
+    })?;
+
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × The workspace contains conflicting Python requirements:
+      │ - `foo`: `<3.12`
+      │ - `foo --group dev`: `>=3.12`
+    "
     );
 
     Ok(())

@@ -21071,15 +21071,14 @@ fn lock_group_include_cycle() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ╰─▶ Detected a cycle in `dependency-groups`: `bar` -> `foobar` -> `foo` -> `bar`
-    "###);
+    error: Detected a cycle in `dependency-groups`: `bar` -> `foobar` -> `foo` -> `bar`
+    ");
 
     Ok(())
 }
@@ -21105,15 +21104,14 @@ fn lock_group_include_dev() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ╰─▶ Group `foo` includes the `dev` group (`include = "dev"`), but only `tool.uv.dev-dependencies` was found. To reference the `dev` group via an `include`, remove the `tool.uv.dev-dependencies` section and add any development dependencies to the `dev` entry in the `[dependency-groups]` table instead.
-    "###);
+    error: Group `foo` includes the `dev` group (`include = "dev"`), but only `tool.uv.dev-dependencies` was found. To reference the `dev` group via an `include`, remove the `tool.uv.dev-dependencies` section and add any development dependencies to the `dev` entry in the `[dependency-groups]` table instead.
+    "#);
 
     Ok(())
 }
@@ -21136,15 +21134,14 @@ fn lock_group_include_missing() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ╰─▶ Failed to find group `bar` included by `foo`
-    "###);
+    error: Failed to find group `bar` included by `foo`
+    ");
 
     Ok(())
 }
@@ -21167,31 +21164,29 @@ fn lock_group_invalid_entry_package() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry in group `foo`: `invalid!`
-      ╰─▶ no such comparison operator "!", must be one of ~= == != <= >= < > ===
-          invalid!
-                 ^
-    "###);
+    error: Failed to parse entry in group `foo`: `invalid!`
+      Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
+    invalid!
+           ^
+    "#);
 
-    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--group").arg("foo"), @r#"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ├─▶ Failed to parse entry in group `foo`: `invalid!`
-      ╰─▶ no such comparison operator "!", must be one of ~= == != <= >= < > ===
-          invalid!
-                 ^
-    "###);
+    error: Failed to parse entry in group `foo`: `invalid!`
+      Caused by: no such comparison operator "!", must be one of ~= == != <= >= < > ===
+    invalid!
+           ^
+    "#);
 
     Ok(())
 }
@@ -21288,12 +21283,11 @@ fn lock_group_invalid_entry_table() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.lock(), @r#"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `project @ file://[TEMP_DIR]/`
-      ╰─▶ Group `foo` contains an unknown dependency object specifier: {"bar": "unknown"}
+    error: Group `foo` contains an unknown dependency object specifier: {"bar": "unknown"}
     "#);
 
     Ok(())

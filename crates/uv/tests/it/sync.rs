@@ -8940,52 +8940,47 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
 
     uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `example @ file://[TEMP_DIR]/`
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `example @ file://[TEMP_DIR]/`
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("test"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `example @ file://[TEMP_DIR]/`
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("test").arg("--group").arg("magic"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `example @ file://[TEMP_DIR]/`
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     uv_snapshot!(context.filters(), context.sync().arg("--group").arg("dev").arg("--group").arg("magic"), @r"
     success: false
-    exit_code: 1
+    exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to build `example @ file://[TEMP_DIR]/`
-      ╰─▶ Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
+    error: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
     Ok(())

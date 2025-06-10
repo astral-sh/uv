@@ -7,26 +7,77 @@ use tracing::error;
 
 use uv_distribution_types::RequiresPython;
 use uv_normalize::{DEV_DEPENDENCIES, GroupName};
+use uv_pep440::VersionSpecifiers;
 use uv_pep508::Pep508Error;
 use uv_pypi_types::{DependencyGroupSpecifier, VerbatimParsedUrl};
 
-use crate::pyproject::DependencyGroupSettings;
+use crate::pyproject::{DependencyGroupSettings, PyProjectToml, ToolUvDependencyGroups};
 
 /// PEP 735 dependency groups, with any `include-group` entries resolved.
 #[derive(Debug, Default, Clone)]
-pub struct FlatDependencyGroups(
-    BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-);
+pub struct FlatDependencyGroups(BTreeMap<GroupName, FlatDependencyGroup>);
+
+#[derive(Debug, Default, Clone)]
+pub struct FlatDependencyGroup {
+    pub requirements: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
+    pub requires_python: Option<VersionSpecifiers>,
+}
 
 impl FlatDependencyGroups {
+    pub fn from_pyproject_toml(
+        pyproject_toml: &PyProjectToml,
+    ) -> Result<Self, DependencyGroupError> {
+        // Otherwise, return the dependency groups in the non-project workspace root.
+        // First, collect `tool.uv.dev_dependencies`
+        let dev_dependencies = pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.dev_dependencies.as_ref());
+
+        // Then, collect `dependency-groups`
+        let dependency_groups = pyproject_toml
+            .dependency_groups
+            .iter()
+            .flatten()
+            .collect::<BTreeMap<_, _>>();
+
+        // Get additional settings
+        let empty_settings = ToolUvDependencyGroups::default();
+        let group_settings = pyproject_toml
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.dependency_groups.as_ref())
+            .unwrap_or(&empty_settings);
+
+        // Flatten the dependency groups.
+        let mut dependency_groups = FlatDependencyGroups::from_dependency_groups(
+            &dependency_groups,
+            group_settings.inner(),
+        )
+        .map_err(|err| err.with_dev_dependencies(dev_dependencies))?;
+
+        // Add the `dev` group, if `dev-dependencies` is defined.
+        if let Some(dev_dependencies) = dev_dependencies {
+            dependency_groups
+                .entry(DEV_DEPENDENCIES.clone())
+                .or_insert_with(FlatDependencyGroup::default)
+                .requirements
+                .extend(dev_dependencies.clone());
+        }
+
+        Ok(dependency_groups)
+    }
+
     /// Resolve the dependency groups (which may contain references to other groups) into concrete
     /// lists of requirements.
-    pub fn from_dependency_groups(
+    fn from_dependency_groups(
         groups: &BTreeMap<&GroupName, &Vec<DependencyGroupSpecifier>>,
         settings: &BTreeMap<GroupName, DependencyGroupSettings>,
     ) -> Result<Self, DependencyGroupError> {
         fn resolve_group<'data>(
-            resolved: &mut BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+            resolved: &mut BTreeMap<GroupName, FlatDependencyGroup>,
             groups: &'data BTreeMap<&GroupName, &Vec<DependencyGroupSpecifier>>,
             settings: &BTreeMap<GroupName, DependencyGroupSettings>,
             name: &'data GroupName,
@@ -59,6 +110,7 @@ impl FlatDependencyGroups {
 
             parents.push(name);
             let mut requirements = Vec::with_capacity(specifiers.len());
+            let mut full_requires_python = None;
             for specifier in *specifiers {
                 match specifier {
                     DependencyGroupSpecifier::Requirement(requirement) => {
@@ -75,8 +127,17 @@ impl FlatDependencyGroups {
                     }
                     DependencyGroupSpecifier::IncludeGroup { include_group } => {
                         resolve_group(resolved, groups, settings, include_group, parents)?;
-                        requirements
-                            .extend(resolved.get(include_group).into_iter().flatten().cloned());
+                        if let Some(included) = resolved.get(include_group) {
+                            requirements.extend(included.requirements.iter().cloned());
+                            let versions = full_requires_python
+                                .into_iter()
+                                .flatten()
+                                .chain(included.requires_python.clone().into_iter().flatten())
+                                .collect::<Vec<_>>();
+                            let new_requires_python = VersionSpecifiers::from_iter(versions);
+                            full_requires_python =
+                                (!new_requires_python.is_empty()).then_some(new_requires_python);
+                        }
                     }
                     DependencyGroupSpecifier::Object(map) => {
                         return Err(DependencyGroupError::DependencyObjectSpecifierNotSupported(
@@ -90,8 +151,19 @@ impl FlatDependencyGroups {
             let empty_settings = DependencyGroupSettings::default();
             let DependencyGroupSettings { requires_python } =
                 settings.get(name).unwrap_or(&empty_settings);
-            // requires-python should get splatted onto everything
             if let Some(requires_python) = requires_python {
+                // Merge in this requires-python to the full flattened version
+                let versions = full_requires_python
+                    .into_iter()
+                    .flatten()
+                    .chain(requires_python.clone())
+                    .collect::<Vec<_>>();
+                let new_requires_python = VersionSpecifiers::from_iter(versions);
+                full_requires_python =
+                    (!new_requires_python.is_empty()).then_some(new_requires_python);
+                // Merge in this requires-python to every requirement of this group
+                // We don't need to merge the full_requires_python because included
+                // groups already applied theirs.
                 for requirement in &mut requirements {
                     let extra_markers =
                         RequiresPython::from_specifiers(requires_python).to_marker_tree();
@@ -101,7 +173,13 @@ impl FlatDependencyGroups {
 
             parents.pop();
 
-            resolved.insert(name.clone(), requirements);
+            resolved.insert(
+                name.clone(),
+                FlatDependencyGroup {
+                    requirements,
+                    requires_python: full_requires_python,
+                },
+            );
             Ok(())
         }
 
@@ -114,45 +192,30 @@ impl FlatDependencyGroups {
     }
 
     /// Return the requirements for a given group, if any.
-    pub fn get(
-        &self,
-        group: &GroupName,
-    ) -> Option<&Vec<uv_pep508::Requirement<VerbatimParsedUrl>>> {
+    pub fn get(&self, group: &GroupName) -> Option<&FlatDependencyGroup> {
         self.0.get(group)
     }
 
     /// Return the entry for a given group, if any.
-    pub fn entry(
-        &mut self,
-        group: GroupName,
-    ) -> Entry<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>> {
+    pub fn entry(&mut self, group: GroupName) -> Entry<GroupName, FlatDependencyGroup> {
         self.0.entry(group)
     }
 
     /// Consume the [`FlatDependencyGroups`] and return the inner map.
-    pub fn into_inner(self) -> BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>> {
+    pub fn into_inner(self) -> BTreeMap<GroupName, FlatDependencyGroup> {
         self.0
     }
 }
 
-impl FromIterator<(GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>)>
-    for FlatDependencyGroups
-{
-    fn from_iter<
-        T: IntoIterator<Item = (GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>)>,
-    >(
-        iter: T,
-    ) -> Self {
+impl FromIterator<(GroupName, FlatDependencyGroup)> for FlatDependencyGroups {
+    fn from_iter<T: IntoIterator<Item = (GroupName, FlatDependencyGroup)>>(iter: T) -> Self {
         Self(iter.into_iter().collect())
     }
 }
 
 impl IntoIterator for FlatDependencyGroups {
-    type Item = (GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>);
-    type IntoIter = std::collections::btree_map::IntoIter<
-        GroupName,
-        Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
-    >;
+    type Item = (GroupName, FlatDependencyGroup);
+    type IntoIter = std::collections::btree_map::IntoIter<GroupName, FlatDependencyGroup>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()

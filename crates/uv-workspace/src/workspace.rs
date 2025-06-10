@@ -18,10 +18,9 @@ use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
 use uv_static::EnvVars;
 use uv_warnings::warn_user_once;
 
-use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
+use crate::dependency_groups::{DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups};
 use crate::pyproject::{
-    Project, PyProjectToml, PyprojectTomlError, Sources, ToolUvDependencyGroups, ToolUvSources,
-    ToolUvWorkspace,
+    Project, PyProjectToml, PyprojectTomlError, Sources, ToolUvSources, ToolUvWorkspace,
 };
 
 type WorkspaceMembers = Arc<BTreeMap<PackageName, WorkspaceMember>>;
@@ -415,11 +414,14 @@ impl Workspace {
     }
 
     /// Returns an iterator over the `requires-python` values for each member of the workspace.
+    #[allow(clippy::type_complexity)]
     pub fn requires_python(
         &self,
         groups: &DependencyGroupsWithDefaults,
-    ) -> impl Iterator<Item = (&PackageName, &VersionSpecifiers)> {
-        self.packages().iter().flat_map(move |(name, member)| {
+    ) -> Result<Vec<(&PackageName, Option<GroupName>, VersionSpecifiers)>, DependencyGroupError>
+    {
+        let mut requires = Vec::new();
+        for (name, member) in self.packages() {
             // Get the top-level requires-python for this package, which is always active
             //
             // Arguably we could check groups.prod() to disable this, since, the requires-python
@@ -430,35 +432,28 @@ impl Workspace {
                 .project
                 .as_ref()
                 .and_then(|project| project.requires_python.as_ref())
-                .map(|requires_python| (name, requires_python));
+                .map(|requires_python| (name, None, requires_python.clone()));
+            requires.extend(top_requires);
 
             // Get the requires-python for each enabled group on this package
-            let group_requires = member
-                .pyproject_toml()
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.dependency_groups.as_ref())
-                .map(move |settings| {
-                    settings
-                        .inner()
-                        .iter()
-                        .filter_map(move |(group_name, settings)| {
-                            if groups.contains(group_name) {
-                                settings
-                                    .requires_python
-                                    .as_ref()
-                                    .map(|requires_python| (name, requires_python))
-                            } else {
-                                None
-                            }
-                        })
-                })
-                .into_iter()
-                .flatten();
-
-            top_requires.into_iter().chain(group_requires)
-        })
+            // We need to do full flattening here because include-group can transfer requires-python
+            let dependency_groups =
+                FlatDependencyGroups::from_pyproject_toml(&member.pyproject_toml)?;
+            let group_requires =
+                dependency_groups
+                    .into_iter()
+                    .filter_map(move |(group_name, flat_group)| {
+                        if groups.contains(&group_name) {
+                            flat_group
+                                .requires_python
+                                .map(|requires_python| (name, Some(group_name), requires_python))
+                        } else {
+                            None
+                        }
+                    });
+            requires.extend(group_requires);
+        }
+        Ok(requires)
     }
 
     /// Returns any requirements that are exclusive to the workspace root, i.e., not included in
@@ -476,12 +471,9 @@ impl Workspace {
     /// corresponding `pyproject.toml`.
     ///
     /// Otherwise, returns an empty list.
-    pub fn dependency_groups(
+    pub fn workspace_dependency_groups(
         &self,
-    ) -> Result<
-        BTreeMap<GroupName, Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-        DependencyGroupError,
-    > {
+    ) -> Result<BTreeMap<GroupName, FlatDependencyGroup>, DependencyGroupError> {
         if self
             .packages
             .values()
@@ -492,47 +484,8 @@ impl Workspace {
             Ok(BTreeMap::default())
         } else {
             // Otherwise, return the dependency groups in the non-project workspace root.
-            // First, collect `tool.uv.dev_dependencies`
-            let dev_dependencies = self
-                .pyproject_toml
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.dev_dependencies.as_ref());
-
-            // Then, collect `dependency-groups`
-            let dependency_groups = self
-                .pyproject_toml
-                .dependency_groups
-                .iter()
-                .flatten()
-                .collect::<BTreeMap<_, _>>();
-
-            // Get additional settings
-            let empty_settings = ToolUvDependencyGroups::default();
-            let group_settings = self
-                .pyproject_toml
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.dependency_groups.as_ref())
-                .unwrap_or(&empty_settings);
-
-            // Flatten the dependency groups.
-            let mut dependency_groups = FlatDependencyGroups::from_dependency_groups(
-                &dependency_groups,
-                group_settings.inner(),
-            )
-            .map_err(|err| err.with_dev_dependencies(dev_dependencies))?;
-
-            // Add the `dev` group, if `dev-dependencies` is defined.
-            if let Some(dev_dependencies) = dev_dependencies {
-                dependency_groups
-                    .entry(DEV_DEPENDENCIES.clone())
-                    .or_insert_with(Vec::new)
-                    .extend(dev_dependencies.clone());
-            }
-
+            let dependency_groups =
+                FlatDependencyGroups::from_pyproject_toml(&self.pyproject_toml)?;
             Ok(dependency_groups.into_inner())
         }
     }
