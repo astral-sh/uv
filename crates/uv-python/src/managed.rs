@@ -6,14 +6,14 @@ use std::io::{self, Write};
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-#[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 use fs_err as fs;
 use itertools::Itertools;
 use same_file::is_same_file;
 use thiserror::Error;
 use tracing::{debug, warn};
+#[cfg(windows)]
+use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
 
 use uv_fs::{LockedFile, Simplified, replace_symlink, symlink_or_copy_file};
 use uv_state::{StateBucket, StateStore};
@@ -355,7 +355,7 @@ impl ManagedPythonInstallation {
 
     /// The path to this managed installation's Python executable.
     ///
-    /// If the installation has multiple execututables i.e., `python`, `python3`, etc., this will
+    /// If the installation has multiple executables i.e., `python`, `python3`, etc., this will
     /// return the _canonical_ executable name which the other names link to. On Unix, this is
     /// `python{major}.{minor}{variant}` and on Windows, this is `python{exe}`.
     ///
@@ -524,9 +524,7 @@ impl ManagedPythonInstallation {
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
     pub fn ensure_minor_version_link(&self) -> Result<(), Error> {
-        if let Some(directory_symlink) =
-            DirectorySymlink::from_executable(self.executable(false).as_path(), &self.key)
-        {
+        if let Some(directory_symlink) = DirectorySymlink::from_installation(self) {
             directory_symlink.create_directory()?;
         }
         Ok(())
@@ -596,15 +594,8 @@ impl ManagedPythonInstallation {
         Ok(())
     }
 
-    /// Create a link to the managed Python executable.
-    ///
-    /// If the file already exists at the target path, an error will be returned.
-    pub fn create_bin_link(&self, target: &Path) -> Result<(), Error> {
-        create_bin_link(target, self.executable(false))
-    }
-
     /// Returns `true` if the path is a link to this installation's binary, e.g., as created by
-    /// [`ManagedPythonInstallation::create_bin_link`].
+    /// [`create_bin_link`].
     pub fn is_bin_link(&self, path: &Path) -> bool {
         if cfg!(unix) {
             is_same_file(path, self.executable(false)).unwrap_or_default()
@@ -615,7 +606,11 @@ impl ManagedPythonInstallation {
             if !matches!(launcher.kind, uv_trampoline_builder::LauncherKind::Python) {
                 return false;
             }
-            launcher.python_path == self.executable(false)
+            // We canonicalize the target path of the launcher in case it includes a minor version
+            // junction directory. If canonicalization fails, we check against the launcher path
+            // directly.
+            dunce::canonicalize(&launcher.python_path).unwrap_or(launcher.python_path)
+                == self.executable(false)
         } else {
             unreachable!("Only Windows and Unix are supported")
         }
@@ -705,8 +700,7 @@ impl DirectorySymlink {
         let executable_name = executable
             .file_name()
             .expect("Executable file name should exist");
-        let symlink_directory_name =
-            format!("{}", PythonInstallationMinorVersionKey::ref_cast(key));
+        let symlink_directory_name = PythonInstallationMinorVersionKey::ref_cast(key).to_string();
         let parent = executable
             .parent()
             .expect("Executable should have parent directory");
@@ -806,11 +800,11 @@ impl DirectorySymlink {
     }
 }
 
-/// Takes the base directory of a Python installation and an executable name and
-/// derives the full path to the executable. On Unix, this is, e.g., `<base>/bin/python3.10`.
-/// On Windows, this is, e.g., `<base>\python.exe`.
+/// Derive the full path to an executable from the given base path and executable
+/// name. On Unix, this is, e.g., `<base>/bin/python3.10`. On Windows, this is,
+/// e.g., `<base>\python.exe`.
 pub fn executable_path_from_base(
-    home: &Path,
+    base: &Path,
     executable_name: &str,
     implementation: &LenientImplementationName,
 ) -> PathBuf {
@@ -820,9 +814,9 @@ pub fn executable_path_from_base(
             &LenientImplementationName::Known(ImplementationName::GraalPy)
         )
     {
-        home.join("bin").join(executable_name)
+        base.join("bin").join(executable_name)
     } else if cfg!(windows) {
-        home.join(executable_name)
+        base.join(executable_name)
     } else {
         unimplemented!("Only Windows and Unix systems are supported.")
     }
