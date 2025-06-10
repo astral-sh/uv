@@ -300,7 +300,7 @@ If dependency resolution fails due to a transitive pre-release, uv will prompt u
 
 Alternatively, the transitive dependency can be added as a [constraint](#dependency-constraints) or
 direct dependency (i.e. in `requirements.in` or `pyproject.toml`) with a pre-release version
-specifier (e.g., `flask>=2.0.0rc1`) to opt-in to pre-release support for that specific dependency.
+specifier (e.g., `flask>=2.0.0rc1`) to opt in to pre-release support for that specific dependency.
 
 Pre-releases are
 [notoriously difficult](https://pubgrub-rs-guide.netlify.app/limitations/prerelease_versions) to
