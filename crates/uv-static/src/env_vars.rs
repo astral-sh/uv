@@ -1151,6 +1151,10 @@ impl EnvVars {
     #[attr_added_in("0.5.31")]
     pub const UV_RUN_MAX_RECURSION_DEPTH: &'static str = "UV_RUN_MAX_RECURSION_DEPTH";
 
+    /// Should `uv upgrade` allow recursive search for pyproject.toml files?
+    #[attr_hidden]
+    pub const UV_UPGRADE_RECURSIVE: &'static str = "UV_UPGRADE_RECURSIVE";
+
     /// Overrides terminal width used for wrapping. This variable is not read by uv directly.
     ///
     /// This is a quasi-standard variable, described, e.g., in `ncurses(3x)`.

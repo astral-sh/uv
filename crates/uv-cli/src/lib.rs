@@ -671,6 +671,10 @@ pub struct UpgradeProjectArgs {
     #[arg(long)]
     pub dry_run: bool,
 
+    /// Search recursively for pyproject.toml files.
+    #[arg(long, env = EnvVars::UV_UPGRADE_RECURSIVE)]
+    pub recursive: bool,
+
     /// The Python interpreter to use during resolution (overrides pyproject.toml).
     ///
     /// A Python interpreter is required for building source distributions to determine package
