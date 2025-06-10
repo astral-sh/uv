@@ -5557,6 +5557,7 @@ dependencies = [
  "once_cell",
  "owo-colors",
  "procfs",
+ "ref-cast",
  "regex",
  "reqwest",
  "reqwest-middleware",
