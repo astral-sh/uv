@@ -297,17 +297,21 @@ jobs:
 
       # Get crash dumps to debug the `exit_code: -1073741819` failures
       - name: Configure crash dumps
-        if: runner.os == 'Windows'
         shell: powershell
         run: |
           $dumps = "$env:GITHUB_WORKSPACE\dumps"
-          New-Item -Path $dumps -ItemType Directory -Force
+          New-Item -Path $dumps -ItemType Directory -Force | Out-Null
 
-          # https://github.com/microsoft/terminal/wiki/Troubleshooting-Tips#capture-automatically
+          # Configure crash dumps via registry
           $reg = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps"
-          New-Item -Path $reg -Force | Out-Null
+          if (!(Test-Path $reg)) {
+            New-Item -Path $reg -Force | Out-Null
+          }
           Set-ItemProperty -Path $reg -Name "DumpFolder" -Value $dumps
           Set-ItemProperty -Path $reg -Name "DumpType" -Value 2
+          Set-ItemProperty -Path $reg -Name "DumpCount" -Value 10
+
+          echo "RUST_BACKTRACE=full" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: "Cargo test"
         id: test
@@ -317,13 +321,64 @@ jobs:
           # Avoid permission errors during concurrent tests
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
-        shell: bash
+          # Enhanced crash dump collection
+          RUST_BACKTRACE: full
+        shell: powershell
         run: |
-          cargo nextest run \
-            --no-default-features \
-            --features python,pypi,python-managed \
-            --workspace \
-            --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+          Write-Host "=== Starting cargo test with crash monitoring ==="
+
+          $dumps = "$env:GITHUB_WORKSPACE\dumps"
+          $env:_NT_SYMBOL_PATH = "srv*c:\symbols*https://msdl.microsoft.com/download/symbols"
+
+          # Monitor for processes and crashes
+          $initialDumps = @()
+          if (Test-Path "$dumps\*.dmp") {
+            $initialDumps = Get-ChildItem "$dumps\*.dmp"
+          }
+          Write-Host "Initial dump count: $($initialDumps.Count)"
+
+          # Execute cargo test
+          try {
+            Write-Host "Executing: cargo nextest run --no-default-features --features python,pypi,python-managed --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow"
+            $exitCode = 0
+            & cargo nextest run --no-default-features --features python,pypi,python-managed --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+            $exitCode = $LASTEXITCODE
+            Write-Host "Cargo test completed with exit code: $exitCode"
+          } catch {
+            Write-Host "Exception during cargo test: $_"
+            $exitCode = 1
+          }
+
+          # Check for new crash dumps
+          $finalDumps = @()
+          if (Test-Path "$dumps\*.dmp") {
+            $finalDumps = Get-ChildItem "$dumps\*.dmp"
+          }
+
+          $newDumpCount = $finalDumps.Count - $initialDumps.Count
+          if ($newDumpCount -gt 0) {
+            Write-Host "CRASH DETECTED: Found $newDumpCount new crash dump(s)!"
+            $finalDumps | Sort-Object LastWriteTime | Select-Object -Last $newDumpCount | ForEach-Object {
+              Write-Host "New crash dump: $($_.Name) (Size: $($_.Length) bytes, Created: $($_.LastWriteTime))"
+            }
+          } else {
+            Write-Host "No new crash dumps detected"
+          }
+
+          # Also check Windows Event Log for application crashes
+          try {
+            $crashEvents = Get-WinEvent -FilterHashtable @{LogName='Application'; Id=1000; StartTime=(Get-Date).AddMinutes(-30)} -ErrorAction SilentlyContinue | Where-Object {$_.Message -like "*cargo*" -or $_.Message -like "*uv*" -or $_.Message -like "*nextest*"}
+            if ($crashEvents) {
+              Write-Host "Found $($crashEvents.Count) application crash event(s) in Windows Event Log:"
+              $crashEvents | ForEach-Object {
+                Write-Host "Event: $($_.TimeCreated) - $($_.LevelDisplayName) - $($_.Message.Substring(0, [Math]::Min(200, $_.Message.Length)))"
+              }
+            }
+          } catch {
+            Write-Host "Could not check Windows Event Log: $_"
+          }
+
+          exit $exitCode
 
       # Get crash dumps to debug the `exit_code: -1073741819` failures (contd.)
       - name: Analyze crashes
@@ -331,22 +386,48 @@ jobs:
         shell: powershell
         run: |
           $dumps = Get-ChildItem "$env:GITHUB_WORKSPACE\dumps\*.dmp" -ErrorAction SilentlyContinue
-          if (!$dumps) { exit 0 }
-
-          Write-Host "Found $($dumps.Count) crash dump(s)"
-
-          # Download cdb if needed
-          $cdb = "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe"
-          if (!(Test-Path $cdb)) {
-            # https://github.com/microsoft/react-native-windows/blob/f1570a5ef1c4fc1e78d0a0ad5af848ab91a4061c/vnext/Scripts/Analyze-Crash.ps1#L44-L56
-            Invoke-WebRequest "https://go.microsoft.com/fwlink/?linkid=2173743" -OutFile "$env:TEMP\sdk.exe"
-            Start-Process "$env:TEMP\sdk.exe" -ArgumentList "/features OptionId.WindowsDesktopDebuggers /quiet" -Wait
+          if (!$dumps) {
+            Write-Host "No crash dumps found"
+            exit 0
           }
 
-          # Analyze each dump
+          Write-Host "Found $($dumps.Count) crash dump(s)"
+          $dumps | ForEach-Object { Write-Host "- $($_.Name) ($($_.Length) bytes)" }
+
+          # Use cdb for analysis - install if needed
+          $cdb = "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe"
+          if (!(Test-Path $cdb)) {
+            Write-Host "Debugging tools not found, installing..."
+            try {
+              Invoke-WebRequest "https://go.microsoft.com/fwlink/?linkid=2173743" -OutFile "$env:TEMP\winsdksetup.exe"
+              Start-Process "$env:TEMP\winsdksetup.exe" -ArgumentList "/features OptionId.WindowsDesktopDebuggers /quiet" -Wait
+              if (!(Test-Path $cdb)) {
+                Write-Host "CDB still not found after installation, skipping detailed analysis"
+                return
+              }
+            } catch {
+              Write-Host "Failed to install debugging tools: $_"
+              return
+            }
+          }
+
+          # Analyze each dump with comprehensive output
           foreach ($dump in $dumps) {
-            Write-Host "`n=== $($dump.Name) ==="
-            & $cdb -z $dump -c "!analyze -v; .ecxr; k; q" 2>&1 | Select-String -Pattern "(ExceptionCode:|SYMBOL_NAME:|IMAGE_NAME:|STACK_TEXT:)" -Context 0,2
+            Write-Host "`n=== Analyzing $($dump.Name) ==="
+            try {
+              # Get basic crash info
+              & $cdb -z $dump -c "!analyze -v; .ecxr; k 20; ~*k; lm; q" 2>&1 | Tee-Object -Variable output
+
+              # Extract key crash information
+              $output | Select-String -Pattern "(EXCEPTION_RECORD|FAULTING_IP|SYMBOL_NAME|MODULE_NAME|IMAGE_NAME|STACK_TEXT|FOLLOWUP_NAME)" -Context 0,1
+
+              # Get stack trace around crash
+              Write-Host "`n--- Stack Trace ---"
+              $output | Select-String -Pattern "^[0-9a-f]{8}|Child.*SP|RetAddr.*Args" | Select-Object -First 20
+
+            } catch {
+              Write-Host "Failed to analyze $($dump.Name): $_"
+            }
           }
 
       - name: Upload crash dumps
