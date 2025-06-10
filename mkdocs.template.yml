@@ -40,6 +40,7 @@ repo_name: uv
 site_author: charliermarsh
 site_url: https://docs.astral.sh/uv/
 site_dir: site/uv
+site_description: uv is an extremely fast Python package and project manager, written in Rust.
 markdown_extensions:
   - admonition
   - pymdownx.details
@@ -80,6 +81,68 @@ plugins:
         "configuration/files.md": "concepts/configuration-files.md"
         "configuration/indexes.md": "concepts/indexes.md"
         "configuration/environment.md": "reference/environment.md"
+  - llmstxt:
+      markdown_description: |
+        You can use uv to install Python dependencies, run scripts, manage virtual environments,
+        build and publish packages, and even install Python itself. uv is capable of replacing
+        `pip`, `pip-tools`, `pipx`, `poetry`, `pyenv`, `twine`, `virtualenv`, and more.
+
+        uv includes both a pip-compatible CLI (prepend `uv` to a pip command, e.g., `uv pip install ruff`)
+        and a first-class project interface (e.g., `uv add ruff`) complete with lockfiles and
+        workspace support.
+      sections:
+        Getting started:
+          - getting-started/installation.md
+          - getting-started/first-steps.md
+          - getting-started/features.md
+        Guides:
+          - guides/install-python.md
+          - guides/scripts.md
+          - guides/tools.md
+          - guides/projects.md
+          - guides/package.md
+        Integrations:
+          - guides/integration/docker.md
+          - guides/integration/jupyter.md
+          - guides/integration/marimo.md
+          - guides/integration/github.md
+          - guides/integration/gitlab.md
+          - guides/integration/pre-commit.md
+          - guides/integration/pytorch.md
+          - guides/integration/fastapi.md
+          - guides/integration/alternative-indexes.md
+          - guides/integration/dependency-bots.md
+          - guides/integration/aws-lambda.md
+        Projects:
+          - concepts/projects/layout.md
+          - concepts/projects/init.md
+          - concepts/projects/dependencies.md
+          - concepts/projects/run.md
+          - concepts/projects/sync.md
+          - concepts/projects/config.md
+          - concepts/projects/build.md
+          - concepts/projects/workspaces.md
+        Features:
+          - concepts/tools.md
+          - concepts/python-versions.md
+          - concepts/configuration-files.md
+          - concepts/indexes.md
+          - concepts/resolution.md
+          - concepts/build-backend.md
+          - concepts/authentication.md
+          - concepts/cache.md
+        The pip interface:
+          - pip/environments.md
+          - pip/packages.md
+          - pip/inspection.md
+          - pip/dependencies.md
+          - pip/compile.md
+          - pip/compatibility.md
+        Reference:
+          - reference/cli.md
+          - reference/settings.md
+          - reference/environment.md
+          - reference/installer.md
 extra_css:
   - stylesheets/extra.css
 extra_javascript:
