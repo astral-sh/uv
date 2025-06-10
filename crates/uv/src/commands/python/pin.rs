@@ -110,6 +110,12 @@ pub(crate) async fn pin(
             warn_user_once!("{err}");
             None
         }
+        // If there was some other error, log it
+        Err(err) if !resolved => {
+            debug!("{err}");
+            None
+        }
+        // If `resolved` was requested, we must find an interpreter — fail otherwise
         Err(err) => return Err(err.into()),
     };
 
