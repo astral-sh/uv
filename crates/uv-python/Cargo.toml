@@ -38,6 +38,7 @@ uv-warnings = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true, optional = true }
 configparser = { workspace = true }
+dunce = { workspace = true }
 fs-err = { workspace = true, features = ["tokio"] }
 futures = { workspace = true }
 goblin = { workspace = true, default-features = false }
