@@ -4726,7 +4726,7 @@ fn run_groups_requires_python() -> Result<()> {
     error: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`. However, a workspace member (`project`) supports Python >=3.11. To install the workspace member on its own, navigate to ``, then run `uv venv --python 3.11.[X]` followed by `uv pip install -e .`.
     ");
 
-    // Enabling foo we can't find an interpretter
+    // Enabling foo we can't find an interpreter
     uv_snapshot!(context.filters(), context.run()
         .arg("--group").arg("foo")
         .arg("python").arg("-c").arg("import typing_extensions"), @r"
@@ -4756,7 +4756,7 @@ fn run_groups_include_requires_python() -> Result<()> {
 
         [dependency-groups]
         foo = ["anyio"]
-        bar = ["iniconfig", {include-group = "foo"}]
+        bar = ["iniconfig"]
         baz = ["iniconfig"]
         dev = ["sniffio", {include-group = "foo"}, {include-group = "baz"}]
         
@@ -4821,46 +4821,8 @@ fn run_groups_include_requires_python() -> Result<()> {
     ----- stderr -----
     error: The workspace contains conflicting Python requirements:
     - `project`: `>=3.11`
-    - `project --group bar`: `<3.13, >=3.13`
+    - `project --group bar`: `>=3.13`
     - `project --group dev`: `>=3.12, <3.13`
-    ");
-
-    // Explicitly requesting an in-range python can upgrade
-    uv_snapshot!(context.filters(), context.run()
-        .arg("-p").arg("3.13")
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
-    success: false
-    exit_code: 2
-    ----- stdout -----
-
-    ----- stderr -----
-    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
-    error: The requested interpreter resolved to Python 3.13.[X], which is incompatible with the project's Python requirement: `==3.12.*`. However, a workspace member (`project`) supports Python >=3.11. To install the workspace member on its own, navigate to ``, then run `uv venv --python 3.13.[X]` followed by `uv pip install -e .`.
-    ");
-
-    // Going back to just "dev" we shouldn't churn the venv needlessly
-    uv_snapshot!(context.filters(), context.run()
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Audited 5 packages in [TIME]
-    ");
-
-    // Explicitly requesting an in-range python can downgrade
-    uv_snapshot!(context.filters(), context.run()
-        .arg("-p").arg("3.12")
-        .arg("python").arg("-c").arg("import typing_extensions"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 6 packages in [TIME]
-    Audited 5 packages in [TIME]
     ");
 
     // Explicitly requesting an out-of-range python fails

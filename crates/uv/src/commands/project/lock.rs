@@ -143,7 +143,7 @@ pub(crate) async fn lock(
             LockTarget::Workspace(workspace) => ProjectInterpreter::discover(
                 workspace,
                 project_dir,
-                // Don't enable any groups' requires-python for interpretter discovery
+                // Don't enable any groups' requires-python for interpreter discovery
                 &DependencyGroupsWithDefaults::none(),
                 python.as_deref().map(PythonRequest::parse),
                 &network_settings,

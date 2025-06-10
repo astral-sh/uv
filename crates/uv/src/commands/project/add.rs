@@ -148,7 +148,7 @@ pub(crate) async fn add(
     };
     // Default extras currently always disabled
     let defaulted_extras = extras.with_defaults(DefaultExtras::default());
-    // Default groups we need the actual project for, interpretter discovery will use this!
+    // Default groups we need the actual project for, interpreter discovery will use this!
     let defaulted_groups;
 
     let target = if let Some(script) = script {
