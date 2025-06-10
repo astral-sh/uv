@@ -167,6 +167,7 @@ pub(crate) async fn lock(
                 Some(false),
                 cache,
                 printer,
+                project_dir,
             )
             .await?
             .into_interpreter(),
