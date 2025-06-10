@@ -7,17 +7,22 @@ use owo_colors::OwoColorize;
 use tracing::debug;
 
 use uv_cache::Cache;
+use uv_client::BaseClientBuilder;
 use uv_dirs::user_uv_config_dir;
 use uv_fs::Simplified;
 use uv_python::{
-    EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonInstallation, PythonPreference,
-    PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
+    EnvironmentPreference, PYTHON_VERSION_FILENAME, PythonDownloads, PythonInstallation,
+    PythonPreference, PythonRequest, PythonVersionFile, VersionFileDiscoveryOptions,
 };
+use uv_settings::PythonInstallMirrors;
 use uv_warnings::warn_user_once;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache};
 
-use crate::commands::{ExitStatus, project::find_requires_python};
+use crate::commands::{
+    ExitStatus, project::find_requires_python, reporters::PythonDownloadReporter,
+};
 use crate::printer::Printer;
+use crate::settings::NetworkSettings;
 
 /// Pin to a specific Python version.
 #[allow(clippy::fn_params_excessive_bools)]
@@ -26,9 +31,12 @@ pub(crate) async fn pin(
     request: Option<String>,
     resolved: bool,
     python_preference: PythonPreference,
+    python_downloads: PythonDownloads,
     no_project: bool,
     global: bool,
     rm: bool,
+    install_mirrors: PythonInstallMirrors,
+    network_settings: NetworkSettings,
     cache: &Cache,
     printer: Printer,
 ) -> Result<ExitStatus> {
@@ -98,12 +106,26 @@ pub(crate) async fn pin(
         bail!("Requests for arbitrary names (e.g., `{name}`) are not supported in version files");
     }
 
-    let python = match PythonInstallation::find(
-        &request,
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+    let reporter = PythonDownloadReporter::single(printer);
+
+    let python = match PythonInstallation::find_or_download(
+        Some(&request),
         EnvironmentPreference::OnlySystem,
         python_preference,
+        python_downloads,
+        &client_builder,
         cache,
-    ) {
+        Some(&reporter),
+        install_mirrors.python_install_mirror.as_deref(),
+        install_mirrors.pypy_install_mirror.as_deref(),
+        install_mirrors.python_downloads_json_url.as_deref(),
+    )
+    .await
+    {
         Ok(python) => Some(python),
         // If no matching Python version is found, don't fail unless `resolved` was requested
         Err(uv_python::Error::MissingPython(err)) if !resolved => {

@@ -1057,12 +1057,13 @@ pub(crate) struct PythonPinSettings {
     pub(crate) no_project: bool,
     pub(crate) global: bool,
     pub(crate) rm: bool,
+    pub(crate) install_mirrors: PythonInstallMirrors,
 }
 
 impl PythonPinSettings {
     /// Resolve the [`PythonPinSettings`] from the CLI and workspace configuration.
     #[allow(clippy::needless_pass_by_value)]
-    pub(crate) fn resolve(args: PythonPinArgs, _filesystem: Option<FilesystemOptions>) -> Self {
+    pub(crate) fn resolve(args: PythonPinArgs, filesystem: Option<FilesystemOptions>) -> Self {
         let PythonPinArgs {
             request,
             no_resolved,
@@ -1072,12 +1073,17 @@ impl PythonPinSettings {
             rm,
         } = args;
 
+        let install_mirrors = filesystem
+            .map(|fs| fs.install_mirrors.clone())
+            .unwrap_or_default();
+
         Self {
             request,
             resolved: flag(resolved, no_resolved).unwrap_or(false),
             no_project,
             global,
             rm,
+            install_mirrors,
         }
     }
 }

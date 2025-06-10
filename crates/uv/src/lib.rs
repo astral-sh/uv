@@ -1464,9 +1464,12 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.request,
                 args.resolved,
                 globals.python_preference,
+                globals.python_downloads,
                 args.no_project,
                 args.global,
                 args.rm,
+                args.install_mirrors,
+                globals.network_settings,
                 &cache,
                 printer,
             )

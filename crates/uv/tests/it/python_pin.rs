@@ -817,6 +817,32 @@ fn python_pin_with_comments() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "python-managed")]
+fn python_pin_install() {
+    let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_python_sources();
+
+    // Should not install 3.12 when downloads are not automatic
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.12`
+
+    ----- stderr -----
+    warning: No interpreter found for Python 3.12 in [PYTHON SOURCES]
+    ");
+
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12").env("UV_PYTHON_DOWNLOADS", "auto"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.12`
+
+    ----- stderr -----
+    ");
+}
+
+#[test]
 fn python_pin_rm() {
     let context: TestContext = TestContext::new_with_versions(&["3.12"]);
 
