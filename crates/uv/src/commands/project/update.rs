@@ -5,6 +5,9 @@ use std::io::ErrorKind;
 use std::path::Path;
 use std::str::FromStr;
 
+use crate::commands::ExitStatus;
+use crate::commands::pip::latest::LatestClient;
+use crate::printer::Printer;
 use anyhow::Result;
 use owo_colors::OwoColorize;
 use prettytable::format::FormatBuilder;
@@ -21,17 +24,23 @@ use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::{PackageName, Requirement};
 use uv_resolver::{PrereleaseMode, RequiresPython};
 use uv_warnings::warn_user;
+use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::{DependencyTarget, PyProjectTomlMut};
 use walkdir::WalkDir;
-
-use crate::commands::ExitStatus;
-use crate::commands::pip::latest::LatestClient;
-use crate::printer::Printer;
 
 /// Upgrade all dependencies in the project requirements (pyproject.toml).
 ///
 /// This doesn't read or modify uv.lock, only constraints like `<1.0` are bumped.
 pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Result<ExitStatus> {
+    let tables: Vec<_> = match args
+        .types
+        .iter()
+        .filter_map(|t| t.clone().into_option())
+        .collect::<Vec<_>>()
+    {
+        tables if !tables.is_empty() => tables,
+        _ => DependencyType::iter().to_vec(),
+    };
     let tomls = match args
         .recursive
         .then(|| search_pyproject_tomls(Path::new(".")))
@@ -131,7 +140,7 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
             format!("{}/", &toml_dir[2..])
         };
         let subpath = format!("{relative}pyproject.toml");
-        let (found, upgrades) = toml.upgrade_all_dependencies(&find_latest).await;
+        let (found, upgrades) = toml.upgrade_all_dependencies(&find_latest, &tables).await;
         let bumped = upgrades.len();
         all_found += found;
         all_bumped += bumped;
@@ -158,7 +167,7 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
             "upgraded {subpath}{}",
             if args.dry_run { " (dry run)" } else { "" }
         );
-        table.add_row(row![r->"#", rb->"name", Fr->"-old", bFg->"+new", "latest", dry_run]); // diff-like
+        table.add_row(row![r->"#", rb->"name", Fr->"-old", bFg->"+new", "latest", "type", dry_run]); // diff-like
         let remove_spaces = |v: &Requirement| {
             v.clone()
                 .version_or_url
@@ -169,12 +178,18 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
         upgrades
             .iter()
             .enumerate()
-            .for_each(|(i, (_, _dep, old, new, version, upgraded))| {
+            .for_each(|(i, (_, _dep, old, new, version, upgraded, dependency_type))| {
                 let from = remove_spaces(old);
                 let to = remove_spaces(new);
                 let upordown = if *upgraded { "✅ up" } else { "❌ down" };
+                let _type = match dependency_type {
+                    DependencyType::Production => "prod".into(),
+                    DependencyType::Dev => "dev".into(),
+                    DependencyType::Optional(extra) => format!("{extra} [extra]"),
+                    DependencyType::Group(group) => format!("{group} [group]"),
+                };
                 table.add_row(
-                    row![r->i + 1, rb->old.name, Fr->from, bFg->to, version.to_string(), upordown],
+                    row![r->i + 1, rb->old.name, Fr->from, bFg->to, version.to_string(), _type, upordown],
                 );
             });
         table.printstd();
@@ -219,7 +234,7 @@ fn search_pyproject_tomls(root: &Path) -> Result<Vec<String>, anyhow::Error> {
     // Hint: Doesn't skip special folders like `build`, `dist` or `target`
     let is_hidden_or_not_pyproject = |path: &Path| {
         path.file_name().and_then(OsStr::to_str).is_some_and(|s| {
-            s.starts_with('.') || s.starts_with('_') || path.is_file() && s != "pyproject.toml"
+            s.starts_with('.') || s.starts_with('_') || s == "target" || path.is_file() && s != "pyproject.toml"
         })
     };
 
