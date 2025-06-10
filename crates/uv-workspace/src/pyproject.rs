@@ -358,8 +358,8 @@ pub struct ToolUv {
         default = "[]",
         value_type = "dict",
         example = r#"
-            [tool.uv.dependency-groups.mygroup]
-            requires-python = ">=3.12"
+            [tool.uv.dependency-groups]
+            my-group = {requires-python = ">=3.12"}
         "#
     )]
     pub dependency_groups: Option<ToolUvDependencyGroups>,

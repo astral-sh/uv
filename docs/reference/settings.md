@@ -139,8 +139,8 @@ Additional settings for `dependency-groups`
 
 ```toml title="pyproject.toml"
 
-[tool.uv.dependency-groups.mygroup]
-requires-python = ">=3.12"
+[tool.uv.dependency-groups]
+my-group = {requires-python = ">=3.12"}
 ```
 
 ---
