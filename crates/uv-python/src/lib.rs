@@ -12,7 +12,9 @@ pub use crate::discovery::{
 pub use crate::downloads::PlatformRequest;
 pub use crate::environment::{InvalidEnvironmentKind, PythonEnvironment};
 pub use crate::implementation::{ImplementationName, LenientImplementationName};
-pub use crate::installation::{PythonInstallation, PythonInstallationKey};
+pub use crate::installation::{
+    PythonInstallation, PythonInstallationKey, PythonInstallationMinorVersionKey,
+};
 pub use crate::interpreter::{
     BrokenSymlink, Error as InterpreterError, Interpreter, canonicalize_executable,
 };

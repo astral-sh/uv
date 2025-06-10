@@ -14,7 +14,7 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
 use uv_python::managed::{DirectorySymlink, ManagedPythonInstallations, python_executable_dir};
-use uv_python::{PythonInstallationKey, PythonRequest};
+use uv_python::{PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest};
 
 use crate::commands::python::install::format_executables;
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
@@ -224,36 +224,26 @@ async fn do_uninstall(
         &uninstalled
             .iter()
             .fold(FxHashSet::default(), |mut minor_versions, key| {
-                minor_versions.insert(key.version().python_version());
+                minor_versions.insert(PythonInstallationMinorVersionKey::ref_cast(key));
                 minor_versions
             });
     let remaining_installations: Vec<_> = installations.find_all()?.collect();
-    let mut remaining_minor_versions = FxHashMap::default();
-    for installation in remaining_installations {
-        // Add to minor versions map if this installation has the highest
-        // patch seen for a minor version so far.
-        let minor_version = installation.version().python_version();
-        if !uninstalled_minor_versions.contains(&minor_version) {
-            continue;
-        }
-        if let Some(patch) = installation.version().patch() {
-            if let Some((current_patch, _)) = remaining_minor_versions.get(&minor_version) {
-                if patch >= *current_patch {
-                    remaining_minor_versions.insert(minor_version, (patch, installation));
-                }
-            } else {
-                remaining_minor_versions.insert(minor_version, (patch, installation));
-            }
-        }
-    }
-    for (_, installation) in remaining_minor_versions.values() {
+    let remaining_minor_versions =
+        PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
+            remaining_installations,
+        );
+
+    for (_, installation) in remaining_minor_versions
+        .iter()
+        .filter(|(minor_version, _)| uninstalled_minor_versions.contains(minor_version))
+    {
         installation.ensure_minor_version_link()?;
     }
     // For each uninstalled installation, check if there are no remaining installations
     // for its minor version. If there are none remaining, remove the symlink directory
     // (or junction on Windows) if it exists.
     for installation in &matching_installations {
-        if !remaining_minor_versions.contains_key(&installation.key().version().python_version()) {
+        if !remaining_minor_versions.contains_key(installation.minor_version_key()) {
             if let Some(directory_symlink) = DirectorySymlink::from_installation(installation) {
                 if directory_symlink.symlink_exists() {
                     let result = if cfg!(windows) {
