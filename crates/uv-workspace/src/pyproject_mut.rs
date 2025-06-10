@@ -9,7 +9,6 @@ use thiserror::Error;
 use toml_edit::{
     Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
 };
-
 use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Index;
 use uv_fs::PortablePath;
@@ -1209,31 +1208,54 @@ impl PyProjectTomlMut {
     >(
         &mut self,
         find_latest: &F,
+        tables: &[DependencyType],
     ) -> (
         usize,
-        Vec<(usize, String, Requirement, Requirement, Version, bool)>,
+        Vec<(
+            usize,
+            String,
+            Requirement,
+            Requirement,
+            Version,
+            bool,
+            DependencyType,
+        )>,
     ) {
         let mut all_upgrades = Vec::new();
         let mut found = 0;
 
         // Check `project.dependencies`
-        if let Some(item) = self
-            .project_mut()
-            .ok()
+        if let Some(item) = tables
+            .contains(&DependencyType::Production)
+            .then(|| {
+                self.project_mut()
+                    .ok()
+                    .flatten()
+                    .and_then(|p| p.get_mut("dependencies"))
+            })
             .flatten()
-            .and_then(|p| p.get_mut("dependencies"))
         {
             found += item.as_array().map_or(0, Array::len);
-            Self::replace_dependencies(find_latest, &mut all_upgrades, item).await;
+            Self::replace_dependencies(
+                find_latest,
+                &mut all_upgrades,
+                item,
+                &DependencyType::Production,
+            )
+            .await;
         }
 
         // Check `project.optional-dependencies`
-        if let Some(groups) = self
-            .project_mut()
-            .ok()
-            .flatten()
-            .and_then(|p| p.get_mut("optional-dependencies"))
-            .and_then(Item::as_table_like_mut)
+        if let Some(groups) = tables
+            .iter()
+            .find(|t| matches!(t, DependencyType::Optional(_)))
+            .and_then(|_| {
+                self.project_mut()
+                    .ok()
+                    .flatten()
+                    .and_then(|p| p.get_mut("optional-dependencies"))
+                    .and_then(Item::as_table_like_mut)
+            })
         {
             for (extra, item) in groups
                 .iter_mut()
@@ -1241,16 +1263,26 @@ impl PyProjectTomlMut {
             {
                 if let Some(_extra) = extra {
                     found += item.as_array().map_or(0, Array::len);
-                    Self::replace_dependencies(find_latest, &mut all_upgrades, item).await;
+                    Self::replace_dependencies(
+                        find_latest,
+                        &mut all_upgrades,
+                        item,
+                        &DependencyType::Optional(_extra),
+                    )
+                    .await;
                 }
             }
         }
 
         // Check `dependency-groups`.
-        if let Some(groups) = self
-            .doc
-            .get_mut("dependency-groups")
-            .and_then(Item::as_table_like_mut)
+        if let Some(groups) = tables
+            .iter()
+            .find(|t| matches!(t, DependencyType::Group(_)))
+            .and_then(|_| {
+                self.doc
+                    .get_mut("dependency-groups")
+                    .and_then(Item::as_table_like_mut)
+            })
         {
             for (group, item) in groups
                 .iter_mut()
@@ -1258,22 +1290,33 @@ impl PyProjectTomlMut {
             {
                 if let Some(_group) = group {
                     found += item.as_array().map_or(0, Array::len);
-                    Self::replace_dependencies(find_latest, &mut all_upgrades, item).await;
+                    Self::replace_dependencies(
+                        find_latest,
+                        &mut all_upgrades,
+                        item,
+                        &DependencyType::Group(_group),
+                    )
+                    .await;
                 }
             }
         }
 
         // Check `tool.uv.dev-dependencies`
-        if let Some(item) = self
-            .doc
-            .get_mut("tool")
-            .and_then(Item::as_table_mut)
-            .and_then(|tool| tool.get_mut("uv"))
-            .and_then(Item::as_table_mut)
-            .and_then(|uv| uv.get_mut("dev-dependencies"))
+        if let Some(item) = tables
+            .contains(&DependencyType::Dev)
+            .then(|| {
+                self.doc
+                    .get_mut("tool")
+                    .and_then(Item::as_table_mut)
+                    .and_then(|tool| tool.get_mut("uv"))
+                    .and_then(Item::as_table_mut)
+                    .and_then(|uv| uv.get_mut("dev-dependencies"))
+            })
+            .flatten()
         {
             found += item.as_array().map_or(0, Array::len);
-            Self::replace_dependencies(find_latest, &mut all_upgrades, item).await;
+            Self::replace_dependencies(find_latest, &mut all_upgrades, item, &DependencyType::Dev)
+                .await;
         }
 
         (found, all_upgrades)
@@ -1281,19 +1324,45 @@ impl PyProjectTomlMut {
 
     async fn replace_dependencies<Fut: Future<Output = Option<Version>>, F: Fn(String) -> Fut>(
         find_latest: &F,
-        all_upgrades: &mut Vec<(usize, String, Requirement, Requirement, Version, bool)>,
+        all_upgrades: &mut Vec<(
+            usize,
+            String,
+            Requirement,
+            Requirement,
+            Version,
+            bool,
+            DependencyType,
+        )>,
         item: &mut Item,
+        dependency_type: &DependencyType,
     ) {
         if let Some(dependencies) = item.as_array_mut().filter(|d| !d.is_empty()) {
-            Self::replace_upgrades(find_latest, all_upgrades, dependencies).await;
+            Self::replace_upgrades(find_latest, all_upgrades, dependencies, dependency_type).await;
         }
     }
 
     async fn find_upgrades<Fut: Future<Output = Option<Version>>, F: Fn(String) -> Fut>(
         find_latest: F,
         dependencies: &mut Array,
-        all_upgrades: &[(usize, String, Requirement, Requirement, Version, bool)],
-    ) -> Vec<(usize, String, Requirement, Requirement, Version, bool)> {
+        all_upgrades: &[(
+            usize,
+            String,
+            Requirement,
+            Requirement,
+            Version,
+            bool,
+            DependencyType,
+        )],
+        dependency_type: &DependencyType,
+    ) -> Vec<(
+        usize,
+        String,
+        Requirement,
+        Requirement,
+        Version,
+        bool,
+        DependencyType,
+    )> {
         let mut upgrades = Vec::new();
         for (i, dep) in dependencies.iter().enumerate() {
             let Some(mut req) = dep.as_str().and_then(try_parse_requirement) else {
@@ -1307,9 +1376,9 @@ impl PyProjectTomlMut {
             };
             if let Some(upgrade) = match all_upgrades
                 .iter()
-                .find(|(_, _, _, r, _, _)| r.name == req.name)
+                .find(|(_, _, _, r, _, _, _)| r.name == req.name)
             {
-                Some((_, _, _, _, v, _)) => Some(v.clone()), // reuse cached upgrade
+                Some((_, _, _, _, v, _, _)) => Some(v.clone()), // reuse cached upgrade
                 _ => find_latest(req.name.to_string())
                     .await
                     .filter(|latest| !version_specifiers.contains(latest)),
@@ -1324,6 +1393,7 @@ impl PyProjectTomlMut {
                         req,
                         upgrade,
                         upgraded,
+                        dependency_type.clone(),
                     ));
                 }
             }
@@ -1333,11 +1403,21 @@ impl PyProjectTomlMut {
 
     async fn replace_upgrades<Fut: Future<Output = Option<Version>>, F: Fn(String) -> Fut>(
         find_latest: F,
-        all_upgrades: &mut Vec<(usize, String, Requirement, Requirement, Version, bool)>,
+        all_upgrades: &mut Vec<(
+            usize,
+            String,
+            Requirement,
+            Requirement,
+            Version,
+            bool,
+            DependencyType,
+        )>,
         dependencies: &mut Array,
+        dependency_type: &DependencyType,
     ) {
-        let upgrades = Self::find_upgrades(find_latest, dependencies, all_upgrades).await;
-        for (i, _dep, _old, new, _upgrade, _upgraded) in &upgrades {
+        let upgrades =
+            Self::find_upgrades(find_latest, dependencies, all_upgrades, dependency_type).await;
+        for (i, _dep, _old, new, _upgrade, _upgraded, _) in &upgrades {
             let string = new.to_string();
             dependencies.replace(*i, toml_edit::Value::from(string));
         }

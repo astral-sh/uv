@@ -1155,6 +1155,17 @@ impl EnvVars {
     #[attr_hidden]
     pub const UV_UPGRADE_RECURSIVE: &'static str = "UV_UPGRADE_RECURSIVE";
 
+    /// Which pyproject.toml tables should `uv upgrade` search?
+    ///
+    /// Default `prod,dev,optional,groups`.
+    ///
+    /// * prod: `project.dependencies`
+    /// * dev: `tool.uv.dev-dependencies`
+    /// * optional: `project.optional-dependencies`
+    /// * groups: `dependency-groups`
+    #[attr_hidden]
+    pub const UV_UPGRADE_TYPES: &'static str = "UV_UPGRADE_TYPES";
+
     /// Overrides terminal width used for wrapping. This variable is not read by uv directly.
     ///
     /// This is a quasi-standard variable, described, e.g., in `ncurses(3x)`.

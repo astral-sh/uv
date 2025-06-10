@@ -1845,6 +1845,40 @@ pub enum DependencyType {
     Group(GroupName),
 }
 
+impl DependencyType {
+    pub fn iter() -> [Self; 4] {
+        [
+            Self::Production,
+            Self::Dev,
+            Self::Optional(ExtraName::from_str("e").ok().unwrap()),
+            Self::Group(GroupName::from_str("g").ok().unwrap()),
+        ]
+    }
+}
+
+impl FromStr for DependencyType {
+    type Err = DependencyTypeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // case-insensitive, allow abbreviations
+        match s.to_lowercase().as_str() {
+            "prod" | "prd" | "p" => Ok(Self::Production),
+            "dev" | "d" => Ok(Self::Dev),
+            "optional" | "opt" | "o" | "extra" | "e" => {
+                Ok(Self::Optional(ExtraName::from_str("e").ok().unwrap()))
+            }
+            "groups" | "group" | "g" => Ok(Self::Group(GroupName::from_str("g").ok().unwrap())),
+            _ => Err(DependencyTypeError::Unknown(s.to_string())),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum DependencyTypeError {
+    #[error("unknown value for: `{0}` (allowed: `prod,dev,optional,groups`)")]
+    Unknown(String),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(Serialize))]
 pub struct BuildBackendSettingsSchema;

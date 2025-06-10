@@ -34,6 +34,7 @@ use uv_resolver::{
 use uv_settings::PythonInstallMirrors;
 use uv_static::EnvVars;
 use uv_torch::TorchMode;
+use uv_workspace::pyproject::DependencyType;
 use uv_workspace::pyproject_mut::AddBoundsKind;
 
 pub mod comma;
@@ -674,6 +675,21 @@ pub struct UpgradeProjectArgs {
     /// Search recursively for pyproject.toml files.
     #[arg(long, env = EnvVars::UV_UPGRADE_RECURSIVE)]
     pub recursive: bool,
+
+    /// Only search specific tables in pyproject.toml (case-insensitive).
+    /// * `prod,dev,optional,groups` (default)
+    /// * `prod,dev,opt,group` or `p,d,o,g` (abbreviated)
+    /// * `prd,dev,extra,group` or `p,d,e,g` (optional / extra)
+    #[arg(
+        long,
+        env = EnvVars::UV_UPGRADE_TYPES,
+        value_delimiter = ',',
+        value_parser = parse_dependency_type,
+    )]
+    pub types: Vec<Maybe<DependencyType>>,
+
+    #[arg(long, short, alias = "build-constraint", env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
+    pub build_constraints: Vec<Maybe<PathBuf>>,
 
     /// The Python interpreter to use during resolution (overrides pyproject.toml).
     ///
@@ -1329,6 +1345,18 @@ fn parse_insecure_host(input: &str) -> Result<Maybe<TrustedHost>, String> {
     } else {
         match TrustedHost::from_str(input) {
             Ok(host) => Ok(Maybe::Some(host)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
+/// Parse a string into an [`DependencyType`], mapping the empty string to `None`.
+fn parse_dependency_type(input: &str) -> Result<Maybe<DependencyType>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match DependencyType::from_str(input) {
+            Ok(table) => Ok(Maybe::Some(table)),
             Err(err) => Err(err.to_string()),
         }
     }
