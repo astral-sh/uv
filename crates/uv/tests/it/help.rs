@@ -22,6 +22,7 @@ fn help() {
       add                        Add dependencies to the project
       remove                     Remove dependencies from the project
       version                    Read or update the project's version
+      upgrade                    Upgrade the project's dependency constraints
       sync                       Update the project's environment
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
@@ -104,6 +105,7 @@ fn help_flag() {
       add      Add dependencies to the project
       remove   Remove dependencies from the project
       version  Read or update the project's version
+      upgrade  Upgrade the project's dependency constraints
       sync     Update the project's environment
       lock     Update the project's lockfile
       export   Export the project's lockfile to an alternate format
@@ -184,6 +186,7 @@ fn help_short_flag() {
       add      Add dependencies to the project
       remove   Remove dependencies from the project
       version  Read or update the project's version
+      upgrade  Upgrade the project's dependency constraints
       sync     Update the project's environment
       lock     Update the project's lockfile
       export   Export the project's lockfile to an alternate format
@@ -885,6 +888,7 @@ fn help_unknown_subcommand() {
         add
         remove
         version
+        upgrade
         sync
         lock
         export
@@ -914,6 +918,7 @@ fn help_unknown_subcommand() {
         add
         remove
         version
+        upgrade
         sync
         lock
         export
@@ -972,6 +977,7 @@ fn help_with_global_option() {
       add                        Add dependencies to the project
       remove                     Remove dependencies from the project
       version                    Read or update the project's version
+      upgrade                    Upgrade the project's dependency constraints
       sync                       Update the project's environment
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
@@ -1095,6 +1101,7 @@ fn help_with_no_pager() {
       add                        Add dependencies to the project
       remove                     Remove dependencies from the project
       version                    Read or update the project's version
+      upgrade                    Upgrade the project's dependency constraints
       sync                       Update the project's environment
       lock                       Update the project's lockfile
       export                     Export the project's lockfile to an alternate format
