@@ -4066,6 +4066,17 @@ fn python_greater_than_current_patch() {
     let mut filters = context.filters();
     filters.push((r"python-greater-than-current-patch-", "package-"));
 
+    uv_snapshot!(filters, context.venv().arg("-p").arg("3.9.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.9.12 interpreter at: [PYTHON-3.9.12]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    ");
+
     uv_snapshot!(filters, command(&context)
         .arg("python-greater-than-current-patch-a==1.0.0")
         , @r"
