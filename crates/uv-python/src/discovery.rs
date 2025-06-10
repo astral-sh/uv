@@ -25,7 +25,7 @@ use crate::implementation::ImplementationName;
 use crate::installation::PythonInstallation;
 use crate::interpreter::Error as InterpreterError;
 use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
-use crate::managed::ManagedPythonInstallations;
+use crate::managed::{DirectorySymlink, ManagedPythonInstallations};
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
 use crate::virtualenv::Error as VirtualEnvError;
@@ -35,12 +35,12 @@ use crate::virtualenv::{
 };
 #[cfg(windows)]
 use crate::windows_registry::{WindowsPython, registry_pythons};
-use crate::{BrokenSymlink, Interpreter, PythonVersion};
+use crate::{BrokenSymlink, Interpreter, PythonInstallationKey, PythonVersion};
 
 /// A request to find a Python installation.
 ///
 /// See [`PythonRequest::from_str`].
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub enum PythonRequest {
     /// An appropriate default Python installation
     ///
@@ -153,7 +153,7 @@ pub enum PythonVariant {
 }
 
 /// A Python discovery version request.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum VersionRequest {
     /// Allow an appropriate default Python version.
     #[default]
@@ -315,6 +315,8 @@ fn python_executables_from_installed<'a>(
     platform: PlatformRequest,
     preference: PythonPreference,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
+    let is_alternative_implementation =
+        implementation.is_some_and(|implementation| *implementation != ImplementationName::CPython);
     let from_managed_installations = iter::once_with(move || {
         ManagedPythonInstallations::from_settings(None)
             .map_err(Error::from)
@@ -339,7 +341,24 @@ fn python_executables_from_installed<'a>(
                         true
                     })
                     .inspect(|installation| debug!("Found managed installation `{installation}`"))
-                    .map(|installation| (PythonSource::Managed, installation.executable(false))))
+                    .map(move |installation| {
+                        (
+                            PythonSource::Managed,
+                            if version.patch().is_some() || is_alternative_implementation {
+                                installation.executable(false)
+                            } else {
+                                // If this is a CPython implementation, it's a minor version request, and a
+                                // minor version symlink directory (or junction on Windows) exists,
+                                // use an executable path containing that directory.
+                                DirectorySymlink::from_installation(&installation)
+                                    .filter(DirectorySymlink::symlink_exists)
+                                    .map(|directory_symlink| {
+                                        directory_symlink.symlink_executable.clone()
+                                    })
+                                    .unwrap_or_else(|| installation.executable(false))
+                            },
+                        )
+                    }))
             })
     })
     .flatten_ok();
@@ -1625,6 +1644,24 @@ impl PythonRequest {
         Ok(rest.parse().ok())
     }
 
+    /// Check if this request includes a specific patch version.
+    pub fn includes_patch(&self) -> bool {
+        match self {
+            PythonRequest::Default => false,
+            PythonRequest::Any => false,
+            PythonRequest::Version(version_request) => version_request.patch().is_some(),
+            PythonRequest::Directory(..) => false,
+            PythonRequest::File(..) => false,
+            PythonRequest::ExecutableName(..) => false,
+            PythonRequest::Implementation(..) => false,
+            PythonRequest::ImplementationVersion(_, version) => version.patch().is_some(),
+            PythonRequest::Key(request) => request
+                .version
+                .as_ref()
+                .is_some_and(|request| request.patch().is_some()),
+        }
+    }
+
     /// Check if a given interpreter satisfies the interpreter request.
     pub fn satisfied(&self, interpreter: &Interpreter, cache: &Cache) -> bool {
         /// Returns `true` if the two paths refer to the same interpreter executable.
@@ -2066,6 +2103,11 @@ impl fmt::Display for ExecutableName {
 }
 
 impl VersionRequest {
+    /// Derive a [`VersionRequest::MajorMinor`] from a [`PythonInstallationKey`]
+    pub fn major_minor_request_from_key(key: &PythonInstallationKey) -> Self {
+        Self::MajorMinor(key.major, key.minor, key.variant)
+    }
+
     /// Return possible executable names for the given version request.
     pub(crate) fn executable_names(
         &self,

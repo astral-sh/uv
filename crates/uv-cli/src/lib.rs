@@ -4756,6 +4756,23 @@ pub enum PythonCommand {
     /// See `uv help python` to view supported request formats.
     Install(PythonInstallArgs),
 
+    /// Upgrade installed Python versions to the latest supported patch release.
+    ///
+    /// A target Python minor version to upgrade may be provided, e.g., `3.13`. Multiple versions
+    /// may be provided to perform more than one upgrade.
+    ///
+    /// If no target version is provided, then uv will upgrade all managed CPython versions.
+    ///
+    /// During an upgrade, uv will not uninstall outdated patch versions.
+    ///
+    /// When an upgrade is performed, virtual environments created by uv will automatically
+    /// use the new version. However, if the virtual environment was created before the
+    /// upgrade functionality was added, it will continue to use the old Python version; to enable
+    /// upgrades, the environment must be recreated.
+    ///
+    /// Upgrades are not yet supported for alternative implementations, like PyPy.
+    Upgrade(PythonUpgradeArgs),
+
     /// Search for a Python installation.
     ///
     /// Displays the path to the Python executable.
@@ -4942,6 +4959,51 @@ pub struct PythonInstallArgs {
     /// If multiple Python versions are requested, uv will exit with an error.
     #[arg(long)]
     pub default: bool,
+}
+
+#[derive(Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct PythonUpgradeArgs {
+    /// The directory Python installations are stored in.
+    ///
+    /// If provided, `UV_PYTHON_INSTALL_DIR` will need to be set for subsequent operations for uv to
+    /// discover the Python installation.
+    ///
+    /// See `uv python dir` to view the current Python installation directory. Defaults to
+    /// `~/.local/share/uv/python`.
+    #[arg(long, short, env = EnvVars::UV_PYTHON_INSTALL_DIR)]
+    pub install_dir: Option<PathBuf>,
+
+    /// The Python minor version(s) to upgrade.
+    ///
+    /// If no target version is provided, then uv will upgrade all managed CPython versions.
+    #[arg(env = EnvVars::UV_PYTHON)]
+    pub targets: Vec<String>,
+
+    /// Set the URL to use as the source for downloading Python installations.
+    ///
+    /// The provided URL will replace
+    /// `https://github.com/astral-sh/python-build-standalone/releases/download` in, e.g.,
+    /// `https://github.com/astral-sh/python-build-standalone/releases/download/20240713/cpython-3.12.4%2B20240713-aarch64-apple-darwin-install_only.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, env = EnvVars::UV_PYTHON_INSTALL_MIRROR)]
+    pub mirror: Option<String>,
+
+    /// Set the URL to use as the source for downloading PyPy installations.
+    ///
+    /// The provided URL will replace `https://downloads.python.org/pypy` in, e.g.,
+    /// `https://downloads.python.org/pypy/pypy3.8-v7.3.7-osx64.tar.bz2`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[arg(long, env = EnvVars::UV_PYPY_INSTALL_MIRROR)]
+    pub pypy_mirror: Option<String>,
+
+    /// URL pointing to JSON of custom Python installations.
+    ///
+    /// Note that currently, only local paths are supported.
+    #[arg(long, env = EnvVars::UV_PYTHON_DOWNLOADS_JSON_URL)]
+    pub python_downloads_json_url: Option<String>,
 }
 
 #[derive(Args)]
