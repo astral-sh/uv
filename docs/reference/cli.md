@@ -18,6 +18,7 @@ uv [OPTIONS] <COMMAND>
 <dt><a href="#uv-add"><code>uv add</code></a></dt><dd><p>Add dependencies to the project</p></dd>
 <dt><a href="#uv-remove"><code>uv remove</code></a></dt><dd><p>Remove dependencies from the project</p></dd>
 <dt><a href="#uv-version"><code>uv version</code></a></dt><dd><p>Read or update the project's version</p></dd>
+<dt><a href="#uv-upgrade"><code>uv upgrade</code></a></dt><dd><p>Upgrade the project's dependency constraints</p></dd>
 <dt><a href="#uv-sync"><code>uv sync</code></a></dt><dd><p>Update the project's environment</p></dd>
 <dt><a href="#uv-lock"><code>uv lock</code></a></dt><dd><p>Update the project's lockfile</p></dd>
 <dt><a href="#uv-export"><code>uv export</code></a></dt><dd><p>Export the project's lockfile to an alternate format</p></dd>
@@ -1333,6 +1334,71 @@ uv version [OPTIONS] [VALUE]
 </dd><dt id="uv-version--upgrade"><a href="#uv-version--upgrade"><code>--upgrade</code></a>, <code>-U</code></dt><dd><p>Allow package upgrades, ignoring pinned versions in any existing output file. Implies <code>--refresh</code></p>
 </dd><dt id="uv-version--upgrade-package"><a href="#uv-version--upgrade-package"><code>--upgrade-package</code></a>, <code>-P</code> <i>upgrade-package</i></dt><dd><p>Allow upgrades for a specific package, ignoring pinned versions in any existing output file. Implies <code>--refresh-package</code></p>
 </dd><dt id="uv-version--verbose"><a href="#uv-version--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+<p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
+</dd></dl>
+
+## uv upgrade
+
+Upgrade the project's dependency constraints
+
+<h3 class="cli-reference">Usage</h3>
+
+```
+uv upgrade [OPTIONS]
+```
+
+<h3 class="cli-reference">Options</h3>
+
+<dl class="cli-reference"><dt id="uv-upgrade--allow-insecure-host"><a href="#uv-upgrade--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<p>Can be provided multiple times.</p>
+<p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
+<p>WARNING: Hosts included in this list will not be verified against the system's certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-upgrade--cache-dir"><a href="#uv-upgrade--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
+<p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
+<p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-upgrade--color"><a href="#uv-upgrade--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
+<p>By default, uv will automatically detect support for colors when writing to a terminal.</p>
+<p>Possible values:</p>
+<ul>
+<li><code>auto</code>:  Enables colored output only when the output is going to a terminal or TTY with support</li>
+<li><code>always</code>:  Enables colored output regardless of the detected environment</li>
+<li><code>never</code>:  Disables colored output</li>
+</ul></dd><dt id="uv-upgrade--config-file"><a href="#uv-upgrade--config-file"><code>--config-file</code></a> <i>config-file</i></dt><dd><p>The path to a <code>uv.toml</code> file to use for configuration.</p>
+<p>While uv configuration can be included in a <code>pyproject.toml</code> file, it is not allowed in this context.</p>
+<p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-upgrade--directory"><a href="#uv-upgrade--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
+<p>Relative paths are resolved with the given directory as the base.</p>
+<p>See <code>--project</code> to only change the project root directory.</p>
+</dd><dt id="uv-upgrade--dry-run"><a href="#uv-upgrade--dry-run"><code>--dry-run</code></a></dt><dd><p>Run without performing the upgrade</p>
+</dd><dt id="uv-upgrade--help"><a href="#uv-upgrade--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
+</dd><dt id="uv-upgrade--managed-python"><a href="#uv-upgrade--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
+<p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
+<p>May also be set with the <code>UV_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-upgrade--native-tls"><a href="#uv-upgrade--native-tls"><code>--native-tls</code></a></dt><dd><p>Whether to load TLS certificates from the platform's native certificate store.</p>
+<p>By default, uv loads certificates from the bundled <code>webpki-roots</code> crate. The <code>webpki-roots</code> are a reliable set of trust roots from Mozilla, and including them in uv improves portability and performance (especially on macOS).</p>
+<p>However, in some cases, you may want to use the platform's native certificate store, especially if you're relying on a corporate trust root (e.g., for a mandatory proxy) that's included in your system's certificate store.</p>
+<p>May also be set with the <code>UV_NATIVE_TLS</code> environment variable.</p></dd><dt id="uv-upgrade--no-cache"><a href="#uv-upgrade--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
+<p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p></dd><dt id="uv-upgrade--no-config"><a href="#uv-upgrade--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
+<p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-upgrade--no-managed-python"><a href="#uv-upgrade--no-managed-python"><code>--no-managed-python</code></a></dt><dd><p>Disable use of uv-managed Python versions.</p>
+<p>Instead, uv will search for a suitable Python version on the system.</p>
+<p>May also be set with the <code>UV_NO_MANAGED_PYTHON</code> environment variable.</p></dd><dt id="uv-upgrade--no-progress"><a href="#uv-upgrade--no-progress"><code>--no-progress</code></a></dt><dd><p>Hide all progress outputs.</p>
+<p>For example, spinners or progress bars.</p>
+<p>May also be set with the <code>UV_NO_PROGRESS</code> environment variable.</p></dd><dt id="uv-upgrade--no-python-downloads"><a href="#uv-upgrade--no-python-downloads"><code>--no-python-downloads</code></a></dt><dd><p>Disable automatic downloads of Python.</p>
+</dd><dt id="uv-upgrade--offline"><a href="#uv-upgrade--offline"><code>--offline</code></a></dt><dd><p>Disable network access.</p>
+<p>When disabled, uv will only use locally cached data and locally available files.</p>
+<p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-upgrade--project"><a href="#uv-upgrade--project"><code>--project</code></a> <i>project</i></dt><dd><p>Run the command within the given project directory.</p>
+<p>All <code>pyproject.toml</code>, <code>uv.toml</code>, and <code>.python-version</code> files will be discovered by walking up the directory tree from the project root, as will the project's virtual environment (<code>.venv</code>).</p>
+<p>Other command-line arguments (such as relative paths) will be resolved relative to the current working directory.</p>
+<p>See <code>--directory</code> to change the working directory entirely.</p>
+<p>This setting has no effect when used in the <code>uv pip</code> interface.</p>
+<p>May also be set with the <code>UV_PROJECT</code> environment variable.</p></dd><dt id="uv-upgrade--python"><a href="#uv-upgrade--python"><code>--python</code></a>, <code>-p</code> <i>python</i></dt><dd><p>The Python interpreter to use during resolution (overrides pyproject.toml).</p>
+<p>A Python interpreter is required for building source distributions to determine package
+metadata when there are not wheels.</p>
+<p>The interpreter is also used as the fallback value for the minimum Python version if
+<code>requires-python</code> is not set.</p>
+<p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
+<p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-upgrade--quiet"><a href="#uv-upgrade--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
+<p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
+</dd><dt id="uv-upgrade--verbose"><a href="#uv-upgrade--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>
 
