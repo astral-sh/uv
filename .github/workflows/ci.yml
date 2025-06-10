@@ -337,16 +337,21 @@ jobs:
           }
           Write-Host "Initial dump count: $($initialDumps.Count)"
 
-          # Execute cargo test
-          try {
-            Write-Host "Executing: cargo nextest run --no-default-features --features python,pypi,python-managed --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow"
-            $exitCode = 0
-            & cargo nextest run --no-default-features --features python,pypi,python-managed --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
-            $exitCode = $LASTEXITCODE
-            Write-Host "Cargo test completed with exit code: $exitCode"
-          } catch {
-            Write-Host "Exception during cargo test: $_"
-            $exitCode = 1
+          # Execute cargo test in loop
+          $iteration = 1
+          while ($true) {
+            try {
+              Write-Host "Iteration $iteration - Executing: cargo nextest run --no-default-features --features python,pypi,python-managed --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow"
+              $exitCode = 0
+              & cargo nextest run --no-default-features --features python,pypi,python-managed --workspace --status-level skip --failure-output immediate-final --no-fail-fast -j 20 --final-status-level slow
+              $exitCode = $LASTEXITCODE
+              Write-Host "Iteration $iteration - Cargo test completed with exit code: $exitCode"
+              $iteration++
+            } catch {
+              Write-Host "Iteration $iteration - Exception during cargo test: $_"
+              $exitCode = 1
+              $iteration++
+            }
           }
 
           # Check for new crash dumps
