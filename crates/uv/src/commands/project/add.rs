@@ -483,6 +483,9 @@ pub(crate) async fn add(
             if !path.is_dir() {
                 bail!("Directory not found for index: {url}");
             }
+            if fs_err::read_dir(&path)?.next().is_none() {
+                warn_user_once!("Index directory `{url}` is empty; falling back to PyPI.");
+            }
         }
     }
 
