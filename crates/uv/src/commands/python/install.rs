@@ -19,8 +19,8 @@ use uv_python::managed::{
 };
 use uv_python::platform::{Arch, Libc};
 use uv_python::{
-    PythonDownloads, PythonInstallationKey, PythonRequest, PythonVersionFile,
-    VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
+    PythonDownloads, PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest,
+    PythonVersionFile, VersionFileDiscoveryOptions, VersionFilePreference, VersionRequest,
 };
 use uv_shell::Shell;
 use uv_trampoline_builder::{Launcher, LauncherKind};
@@ -451,20 +451,10 @@ pub(crate) async fn install(
     // for each installed minor version.
     let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
     let existing_installations: Vec<_> = installations.find_all()?.collect();
-    let mut minor_versions = FxHashMap::default();
-    for installation in existing_installations {
-        // Add to minor versions map if this installation has the highest
-        // patch seen for a minor version so far.
-        let minor_version = installation.version().python_version();
-        minor_versions
-            .entry(minor_version)
-            .and_modify(|high_installation: &mut ManagedPythonInstallation| {
-                if installation.key() >= high_installation.key() {
-                    *high_installation = installation.clone();
-                }
-            })
-            .or_insert(installation);
-    }
+    let minor_versions =
+        PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
+            existing_installations,
+        );
 
     for installation in minor_versions.values() {
         installation.ensure_minor_version_link()?;
