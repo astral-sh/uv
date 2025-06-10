@@ -1498,7 +1498,7 @@
           }
         },
         "require-hashes": {
-          "description": "Require a matching hash for each requirement.\n\nHash-checking mode is all or nothing. If enabled, _all_ requirements must be provided with a corresponding hash or set of hashes. Additionally, if enabled, _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be specified via direct URL.\n\nHash-checking mode introduces a number of additional constraints:\n\n- Git dependencies are not supported. - Editable installs are not supported. - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or source archive (`.zip`, `.tar.gz`), as opposed to a directory.",
+          "description": "Require a matching hash for each requirement.\n\nHash-checking mode is all or nothing. If enabled, _all_ requirements must be provided with a corresponding hash or set of hashes. Additionally, if enabled, _all_ requirements must either be pinned to exact versions (e.g., `==1.0.0`), or be specified via direct URL.\n\nHash-checking mode introduces a number of additional constraints:\n\n- Git dependencies are not supported. - Editable installations are not supported. - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or source archive (`.zip`, `.tar.gz`), as opposed to a directory.",
           "type": [
             "boolean",
             "null"
