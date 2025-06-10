@@ -10,6 +10,36 @@ use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceC
 
 use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 
+/// Like [`crate::RequiresDist`] but only supporting dependency-groups.
+///
+/// PEP 735 says:
+///
+/// > A pyproject.toml file with only `[dependency-groups]` and no other tables is valid.
+///
+/// This is a special carveout to enable users to adopt dependency-groups without having
+/// to learn about projects. It is supported by `pip install --group`, and thus interfaces
+/// like `uv pip install --group` must also support it for interop and conformance.
+///
+/// On paper this is trivial to support because dependency-groups are so self-contained
+/// that they're basically a `requirements.txt` embedded within a pyproject.toml, so it's
+/// fine to just grab that section and handle it independently.
+///
+/// However several uv extensions make this complicated, notably, as of this writing:
+///
+/// * tool.uv.sources
+/// * tool.uv.index
+///
+/// These fields may also be present in the pyproject.toml, and, critically,
+/// may be defined and inherited in a parent workspace pyproject.toml.
+///
+/// Therefore, we need to gracefully degrade from a full workspacey situation all
+/// the way down to one of these stub pyproject.tomls the PEP defines. This is why
+/// we avoid going through `RequiresDist` -- we don't want to muddy up the "compile a package"
+/// logic with support for non-project/workspace pyproject.tomls, and we don't want to
+/// muddy this logic up with setuptools fallback modes that `RequiresDist` wants.
+///
+/// (We used to shove this feature into that path, and then we would see there's no metadata
+/// and try to run setuptools to try to desperately find any metadata, and then error out.)
 #[derive(Debug, Clone)]
 pub struct SourcedDependencyGroups {
     pub name: Option<PackageName>,
@@ -41,36 +71,48 @@ impl SourcedDependencyGroups {
         };
         let project = VirtualProject::discover_defaulted(pyproject_path, &discovery, cache).await?;
 
-        // Collect any `tool.uv.index` entries.
-        let empty = vec![];
-        let project_indexes = match source_strategy {
-            SourceStrategy::Enabled => project
-                .pyproject_toml()
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.index.as_deref())
-                .unwrap_or(&empty),
-            SourceStrategy::Disabled => &empty,
-        };
-
-        // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
-        let empty = BTreeMap::default();
-        let project_sources = match source_strategy {
-            SourceStrategy::Enabled => project
-                .pyproject_toml()
-                .tool
-                .as_ref()
-                .and_then(|tool| tool.uv.as_ref())
-                .and_then(|uv| uv.sources.as_ref())
-                .map(ToolUvSources::inner)
-                .unwrap_or(&empty),
-            SourceStrategy::Disabled => &empty,
-        };
-
         // Collect the dependency groups.
         let dependency_groups =
             FlatDependencyGroups::from_pyproject_toml(project.root(), project.pyproject_toml())?;
+
+        // If sources/indexes are disabled we can just stop here
+        let SourceStrategy::Enabled = source_strategy else {
+            return Ok(Self {
+                name: project.project_name().cloned(),
+                dependency_groups: dependency_groups
+                    .into_iter()
+                    .map(|(name, group)| {
+                        let requirements = group
+                            .requirements
+                            .into_iter()
+                            .map(Requirement::from)
+                            .collect();
+                        (name, requirements)
+                    })
+                    .collect(),
+            });
+        };
+
+        // Collect any `tool.uv.index` entries.
+        let empty = vec![];
+        let project_indexes = project
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.index.as_deref())
+            .unwrap_or(&empty);
+
+        // Collect any `tool.uv.sources` and `tool.uv.dev_dependencies` from `pyproject.toml`.
+        let empty = BTreeMap::default();
+        let project_sources = project
+            .pyproject_toml()
+            .tool
+            .as_ref()
+            .and_then(|tool| tool.uv.as_ref())
+            .and_then(|uv| uv.sources.as_ref())
+            .map(ToolUvSources::inner)
+            .unwrap_or(&empty);
 
         // Now that we've resolved the dependency groups, we can validate that each source references
         // a valid extra or group, if present.
@@ -80,44 +122,35 @@ impl SourcedDependencyGroups {
         let dependency_groups = dependency_groups
             .into_iter()
             .map(|(name, group)| {
-                let requirements = match source_strategy {
-                    SourceStrategy::Enabled => group
-                        .requirements
-                        .into_iter()
-                        .flat_map(|requirement| {
-                            let requirement_name = requirement.name.clone();
-                            let group = name.clone();
-                            let extra = None;
-                            LoweredRequirement::from_requirement(
-                                requirement,
-                                project.project_name(),
-                                project.root(),
-                                project_sources,
-                                project_indexes,
-                                extra,
-                                Some(&group),
-                                locations,
-                                project.workspace(),
-                                git_member,
-                            )
-                            .map(
-                                move |requirement| match requirement {
-                                    Ok(requirement) => Ok(requirement.into_inner()),
-                                    Err(err) => Err(MetadataError::GroupLoweringError(
-                                        group.clone(),
-                                        requirement_name.clone(),
-                                        Box::new(err),
-                                    )),
-                                },
-                            )
+                let requirements = group
+                    .requirements
+                    .into_iter()
+                    .flat_map(|requirement| {
+                        let requirement_name = requirement.name.clone();
+                        let group = name.clone();
+                        let extra = None;
+                        LoweredRequirement::from_requirement(
+                            requirement,
+                            project.project_name(),
+                            project.root(),
+                            project_sources,
+                            project_indexes,
+                            extra,
+                            Some(&group),
+                            locations,
+                            project.workspace(),
+                            git_member,
+                        )
+                        .map(move |requirement| match requirement {
+                            Ok(requirement) => Ok(requirement.into_inner()),
+                            Err(err) => Err(MetadataError::GroupLoweringError(
+                                group.clone(),
+                                requirement_name.clone(),
+                                Box::new(err),
+                            )),
                         })
-                        .collect::<Result<Box<_>, _>>(),
-                    SourceStrategy::Disabled => Ok(group
-                        .requirements
-                        .into_iter()
-                        .map(Requirement::from)
-                        .collect()),
-                }?;
+                    })
+                    .collect::<Result<Box<_>, _>>()?;
                 Ok::<(GroupName, Box<_>), MetadataError>((name, requirements))
             })
             .collect::<Result<BTreeMap<_, _>, _>>()?;
