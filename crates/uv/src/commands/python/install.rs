@@ -444,7 +444,7 @@ pub(crate) async fn install(
             .expect("We should have a bin directory with preview enabled")
             .as_path();
 
-        let upgradeable = is_default_install
+        let upgradeable = preview.is_enabled() && is_default_install
             || requested_minor_versions.contains(&installation.key().version().python_version());
 
         create_bin_links(
@@ -460,6 +460,7 @@ pub(crate) async fn install(
             &installations,
             &mut changelog,
             &mut errors,
+            preview,
         )?;
 
         if preview.is_enabled() {
@@ -480,7 +481,7 @@ pub(crate) async fn install(
         );
 
     for installation in minor_versions.values() {
-        installation.ensure_minor_version_link()?;
+        installation.ensure_minor_version_link(preview)?;
     }
 
     if changelog.installed.is_empty() && errors.is_empty() {
@@ -622,6 +623,7 @@ fn create_bin_links(
     installations: &[&ManagedPythonInstallation],
     changelog: &mut Changelog,
     errors: &mut Vec<(PythonInstallationKey, Error)>,
+    preview: PreviewMode,
 ) -> Result<(), Error> {
     let targets =
         if (default || is_default_install) && first_request.matches_installation(installation) {
@@ -637,7 +639,9 @@ fn create_bin_links(
     for target in targets {
         let target = bin.join(target);
         let executable = if upgradeable {
-            if let Some(directory_symlink) = DirectorySymlink::from_installation(installation) {
+            if let Some(directory_symlink) =
+                DirectorySymlink::from_installation(installation, preview)
+            {
                 directory_symlink.symlink_executable.clone()
             } else {
                 installation.executable(false)

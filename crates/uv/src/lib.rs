@@ -794,6 +794,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 &globals.network_settings,
                 args.dry_run,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -815,6 +816,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.paths,
                 &cache,
                 printer,
+                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
@@ -846,6 +848,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -867,6 +870,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.files,
                 &cache,
                 printer,
+                globals.preview,
             )
         }
         Commands::Pip(PipNamespace {
@@ -898,6 +902,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -916,6 +921,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 args.settings.system,
                 &cache,
                 printer,
+                globals.preview,
             )
         }
         Commands::Cache(CacheNamespace {
@@ -1374,6 +1380,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.python_downloads,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }
@@ -1408,6 +1415,14 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
         Commands::Python(PythonNamespace {
             command: PythonCommand::Upgrade(args),
         }) => {
+            if globals.preview.is_disabled() {
+                writeln!(
+                    printer.stderr(),
+                    "`uv python upgrade` is only available in preview mode; add the `--preview` flag to use `upgrade`"
+                )?;
+                return Ok(ExitStatus::Failure);
+            }
+
             // Resolve the settings from the command-line arguments and workspace configuration.
             let args = settings::PythonUpgradeSettings::resolve(args, filesystem);
             show_settings!(args);
@@ -1468,6 +1483,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     cli.top_level.no_config,
                     &cache,
                     printer,
+                    globals.preview,
                 )
                 .await
             } else {
@@ -1481,6 +1497,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                     globals.python_preference,
                     &cache,
                     printer,
+                    globals.preview,
                 )
                 .await
             }
@@ -1507,6 +1524,7 @@ async fn run(mut cli: Cli) -> Result<ExitStatus> {
                 globals.network_settings,
                 &cache,
                 printer,
+                globals.preview,
             )
             .await
         }

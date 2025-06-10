@@ -8,6 +8,7 @@ use std::{env, io, iter};
 use std::{path::Path, path::PathBuf, str::FromStr};
 use thiserror::Error;
 use tracing::{debug, instrument, trace};
+use uv_configuration::PreviewMode;
 use which::{which, which_all};
 
 use uv_cache::Cache;
@@ -314,6 +315,7 @@ fn python_executables_from_installed<'a>(
     implementation: Option<&'a ImplementationName>,
     platform: PlatformRequest,
     preference: PythonPreference,
+    preview: PreviewMode,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     let is_alternative_implementation =
         implementation.is_some_and(|implementation| *implementation != ImplementationName::CPython);
@@ -350,7 +352,7 @@ fn python_executables_from_installed<'a>(
                                 // If this is a CPython implementation, it's a minor version request, and a
                                 // minor version symlink directory (or junction on Windows) exists,
                                 // use an executable path containing that directory.
-                                DirectorySymlink::from_installation(&installation)
+                                DirectorySymlink::from_installation(&installation, preview)
                                     .filter(DirectorySymlink::symlink_exists)
                                     .map(|directory_symlink| {
                                         directory_symlink.symlink_executable.clone()
@@ -451,6 +453,7 @@ fn python_executables<'a>(
     platform: PlatformRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
+    preview: PreviewMode,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     // Always read from `UV_INTERNAL__PARENT_INTERPRETER` — it could be a system interpreter
     let from_parent_interpreter = iter::once_with(|| {
@@ -471,7 +474,7 @@ fn python_executables<'a>(
 
     let from_virtual_environments = python_executables_from_virtual_environments();
     let from_installed =
-        python_executables_from_installed(version, implementation, platform, preference);
+        python_executables_from_installed(version, implementation, platform, preference, preview);
 
     // Limit the search to the relevant environment preference; this avoids unnecessary work like
     // traversal of the file system. Subsequent filtering should be done by the caller with
@@ -670,16 +673,23 @@ fn python_interpreters<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
+    preview: PreviewMode,
 ) -> impl Iterator<Item = Result<(PythonSource, Interpreter), Error>> + 'a {
     python_interpreters_from_executables(
         // Perform filtering on the discovered executables based on their source. This avoids
         // unnecessary interpreter queries, which are generally expensive. We'll filter again
         // with `interpreter_satisfies_environment_preference` after querying.
-        python_executables(version, implementation, platform, environments, preference).filter_ok(
-            move |(source, path)| {
-                source_satisfies_environment_preference(*source, path, environments)
-            },
-        ),
+        python_executables(
+            version,
+            implementation,
+            platform,
+            environments,
+            preference,
+            preview,
+        )
+        .filter_ok(move |(source, path)| {
+            source_satisfies_environment_preference(*source, path, environments)
+        }),
         cache,
     )
     .filter_ok(move |(source, interpreter)| {
@@ -918,6 +928,7 @@ pub fn find_python_installations<'a>(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
+    preview: PreviewMode,
 ) -> Box<dyn Iterator<Item = Result<FindPythonResult, Error>> + 'a> {
     let sources = DiscoveryPreferences {
         python_preference: preference,
@@ -1009,6 +1020,7 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
+                preview,
             )
             .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
@@ -1021,6 +1033,7 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
+                preview,
             )
             .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
         }),
@@ -1037,6 +1050,7 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
+                    preview,
                 )
                 .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
@@ -1050,6 +1064,7 @@ pub fn find_python_installations<'a>(
                 environments,
                 preference,
                 cache,
+                preview,
             )
             .filter_ok(|(_source, interpreter)| {
                 interpreter
@@ -1071,6 +1086,7 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
+                    preview,
                 )
                 .filter_ok(|(_source, interpreter)| {
                     interpreter
@@ -1095,6 +1111,7 @@ pub fn find_python_installations<'a>(
                     environments,
                     preference,
                     cache,
+                    preview,
                 )
                 .filter_ok(|(_source, interpreter)| request.satisfied_by_interpreter(interpreter))
                 .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
@@ -1112,8 +1129,10 @@ pub(crate) fn find_python_installation(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &Cache,
+    preview: PreviewMode,
 ) -> Result<FindPythonResult, Error> {
-    let installations = find_python_installations(request, environments, preference, cache);
+    let installations =
+        find_python_installations(request, environments, preference, cache, preview);
     let mut first_prerelease = None;
     let mut first_error = None;
     for result in installations {
@@ -1209,12 +1228,13 @@ pub(crate) fn find_best_python_installation(
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &Cache,
+    preview: PreviewMode,
 ) -> Result<FindPythonResult, Error> {
     debug!("Starting Python discovery for {}", request);
 
     // First, check for an exact match (or the first available version if no Python version was provided)
     debug!("Looking for exact match for request {request}");
-    let result = find_python_installation(request, environments, preference, cache);
+    let result = find_python_installation(request, environments, preference, cache, preview);
     match result {
         Ok(Ok(installation)) => {
             warn_on_unsupported_python(installation.interpreter());
@@ -1242,7 +1262,7 @@ pub(crate) fn find_best_python_installation(
         _ => None,
     } {
         debug!("Looking for relaxed patch version {request}");
-        let result = find_python_installation(&request, environments, preference, cache);
+        let result = find_python_installation(&request, environments, preference, cache, preview);
         match result {
             Ok(Ok(installation)) => {
                 warn_on_unsupported_python(installation.interpreter());
@@ -1259,14 +1279,16 @@ pub(crate) fn find_best_python_installation(
     debug!("Looking for a default Python installation");
     let request = PythonRequest::Default;
     Ok(
-        find_python_installation(&request, environments, preference, cache)?.map_err(|err| {
-            // Use a more general error in this case since we looked for multiple versions
-            PythonNotFound {
-                request,
-                python_preference: err.python_preference,
-                environment_preference: err.environment_preference,
-            }
-        }),
+        find_python_installation(&request, environments, preference, cache, preview)?.map_err(
+            |err| {
+                // Use a more general error in this case since we looked for multiple versions
+                PythonNotFound {
+                    request,
+                    python_preference: err.python_preference,
+                    environment_preference: err.environment_preference,
+                }
+            },
+        ),
     )
 }
 

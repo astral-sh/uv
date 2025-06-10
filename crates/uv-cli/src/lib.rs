@@ -4756,7 +4756,8 @@ pub enum PythonCommand {
     /// See `uv help python` to view supported request formats.
     Install(PythonInstallArgs),
 
-    /// Upgrade installed Python versions to the latest supported patch release.
+    /// Upgrade installed Python versions to the latest supported patch release (requires the
+    /// `--preview` flag).
     ///
     /// A target Python minor version to upgrade may be provided, e.g., `3.13`. Multiple versions
     /// may be provided to perform more than one upgrade.
