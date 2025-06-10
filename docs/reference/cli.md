@@ -1398,7 +1398,8 @@ metadata when there are not wheels.</p>
 <p>See <a href="#uv-python">uv python</a> for details on Python discovery and supported request formats.</p>
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-upgrade--quiet"><a href="#uv-upgrade--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
-</dd><dt id="uv-upgrade--verbose"><a href="#uv-upgrade--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
+</dd><dt id="uv-upgrade--recursive"><a href="#uv-upgrade--recursive"><code>--recursive</code></a></dt><dd><p>Search recursively for pyproject.toml files</p>
+<p>May also be set with the <code>UV_UPGRADE_RECURSIVE</code> environment variable.</p></dd><dt id="uv-upgrade--verbose"><a href="#uv-upgrade--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>
 
