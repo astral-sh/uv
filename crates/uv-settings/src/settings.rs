@@ -1495,7 +1495,7 @@ pub struct PipOptions {
     /// Hash-checking mode introduces a number of additional constraints:
     ///
     /// - Git dependencies are not supported.
-    /// - Editable installs are not supported.
+    /// - Editable installations are not supported.
     /// - Local dependencies are not supported, unless they point to a specific wheel (`.whl`) or
     ///   source archive (`.zip`, `.tar.gz`), as opposed to a directory.
     #[option(

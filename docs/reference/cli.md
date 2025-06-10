@@ -3550,7 +3550,7 @@ be used with caution, as it can modify the system Python installation.</p>
 <p>When <code>--require-hashes</code> is enabled, <em>all</em> requirements must include a hash or set of hashes, and <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
 <p>Hash-checking mode introduces a number of additional constraints:</p>
 <ul>
-<li>Git dependencies are not supported. - Editable installs are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
+<li>Git dependencies are not supported. - Editable installations are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
 </ul>
 <p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p></dd><dt id="uv-pip-sync--strict"><a href="#uv-pip-sync--strict"><code>--strict</code></a></dt><dd><p>Validate the Python environment after completing the installation, to detect packages with missing dependencies or other issues</p>
 </dd><dt id="uv-pip-sync--system"><a href="#uv-pip-sync--system"><code>--system</code></a></dt><dd><p>Install packages into the system Python environment.</p>
@@ -3814,7 +3814,7 @@ should be used with caution, as it can modify the system Python installation.</p
 <p>When <code>--require-hashes</code> is enabled, <em>all</em> requirements must include a hash or set of hashes, and <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
 <p>Hash-checking mode introduces a number of additional constraints:</p>
 <ul>
-<li>Git dependencies are not supported. - Editable installs are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
+<li>Git dependencies are not supported. - Editable installations are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
 </ul>
 <p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p></dd><dt id="uv-pip-install--requirements"><a href="#uv-pip-install--requirements"><code>--requirements</code></a>, <code>--requirement</code>, <code>-r</code> <i>requirements</i></dt><dd><p>Install all packages listed in the given <code>requirements.txt</code> or <code>pylock.toml</code> files.</p>
 <p>If a <code>pyproject.toml</code>, <code>setup.py</code>, or <code>setup.cfg</code> file is provided, uv will extract the requirements for the relevant project.</p>
@@ -4676,7 +4676,7 @@ the platform.</p>
 <p>When <code>--require-hashes</code> is enabled, <em>all</em> requirements must include a hash or set of hashes, and <em>all</em> requirements must either be pinned to exact versions (e.g., <code>==1.0.0</code>), or be specified via direct URL.</p>
 <p>Hash-checking mode introduces a number of additional constraints:</p>
 <ul>
-<li>Git dependencies are not supported. - Editable installs are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
+<li>Git dependencies are not supported. - Editable installations are not supported. - Local dependencies are not supported, unless they point to a specific wheel (<code>.whl</code>) or source archive (<code>.zip</code>, <code>.tar.gz</code>), as opposed to a directory.</li>
 </ul>
 <p>May also be set with the <code>UV_REQUIRE_HASHES</code> environment variable.</p></dd><dt id="uv-build--resolution"><a href="#uv-build--resolution"><code>--resolution</code></a> <i>resolution</i></dt><dd><p>The strategy to use when selecting between the different compatible versions for a given package requirement.</p>
 <p>By default, uv will use the latest compatible version of each package (<code>highest</code>).</p>
