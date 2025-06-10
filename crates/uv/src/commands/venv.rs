@@ -223,6 +223,7 @@ async fn venv_impl(
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
+            preview,
         )
         .await
         .into_diagnostic()?;
@@ -264,9 +265,10 @@ async fn venv_impl(
     )
     .into_diagnostic()?;
 
-    let upgradeable = python_request
-        .as_ref()
-        .is_none_or(|request| !request.includes_patch());
+    let upgradeable = preview.is_enabled()
+        && python_request
+            .as_ref()
+            .is_none_or(|request| !request.includes_patch());
 
     // Create the virtual environment.
     let venv = uv_virtualenv::create_venv(
@@ -278,6 +280,7 @@ async fn venv_impl(
         relocatable,
         seed,
         upgradeable,
+        preview,
     )
     .map_err(VenvError::Creation)?;
 

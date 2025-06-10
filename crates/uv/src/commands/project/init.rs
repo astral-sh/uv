@@ -86,6 +86,7 @@ pub(crate) async fn init(
                 pin_python,
                 package,
                 no_config,
+                preview,
             )
             .await?;
 
@@ -201,6 +202,7 @@ async fn init_script(
     pin_python: bool,
     package: bool,
     no_config: bool,
+    preview: PreviewMode,
 ) -> Result<()> {
     if no_workspace {
         warn_user_once!("`--no-workspace` is a no-op for Python scripts, which are standalone");
@@ -257,6 +259,7 @@ async fn init_script(
         &client_builder,
         cache,
         &reporter,
+        preview,
     )
     .await?;
 
@@ -433,6 +436,7 @@ async fn init_project(
                         install_mirrors.python_install_mirror.as_deref(),
                         install_mirrors.pypy_install_mirror.as_deref(),
                         install_mirrors.python_downloads_json_url.as_deref(),
+                        preview,
                     )
                     .await?
                     .into_interpreter();
@@ -460,6 +464,7 @@ async fn init_project(
                     install_mirrors.python_install_mirror.as_deref(),
                     install_mirrors.pypy_install_mirror.as_deref(),
                     install_mirrors.python_downloads_json_url.as_deref(),
+                    preview,
                 )
                 .await?
                 .into_interpreter();
@@ -526,6 +531,7 @@ async fn init_project(
                 install_mirrors.python_install_mirror.as_deref(),
                 install_mirrors.pypy_install_mirror.as_deref(),
                 install_mirrors.python_downloads_json_url.as_deref(),
+                preview,
             )
             .await?
             .into_interpreter();
@@ -553,6 +559,7 @@ async fn init_project(
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
             install_mirrors.python_downloads_json_url.as_deref(),
+            preview,
         )
         .await?
         .into_interpreter();
