@@ -525,8 +525,8 @@ impl ManagedPythonInstallation {
     /// Ensure the environment contains the symlink directory (or junction on Windows)
     /// pointing to the patch directory for this minor version.
     pub fn ensure_minor_version_link(&self, preview: PreviewMode) -> Result<(), Error> {
-        if let Some(directory_symlink) = DirectorySymlink::from_installation(self, preview) {
-            directory_symlink.create_directory()?;
+        if let Some(minor_version_link) = PythonMinorVersionLink::from_installation(self, preview) {
+            minor_version_link.create_directory()?;
         }
         Ok(())
     }
@@ -655,10 +655,10 @@ impl ManagedPythonInstallation {
     }
 }
 
-/// A representation of a symlink directory (or junction on Windows) linking to
-/// the home directory of a Python installation.
+/// A representation of a minor version symlink directory (or junction on Windows)
+/// linking to the home directory of a Python installation.
 #[derive(Clone, Debug)]
-pub struct DirectorySymlink {
+pub struct PythonMinorVersionLink {
     /// The symlink directory (or junction on Windows)
     pub symlink_directory: PathBuf,
     /// The full path to the executable including the symlink directory
@@ -669,7 +669,7 @@ pub struct DirectorySymlink {
     pub target_directory: PathBuf,
 }
 
-impl DirectorySymlink {
+impl PythonMinorVersionLink {
     /// Attempt to derive a path from an executable path that substitutes a minor
     /// version symlink directory (or junction on Windows) for the patch version
     /// directory.
@@ -737,27 +737,27 @@ impl DirectorySymlink {
             &executable_name.to_string_lossy(),
             implementation,
         );
-        let directory_symlink = Self {
+        let minor_version_link = Self {
             symlink_directory,
             symlink_executable,
             target_directory,
         };
-        // If preview mode is disabled, still return a `DirectorySymlink` for
+        // If preview mode is disabled, still return a `MinorVersionSymlink` for
         // existing symlinks, allowing continued operations without the `--preview`
         // flag after initial symlink directory installation.
         if preview.is_disabled() {
-            if !directory_symlink.symlink_exists() {
+            if !minor_version_link.symlink_exists() {
                 return None;
             }
         }
-        Some(directory_symlink)
+        Some(minor_version_link)
     }
 
     pub fn from_installation(
         installation: &ManagedPythonInstallation,
         preview: PreviewMode,
     ) -> Option<Self> {
-        DirectorySymlink::from_executable(
+        PythonMinorVersionLink::from_executable(
             installation.executable(false).as_path(),
             installation.key(),
             preview,
@@ -765,7 +765,11 @@ impl DirectorySymlink {
     }
 
     pub fn from_interpreter(interpreter: &Interpreter, preview: PreviewMode) -> Option<Self> {
-        DirectorySymlink::from_executable(interpreter.sys_executable(), &interpreter.key(), preview)
+        PythonMinorVersionLink::from_executable(
+            interpreter.sys_executable(),
+            &interpreter.key(),
+            preview,
+        )
     }
 
     pub fn create_directory(&self) -> Result<(), Error> {

@@ -13,7 +13,9 @@ use tracing::{debug, warn};
 use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::PythonDownloadRequest;
-use uv_python::managed::{DirectorySymlink, ManagedPythonInstallations, python_executable_dir};
+use uv_python::managed::{
+    ManagedPythonInstallations, PythonMinorVersionLink, python_executable_dir,
+};
 use uv_python::{PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest};
 
 use crate::commands::python::install::format_executables;
@@ -244,19 +246,19 @@ async fn do_uninstall(
     // (or junction on Windows) if it exists.
     for installation in &matching_installations {
         if !remaining_minor_versions.contains_key(installation.minor_version_key()) {
-            if let Some(directory_symlink) =
-                DirectorySymlink::from_installation(installation, preview)
+            if let Some(minor_version_link) =
+                PythonMinorVersionLink::from_installation(installation, preview)
             {
-                if directory_symlink.symlink_exists() {
+                if minor_version_link.symlink_exists() {
                     let result = if cfg!(windows) {
-                        fs_err::remove_dir(directory_symlink.symlink_directory.as_path())
+                        fs_err::remove_dir(minor_version_link.symlink_directory.as_path())
                     } else {
-                        fs_err::remove_file(directory_symlink.symlink_directory.as_path())
+                        fs_err::remove_file(minor_version_link.symlink_directory.as_path())
                     };
                     if result.is_err() {
                         return Err(anyhow::anyhow!(
                             "Failed to remove symlink directory {}",
-                            directory_symlink.symlink_directory.display()
+                            minor_version_link.symlink_directory.display()
                         ));
                     }
                     let symlink_term = if cfg!(windows) {
@@ -267,7 +269,7 @@ async fn do_uninstall(
                     debug!(
                         "Removed {}: {}",
                         symlink_term,
-                        directory_symlink.symlink_directory.to_string_lossy()
+                        minor_version_link.symlink_directory.to_string_lossy()
                     );
                 }
             }
