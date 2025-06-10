@@ -28,6 +28,8 @@ use crate::interpreter::{StatusCodeError, UnexpectedResponseError};
 use crate::managed::ManagedPythonInstallations;
 #[cfg(windows)]
 use crate::microsoft_store::find_microsoft_store_pythons;
+#[cfg(windows)]
+use crate::pe_version::extract_version_from_pe;
 use crate::virtualenv::Error as VirtualEnvError;
 use crate::virtualenv::{
     CondaEnvironmentKind, conda_environment_from_env, virtualenv_from_env,
@@ -554,6 +556,20 @@ fn python_executables_from_search_path<'a>(
                                 .into_iter()
                                 .flatten(),
                         )
+                        .filter(|path| {
+                            // On Windows, try PE version extraction first as an optimization
+                            // Skip this executable if PE version doesn't match
+                            if let Some(pe_matches) = try_pe_version_check(path, Some(version)) {
+                                if !pe_matches {
+                                    debug!(
+                                        "Skipping `{}` based on PE version mismatch",
+                                        path.display()
+                                    );
+                                    return false;
+                                }
+                            }
+                            true
+                        })
                 })
                 .into_iter()
                 .flatten()
@@ -668,23 +684,78 @@ fn python_interpreters<'a>(
     })
 }
 
+/// On Windows, try to extract version from PE metadata to potentially skip expensive interpreter queries.
+/// Returns `None` if PE extraction fails or is not available, indicating fallback to full query.
+#[cfg(windows)]
+fn try_pe_version_check(path: &Path, request: Option<&VersionRequest>) -> Option<bool> {
+    let Some(request) = request else {
+        // No specific version requested, can't optimize
+        return None;
+    };
+
+    let pe_version = match extract_version_from_pe(path) {
+        Ok(Some(version)) => version,
+        Ok(None) => {
+            debug!("No version info found in PE file: {}", path.display());
+            return None;
+        }
+        Err(err) => {
+            debug!(
+                "Failed to extract PE version from {}: {}",
+                path.display(),
+                err
+            );
+            return None;
+        }
+    };
+
+    let matches = request.matches_version(&pe_version);
+
+    if matches {
+        debug!(
+            "PE version {} from {} matches request {}",
+            pe_version,
+            path.display(),
+            request
+        );
+    } else {
+        debug!(
+            "PE version {} from {} does not match request {}",
+            pe_version,
+            path.display(),
+            request
+        );
+    }
+
+    Some(matches)
+}
+
+/// Non-Windows version always returns None (no optimization available)
+#[cfg(not(windows))]
+fn try_pe_version_check(_path: &Path, _request: Option<&VersionRequest>) -> Option<bool> {
+    None
+}
+
 /// Lazily convert Python executables into interpreters.
 fn python_interpreters_from_executables<'a>(
     executables: impl Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a,
     cache: &'a Cache,
 ) -> impl Iterator<Item = Result<(PythonSource, Interpreter), Error>> + 'a {
-    executables.map(|result| match result {
-        Ok((source, path)) => Interpreter::query(&path, cache)
-            .map(|interpreter| (source, interpreter))
-            .inspect(|(source, interpreter)| {
-                debug!(
-                    "Found `{}` at `{}` ({source})",
-                    interpreter.key(),
-                    path.display()
-                );
-            })
-            .map_err(|err| Error::Query(Box::new(err), path, source))
-            .inspect_err(|err| debug!("{err}")),
+    executables.map(move |result| match result {
+        Ok((source, path)) => {
+            // Proceed with full interpreter query
+            Interpreter::query(&path, cache)
+                .map(|interpreter| (source, interpreter))
+                .inspect(|(source, interpreter)| {
+                    debug!(
+                        "Found `{}` at `{}` ({source})",
+                        interpreter.key(),
+                        path.display()
+                    );
+                })
+                .map_err(|err| Error::Query(Box::new(err), path, source))
+                .inspect_err(|err| debug!("{err}"))
+        }
         Err(err) => Err(err),
     })
 }
