@@ -88,6 +88,22 @@ fn make_child_cmdline() -> CString {
                 // (in `launcher.c`). This allows virtual environments to
                 // be correctly detected when using trampolines.
                 std::env::set_var("__PYVENV_LAUNCHER__", &executable_name);
+
+                // If this is not a virtual environment and `PYTHONHOME` has
+                // not been set, then set `PYTHONHOME` to the parent directory of
+                // the executable. This ensures that the correct installation
+                // directories are added to `sys.path` when running with a junction
+                // trampoline.
+                let python_home_set =
+                    std::env::var("PYTHONHOME").is_ok_and(|home| !home.is_empty());
+                if !is_virtualenv(python_exe.as_path()) && !python_home_set {
+                    std::env::set_var(
+                        "PYTHONHOME",
+                        python_exe
+                            .parent()
+                            .expect("Python executable should have a parent directory"),
+                    );
+                }
             }
         }
         TrampolineKind::Script => {
@@ -127,6 +143,20 @@ fn push_quoted_path(path: &Path, command: &mut Vec<u8>) {
         }
     }
     command.extend(br#"""#);
+}
+
+/// Checks if the given executable is part of a virtual environment
+///
+/// Checks if a `pyvenv.cfg` file exists in grandparent directory of the given executable.
+/// PEP 405 specifies a more robust procedure (checking both the parent and grandparent
+/// directory and then scanning for a `home` key), but in practice we have found this to
+/// be unnecessary.
+fn is_virtualenv(executable: &Path) -> bool {
+    executable
+        .parent()
+        .and_then(Path::parent)
+        .map(|path| path.join("pyvenv.cfg").is_file())
+        .unwrap_or(false)
 }
 
 /// Reads the executable binary from the back to find:
