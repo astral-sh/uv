@@ -9420,7 +9420,7 @@ fn add_index_empty_directory() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: Index directory `file://[TEMP_DIR]/test-index` is empty; falling back to PyPI.
+    warning: Index directory `file://[TEMP_DIR]/test-index` is empty, skipping
     Resolved 2 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
