@@ -422,6 +422,17 @@ fn python_patch_override_patch_compatible() -> Result<()> {
     let requirements_in = context.temp_dir.child("requirements.in");
     requirements_in.write_str("python-patch-override-patch-compatible-a==1.0.0")?;
 
+    uv_snapshot!(filters, context.venv().arg("-p").arg("3.9.20"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.9.20 interpreter at: [PYTHON-3.9.20]
+    Creating virtual environment at: .venv
+    Activate with: source .venv/[BIN]/activate
+    ");
+
     let output = uv_snapshot!(filters, command(&context, python_versions)
         .arg("--python-version=3.9.0")
         , @r"
