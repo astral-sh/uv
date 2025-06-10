@@ -25,11 +25,13 @@ pub struct FlatDependencyGroup {
 }
 
 impl FlatDependencyGroups {
+    /// Gather and flatten all the dependency-groups defined in the given pyproject.toml
+    ///
+    /// The path is only used in diagnostics.
     pub fn from_pyproject_toml(
         path: &Path,
         pyproject_toml: &PyProjectToml,
     ) -> Result<Self, DependencyGroupError> {
-        // Otherwise, return the dependency groups in the non-project workspace root.
         // First, collect `tool.uv.dev_dependencies`
         let dev_dependencies = pyproject_toml
             .tool
@@ -68,7 +70,13 @@ impl FlatDependencyGroups {
             error: err.with_dev_dependencies(dev_dependencies),
         })?;
 
-        // Add the `dev` group, if `dev-dependencies` is defined.
+        // Add the `dev` group, if the legacy `dev-dependencies` is defined.
+        //
+        // NOTE: the fact that we do this out here means that nothing can inherit from
+        // the legacy dev-dependencies group (or define a group requires-python for it).
+        // This is intentional, we want groups to be defined in a standard interoperable
+        // way, and letting things include-group a group that isn't defined would be a
+        // mess for other python tools.
         if let Some(dev_dependencies) = dev_dependencies {
             dependency_groups
                 .entry(DEV_DEPENDENCIES.clone())
@@ -120,7 +128,7 @@ impl FlatDependencyGroups {
 
             parents.push(name);
             let mut requirements = Vec::with_capacity(specifiers.len());
-            let mut full_requires_python = None;
+            let mut requires_python_intersection = VersionSpecifiers::empty();
             for specifier in *specifiers {
                 match specifier {
                     DependencyGroupSpecifier::Requirement(requirement) => {
@@ -139,14 +147,12 @@ impl FlatDependencyGroups {
                         resolve_group(resolved, groups, settings, include_group, parents)?;
                         if let Some(included) = resolved.get(include_group) {
                             requirements.extend(included.requirements.iter().cloned());
-                            let versions = full_requires_python
+
+                            // Intersect the requires-python for this group with the the included group's
+                            requires_python_intersection = requires_python_intersection
                                 .into_iter()
-                                .flatten()
                                 .chain(included.requires_python.clone().into_iter().flatten())
-                                .collect::<Vec<_>>();
-                            let new_requires_python = VersionSpecifiers::from_iter(versions);
-                            full_requires_python =
-                                (!new_requires_python.is_empty()).then_some(new_requires_python);
+                                .collect();
                         }
                     }
                     DependencyGroupSpecifier::Object(map) => {
@@ -164,18 +170,16 @@ impl FlatDependencyGroups {
             let DependencyGroupSettings { requires_python } =
                 settings.get(name).unwrap_or(&empty_settings);
             if let Some(requires_python) = requires_python {
-                // Merge in this requires-python to the full flattened version
-                let versions = full_requires_python
+                // Intersect the requires-python for this group to get the final requires-python
+                // that will be used by interpreter discovery and checking.
+                requires_python_intersection = requires_python_intersection
                     .into_iter()
-                    .flatten()
                     .chain(requires_python.clone())
-                    .collect::<Vec<_>>();
-                let new_requires_python = VersionSpecifiers::from_iter(versions);
-                full_requires_python =
-                    (!new_requires_python.is_empty()).then_some(new_requires_python);
-                // Merge in this requires-python to every requirement of this group
-                // We don't need to merge the full_requires_python because included
-                // groups already applied theirs.
+                    .collect();
+
+                // Add the group requires-python as a marker to each requirement
+                // We don't use `requires_python_intersection` because each `include-group`
+                // should already have its markers applied to these.
                 for requirement in &mut requirements {
                     let extra_markers =
                         RequiresPython::from_specifiers(requires_python).to_marker_tree();
@@ -189,7 +193,11 @@ impl FlatDependencyGroups {
                 name.clone(),
                 FlatDependencyGroup {
                     requirements,
-                    requires_python: full_requires_python,
+                    requires_python: if requires_python_intersection.is_empty() {
+                        None
+                    } else {
+                        Some(requires_python_intersection)
+                    },
                 },
             );
             Ok(())

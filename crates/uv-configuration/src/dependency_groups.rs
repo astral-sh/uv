@@ -303,6 +303,7 @@ impl DependencyGroupsWithDefaults {
     pub fn none() -> Self {
         DependencyGroups::default().with_defaults(DefaultGroups::default())
     }
+
     /// Returns `true` if the specification was enabled, and *only* because it was a default
     pub fn contains_because_default(&self, group: &GroupName) -> bool {
         self.cur.contains(group) && !self.prev.contains(group)
