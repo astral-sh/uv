@@ -1217,6 +1217,10 @@ impl ProjectEnvironment {
         // Lock the project environment to avoid synchronization issues.
         let _lock = ProjectInterpreter::lock(workspace).await?;
 
+        let upgradeable = python
+            .as_ref()
+            .is_none_or(|request| !request.includes_patch());
+
         match ProjectInterpreter::discover(
             workspace,
             workspace.install_path().as_ref(),
@@ -1300,6 +1304,7 @@ impl ProjectEnvironment {
                         false,
                         false,
                         false,
+                        upgradeable,
                     )?;
                     return Ok(if replace {
                         Self::WouldReplace(root, environment, temp_dir)
@@ -1337,6 +1342,7 @@ impl ProjectEnvironment {
                     false,
                     false,
                     false,
+                    upgradeable,
                 )?;
 
                 if replace {
@@ -1423,6 +1429,9 @@ impl ScriptEnvironment {
     ) -> Result<Self, ProjectError> {
         // Lock the script environment to avoid synchronization issues.
         let _lock = ScriptInterpreter::lock(script).await?;
+        let upgradeable = python_request
+            .as_ref()
+            .is_none_or(|request| !request.includes_patch());
 
         match ScriptInterpreter::discover(
             script,
@@ -1468,6 +1477,7 @@ impl ScriptEnvironment {
                         false,
                         false,
                         false,
+                        upgradeable,
                     )?;
                     return Ok(if root.exists() {
                         Self::WouldReplace(root, environment, temp_dir)
@@ -1502,6 +1512,7 @@ impl ScriptEnvironment {
                     false,
                     false,
                     false,
+                    upgradeable,
                 )?;
 
                 Ok(if replaced {
