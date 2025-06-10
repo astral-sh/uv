@@ -84,6 +84,9 @@ mod python_install;
 #[cfg(feature = "python")]
 mod python_pin;
 
+#[cfg(feature = "python-managed")]
+mod python_upgrade;
+
 #[cfg(all(feature = "python", feature = "pypi"))]
 mod run;
 
