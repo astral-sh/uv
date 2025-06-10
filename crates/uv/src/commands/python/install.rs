@@ -16,7 +16,7 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{
-    DirectorySymlink, ManagedPythonInstallation, ManagedPythonInstallations, create_bin_link,
+    ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink, create_bin_link,
     python_executable_dir,
 };
 use uv_python::platform::{Arch, Libc};
@@ -639,10 +639,10 @@ fn create_bin_links(
     for target in targets {
         let target = bin.join(target);
         let executable = if upgradeable {
-            if let Some(directory_symlink) =
-                DirectorySymlink::from_installation(installation, preview)
+            if let Some(minor_version_link) =
+                PythonMinorVersionLink::from_installation(installation, preview)
             {
-                directory_symlink.symlink_executable.clone()
+                minor_version_link.symlink_executable.clone()
             } else {
                 installation.executable(false)
             }
