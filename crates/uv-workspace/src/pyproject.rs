@@ -6,16 +6,15 @@
 //!
 //! Then lowers them into a dependency specification.
 
+use glob::Pattern;
+use owo_colors::OwoColorize;
+use rustc_hash::{FxBuildHasher, FxHashSet};
+use serde::{Deserialize, Deserializer, Serialize, de::IntoDeserializer, de::SeqAccess};
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-
-use glob::Pattern;
-use owo_colors::OwoColorize;
-use rustc_hash::{FxBuildHasher, FxHashSet};
-use serde::{Deserialize, Deserializer, Serialize, de::IntoDeserializer, de::SeqAccess};
 use thiserror::Error;
 use uv_build_backend::BuildBackendSettings;
 use uv_distribution_types::{Index, IndexName, RequirementSource};
@@ -1682,4 +1681,38 @@ pub enum DependencyType {
     Optional(ExtraName),
     /// A dependency in `dependency-groups.{0}`.
     Group(GroupName),
+}
+
+impl DependencyType {
+    pub fn iter() -> [Self; 4] {
+        [
+            Self::Production,
+            Self::Dev,
+            Self::Optional(ExtraName::from_str("e").ok().unwrap()),
+            Self::Group(GroupName::from_str("g").ok().unwrap()),
+        ]
+    }
+}
+
+impl FromStr for DependencyType {
+    type Err = DependencyTypeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // case-insensitive, allow abbreviations
+        match s.to_lowercase().as_str() {
+            "prod" | "prd" | "p" => Ok(Self::Production),
+            "dev" | "d" => Ok(Self::Dev),
+            "optional" | "opt" | "o" | "extra" | "e" => {
+                Ok(Self::Optional(ExtraName::from_str("e").ok().unwrap()))
+            }
+            "groups" | "group" | "g" => Ok(Self::Group(GroupName::from_str("g").ok().unwrap())),
+            _ => Err(DependencyTypeError::Unknown(s.to_string())),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum DependencyTypeError {
+    #[error("unknown value for: `{0}` (allowed: `prod,dev,optional,groups`)")]
+    Unknown(String),
 }
