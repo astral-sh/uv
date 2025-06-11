@@ -42,6 +42,7 @@ pub(crate) async fn list(
     }
 }
 
+#[allow(clippy::fn_params_excessive_bools)]
 async fn list_text(
     show_paths: bool,
     show_version_specifiers: bool,
@@ -221,7 +222,7 @@ async fn list_json(cache: &Cache, printer: Printer) -> Result<ExitStatus> {
             return Ok(ExitStatus::Success);
         }
         Err(err) => return Err(err.into()),
-    };
+    }
 
     let tools = installed_tools.tools()?;
 
@@ -309,5 +310,5 @@ async fn list_json(cache: &Cache, printer: Printer) -> Result<ExitStatus> {
         .collect::<Vec<_>>();
 
     writeln!(printer.stdout(), "{}", serde_json::to_string(&tool_list)?)?;
-    return Ok(ExitStatus::Success);
+    Ok(ExitStatus::Success)
 }
