@@ -19,7 +19,7 @@ pub struct Tool {
     constraints: Vec<Requirement>,
     /// The overrides requested by the user during installation.
     overrides: Vec<Requirement>,
-    /// The excludes
+    /// The excludes requested by the user during installation.
     excludes: Vec<Requirement>,
     /// The build constraints requested by the user during installation.
     build_constraints: Vec<Requirement>,

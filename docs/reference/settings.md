@@ -177,6 +177,24 @@ environments = ["sys_platform == 'darwin'"]
 
 ---
 
+### [`excluded-dependencies`](#excluded-dependencies) {: #excluded-dependencies }
+
+Exclude
+
+**Default value**: `[]`
+
+**Type**: `list[str]`
+
+**Example usage**:
+
+```toml title="pyproject.toml"
+[tool.uv]
+# Exclude numpy from being installed, even if other dependencies require it
+exclude-dependencies = ["numpy"]
+```
+
+---
+
 ### [`index`](#index) {: #index }
 
 The indexes to use when resolving dependencies.

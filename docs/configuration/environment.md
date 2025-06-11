@@ -68,6 +68,11 @@ this URL as the default index when searching for packages.
 
 `.env` files from which to load environment variables when executing `uv run` commands.
 
+### `UV_EXCLUDE`
+
+Equivalent to the `--exclude` command-line argument. If set, uv will use this file
+as the exclude file, Uses space-separated list of files.
+
 ### `UV_EXCLUDE_NEWER`
 
 Equivalent to the `--exclude-newer` command-line argument. If set, uv will
