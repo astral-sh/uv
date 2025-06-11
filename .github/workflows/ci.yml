@@ -262,7 +262,6 @@ jobs:
             --status-level skip --failure-output immediate-final --no-fail-fast -j 12 --final-status-level slow
 
   cargo-test-windows:
-    timeout-minutes: 15
     needs: determine_changes
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && (needs.determine_changes.outputs.code == 'true' || github.ref == 'refs/heads/main') }}
     runs-on: github-windows-2025-x86_64-16
