@@ -1140,7 +1140,7 @@ impl TestContext {
     fn path_pattern(path: impl AsRef<Path>) -> String {
         format!(
             // Trim the trailing separator for cross-platform directories filters
-            r"{}\\?/?",
+            r"{}\\{{0,2}}/?",
             regex::escape(&path.as_ref().simplified_display().to_string())
                 // Make separators platform agnostic because on Windows we will display
                 // paths with Unix-style separators sometimes
