@@ -131,7 +131,7 @@ pub enum ArchRequest {
     Environment(Arch),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PlatformRequest {
     pub(crate) os: Option<Os>,
     pub(crate) arch: Option<ArchRequest>,
@@ -139,11 +139,8 @@ pub struct PlatformRequest {
 }
 
 impl PlatformRequest {
-    /// Check if this platform request could potentially be satisfied by an installation key.
-    ///
-    /// This is a lightweight check that can be done before querying the interpreter
-    /// to avoid expensive subprocess calls when the platform clearly doesn't match.
-    pub fn could_be_satisfied_by_key(&self, key: &PythonInstallationKey) -> bool {
+    /// Check if this platform request is satisfied by an installation key.
+    pub fn matches(&self, key: &PythonInstallationKey) -> bool {
         if let Some(os) = self.os {
             if key.os != os {
                 return false;
@@ -163,6 +160,22 @@ impl PlatformRequest {
         }
 
         true
+    }
+}
+
+impl Display for PlatformRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut parts = Vec::new();
+        if let Some(os) = &self.os {
+            parts.push(os.to_string());
+        }
+        if let Some(arch) = &self.arch {
+            parts.push(arch.to_string());
+        }
+        if let Some(libc) = &self.libc {
+            parts.push(libc.to_string());
+        }
+        write!(f, "{}", parts.join("-"))
     }
 }
 
@@ -448,16 +461,12 @@ impl PythonDownloadRequest {
         true
     }
 
-    /// Extract the platform components as a `PlatformRequest` for early filtering.
-    pub fn platform_request(&self) -> Option<PlatformRequest> {
-        if self.os.is_some() || self.arch.is_some() || self.libc.is_some() {
-            Some(PlatformRequest {
-                os: self.os,
-                arch: self.arch,
-                libc: self.libc,
-            })
-        } else {
-            None
+    /// Extract the platform components of this request.
+    pub fn platform(&self) -> PlatformRequest {
+        PlatformRequest {
+            os: self.os,
+            arch: self.arch,
+            libc: self.libc,
         }
     }
 }

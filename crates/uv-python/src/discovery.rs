@@ -312,7 +312,7 @@ fn python_executables_from_virtual_environments<'a>()
 fn python_executables_from_installed<'a>(
     version: &'a VersionRequest,
     implementation: Option<&'a ImplementationName>,
-    platform_filter: Option<PlatformRequest>,
+    platform: PlatformRequest,
     preference: PythonPreference,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
     let from_managed_installations = iter::once_with(move || {
@@ -329,14 +329,12 @@ fn python_executables_from_installed<'a>(
                     .into_iter()
                     .filter(move |installation| {
                         if !version.matches_version(&installation.version()) {
-                            debug!("Skipping incompatible managed installation `{installation}`: version mismatch");
+                            debug!("Skipping managed installation `{installation}`: does not satisfy `{version}`");
                             return false;
                         }
-                        if let Some(ref platform_req) = platform_filter {
-                            if !platform_req.could_be_satisfied_by_key(installation.key()) {
-                                debug!("Skipping incompatible managed installation `{installation}`: platform mismatch");
-                                return false;
-                            }
+                        if !platform.matches(installation.key()) {
+                            debug!("Skipping managed installation `{installation}`: does not satisfy `{platform}`");
+                            return false;
                         }
                         true
                     })
@@ -421,16 +419,17 @@ fn python_executables_from_installed<'a>(
 
 /// Lazily iterate over all discoverable Python executables.
 ///
-/// Note that Python executables may be excluded by the given [`EnvironmentPreference`] and
-/// [`PythonPreference`]. However, these filters are only applied for performance. We cannot
-/// guarantee that the [`EnvironmentPreference`] is satisfied until we query the interpreter.
+/// Note that Python executables may be excluded by the given [`EnvironmentPreference`],
+/// [`PythonPreference`], and [`PlatformRequest`]. However, these filters are only applied for
+/// performance. We cannot guarantee that the all requests or preferences are satisfied until we
+/// query the interpreter.
 ///
 /// See [`python_executables_from_installed`] and [`python_executables_from_virtual_environments`]
 /// for more information on discovery.
 fn python_executables<'a>(
     version: &'a VersionRequest,
     implementation: Option<&'a ImplementationName>,
-    platform_filter: Option<PlatformRequest>,
+    platform: PlatformRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
@@ -453,7 +452,7 @@ fn python_executables<'a>(
 
     let from_virtual_environments = python_executables_from_virtual_environments();
     let from_installed =
-        python_executables_from_installed(version, implementation, platform_filter, preference);
+        python_executables_from_installed(version, implementation, platform, preference);
 
     // Limit the search to the relevant environment preference; this avoids unnecessary work like
     // traversal of the file system. Subsequent filtering should be done by the caller with
@@ -638,17 +637,17 @@ fn find_all_minor(
 
 /// Lazily iterate over all discoverable Python interpreters.
 ///
-/// Note interpreters may be excluded by the given [`EnvironmentPreference`] and [`PythonPreference`].
+/// Note interpreters may be excluded by the given [`EnvironmentPreference`], [`PythonPreference`],
+/// [`VersionRequest`], or [`PlatformRequest`].
+///
+/// The [`PlatformRequest`] is currently on applied to managed Python installations before querying
+/// the interpreter. The caller is responsible for ensuring it is applied otherwise.
 ///
 /// See [`python_executables`] for more information on discovery.
-/// Lazily iterate over all discoverable Python interpreters with optional platform filtering.
-///
-/// This version supports early platform filtering for managed installations to avoid
-/// unnecessary interpreter queries when the platform clearly doesn't match.
 fn python_interpreters<'a>(
     version: &'a VersionRequest,
     implementation: Option<&'a ImplementationName>,
-    platform_filter: Option<PlatformRequest>,
+    platform: PlatformRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
     cache: &'a Cache,
@@ -657,16 +656,11 @@ fn python_interpreters<'a>(
         // Perform filtering on the discovered executables based on their source. This avoids
         // unnecessary interpreter queries, which are generally expensive. We'll filter again
         // with `interpreter_satisfies_environment_preference` after querying.
-        python_executables(
-            version,
-            implementation,
-            platform_filter,
-            environments,
-            preference,
-        )
-        .filter_ok(move |(source, path)| {
-            source_satisfies_environment_preference(*source, path, environments)
-        }),
+        python_executables(version, implementation, platform, environments, preference).filter_ok(
+            move |(source, path)| {
+                source_satisfies_environment_preference(*source, path, environments)
+            },
+        ),
         cache,
     )
     .filter_ok(move |(source, interpreter)| {
@@ -992,7 +986,7 @@ pub fn find_python_installations<'a>(
             python_interpreters(
                 &VersionRequest::Any,
                 None,
-                None,
+                PlatformRequest::default(),
                 environments,
                 preference,
                 cache,
@@ -1004,7 +998,7 @@ pub fn find_python_installations<'a>(
             python_interpreters(
                 &VersionRequest::Default,
                 None,
-                None,
+                PlatformRequest::default(),
                 environments,
                 preference,
                 cache,
@@ -1017,8 +1011,15 @@ pub fn find_python_installations<'a>(
             }
             Box::new({
                 debug!("Searching for {request} in {sources}");
-                python_interpreters(version, None, None, environments, preference, cache)
-                    .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
+                python_interpreters(
+                    version,
+                    None,
+                    PlatformRequest::default(),
+                    environments,
+                    preference,
+                    cache,
+                )
+                .map_ok(|tuple| Ok(PythonInstallation::from_tuple(tuple)))
             })
         }
         PythonRequest::Implementation(implementation) => Box::new({
@@ -1026,7 +1027,7 @@ pub fn find_python_installations<'a>(
             python_interpreters(
                 &VersionRequest::Default,
                 Some(implementation),
-                None,
+                PlatformRequest::default(),
                 environments,
                 preference,
                 cache,
@@ -1047,7 +1048,7 @@ pub fn find_python_installations<'a>(
                 python_interpreters(
                     version,
                     Some(implementation),
-                    None,
+                    PlatformRequest::default(),
                     environments,
                     preference,
                     cache,
@@ -1066,13 +1067,12 @@ pub fn find_python_installations<'a>(
                     return Box::new(iter::once(Err(Error::InvalidVersionRequest(err))));
                 }
             }
-            let platform_filter = request.platform_request();
             Box::new({
                 debug!("Searching for {request} in {sources}");
                 python_interpreters(
                     request.version().unwrap_or(&VersionRequest::Default),
                     request.implementation(),
-                    platform_filter,
+                    request.platform(),
                     environments,
                     preference,
                     cache,
