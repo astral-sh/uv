@@ -4728,7 +4728,8 @@ pub enum PythonCommand {
     ///
     /// A `python` executable is not made globally available, managed Python versions are only used
     /// in uv commands or in active virtual environments. There is experimental support for adding
-    /// Python executables to the `PATH` — use the `--preview` flag to enable this behavior.
+    /// Python executables to a directory on the path — use the `--preview` flag to enable this
+    /// behavior and `uv python dir --bin` to retrieve the target directory.
     ///
     /// Multiple Python versions may be requested.
     ///
@@ -4763,7 +4764,8 @@ pub enum PythonCommand {
     /// The Python installation directory may be overridden with `$UV_PYTHON_INSTALL_DIR`.
     ///
     /// To view the directory where uv installs Python executables instead, use the `--bin` flag.
-    /// Note that Python executables are only installed when preview mode is enabled.
+    /// The Python executable directory may be overridden with `$UV_PYTHON_BIN_DIR`. Note that
+    /// Python executables are only installed when preview mode is enabled.
     Dir(PythonDirArgs),
 
     /// Uninstall Python versions.

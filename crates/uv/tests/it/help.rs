@@ -468,7 +468,8 @@ fn help_subsubcommand() {
 
     A `python` executable is not made globally available, managed Python versions are only used in uv
     commands or in active virtual environments. There is experimental support for adding Python
-    executables to the `PATH` — use the `--preview` flag to enable this behavior.
+    executables to a directory on the path — use the `--preview` flag to enable this behavior and `uv
+    python dir --bin` to retrieve the target directory.
 
     Multiple Python versions may be requested.
 
