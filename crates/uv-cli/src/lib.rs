@@ -1132,7 +1132,14 @@ pub struct PipCompileArgs {
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
 
-    /// Exclude
+    /// Exclude packages listed in the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify packages which should be
+    /// ignored during resolution and installation. Any package listed in these files will be
+    /// explicitly excluded, regardless of whether it is required by any constituent package.
+    ///
+    /// This mechanism is useful for removing transitive dependencies or skipping problematic
+    /// packages that would otherwise be included in the environment.
     #[arg(long, alias = "excludes", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub excludes: Vec<Maybe<PathBuf>>,
 
@@ -1747,8 +1754,14 @@ pub struct PipInstallArgs {
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
 
-    /// Excludes
-
+    /// Exclude packages listed in the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify packages which should be
+    /// ignored during resolution and installation. Any package listed in these files will be
+    /// explicitly excluded, regardless of whether it is required by any constituent package.
+    ///
+    /// This mechanism is useful for removing transitive dependencies or skipping problematic
+    /// packages that would otherwise be included in the environment.
     #[arg(long, alias = "excludes", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub excludes: Vec<Maybe<PathBuf>>,
 
@@ -4267,7 +4280,14 @@ pub struct ToolRunArgs {
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
 
-    /// Excludes
+    /// Exclude packages listed in the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify packages which should be
+    /// ignored during resolution and installation. Any package listed in these files will be
+    /// explicitly excluded, regardless of whether it is required by any constituent package.
+    ///
+    /// This mechanism is useful for removing transitive dependencies or skipping problematic
+    /// packages that would otherwise be included in the environment.
     #[arg(long, alias = "exclude", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub excludes: Vec<Maybe<PathBuf>>,
 
@@ -4379,6 +4399,14 @@ pub struct ToolInstallArgs {
     #[arg(long, alias = "override", env = EnvVars::UV_OVERRIDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub overrides: Vec<Maybe<PathBuf>>,
 
+    /// Exclude packages listed in the given requirements files.
+    ///
+    /// Excludes files are `requirements.txt`-like files that specify packages which should be
+    /// ignored during resolution and installation. Any package listed in these files will be
+    /// explicitly excluded, regardless of whether it is required by any constituent package.
+    ///
+    /// This mechanism is useful for removing transitive dependencies or skipping problematic
+    /// packages that would otherwise be included in the environment.
     #[arg(long, alias = "excludes", env = EnvVars::UV_EXCLUDE, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
     pub excludes: Vec<Maybe<PathBuf>>,
 
