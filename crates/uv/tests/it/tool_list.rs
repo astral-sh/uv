@@ -590,7 +590,6 @@ fn tool_list_output_format_json() {
         .assert()
         .success();
 
-    // Test with --show-extras only
     uv_snapshot!(context.filters(), context.tool_list().arg("--output-format=json")
     .env(EnvVars::UV_TOOL_DIR, tool_dir.as_os_str())
     .env(EnvVars::XDG_BIN_HOME, bin_dir.as_os_str()), @r###"

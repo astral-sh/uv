@@ -1144,7 +1144,8 @@ impl TestContext {
             regex::escape(&path.as_ref().simplified_display().to_string())
                 // Make separators platform agnostic because on Windows we will display
                 // paths with Unix-style separators sometimes
-                .replace(r"\\", r"(\\|\/)")
+                // (Double-backslashes is for JSON-ified Windows paths.)
+                .replace(r"\\", r"(\\{1,2}|\/)")
         )
     }
 
