@@ -317,8 +317,6 @@ fn python_executables_from_installed<'a>(
     preference: PythonPreference,
     preview: PreviewMode,
 ) -> Box<dyn Iterator<Item = Result<(PythonSource, PathBuf), Error>> + 'a> {
-    let is_alternative_implementation =
-        implementation.is_some_and(|implementation| *implementation != ImplementationName::CPython);
     let from_managed_installations = iter::once_with(move || {
         ManagedPythonInstallations::from_settings(None)
             .map_err(Error::from)
@@ -346,19 +344,25 @@ fn python_executables_from_installed<'a>(
                     .map(move |installation| {
                         (
                             PythonSource::Managed,
-                            if version.patch().is_some() || is_alternative_implementation {
-                                installation.executable(false)
-                            } else {
-                                // If this is a CPython implementation, it's a minor version request, and a
-                                // minor version symlink directory (or junction on Windows) exists,
-                                // use an executable path containing that directory.
-                                PythonMinorVersionLink::from_installation(&installation, preview)
+                            // If it's not a patch version request, then attempt to read the stable
+                            // minor version link.
+                            version
+                                .patch()
+                                .is_none()
+                                .then(|| {
+                                    PythonMinorVersionLink::from_installation(
+                                        &installation,
+                                        preview,
+                                    )
                                     .filter(PythonMinorVersionLink::symlink_exists)
-                                    .map(|minor_version_link| {
-                                        minor_version_link.symlink_executable.clone()
-                                    })
-                                    .unwrap_or_else(|| installation.executable(false))
-                            },
+                                    .map(
+                                        |minor_version_link| {
+                                            minor_version_link.symlink_executable.clone()
+                                        },
+                                    )
+                                })
+                                .flatten()
+                                .unwrap_or_else(|| installation.executable(false)),
                         )
                     }))
             })
