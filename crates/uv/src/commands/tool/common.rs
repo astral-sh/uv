@@ -169,6 +169,7 @@ pub(crate) fn install_executables(
     requirements: Vec<Requirement>,
     constraints: Vec<Requirement>,
     overrides: Vec<Requirement>,
+    excludes: Vec<Requirement>,
     build_constraints: Vec<Requirement>,
     printer: Printer,
 ) -> anyhow::Result<ExitStatus> {
@@ -291,6 +292,7 @@ pub(crate) fn install_executables(
         requirements,
         constraints,
         overrides,
+        excludes,
         build_constraints,
         python,
         target_entry_points

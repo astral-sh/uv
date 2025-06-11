@@ -108,6 +108,8 @@ impl EnvVars {
     /// as the overrides file. Uses space-separated list of files.
     pub const UV_OVERRIDE: &'static str = "UV_OVERRIDE";
 
+    pub const UV_EXCLUDE: &'static str = "UV_EXCLUDE";
+
     /// Equivalent to the `--link-mode` command-line argument. If set, uv will use this as
     /// a link mode.
     pub const UV_LINK_MODE: &'static str = "UV_LINK_MODE";

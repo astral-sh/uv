@@ -54,6 +54,7 @@ pub(crate) async fn read_requirements(
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
+    excludes: &[RequirementsSource],
     extras: &ExtrasSpecification,
     groups: BTreeMap<PathBuf, Vec<GroupName>>,
     client_builder: &BaseClientBuilder<'_>,
@@ -80,6 +81,7 @@ pub(crate) async fn read_requirements(
         requirements,
         constraints,
         overrides,
+        excludes,
         groups,
         client_builder,
     )
@@ -95,6 +97,7 @@ pub(crate) async fn read_constraints(
         &[],
         constraints,
         &[],
+        &[],
         BTreeMap::default(),
         client_builder,
     )
@@ -107,6 +110,7 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
     requirements: Vec<UnresolvedRequirementSpecification>,
     constraints: Vec<NameRequirementSpecification>,
     overrides: Vec<UnresolvedRequirementSpecification>,
+    _excludes: Vec<UnresolvedRequirementSpecification>,
     source_trees: Vec<PathBuf>,
     mut project: Option<PackageName>,
     workspace_members: BTreeSet<PackageName>,
