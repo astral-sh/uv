@@ -500,6 +500,43 @@ Build a PEP 420 implicit namespace package, allowing more than one root `__init_
 Use this option when the namespace package contains multiple root `__init__.py`, for
 namespace packages with a single root `__init__.py` use a dotted `module-name` instead.
 
+To compare dotted `module-name` and `namespace = true`, the first example below can be
+expressed with `module-name = "cloud.database"`: There is one root `__init__.py` `database`.
+In the second example, we have three roots (`cloud.database`, `cloud.database_pro`,
+`billing.modules.database_pro`), so `namespace = true` is required.
+
+```text
+src
+└── cloud
+    └── database
+        ├── __init__.py
+        ├── query_builder
+        │   └── __init__.py
+        └── sql
+            ├── parser.py
+            └── __init__.py
+```
+
+```text
+src
+├── cloud
+│   ├── database
+│   │   ├── __init__.py
+│   │   ├── query_builder
+│   │   │   └── __init__.py
+│   │   └── sql
+│   │       ├── parser.py
+│   │       └── __init__.py
+│   └── database_pro
+│       ├── __init__.py
+│       └── query_builder.py
+└── billing
+    └── modules
+        └── database_pro
+            ├── __init__.py
+            └── sql.py
+```
+
 **Default value**: `false`
 
 **Type**: `bool`
