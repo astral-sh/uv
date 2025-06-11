@@ -1467,6 +1467,52 @@ jobs:
           done <<< "${CHANGED_FILES}"
           echo "code_any_changed=${CODE_CHANGED}" >> "${GITHUB_OUTPUT}"
 
+  integration-test-registries:
+    timeout-minutes: 10
+    needs: build-binary-linux-libc
+    name: "integration test | registries"
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-test') && github.event.pull_request.head.repo.fork != true }}
+    environment: uv-test-registries
+    env:
+      PYTHON_VERSION: 3.12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "${{ env.PYTHON_VERSION }}"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: uv-linux-libc-${{ github.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Run registry tests"
+        run: ./uv run -p ${{ env.PYTHON_VERSION }} scripts/registries-test.py --uv ./uv
+        env:
+          RUST_LOG: uv=debug
+          UV_TEST_ARTIFACTORY_URL: ${{ secrets.UV_TEST_ARTIFACTORY_URL }}
+          UV_TEST_ARTIFACTORY_USERNAME: ${{ secrets.UV_TEST_ARTIFACTORY_USERNAME }}
+          UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
+          UV_TEST_AZURE_URL: ${{ secrets.UV_TEST_AZURE_URL }}
+          UV_TEST_AZURE_USERNAME: ${{ secrets.UV_TEST_AZURE_USERNAME }}
+          UV_TEST_AZURE_TOKEN: ${{ secrets.UV_TEST_AZURE_TOKEN }}
+          UV_TEST_CLOUDSMITH_URL: ${{ secrets.UV_TEST_CLOUDSMITH_URL }}
+          UV_TEST_CLOUDSMITH_USERNAME: ${{ secrets.UV_TEST_CLOUDSMITH_USERNAME }}
+          UV_TEST_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_CLOUDSMITH_TOKEN }}
+          UV_TEST_GEMFURY_URL: ${{ secrets.UV_TEST_GEMFURY_URL }}
+          UV_TEST_GEMFURY_USERNAME: ${{ secrets.UV_TEST_GEMFURY_USERNAME }}
+          UV_TEST_GEMFURY_TOKEN: ${{ secrets.UV_TEST_GEMFURY_TOKEN }}
+          UV_TEST_GITLAB_URL: ${{ secrets.UV_TEST_GITLAB_URL }}
+          UV_TEST_GITLAB_USERNAME: ${{ secrets.UV_TEST_GITLAB_USERNAME }}
+          UV_TEST_GITLAB_TOKEN: ${{ secrets.UV_TEST_GITLAB_TOKEN }}
+
   integration-test-publish:
     timeout-minutes: 20
     needs: integration-test-publish-changed

@@ -145,12 +145,15 @@ def get_registries(env: Dict[str, str]) -> Dict[str, str]:
     return registries
 
 
-def setup_test_project(registry_name: str, registry_url: str, project_dir: str):
+def setup_test_project(
+    registry_name: str, registry_url: str, project_dir: str, requires_python: str
+):
     """Create a temporary project directory with a pyproject.toml"""
     pyproject_content = f"""[project]
 name = "{registry_name}-test"
 version = "0.1.0"
 description = "Test registry"
+requires-python = ">={requires_python}"
 
 [[tool.uv.index]]
 name = "{registry_name}"
@@ -170,7 +173,8 @@ def run_test(
     username: str,
     token: str,
     verbosity: int,
-    timeout: int = DEFAULT_TIMEOUT,
+    timeout: int,
+    requires_python: str,
 ) -> bool:
     print(uv)
     """Attempt to install a package from this registry."""
@@ -186,7 +190,7 @@ def run_test(
     env[f"UV_INDEX_{registry_name.upper()}_PASSWORD"] = token
 
     with tempfile.TemporaryDirectory() as project_dir:
-        setup_test_project(registry_name, registry_url, project_dir)
+        setup_test_project(registry_name, registry_url, project_dir, requires_python)
 
         cmd = [
             uv,
@@ -284,6 +288,12 @@ def parse_args() -> argparse.Namespace:
         default="RegistryTests",
         help="name of the 1Password vault to use (default: RegistryTests)",
     )
+    parser.add_argument(
+        "--required-python",
+        type=str,
+        default="3.12",
+        help="minimum Python version for tests (default: 3.12)",
+    )
     return parser.parse_args()
 
 
@@ -349,6 +359,7 @@ def main() -> None:
             token,
             args.verbose,
             args.timeout,
+            args.required_python,
         ):
             passed.append(registry_name)
         else:
@@ -393,7 +404,7 @@ def main() -> None:
         print('     * UV_TEST_<registry_name>_USERNAME (defaults to "__token__")')
         sys.exit(1)
 
-    sys.exit(0 if failed == 0 else 1)
+    sys.exit(0 if len(failed) == 0 else 1)
 
 
 if __name__ == "__main__":
