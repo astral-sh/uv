@@ -1,6 +1,6 @@
-# Configuring the uv installer
+# The uv installer
 
-## Changing the install path
+## Changing the installation path
 
 By default, uv is installed to `~/.local/bin`. If `XDG_BIN_HOME` is set, it will be used instead.
 Similarly, if `XDG_DATA_HOME` is set, the target directory will be inferred as
@@ -16,8 +16,8 @@ To change the installation path, use `UV_INSTALL_DIR`:
 
 === "Windows"
 
-    ```powershell
-    powershell -ExecutionPolicy ByPass -c {$env:UV_INSTALL_DIR = "C:\Custom\Path";irm https://astral.sh/uv/install.ps1 | iex}
+    ```pwsh-session
+    PS> powershell -ExecutionPolicy ByPass -c {$env:UV_INSTALL_DIR = "C:\Custom\Path";irm https://astral.sh/uv/install.ps1 | iex}
     ```
 
 ## Disabling shell modifications
@@ -43,10 +43,11 @@ $ curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="/custom
 
 The use of `UV_UNMANAGED_INSTALL` will also disable self-updates (via `uv self update`).
 
-## Passing options to the install script
+## Passing options to the installation script
 
 Using environment variables is recommended because they are consistent across platforms. However,
-options can be passed directly to the install script. For example, to see the available options:
+options can be passed directly to the installation script. For example, to see the available
+options:
 
 ```console
 $ curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --help

@@ -4,16 +4,17 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use jiff::Timestamp;
 use jiff::civil::{Date, DateTime, Time};
 use jiff::tz::{Offset, TimeZone};
-use jiff::Timestamp;
 use serde::Deserialize;
-use toml_edit::{value, Array, ArrayOfTables, Item, Table};
+use toml_edit::{Array, ArrayOfTables, Item, Table, value};
 use url::Url;
 
 use uv_cache_key::RepositoryUrl;
 use uv_configuration::{
-    BuildOptions, DependencyGroupsWithDefaults, ExtrasSpecificationWithDefaults, InstallOptions,
+    BuildOptions, DependencyGroupsWithDefaults, EditableMode, ExtrasSpecificationWithDefaults,
+    InstallOptions,
 };
 use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, SourceDistFilename,
@@ -25,7 +26,7 @@ use uv_distribution_types::{
     RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Resolution,
     ResolvedDist, SourceDist, ToUrlError, UrlString,
 };
-use uv_fs::{relative_to, PortablePathBuf};
+use uv_fs::{PortablePathBuf, relative_to};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
@@ -33,32 +34,51 @@ use uv_pep440::Version;
 use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl};
 use uv_platform_tags::{TagCompatibility, TagPriority, Tags};
 use uv_pypi_types::{HashDigests, Hashes, ParsedGitUrl, VcsKind};
+use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 
 use crate::lock::export::ExportableRequirements;
-use crate::lock::{each_element_on_its_line_array, Source, WheelTagHint};
+use crate::lock::{Source, WheelTagHint, each_element_on_its_line_array};
 use crate::resolution::ResolutionGraphNode;
 use crate::{Installable, LockError, RequiresPython, ResolverOutput};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PylockTomlErrorKind {
-    #[error("Package `{0}` includes both a registry (`packages.wheels`) and a directory source (`packages.directory`)")]
+    #[error(
+        "Package `{0}` includes both a registry (`packages.wheels`) and a directory source (`packages.directory`)"
+    )]
     WheelWithDirectory(PackageName),
-    #[error("Package `{0}` includes both a registry (`packages.wheels`) and a VCS source (`packages.vcs`)")]
+    #[error(
+        "Package `{0}` includes both a registry (`packages.wheels`) and a VCS source (`packages.vcs`)"
+    )]
     WheelWithVcs(PackageName),
-    #[error("Package `{0}` includes both a registry (`packages.wheels`) and an archive source (`packages.archive`)")]
+    #[error(
+        "Package `{0}` includes both a registry (`packages.wheels`) and an archive source (`packages.archive`)"
+    )]
     WheelWithArchive(PackageName),
-    #[error("Package `{0}` includes both a registry (`packages.sdist`) and a directory source (`packages.directory`)")]
+    #[error(
+        "Package `{0}` includes both a registry (`packages.sdist`) and a directory source (`packages.directory`)"
+    )]
     SdistWithDirectory(PackageName),
-    #[error("Package `{0}` includes both a registry (`packages.sdist`) and a VCS source (`packages.vcs`)")]
+    #[error(
+        "Package `{0}` includes both a registry (`packages.sdist`) and a VCS source (`packages.vcs`)"
+    )]
     SdistWithVcs(PackageName),
-    #[error("Package `{0}` includes both a registry (`packages.sdist`) and an archive source (`packages.archive`)")]
+    #[error(
+        "Package `{0}` includes both a registry (`packages.sdist`) and an archive source (`packages.archive`)"
+    )]
     SdistWithArchive(PackageName),
-    #[error("Package `{0}` includes both a directory (`packages.directory`) and a VCS source (`packages.vcs`)")]
+    #[error(
+        "Package `{0}` includes both a directory (`packages.directory`) and a VCS source (`packages.vcs`)"
+    )]
     DirectoryWithVcs(PackageName),
-    #[error("Package `{0}` includes both a directory (`packages.directory`) and an archive source (`packages.archive`)")]
+    #[error(
+        "Package `{0}` includes both a directory (`packages.directory`) and an archive source (`packages.archive`)"
+    )]
     DirectoryWithArchive(PackageName),
-    #[error("Package `{0}` includes both a VCS (`packages.vcs`) and an archive source (`packages.archive`)")]
+    #[error(
+        "Package `{0}` includes both a VCS (`packages.vcs`) and an archive source (`packages.archive`)"
+    )]
     VcsWithArchive(PackageName),
     #[error(
         "Package `{0}` must include one of: `wheels`, `directory`, `archive`, `sdist`, or `vcs`"
@@ -75,24 +95,36 @@ pub enum PylockTomlErrorKind {
     #[error("`packages.vcs` entry for `{0}` must have a `url` or `path`")]
     VcsMissingPathUrl(PackageName),
     #[error("URL must end in a valid wheel filename: `{0}`")]
-    UrlMissingFilename(Url),
+    UrlMissingFilename(DisplaySafeUrl),
     #[error("Path must end in a valid wheel filename: `{0}`")]
     PathMissingFilename(Box<Path>),
     #[error("Failed to convert path to URL")]
     PathToUrl,
     #[error("Failed to convert URL to path")]
     UrlToPath,
-    #[error("Package `{0}` can't be installed because it doesn't have a source distribution or wheel for the current platform")]
+    #[error(
+        "Package `{0}` can't be installed because it doesn't have a source distribution or wheel for the current platform"
+    )]
     NeitherSourceDistNorWheel(PackageName),
-    #[error("Package `{0}` can't be installed because it is marked as both `--no-binary` and `--no-build`")]
+    #[error(
+        "Package `{0}` can't be installed because it is marked as both `--no-binary` and `--no-build`"
+    )]
     NoBinaryNoBuild(PackageName),
-    #[error("Package `{0}` can't be installed because it is marked as `--no-binary` but has no source distribution")]
+    #[error(
+        "Package `{0}` can't be installed because it is marked as `--no-binary` but has no source distribution"
+    )]
     NoBinary(PackageName),
-    #[error("Package `{0}` can't be installed because it is marked as `--no-build` but has no binary distribution")]
+    #[error(
+        "Package `{0}` can't be installed because it is marked as `--no-build` but has no binary distribution"
+    )]
     NoBuild(PackageName),
-    #[error("Package `{0}` can't be installed because the binary distribution is incompatible with the current platform")]
+    #[error(
+        "Package `{0}` can't be installed because the binary distribution is incompatible with the current platform"
+    )]
     IncompatibleWheelOnly(PackageName),
-    #[error("Package `{0}` can't be installed because it is marked as `--no-binary` but is itself a binary distribution")]
+    #[error(
+        "Package `{0}` can't be installed because it is marked as `--no-binary` but is itself a binary distribution"
+    )]
     NoBinaryWheelOnly(PackageName),
     #[error(transparent)]
     WheelFilename(#[from] WheelFilenameError),
@@ -174,7 +206,7 @@ pub struct PylockTomlPackage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<Version>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub index: Option<Url>,
+    pub index: Option<DisplaySafeUrl>,
     #[serde(
         skip_serializing_if = "uv_pep508::marker::ser::is_empty",
         serialize_with = "uv_pep508::marker::ser::serialize",
@@ -199,7 +231,8 @@ pub struct PylockTomlPackage {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct PylockTomlDependency;
+#[allow(clippy::empty_structs_with_brackets)]
+struct PylockTomlDependency {}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -216,7 +249,7 @@ struct PylockTomlDirectory {
 struct PylockTomlVcs {
     r#type: VcsKind,
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<Url>,
+    url: Option<DisplaySafeUrl>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -230,7 +263,7 @@ struct PylockTomlVcs {
 #[serde(rename_all = "kebab-case")]
 struct PylockTomlArchive {
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<Url>,
+    url: Option<DisplaySafeUrl>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -253,7 +286,7 @@ struct PylockTomlSdist {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<SmallString>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<Url>,
+    url: Option<DisplaySafeUrl>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(
@@ -274,7 +307,7 @@ struct PylockTomlWheel {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<WheelFilename>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<Url>,
+    url: Option<DisplaySafeUrl>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<PortablePathBuf>,
     #[serde(
@@ -587,6 +620,7 @@ impl<'lock> PylockToml {
         extras: &ExtrasSpecificationWithDefaults,
         dev: &DependencyGroupsWithDefaults,
         annotate: bool,
+        editable: EditableMode,
         install_options: &'lock InstallOptions,
     ) -> Result<Self, PylockTomlErrorKind> {
         // Extract the packages from the lock file.
@@ -701,7 +735,10 @@ impl<'lock> PylockToml {
                             .unwrap_or_else(|_| sdist.install_path.to_path_buf())
                             .into_boxed_path(),
                     ),
-                    editable: Some(sdist.editable),
+                    editable: match editable {
+                        EditableMode::NonEditable => None,
+                        EditableMode::Editable => Some(sdist.editable),
+                    },
                     subdirectory: None,
                 }),
                 _ => None,
@@ -1071,11 +1108,10 @@ impl<'lock> PylockToml {
                     hashes,
                     install: true,
                 }
-            } else if let Some(dist) =
-                package
-                    .archive
-                    .as_ref()
-                    .filter(|_| if is_wheel { !no_binary } else { !no_build })
+            } else if let Some(dist) = package
+                .archive
+                .as_ref()
+                .filter(|_| if is_wheel { !no_binary } else { !no_build })
             {
                 let hashes = HashDigests::from(dist.hashes.clone());
                 let dist = dist.to_dist(install_path, &package.name, package.version.as_ref())?;
@@ -1294,7 +1330,7 @@ impl PylockTomlWheel {
         &self,
         install_path: &Path,
         name: &PackageName,
-        index: Option<&Url>,
+        index: Option<&DisplaySafeUrl>,
     ) -> Result<RegistryBuiltWheel, PylockTomlErrorKind> {
         let filename = self.filename(name)?.into_owned();
 
@@ -1302,7 +1338,8 @@ impl PylockTomlWheel {
             UrlString::from(url)
         } else if let Some(path) = self.path.as_ref() {
             let path = install_path.join(path);
-            let url = Url::from_file_path(path).map_err(|()| PylockTomlErrorKind::PathToUrl)?;
+            let url = DisplaySafeUrl::from_file_path(path)
+                .map_err(|()| PylockTomlErrorKind::PathToUrl)?;
             UrlString::from(url)
         } else {
             return Err(PylockTomlErrorKind::WheelMissingPathUrl(name.clone()));
@@ -1378,8 +1415,10 @@ impl PylockTomlVcs {
             let mut url = if let Some(url) = self.url.as_ref() {
                 url.clone()
             } else if let Some(path) = self.path.as_ref() {
-                Url::from_directory_path(install_path.join(path))
-                    .map_err(|()| PylockTomlErrorKind::PathToUrl)?
+                DisplaySafeUrl::from(
+                    Url::from_directory_path(install_path.join(path))
+                        .map_err(|()| PylockTomlErrorKind::PathToUrl)?,
+                )
             } else {
                 return Err(PylockTomlErrorKind::VcsMissingPathUrl(name.clone()));
             };
@@ -1397,7 +1436,7 @@ impl PylockTomlVcs {
         };
 
         // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-        let url = Url::from(ParsedGitUrl {
+        let url = DisplaySafeUrl::from(ParsedGitUrl {
             url: git_url.clone(),
             subdirectory: subdirectory.clone(),
         });
@@ -1439,7 +1478,7 @@ impl PylockTomlSdist {
         install_path: &Path,
         name: &PackageName,
         version: Option<&Version>,
-        index: Option<&Url>,
+        index: Option<&DisplaySafeUrl>,
     ) -> Result<RegistrySourceDist, PylockTomlErrorKind> {
         let filename = self.filename(name)?.into_owned();
         let ext = SourceDistExtension::from_path(filename.as_ref())?;
@@ -1455,7 +1494,8 @@ impl PylockTomlSdist {
             UrlString::from(url)
         } else if let Some(path) = self.path.as_ref() {
             let path = install_path.join(path);
-            let url = Url::from_file_path(path).map_err(|()| PylockTomlErrorKind::PathToUrl)?;
+            let url = DisplaySafeUrl::from_file_path(path)
+                .map_err(|()| PylockTomlErrorKind::PathToUrl)?;
             UrlString::from(url)
         } else {
             return Err(PylockTomlErrorKind::SdistMissingPathUrl(name.clone()));

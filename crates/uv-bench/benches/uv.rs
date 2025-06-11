@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
-use uv_bench::criterion::black_box;
-use uv_bench::criterion::{criterion_group, criterion_main, measurement::WallTime, Criterion};
+use std::hint::black_box;
+use uv_bench::criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 use uv_cache::Cache;
 use uv_client::RegistryClientBuilder;
 use uv_distribution_types::Requirement;
@@ -206,6 +206,7 @@ mod resolver {
             options,
             &python_requirement,
             markers,
+            interpreter.markers(),
             conflicts,
             Some(&TAGS),
             &flat_index,

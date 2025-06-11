@@ -25,11 +25,11 @@ use crate::commands::pip::loggers::{
 };
 use crate::commands::pip::operations::Modifications;
 use crate::commands::project::{
-    resolve_environment, sync_environment, update_environment, EnvironmentUpdate, PlatformState,
+    EnvironmentUpdate, PlatformState, resolve_environment, sync_environment, update_environment,
 };
 use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::tool::common::remove_entrypoints;
-use crate::commands::{conjunction, tool::common::install_executables, ExitStatus};
+use crate::commands::{ExitStatus, conjunction, tool::common::install_executables};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
@@ -98,6 +98,7 @@ pub(crate) async fn upgrade(
                 Some(&reporter),
                 install_mirrors.python_install_mirror.as_deref(),
                 install_mirrors.pypy_install_mirror.as_deref(),
+                install_mirrors.python_downloads_json_url.as_deref(),
             )
             .await?
             .into_interpreter(),

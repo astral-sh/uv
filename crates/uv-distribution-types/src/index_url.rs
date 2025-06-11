@@ -10,12 +10,13 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use thiserror::Error;
 use url::{ParseError, Url};
 
-use uv_auth::UrlAuthPolicies;
-use uv_pep508::{split_scheme, Scheme, VerbatimUrl, VerbatimUrlError};
+use uv_pep508::{Scheme, VerbatimUrl, VerbatimUrlError, split_scheme};
+use uv_redacted::DisplaySafeUrl;
 
-use crate::{Index, Verbatim};
+use crate::{Index, IndexStatusCodeStrategy, Verbatim};
 
-static PYPI_URL: LazyLock<Url> = LazyLock::new(|| Url::parse("https://pypi.org/simple").unwrap());
+static PYPI_URL: LazyLock<DisplaySafeUrl> =
+    LazyLock::new(|| DisplaySafeUrl::parse("https://pypi.org/simple").unwrap());
 
 static DEFAULT_INDEX: LazyLock<Index> = LazyLock::new(|| {
     Index::from_index_url(IndexUrl::Pypi(Arc::new(VerbatimUrl::from_url(
@@ -70,7 +71,7 @@ impl IndexUrl {
     ///
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
-    pub fn root(&self) -> Option<Url> {
+    pub fn root(&self) -> Option<DisplaySafeUrl> {
         let mut segments = self.url().path_segments()?;
         let last = match segments.next_back()? {
             // If the last segment is empty due to a trailing `/`, skip it (as in `pop_if_empty`)
@@ -78,7 +79,8 @@ impl IndexUrl {
             segment => segment,
         };
 
-        if !last.eq_ignore_ascii_case("simple") {
+        // We also handle `/+simple` as it's used in devpi
+        if !(last.eq_ignore_ascii_case("simple") || last.eq_ignore_ascii_case("+simple")) {
             return None;
         }
 
@@ -109,7 +111,7 @@ impl schemars::JsonSchema for IndexUrl {
 
 impl IndexUrl {
     /// Return the raw URL for the index.
-    pub fn url(&self) -> &Url {
+    pub fn url(&self) -> &DisplaySafeUrl {
         match self {
             Self::Pypi(url) => url.raw(),
             Self::Url(url) => url.raw(),
@@ -117,8 +119,8 @@ impl IndexUrl {
         }
     }
 
-    /// Convert the index URL into a [`Url`].
-    pub fn into_url(self) -> Url {
+    /// Convert the index URL into a [`DisplaySafeUrl`].
+    pub fn into_url(self) -> DisplaySafeUrl {
         match self {
             Self::Pypi(url) => url.to_url(),
             Self::Url(url) => url.to_url(),
@@ -127,7 +129,7 @@ impl IndexUrl {
     }
 
     /// Return the redacted URL for the index, omitting any sensitive credentials.
-    pub fn redacted(&self) -> Cow<'_, Url> {
+    pub fn without_credentials(&self) -> Cow<'_, DisplaySafeUrl> {
         let url = self.url();
         if url.username().is_empty() && url.password().is_none() {
             Cow::Borrowed(url)
@@ -223,7 +225,7 @@ impl From<VerbatimUrl> for IndexUrl {
     }
 }
 
-impl From<IndexUrl> for Url {
+impl From<IndexUrl> for DisplaySafeUrl {
     fn from(index: IndexUrl) -> Self {
         match index {
             IndexUrl::Pypi(url) => url.to_url(),
@@ -411,16 +413,20 @@ impl<'a> IndexLocations {
     }
 }
 
-impl From<&IndexLocations> for UrlAuthPolicies {
-    fn from(index_locations: &IndexLocations) -> UrlAuthPolicies {
-        UrlAuthPolicies::from_tuples(index_locations.allowed_indexes().into_iter().map(|index| {
-            let mut url = index
-                .url()
-                .root()
-                .unwrap_or_else(|| index.url().url().clone());
+impl From<&IndexLocations> for uv_auth::Indexes {
+    fn from(index_locations: &IndexLocations) -> uv_auth::Indexes {
+        uv_auth::Indexes::from_indexes(index_locations.allowed_indexes().into_iter().map(|index| {
+            let mut url = index.url().url().clone();
             url.set_username("").ok();
             url.set_password(None).ok();
-            (url, index.authenticate)
+            let mut root_url = index.url().root().unwrap_or_else(|| url.clone());
+            root_url.set_username("").ok();
+            root_url.set_password(None).ok();
+            uv_auth::Index {
+                url,
+                root_url,
+                auth_policy: index.authenticate,
+            }
         }))
     }
 }
@@ -486,9 +492,11 @@ impl<'a> IndexUrls {
     /// If `no_index` was enabled, then this always returns an empty
     /// iterator.
     pub fn indexes(&'a self) -> impl Iterator<Item = &'a Index> + 'a {
+        let mut seen = FxHashSet::default();
         self.implicit_indexes()
             .chain(self.default_index())
             .filter(|index| !index.explicit)
+            .filter(move |index| seen.insert(index.raw_url())) // Filter out redundant raw URLs
     }
 
     /// Return an iterator over all user-defined [`Index`] entries in order.
@@ -532,6 +540,16 @@ impl<'a> IndexUrls {
     /// Return the `--no-index` flag.
     pub fn no_index(&self) -> bool {
         self.no_index
+    }
+
+    /// Return the [`IndexStatusCodeStrategy`] for an [`IndexUrl`].
+    pub fn status_code_strategy_for(&self, url: &IndexUrl) -> IndexStatusCodeStrategy {
+        for index in &self.indexes {
+            if index.url() == url {
+                return index.status_code_strategy();
+            }
+        }
+        IndexStatusCodeStrategy::Default
     }
 }
 

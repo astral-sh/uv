@@ -1,11 +1,11 @@
-use assert_fs::prelude::PathChild;
+use assert_fs::prelude::{FileTouch, PathChild};
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
 use indoc::indoc;
 
 use uv_python::platform::{Arch, Os};
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, venv_bin_path, TestContext};
+use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 
 #[test]
 fn python_find() {
@@ -97,15 +97,14 @@ fn python_find() {
     let arch = Arch::from_env();
 
     uv_snapshot!(context.filters(), context.python_find()
-    .arg(format!("cpython-3.12-{os}-{arch}"))
-    , @r###"
+        .arg(format!("cpython-3.12-{os}-{arch}")), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [PYTHON-3.12]
 
     ----- stderr -----
-    "###);
+    ");
 
     // Request PyPy (which should be missing)
     uv_snapshot!(context.filters(), context.python_find().arg("pypy"), @r"
@@ -215,6 +214,82 @@ fn python_find_pin() {
 
     ----- stderr -----
     "###);
+}
+
+#[test]
+fn python_find_pin_arbitrary_name() {
+    let context: TestContext = TestContext::new_with_versions(&["3.11", "3.12"]);
+
+    // Try to pin to an arbitrary name
+    uv_snapshot!(context.filters(), context.python_pin().arg("foo"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Requests for arbitrary names (e.g., `foo`) are not supported in version files
+    ");
+
+    // Pin to an arbitrary name, bypassing uv
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("foo")
+        .unwrap();
+
+    // The arbitrary name should be ignored
+    uv_snapshot!(context.filters(), context.python_find(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    warning: Ignoring unsupported Python request `foo` in version file: [TEMP_DIR]/.python-version
+    ");
+
+    // The pin should be updatable
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.11"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Pinned `.python-version` to `3.11`
+
+    ----- stderr -----
+    warning: Ignoring unsupported Python request `foo` in version file: [TEMP_DIR]/.python-version
+    ");
+
+    // Warnings shouldn't appear afterwards...
+    uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    Updated `.python-version` from `3.11` -> `3.12`
+
+    ----- stderr -----
+    ");
+
+    // Pin in a sub-directory
+    context.temp_dir.child("foo").create_dir_all().unwrap();
+    context
+        .temp_dir
+        .child("foo")
+        .child(".python-version")
+        .write_str("foo")
+        .unwrap();
+
+    // The arbitrary name should be ignored, but we won't walk up to the parent `.python-version`
+    // file (which contains 3.12); this behavior is a little questionable but we probably want to
+    // ignore all empty version files if we want to change this?
+    uv_snapshot!(context.filters(), context.python_find().current_dir(context.temp_dir.child("foo").path()), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+    [PYTHON-3.11]
+
+    ----- stderr -----
+    warning: Ignoring unsupported Python request `foo` in version file: [TEMP_DIR]/foo/.python-version
+    ");
 }
 
 #[test]
@@ -670,27 +745,28 @@ fn python_required_python_major_minor() {
 
     // Symlink it to `python3.11`.
     fs_err::create_dir_all(context.temp_dir.child("child")).unwrap();
-    std::os::unix::fs::symlink(path, context.temp_dir.child("child").join("python3.11")).unwrap();
+    fs_err::os::unix::fs::symlink(path, context.temp_dir.child("child").join("python3.11"))
+        .unwrap();
 
     // Find `python3.11`, which is `>=3.11.4`.
-    uv_snapshot!(context.filters(), context.python_find().arg(">=3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/child/python3.11
 
     ----- stderr -----
-    "###);
+    ");
 
     // Find `python3.11`, which is `>3.11.4`.
-    uv_snapshot!(context.filters(), context.python_find().arg(">3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.11.4, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
     [TEMP_DIR]/child/python3.11
 
     ----- stderr -----
-    "###);
+    ");
 
     // Fail to find any matching Python interpreter.
     uv_snapshot!(context.filters(), context.python_find().arg(">3.11.255, <3.12").env(EnvVars::UV_TEST_PYTHON_PATH, context.temp_dir.child("child").path()), @r###"
@@ -898,5 +974,45 @@ fn python_find_show_version() {
     3.11.[X]
 
     ----- stderr -----
+    ");
+}
+
+#[test]
+fn python_find_path() {
+    let context: TestContext = TestContext::new_with_versions(&[]).with_filtered_not_executable();
+
+    context.temp_dir.child("foo").create_dir_all().unwrap();
+    context.temp_dir.child("bar").touch().unwrap();
+
+    // No interpreter in a directory
+    uv_snapshot!(context.filters(), context.python_find().arg(context.temp_dir.child("foo").as_os_str()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found in directory `foo`
+    ");
+
+    // No interpreter at a file
+    uv_snapshot!(context.filters(), context.python_find().arg(context.temp_dir.child("bar").as_os_str()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from provided path at `bar`
+      Caused by: Failed to query Python interpreter at `[TEMP_DIR]/bar`
+      Caused by: [PERMISSION DENIED]
+    ");
+
+    // No interpreter at a file that does not exist
+    uv_snapshot!(context.filters(), context.python_find().arg(context.temp_dir.child("foobar").as_os_str()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: No interpreter found at path `foobar`
     ");
 }

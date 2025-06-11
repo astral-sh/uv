@@ -3,6 +3,7 @@ use std::fmt::Formatter;
 use std::sync::Arc;
 
 use indexmap::IndexSet;
+use owo_colors::OwoColorize;
 use pubgrub::{
     DefaultStringReporter, DerivationTree, Derived, External, Range, Ranges, Reporter, Term,
 };
@@ -13,7 +14,8 @@ use uv_distribution_types::{
     DerivationChain, DistErrorKind, IndexCapabilities, IndexLocations, IndexUrl, RequestedDist,
 };
 use uv_normalize::{ExtraName, InvalidNameError, PackageName};
-use uv_pep440::{LocalVersionSlice, LowerBound, Version};
+use uv_pep440::{LocalVersionSlice, LowerBound, Version, VersionSpecifier};
+use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_platform_tags::Tags;
 use uv_static::EnvVars;
 
@@ -80,7 +82,9 @@ pub enum ResolveError {
     #[error("Requirements contain conflicting indexes for package `{0}`: `{1}` vs. `{2}`")]
     ConflictingIndexes(PackageName, String, String),
 
-    #[error("Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file.")]
+    #[error(
+        "Package `{0}` attempted to resolve via URL: {1}. URL dependencies must be expressed as direct requirements or constraints. Consider adding `{0} @ {1}` to your dependencies or constraints file."
+    )]
     DisallowedUrl(PackageName, String),
 
     #[error(transparent)]
@@ -98,12 +102,14 @@ pub enum ResolveError {
     ),
 
     #[error(transparent)]
-    NoSolution(#[from] NoSolutionError),
+    NoSolution(#[from] Box<NoSolutionError>),
 
     #[error("Attempted to construct an invalid version specifier")]
     InvalidVersion(#[from] uv_pep440::VersionSpecifierBuildError),
 
-    #[error("In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`")]
+    #[error(
+        "In `--require-hashes` mode, all requirements must be pinned upfront with `==`, but found: `{0}`"
+    )]
     UnhashedPackage(PackageName),
 
     #[error("found conflicting distribution in resolution: {0}")]
@@ -124,7 +130,9 @@ pub enum ResolveError {
         #[source]
         name_error: InvalidNameError,
     },
-    #[error("The index returned metadata for the wrong package: expected {request} for {expected}, got {request} for {actual}")]
+    #[error(
+        "The index returned metadata for the wrong package: expected {request} for {expected}, got {request} for {actual}"
+    )]
     MismatchedPackageName {
         request: &'static str,
         expected: PackageName,
@@ -157,6 +165,7 @@ pub struct NoSolutionError {
     fork_urls: ForkUrls,
     fork_indexes: ForkIndexes,
     env: ResolverEnvironment,
+    current_environment: MarkerEnvironment,
     tags: Option<Tags>,
     workspace_members: BTreeSet<PackageName>,
     options: Options,
@@ -178,6 +187,7 @@ impl NoSolutionError {
         fork_urls: ForkUrls,
         fork_indexes: ForkIndexes,
         env: ResolverEnvironment,
+        current_environment: MarkerEnvironment,
         tags: Option<Tags>,
         workspace_members: BTreeSet<PackageName>,
         options: Options,
@@ -196,6 +206,7 @@ impl NoSolutionError {
             fork_urls,
             fork_indexes,
             env,
+            current_environment,
             tags,
             workspace_members,
             options,
@@ -347,6 +358,44 @@ impl NoSolutionError {
     pub fn header(&self) -> NoSolutionHeader {
         NoSolutionHeader::new(self.env.clone())
     }
+
+    /// Hint at limiting the resolver environment if universal resolution failed for a target
+    /// that is not the current platform or not the current Python version.
+    fn hint_disjoint_targets(&self, f: &mut Formatter) -> std::fmt::Result {
+        // Only applicable to universal resolution.
+        let Some(markers) = self.env.fork_markers() else {
+            return Ok(());
+        };
+
+        // TODO(konsti): This is a crude approximation to telling the user the difference
+        // between their Python version and the relevant Python version range from the marker.
+        let current_python_version = self.current_environment.python_version().version.clone();
+        let current_python_marker = MarkerTree::expression(MarkerExpression::Version {
+            key: MarkerValueVersion::PythonVersion,
+            specifier: VersionSpecifier::equals_version(current_python_version.clone()),
+        });
+        if markers.is_disjoint(current_python_marker) {
+            write!(
+                f,
+                "\n\n{}{} While the active Python version is {}, \
+                the resolution failed for other Python versions supported by your \
+                project. Consider limiting your project's supported Python versions \
+                using `requires-python`.",
+                "hint".bold().cyan(),
+                ":".bold(),
+                current_python_version,
+            )?;
+        } else if !markers.evaluate(&self.current_environment, &[]) {
+            write!(
+                f,
+                "\n\n{}{} The resolution failed for an environment that is not the current one, \
+                consider limiting the environments with `tool.uv.environments`.",
+                "hint".bold().cyan(),
+                ":".bold(),
+            )?;
+        }
+        Ok(())
+    }
 }
 
 impl std::fmt::Debug for NoSolutionError {
@@ -366,6 +415,7 @@ impl std::fmt::Debug for NoSolutionError {
             fork_urls,
             fork_indexes,
             env,
+            current_environment,
             tags,
             workspace_members,
             options,
@@ -383,6 +433,7 @@ impl std::fmt::Debug for NoSolutionError {
             .field("fork_urls", fork_urls)
             .field("fork_indexes", fork_indexes)
             .field("env", env)
+            .field("current_environment", current_environment)
             .field("tags", tags)
             .field("workspace_members", workspace_members)
             .field("options", options)
@@ -466,6 +517,8 @@ impl std::fmt::Display for NoSolutionError {
         for hint in additional_hints {
             write!(f, "\n\n{hint}")?;
         }
+
+        self.hint_disjoint_targets(f)?;
 
         Ok(())
     }
@@ -834,17 +887,17 @@ fn simplify_derivation_tree_markers(
     tree: &mut DerivationTree<PubGrubPackage, Range<Version>, UnavailableReason>,
 ) {
     match tree {
-        DerivationTree::External(External::NotRoot(ref mut pkg, _)) => {
+        DerivationTree::External(External::NotRoot(pkg, _)) => {
             pkg.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::NoVersions(ref mut pkg, _)) => {
+        DerivationTree::External(External::NoVersions(pkg, _)) => {
             pkg.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::FromDependencyOf(ref mut pkg1, _, ref mut pkg2, _)) => {
+        DerivationTree::External(External::FromDependencyOf(pkg1, _, pkg2, _)) => {
             pkg1.simplify_markers(python_requirement);
             pkg2.simplify_markers(python_requirement);
         }
-        DerivationTree::External(External::Custom(ref mut pkg, _, _)) => {
+        DerivationTree::External(External::Custom(pkg, _, _)) => {
             pkg.simplify_markers(python_requirement);
         }
         DerivationTree::Derived(derived) => {

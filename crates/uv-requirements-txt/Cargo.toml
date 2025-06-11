@@ -23,6 +23,7 @@ uv-fs = { workspace = true }
 uv-normalize = { workspace = true }
 uv-pep508 = { workspace = true }
 uv-pypi-types = { workspace = true }
+uv-redacted = { workspace = true }
 uv-warnings = { workspace = true }
 
 fs-err = { workspace = true }
@@ -38,7 +39,7 @@ url = { workspace = true }
 http = ["reqwest", "reqwest-middleware"]
 
 [dev-dependencies]
-anyhow = { version = "1.0.89" }
+anyhow = { workspace = true }
 assert_fs = { version = "1.1.2" }
 indoc = { workspace = true }
 insta = { version = "1.40.0", features = ["filters"] }

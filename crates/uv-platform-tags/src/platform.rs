@@ -43,6 +43,7 @@ pub enum Os {
     Manylinux { major: u16, minor: u16 },
     Musllinux { major: u16, minor: u16 },
     Windows,
+    Pyodide { major: u16, minor: u16 },
     Macos { major: u16, minor: u16 },
     FreeBsd { release: String },
     NetBsd { release: String },
@@ -67,6 +68,7 @@ impl fmt::Display for Os {
             Self::Illumos { .. } => write!(f, "illumos"),
             Self::Haiku { .. } => write!(f, "haiku"),
             Self::Android { .. } => write!(f, "android"),
+            Self::Pyodide { .. } => write!(f, "pyodide"),
         }
     }
 }
@@ -109,6 +111,7 @@ pub enum Arch {
     S390X,
     LoongArch64,
     Riscv64,
+    Wasm32,
 }
 
 impl fmt::Display for Arch {
@@ -126,6 +129,7 @@ impl fmt::Display for Arch {
             Self::S390X => write!(f, "s390x"),
             Self::LoongArch64 => write!(f, "loongarch64"),
             Self::Riscv64 => write!(f, "riscv64"),
+            Self::Wasm32 => write!(f, "wasm32"),
         }
     }
 }
@@ -168,7 +172,7 @@ impl Arch {
             // manylinux_2_36
             Self::LoongArch64 => Some(36),
             // unsupported
-            Self::Powerpc | Self::Armv5TEL | Self::Armv6L => None,
+            Self::Powerpc | Self::Armv5TEL | Self::Armv6L | Self::Wasm32 => None,
         }
     }
 
@@ -187,6 +191,7 @@ impl Arch {
             Self::S390X => "s390x",
             Self::LoongArch64 => "loongarch64",
             Self::Riscv64 => "riscv64",
+            Self::Wasm32 => "wasm32",
         }
     }
 

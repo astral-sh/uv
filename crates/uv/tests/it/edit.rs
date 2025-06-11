@@ -2,7 +2,7 @@
 
 #[cfg(feature = "git")]
 mod conditional_imports {
-    pub(crate) use crate::common::{decode_token, READ_ONLY_GITHUB_TOKEN};
+    pub(crate) use crate::common::{READ_ONLY_GITHUB_TOKEN, decode_token};
 }
 
 #[cfg(feature = "git")]
@@ -14,13 +14,12 @@ use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use std::path::Path;
-use url::Url;
 use uv_fs::Simplified;
-use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
 
 use uv_static::EnvVars;
 
-use crate::common::{packse_index_url, uv_snapshot, venv_bin_path, TestContext};
+use crate::common::{TestContext, packse_index_url, uv_snapshot, venv_bin_path};
 
 /// Add a PyPI requirement.
 #[test]
@@ -406,6 +405,8 @@ fn add_git_private_source() -> Result<()> {
 fn add_git_private_raw() -> Result<()> {
     let context = TestContext::new("3.12");
     let token = decode_token(READ_ONLY_GITHUB_TOKEN);
+    let mut filters = context.filters();
+    filters.push((&token, "***"));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -416,7 +417,7 @@ fn add_git_private_raw() -> Result<()> {
         dependencies = []
     "#})?;
 
-    uv_snapshot!(context.filters(), context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")).arg("--raw-sources"), @r"
+    uv_snapshot!(filters, context.add().arg(format!("uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage")).arg("--raw-sources"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -430,16 +431,11 @@ fn add_git_private_raw() -> Result<()> {
 
     let pyproject_toml = context.read("pyproject.toml");
 
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     insta::with_settings!({
-        filters => filters
+        filters => filters.clone()
     }, {
         assert_snapshot!(
-            pyproject_toml, @r###"
+            pyproject_toml, @r#"
         [project]
         name = "project"
         version = "0.1.0"
@@ -447,14 +443,14 @@ fn add_git_private_raw() -> Result<()> {
         dependencies = [
             "uv-private-pypackage @ git+https://***@github.com/astral-test/uv-private-pypackage",
         ]
-        "###
+        "#
         );
     });
 
     let lock = context.read("uv.lock");
 
     insta::with_settings!({
-        filters => context.filters(),
+        filters => filters.clone(),
     }, {
         assert_snapshot!(
             lock, @r#"
@@ -485,7 +481,7 @@ fn add_git_private_raw() -> Result<()> {
     });
 
     // Install from the lockfile.
-    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @r"
+    uv_snapshot!(filters, context.sync().arg("--frozen"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -800,18 +796,71 @@ fn add_raw_error() -> Result<()> {
     "#})?;
 
     // Provide a tag without a Git source.
-    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage").arg("--tag").arg("0.0.1").arg("--raw-sources"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: the argument '--tag <TAG>' cannot be used with '--raw-sources'
+    error: the argument '--tag <TAG>' cannot be used with '--raw'
 
     Usage: uv add --cache-dir [CACHE_DIR] --tag <TAG> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
 
     For more information, try '--help'.
-    "###);
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn reinstall_local_source_trees() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let project_1 = context.temp_dir.child("project1");
+    project_1.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project1"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    let project_2 = context.temp_dir.child("project2");
+    project_2.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project2"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().current_dir(&project_1).arg("../project2").arg("--editable"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Creating virtual environment at: .venv
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project2==0.1.0 (from file://[TEMP_DIR]/project2)
+    ");
+
+    // Running `uv add` should reinstall the project.
+    uv_snapshot!(context.filters(), context.add().current_dir(&project_1).arg("../project2").arg("--editable"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     ~ project2==0.1.0 (from file://[TEMP_DIR]/project2)
+    ");
 
     Ok(())
 }
@@ -1405,12 +1454,7 @@ fn add_remove_inline_optional() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==3.7.0
-     + idna==3.6
-     + sniffio==1.3.1
      - typing-extensions==4.10.0
     ");
 
@@ -3853,7 +3897,7 @@ fn add_environment_yml_error() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Conda environment files (i.e. `environment.yml`) are not supported
+    error: Conda environment files (i.e., `environment.yml`) are not supported
     ");
 
     Ok(())
@@ -3960,7 +4004,7 @@ fn add_lower_bound_existing() -> Result<()> {
     Ok(())
 }
 
-/// Avoid setting a lower bound with `--raw-sources`.
+/// Avoid setting a lower bound with `--raw`.
 #[test]
 fn add_lower_bound_raw() -> Result<()> {
     let context = TestContext::new("3.12");
@@ -3974,8 +4018,8 @@ fn add_lower_bound_raw() -> Result<()> {
         dependencies = ["anyio"]
     "#})?;
 
-    // Adding `anyio` should _not_ set a lower-bound when using `--raw-sources`.
-    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--raw-sources"), @r"
+    // Adding `anyio` should _not_ set a lower-bound when using `--raw`.
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--raw"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -5763,6 +5807,73 @@ fn add_script_settings() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn add_script_trailing_comment_lines() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "requests<3",
+        #   "rich",
+        # ]
+        # ///
+        #
+        # Additional description
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--script").arg("script.py"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Updated `script.py`
+    "###);
+
+    let script_content = context.read("script.py");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            script_content, @r##"
+        # /// script
+        # requires-python = ">=3.11"
+        # dependencies = [
+        #   "anyio",
+        #   "requests<3",
+        #   "rich",
+        # ]
+        # ///
+        #
+        # Additional description
+
+        import requests
+        from rich.pretty import pprint
+
+        resp = requests.get("https://peps.python.org/api/peps.json")
+        data = resp.json()
+        pprint([(k, v["title"]) for k, v in data.items()][:10])
+        "##
+        );
+    });
+
+    // Adding to a script without a lockfile shouldn't create a lockfile.
+    assert!(!context.temp_dir.join("script.py.lock").exists());
+
+    Ok(())
+}
+
 /// Add to a script without an existing metadata table.
 #[test]
 fn add_script_without_metadata_table() -> Result<()> {
@@ -6856,6 +6967,130 @@ fn add_git_to_script() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn add_include_default_groups() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        foo = ["anyio"]
+
+        [tool.uv]
+        default-groups = ["foo"]
+    "#})?;
+
+    // add should install default groups.
+    uv_snapshot!(context.filters(), context.add().arg("typing-extensions"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "typing-extensions>=4.10.0",
+        ]
+
+        [dependency-groups]
+        foo = ["anyio"]
+
+        [tool.uv]
+        default-groups = ["foo"]
+        "#
+        );
+    });
+
+    assert!(context.temp_dir.join("uv.lock").exists());
+
+    Ok(())
+}
+
+#[test]
+fn remove_include_default_groups() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "typing-extensions>=4.10.0",
+        ]
+
+        [dependency-groups]
+        dev = ["anyio"]
+    "#})?;
+
+    // remove should install default groups.
+    uv_snapshot!(context.filters(), context.remove().arg("typing-extensions"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    let pyproject_toml = fs_err::read_to_string(context.temp_dir.join("pyproject.toml"))?;
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "parent"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["anyio"]
+        "#
+        );
+    });
+
+    assert!(context.temp_dir.join("uv.lock").exists());
+
+    Ok(())
+}
 /// Revert changes to the `pyproject.toml` and `uv.lock` when the `add` operation fails.
 #[test]
 fn fail_to_add_revert_project() -> Result<()> {
@@ -7117,6 +7352,63 @@ fn sorted_dependencies() -> Result<()> {
     Ok(())
 }
 
+/// Ensure that if the dependencies are sorted naively (i.e. by the whole
+/// requirement specifier), that added dependencies are sorted in the same way.
+#[test]
+fn naive_sorted_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "pytest-mock>=3.14",
+        "pytest>=8.1.1",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["pytest-randomly"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-mock==3.14.0
+     + pytest-randomly==3.15.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "pytest-mock>=3.14",
+            "pytest-randomly>=3.15.0",
+            "pytest>=8.1.1",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
 /// Ensure that the added dependencies are case sensitive sorted if the dependency list was already
 /// case sensitive sorted prior to the operation.
 #[test]
@@ -7177,6 +7469,66 @@ fn case_sensitive_sorted_dependencies() -> Result<()> {
             "anyio>=4.3.0",
             "iniconfig",
             "typing-extensions>=4.10.0",
+        ]
+        "###
+        );
+    });
+    Ok(())
+}
+
+/// Ensure that if the dependencies are sorted naively (i.e. by the whole
+/// requirement specifier), that added dependencies are sorted in the same way.
+#[test]
+fn case_sensitive_naive_sorted_dependencies() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "Typing-extensions>=4.10.0",
+        "pytest-mock>=3.14",
+        "pytest>=8.1.1",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["pytest-randomly"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-mock==3.14.0
+     + pytest-randomly==3.15.0
+     + typing-extensions==4.10.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r###"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "Typing-extensions>=4.10.0",
+            "pytest-mock>=3.14",
+            "pytest-randomly>=3.15.0",
+            "pytest>=8.1.1",
         ]
         "###
         );
@@ -7271,6 +7623,201 @@ fn sorted_dependencies_name_specifiers() -> Result<()> {
         );
     });
 
+    Ok(())
+}
+
+#[test]
+fn sorted_dependencies_with_include_group() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+
+    [dependency-groups]
+    dev = [
+        { include-group = "coverage" },
+        "pytest-mock>=3.14",
+        "pytest>=8.1.1",
+    ]
+    coverage = [
+        "coverage>=7.4.4",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest-randomly"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + coverage==7.4.4
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-mock==3.14.0
+     + pytest-randomly==3.15.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = [
+            { include-group = "coverage" },
+            "pytest-mock>=3.14",
+            "pytest-randomly>=3.15.0",
+            "pytest>=8.1.1",
+        ]
+        coverage = [
+            "coverage>=7.4.4",
+        ]
+        "#
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn sorted_dependencies_new_dependency_after_include_group() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+
+    [dependency-groups]
+    dev = [
+        { include-group = "coverage" },
+    ]
+    coverage = [
+        "coverage>=7.4.4",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + coverage==7.4.4
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = [
+            { include-group = "coverage" },
+            "pytest>=8.1.1",
+        ]
+        coverage = [
+            "coverage>=7.4.4",
+        ]
+        "#
+        );
+    });
+    Ok(())
+}
+
+#[test]
+fn sorted_dependencies_include_group_kept_at_bottom() -> Result<()> {
+    let context = TestContext::new("3.12").with_filtered_counts();
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+
+    [dependency-groups]
+    dev = [
+        "pytest>=8.1.1",
+        { include-group = "coverage" },
+    ]
+    coverage = [
+        "coverage>=7.4.4",
+    ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().args(["--dev", "pytest-randomly"]), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved [N] packages in [TIME]
+    Prepared [N] packages in [TIME]
+    Installed [N] packages in [TIME]
+     + coverage==7.4.4
+     + iniconfig==2.0.0
+     + packaging==24.0
+     + pluggy==1.4.0
+     + pytest==8.1.1
+     + pytest-randomly==3.15.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(
+            pyproject_toml, @r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [dependency-groups]
+        dev = [
+            "pytest>=8.1.1",
+            "pytest-randomly>=3.15.0",
+            { include-group = "coverage" },
+        ]
+        coverage = [
+            "coverage>=7.4.4",
+        ]
+        "#
+        );
+    });
     Ok(())
 }
 
@@ -7409,7 +7956,7 @@ fn add_shadowed_name() -> Result<()> {
     "###);
 
     // Constraint with several available versions, check for an indirect dependency loop.
-    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver>=1.6.11,<1.7.0"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("dagster-webserver>=1.6.11,<1.7.0"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7417,21 +7964,16 @@ fn add_shadowed_name() -> Result<()> {
     ----- stderr -----
       × No solution found when resolving dependencies:
       ╰─▶ Because only the following versions of dagster-webserver are available:
-              dagster-webserver<=1.6.13
-              dagster-webserver>1.7.0
-          and dagster-webserver==1.6.11 depends on your project, we can conclude that all of:
-              dagster-webserver>=1.6.11,<1.6.12
-              dagster-webserver>1.6.13,<1.7.0
-          depend on your project.
-          And because dagster-webserver==1.6.12 depends on your project, we can conclude that all of:
-              dagster-webserver>=1.6.11,<1.6.13
-              dagster-webserver>1.6.13,<1.7.0
-          depend on your project.
-          And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11,<1.7.0, we can conclude that your project's requirements are unsatisfiable.
+              dagster-webserver<=1.6.11
+              dagster-webserver==1.6.12
+              dagster-webserver==1.6.13
+          and dagster-webserver==1.6.11 depends on your project, we can conclude that dagster-webserver>=1.6.11,<1.6.12 depends on your project.
+          And because dagster-webserver==1.6.12 depends on your project, we can conclude that dagster-webserver>=1.6.11,<1.6.13 depends on your project.
+          And because dagster-webserver==1.6.13 depends on your project and your project depends on dagster-webserver>=1.6.11, we can conclude that your project's requirements are unsatisfiable.
 
           hint: The package `dagster-webserver` depends on the package `dagster` but the name is shadowed by your project. Consider changing the name of the project.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-    "###);
+    ");
 
     Ok(())
 }
@@ -7518,7 +8060,7 @@ fn add_warn_index_url() -> Result<()> {
         );
     });
 
-    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--extra-index-url").arg("https://test.pypi.org/simple"), @r###"
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--extra-index-url").arg("https://test.pypi.org/simple"), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -7530,7 +8072,7 @@ fn add_warn_index_url() -> Result<()> {
 
           hint: `idna` was found on https://test.pypi.org/simple, but not at the requested version (idna>=3.6). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
       help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
-    "###);
+    ");
 
     Ok(())
 }
@@ -8757,6 +9299,101 @@ fn add_index_without_trailing_slash() -> Result<()> {
         "#
         );
     });
+
+    Ok(())
+}
+
+/// Add an index with an existing relative path.
+#[test]
+fn add_index_with_existing_relative_path_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    // Create test-index/ subdirectory and copy our "offline" tqdm wheel there
+    let packages = context.temp_dir.child("test-index");
+    packages.create_dir_all()?;
+
+    let wheel_src = context
+        .workspace_root
+        .join("scripts/links/ok-1.0.0-py3-none-any.whl");
+    let wheel_dst = packages.child("ok-1.0.0-py3-none-any.whl");
+    fs_err::copy(&wheel_src, &wheel_dst)?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    ");
+
+    Ok(())
+}
+
+/// Add an index with a non-existent relative path.
+#[test]
+fn add_index_with_non_existent_relative_path() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Directory not found for index: file://[TEMP_DIR]/test-index
+    ");
+
+    Ok(())
+}
+
+/// Add an index with a non-existent relative path with the same name as a defined index.
+#[test]
+fn add_index_with_non_existent_relative_path_with_same_name_as_index() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [[tool.uv.index]]
+        name = "test-index"
+        url = "https://pypi-proxy.fly.dev/simple"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("iniconfig").arg("--index").arg("test-index"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Directory not found for index: file://[TEMP_DIR]/test-index
+    ");
 
     Ok(())
 }
@@ -10435,7 +11072,7 @@ fn repeated_index_cli_reversed() -> Result<()> {
 
 #[test]
 fn add_with_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! {r#"
@@ -10507,6 +11144,393 @@ fn add_unsupported_git_scheme() {
     git+fantasy://ferris/dreams/of/urls@7701ffcbae245819b828dc5f885a5201158897ef
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     "###);
+}
+
+#[test]
+fn add_index_url_in_keyring() -> Result<()> {
+    let keyring_context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    keyring_context
+        .pip_install()
+        .arg(
+            keyring_context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+        [tool.uv]
+        keyring-provider = "subprocess"
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        default = true
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("anyio")
+        .env(EnvVars::index_username("PROXY"), "public")
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"https://pypi-proxy.fly.dev/basic-auth/simple": {"public": "heron"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    context.assert_command("import anyio").success();
+    Ok(())
+}
+
+#[test]
+fn add_full_url_in_keyring() -> Result<()> {
+    let keyring_context = TestContext::new("3.12");
+
+    // Install our keyring plugin
+    keyring_context
+        .pip_install()
+        .arg(
+            keyring_context
+                .workspace_root
+                .join("scripts")
+                .join("packages")
+                .join("keyring_test_plugin"),
+        )
+        .assert()
+        .success();
+
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+        [tool.uv]
+        keyring-provider = "subprocess"
+        [[tool.uv.index]]
+        name = "proxy"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        default = true
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("anyio")
+        .env(EnvVars::index_username("PROXY"), "public")
+        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"https://pypi-proxy.fly.dev/basic-auth/simple/anyio": {"public": "heron"}}"#)
+        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@pypi-proxy.fly.dev
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+    Ok(())
+}
+
+/// If uv receives an authentication failure from a configured index, it
+/// should not fall back to the default index.
+#[test]
+fn add_stop_index_search_early_on_auth_failure() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("anyio"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because anyio was not found in the package registry and your project depends on anyio, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+    Ok(())
+}
+
+/// uv should continue searching the default index if it receives an
+/// authentication failure that is specified in `ignore-error-codes`.
+#[test]
+fn add_ignore_error_codes() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        ignore-error-codes = [401, 403]
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("anyio"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "
+    );
+
+    context.assert_command("import anyio").success();
+    Ok(())
+}
+
+/// uv should only fall through on 404s if an empty list is specified
+/// in `ignore-error-codes`, even for pytorch.
+#[test]
+fn add_empty_ignore_error_codes() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+
+        [tool.uv.sources]
+        jinja2 = { index = "pytorch" }
+
+        [[tool.uv.index]]
+        name = "pytorch"
+        url = "https://download.pytorch.org/whl/cpu"
+        ignore-error-codes = []
+        "#
+    })?;
+
+    // The default behavior of ignoring pytorch 403s has been overridden
+    // by the empty ignore-error-codes list.
+    uv_snapshot!(context.add().arg("flask"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because flask was not found in the package registry and your project depends on flask, we can conclude that your project's requirements are unsatisfiable.
+
+          hint: An index URL (https://download.pytorch.org/whl/cpu) could not be queried due to a lack of valid authentication credentials (403 Forbidden).
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+    Ok(())
+}
+
+/// uv should not report a credential error on a missing package for pytorch since
+/// pytorch returns 403s to indicate not found.
+#[test]
+fn add_missing_package_on_pytorch() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+
+        [tool.uv.sources]
+        fakepkg = { index = "pytorch" }
+
+        [[tool.uv.index]]
+        name = "pytorch"
+        url = "https://download.pytorch.org/whl/cpu"
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("fakepkg"), @r"
+    success: false
+    exit_code: 1
+    ----- stdout -----
+
+    ----- stderr -----
+      × No solution found when resolving dependencies:
+      ╰─▶ Because fakepkg was not found in the package registry and your project depends on fakepkg, we can conclude that your project's requirements are unsatisfiable.
+      help: If you want to add the package regardless of the failed resolution, provide the `--frozen` flag to skip locking and syncing.
+    "
+    );
+    Ok(())
+}
+
+/// Test HTTP errors other than 401s and 403s.
+#[tokio::test]
+async fn add_unexpected_error_code() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let filters = context
+        .filters()
+        .into_iter()
+        .chain([(r"127\.0\.0\.1(?::\d+)?", "[LOCALHOST]")])
+        .collect::<Vec<_>>();
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(503))
+        .mount(&server)
+        .await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+        "#
+    })?;
+
+    uv_snapshot!(filters, context.add().arg("anyio").arg("--index").arg(server.uri()), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to fetch: `http://[LOCALHOST]/anyio/`
+      Caused by: HTTP status server error (503 Service Unavailable) for url (http://[LOCALHOST]/anyio/)
+    "
+    );
+    Ok(())
+}
+
+/// uv should fail to parse `pyproject.toml` if `ignore-error-codes`
+/// contains an invalid status code number.
+#[test]
+fn add_invalid_ignore_error_code() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = ">=3.11, <4"
+        dependencies = []
+        [[tool.uv.index]]
+        name = "my-index"
+        url = "https://pypi-proxy.fly.dev/basic-auth/simple"
+        ignore-error-codes = [401, 403, 1234]
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("anyio"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: Failed to parse `pyproject.toml` during settings discovery:
+      TOML parse error at line 9, column 22
+        |
+      9 | ignore-error-codes = [401, 403, 1234]
+        |                      ^^^^^^^^^^^^^^^^
+      1234 is not a valid HTTP status code
+
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 9, column 22
+      |
+    9 | ignore-error-codes = [401, 403, 1234]
+      |                      ^^^^^^^^^^^^^^^^
+    1234 is not a valid HTTP status code
+    "
+    );
+
+    Ok(())
+}
+
+/// uv should fail to parse `pyproject.toml` if `require-python`
+/// contains an invalid specifier and try to return a helpful hint.
+#[test]
+fn add_invalid_requires_python() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! { r#"
+        [project]
+        name = "foo"
+        version = "1.0.0"
+        requires-python = "3.12"
+        dependencies = []
+        "#
+    })?;
+
+    uv_snapshot!(context.add().arg("anyio"), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 4, column 19
+      |
+    4 | requires-python = "3.12"
+      |                   ^^^^^^
+    Failed to parse version: Unexpected end of version specifier, expected operator. Did you mean `==3.12`?:
+    3.12
+    ^^^^
+    "#);
+
+    Ok(())
 }
 
 /// In authentication "always", the normal authentication flow should still work.
@@ -10750,197 +11774,6 @@ fn add_auth_policy_never_without_credentials() -> Result<()> {
     Ok(())
 }
 
-/// If uv receives a 302 redirect, it should use supplied credentials for the
-/// new location.
-#[tokio::test]
-async fn add_redirect() -> Result<()> {
-    let context = TestContext::new("3.12");
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
-        [project]
-        name = "foo"
-        version = "1.0.0"
-        requires-python = ">=3.12"
-        dependencies = []
-        "#
-    })?;
-
-    let redirect_server = MockServer::start().await;
-
-    Mock::given(method("GET"))
-        .respond_with(|req: &wiremock::Request| {
-            let redirect_url = redirect_url_to_pypi_proxy(req);
-            ResponseTemplate::new(302).insert_header("Location", &redirect_url)
-        })
-        .mount(&redirect_server)
-        .await;
-
-    let mut redirect_url = Url::parse(&redirect_server.uri())?;
-    let _ = redirect_url.set_username("public");
-    let _ = redirect_url.set_password(Some("heron"));
-
-    uv_snapshot!(context.add().arg("--default-index").arg(redirect_url.as_str()).arg("anyio"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
-    "
-    );
-
-    context.assert_command("import anyio").success();
-    Ok(())
-}
-
-/// If uv receives a 302 redirect, it should use credentials from the keyring
-/// for the new location.
-#[tokio::test]
-async fn add_redirect_with_keyring() -> Result<()> {
-    let keyring_context = TestContext::new("3.12");
-
-    // Install our keyring plugin
-    keyring_context
-        .pip_install()
-        .arg(
-            keyring_context
-                .workspace_root
-                .join("scripts")
-                .join("packages")
-                .join("keyring_test_plugin"),
-        )
-        .assert()
-        .success();
-
-    let context = TestContext::new("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"127\.0\.0\.1[^\r\n]*", "[LOCALHOST]")])
-        .collect::<Vec<_>>();
-
-    let pyproject_toml = context.temp_dir.child("pyproject.toml");
-    pyproject_toml.write_str(indoc! { r#"
-        [project]
-        name = "foo"
-        version = "1.0.0"
-        requires-python = ">=3.12"
-        dependencies = []
-
-        [tool.uv]
-        keyring-provider = "subprocess"
-        "#,
-    })?;
-
-    let redirect_server = MockServer::start().await;
-
-    Mock::given(method("GET"))
-        .respond_with(|req: &wiremock::Request| {
-            let redirect_url = redirect_url_to_pypi_proxy(req);
-            ResponseTemplate::new(302).insert_header("Location", &redirect_url)
-        })
-        .mount(&redirect_server)
-        .await;
-
-    let mut redirect_url = Url::parse(&redirect_server.uri())?;
-    let _ = redirect_url.set_username("public");
-
-    uv_snapshot!(filters, context.add().arg("--default-index")
-        .arg(redirect_url.as_str())
-        .arg("anyio")
-        .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&keyring_context.venv)), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Request for public@http://[LOCALHOST]
-    Request for public@[LOCALHOST]
-    Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
-    Request for public@pypi-proxy.fly.dev
-    Resolved 4 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
-    "
-    );
-
-    context.assert_command("import anyio").success();
-    Ok(())
-}
-
-/// If uv receives a 302 redirect, it should use credentials from netrc
-/// for the new location.
-#[tokio::test]
-async fn add_redirect_with_netrc() -> Result<()> {
-    let context = TestContext::new("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"127\.0\.0\.1[^\r\n]*", "[LOCALHOST]")])
-        .collect::<Vec<_>>();
-
-    let netrc = context.temp_dir.child(".netrc");
-    netrc.write_str("machine pypi-proxy.fly.dev login public password heron")?;
-
-    let redirect_server = MockServer::start().await;
-
-    Mock::given(method("GET"))
-        .respond_with(|req: &wiremock::Request| {
-            let redirect_url = redirect_url_to_pypi_proxy(req);
-            ResponseTemplate::new(302).insert_header("Location", &redirect_url)
-        })
-        .mount(&redirect_server)
-        .await;
-
-    let mut redirect_url = Url::parse(&redirect_server.uri())?;
-    let _ = redirect_url.set_username("public");
-
-    uv_snapshot!(filters, context.pip_install()
-        .arg("anyio")
-        .arg("--index-url")
-        .arg(redirect_url.as_str())
-        .env(EnvVars::NETRC, netrc.to_str().unwrap())
-        .arg("--strict"), @r###"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Resolved 3 packages in [TIME]
-    Prepared 3 packages in [TIME]
-    Installed 3 packages in [TIME]
-     + anyio==4.3.0
-     + idna==3.6
-     + sniffio==1.3.1
-    "###
-    );
-
-    context.assert_command("import anyio").success();
-
-    Ok(())
-}
-
-fn redirect_url_to_pypi_proxy(req: &wiremock::Request) -> String {
-    let last_path_segment = req
-        .url
-        .path_segments()
-        .expect("path has segments")
-        .filter(|segment| !segment.is_empty()) // Filter out empty segments
-        .next_back()
-        .expect("path has a package segment");
-    format!("https://pypi-proxy.fly.dev/basic-auth/simple/{last_path_segment}/")
-}
-
 /// Test the error message when adding a package with multiple existing references in
 /// `pyproject.toml`.
 #[test]
@@ -11079,8 +11912,12 @@ fn add_optional_normalize() -> Result<()> {
 
     ----- stderr -----
     Resolved 5 packages in [TIME]
-    Uninstalled 1 package in [TIME]
+    Uninstalled 5 packages in [TIME]
+     - anyio==3.7.0
+     - idna==3.6
      - iniconfig==2.0.0
+     - sniffio==1.3.1
+     - typing-extensions==4.10.0
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -11108,8 +11945,7 @@ fn add_optional_normalize() -> Result<()> {
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    Uninstalled 1 package in [TIME]
-     - typing-extensions==4.10.0
+    Audited in [TIME]
     ");
 
     let pyproject_toml = context.read("pyproject.toml");
@@ -11124,6 +11960,235 @@ fn add_optional_normalize() -> Result<()> {
     [project.optional-dependencies]
     cloud_export_to_parquet = [
         "anyio==3.7.0",
+    ]
+    "#
+    );
+
+    Ok(())
+}
+
+/// Test `uv add` with different kinds of bounds and constraints.
+#[test]
+fn add_bounds() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Set bounds in `uv.toml`
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r#"
+        add-bounds = "exact"
+    "#})?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("idna"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The bounds option is in preview and may change in any future release.
+    Resolved 2 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + idna==3.6
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "idna==3.6",
+    ]
+    "#
+    );
+
+    fs_err::remove_file(uv_toml)?;
+
+    // Set bounds in `pyproject.toml`
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        add-bounds = "major"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    warning: The bounds option is in preview and may change in any future release.
+    Resolved 4 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + anyio==4.3.0
+     + sniffio==1.3.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio>=4.3.0,<5.0.0",
+    ]
+
+    [tool.uv]
+    add-bounds = "major"
+    "#
+    );
+
+    // Existing constraints take precedence over the bounds option
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--bounds").arg("minor").arg("--preview"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Audited 3 packages in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio>=4.3.0,<5.0.0",
+    ]
+
+    [tool.uv]
+    add-bounds = "major"
+    "#
+    );
+
+    // Explicit constraints take precedence over the bounds option
+    uv_snapshot!(context.filters(), context.add().arg("anyio==4.2").arg("idna").arg("--bounds").arg("minor").arg("--preview"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Uninstalled 1 package in [TIME]
+    Installed 1 package in [TIME]
+     - anyio==4.3.0
+     + anyio==4.2.0
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio==4.2",
+        "idna>=3.6,<3.7",
+    ]
+
+    [tool.uv]
+    add-bounds = "major"
+    "#
+    );
+
+    // Set bounds on the CLI and use `--preview` to silence the warning.
+    uv_snapshot!(context.filters(), context.add().arg("sniffio").arg("--bounds").arg("minor").arg("--preview"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    Audited 3 packages in [TIME]
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio==4.2",
+        "idna>=3.6,<3.7",
+        "sniffio>=1.3.1,<1.4.0",
+    ]
+
+    [tool.uv]
+    add-bounds = "major"
+    "#
+    );
+
+    Ok(())
+}
+
+/// Hint that we're using an explicit bound over the preferred bounds.
+#[test]
+fn add_bounds_requirement_over_bounds_kind() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    // Set bounds in `uv.toml`
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r#"
+        add-bounds = "exact"
+    "#})?;
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.add().arg("anyio==4.2").arg("idna").arg("--bounds").arg("minor").arg("--preview"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    note: Using explicit requirement `anyio==4.2` over bounds preference `minor`
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.2.0
+     + idna==3.6
+     + sniffio==1.3.1
+    ");
+
+    let pyproject_toml = context.read("pyproject.toml");
+    assert_snapshot!(
+        pyproject_toml, @r#"
+    [project]
+    name = "project"
+    version = "0.1.0"
+    requires-python = ">=3.12"
+    dependencies = [
+        "anyio==4.2",
+        "idna>=3.6,<3.7",
     ]
     "#
     );

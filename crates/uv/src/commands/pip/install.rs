@@ -3,11 +3,11 @@ use std::fmt::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use anyhow::Context;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use tracing::{debug, enabled, Level};
+use tracing::{Level, debug, enabled};
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -44,7 +44,7 @@ use crate::commands::pip::loggers::{DefaultInstallLogger, DefaultResolveLogger, 
 use crate::commands::pip::operations::Modifications;
 use crate::commands::pip::operations::{report_interpreter, report_target_environment};
 use crate::commands::pip::{operations, resolution_markers, resolution_tags};
-use crate::commands::{diagnostics, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
@@ -133,7 +133,9 @@ pub(crate) async fn pip_install(
 
     if pylock.is_some() {
         if preview.is_disabled() {
-            warn_user!("The `--pylock` setting is experimental and may change without warning. Pass `--preview` to disable this warning.");
+            warn_user!(
+                "The `--pylock` setting is experimental and may change without warning. Pass `--preview` to disable this warning."
+            );
         }
     }
 
@@ -359,10 +361,9 @@ pub(crate) async fn pip_install(
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_urls(index_locations.index_urls())
+        .index_locations(&index_locations)
         .index_strategy(index_strategy)
-        .url_auth_policies(UrlAuthPolicies::from(&index_locations))
-        .torch_backend(torch_backend)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -439,7 +440,8 @@ pub(crate) async fn pip_install(
         let install_path = std::path::absolute(&pylock)?;
         let install_path = install_path.parent().unwrap();
         let content = fs_err::tokio::read_to_string(&pylock).await?;
-        let lock = toml::from_str::<PylockToml>(&content)?;
+        let lock = toml::from_str::<PylockToml>(&content)
+            .with_context(|| format!("Not a valid pylock.toml file: {}", pylock.user_display()))?;
 
         let resolution =
             lock.to_resolution(install_path, marker_env.markers(), &tags, &build_options)?;
@@ -456,6 +458,7 @@ pub(crate) async fn pip_install(
             .dependency_mode(dependency_mode)
             .exclude_newer(exclude_newer)
             .index_strategy(index_strategy)
+            .torch_backend(torch_backend)
             .build_options(build_options.clone())
             .build();
 
@@ -477,6 +480,7 @@ pub(crate) async fn pip_install(
             Some(&tags),
             ResolverEnvironment::specific(marker_env.clone()),
             python_requirement,
+            interpreter.markers(),
             Conflicts::empty(),
             &client,
             &flat_index,
@@ -493,7 +497,7 @@ pub(crate) async fn pip_install(
             Err(err) => {
                 return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
             }
         };
 
@@ -530,7 +534,7 @@ pub(crate) async fn pip_install(
         Err(err) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     }
 

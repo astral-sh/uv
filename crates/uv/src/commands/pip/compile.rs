@@ -1,16 +1,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use rustc_hash::FxHashSet;
 use tracing::debug;
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -23,7 +23,7 @@ use uv_distribution_types::{
     DependencyMetadata, HashGeneration, Index, IndexLocations, NameRequirementSpecification,
     Origin, Requirement, UnresolvedRequirementSpecification, Verbatim,
 };
-use uv_fs::{Simplified, CWD};
+use uv_fs::{CWD, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_install_wheel::LinkMode;
 use uv_normalize::{GroupName, PackageName};
@@ -32,9 +32,9 @@ use uv_python::{
     EnvironmentPreference, PythonEnvironment, PythonInstallation, PythonPreference, PythonRequest,
     PythonVersion, VersionRequest,
 };
-use uv_requirements::upgrade::{read_pylock_toml_requirements, LockedRequirements};
+use uv_requirements::upgrade::{LockedRequirements, read_pylock_toml_requirements};
 use uv_requirements::{
-    upgrade::read_requirements_txt, RequirementsSource, RequirementsSpecification,
+    RequirementsSource, RequirementsSpecification, is_pylock_toml, upgrade::read_requirements_txt,
 };
 use uv_resolver::{
     AnnotationStyle, DependencyMode, DisplayResolutionGraph, ExcludeNewer, FlatIndex, ForkStrategy,
@@ -48,7 +48,7 @@ use uv_workspace::WorkspaceCache;
 
 use crate::commands::pip::loggers::DefaultResolveLogger;
 use crate::commands::pip::{operations, resolution_environment};
-use crate::commands::{diagnostics, ExitStatus, OutputWriter};
+use crate::commands::{ExitStatus, OutputWriter, diagnostics};
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
@@ -133,6 +133,20 @@ pub(crate) async fn pip_compile(
             ExportFormat::RequirementsTxt
         }
     });
+
+    // If the user is exporting to PEP 751, ensure the filename matches the specification.
+    if matches!(format, ExportFormat::PylockToml) {
+        if let Some(file_name) = output_file
+            .and_then(Path::file_name)
+            .and_then(OsStr::to_str)
+        {
+            if !is_pylock_toml(file_name) {
+                return Err(anyhow!(
+                    "Expected the output filename to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`); `{file_name}` won't be recognized as a `pylock.toml` file in subsequent commands",
+                ));
+            }
+        }
+    }
 
     // Respect `UV_PYTHON`
     if python.is_none() && python_version.is_none() {
@@ -392,10 +406,9 @@ pub(crate) async fn pip_compile(
     // Initialize the registry client.
     let client = RegistryClientBuilder::try_from(client_builder)?
         .cache(cache.clone())
-        .index_urls(index_locations.index_urls())
+        .index_locations(&index_locations)
         .index_strategy(index_strategy)
-        .url_auth_policies(UrlAuthPolicies::from(&index_locations))
-        .torch_backend(torch_backend)
+        .torch_backend(torch_backend.clone())
         .markers(interpreter.markers())
         .platform(interpreter.platform())
         .build();
@@ -482,6 +495,7 @@ pub(crate) async fn pip_compile(
         .dependency_mode(dependency_mode)
         .exclude_newer(exclude_newer)
         .index_strategy(index_strategy)
+        .torch_backend(torch_backend)
         .build_options(build_options.clone())
         .build();
 
@@ -503,6 +517,7 @@ pub(crate) async fn pip_compile(
         tags.as_deref(),
         resolver_env.clone(),
         python_requirement,
+        interpreter.markers(),
         Conflicts::empty(),
         &client,
         &flat_index,
@@ -519,7 +534,7 @@ pub(crate) async fn pip_compile(
         Err(err) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
     };
 
@@ -641,7 +656,9 @@ pub(crate) async fn pip_compile(
         }
         ExportFormat::PylockToml => {
             if include_marker_expression {
-                warn_user!("The `--emit-marker-expression` option is not supported for `pylock.toml` output");
+                warn_user!(
+                    "The `--emit-marker-expression` option is not supported for `pylock.toml` output"
+                );
             }
             if include_index_url {
                 warn_user!(
@@ -659,7 +676,9 @@ pub(crate) async fn pip_compile(
                 );
             }
             if include_index_annotation {
-                warn_user!("The `--emit-index-annotation` option is not supported for `pylock.toml` output");
+                warn_user!(
+                    "The `--emit-index-annotation` option is not supported for `pylock.toml` output"
+                );
             }
 
             // Determine the directory relative to which the output file should be written.

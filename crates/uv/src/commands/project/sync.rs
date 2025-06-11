@@ -7,9 +7,8 @@ use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
-use uv_client::{FlatIndexClient, RegistryClientBuilder};
+use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroups, DependencyGroupsWithDefaults, DryRun, EditableMode,
     ExtrasSpecification, ExtrasSpecificationWithDefaults, HashCheckingMode, InstallOptions,
@@ -44,7 +43,7 @@ use crate::commands::project::{
     update_environment, PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment,
     UniversalState,
 };
-use crate::commands::{diagnostics, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
 use crate::settings::{InstallerSettingsRef, NetworkSettings, ResolverInstallerSettings};
 
@@ -110,7 +109,9 @@ pub(crate) async fn sync(
         if project.workspace().pyproject_toml().has_scripts()
             && !project.workspace().pyproject_toml().is_package()
         {
-            warn_user!("Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`");
+            warn_user!(
+                "Skipping installation of entry points (`project.scripts`) because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`"
+            );
         }
 
         SyncTarget::Project(project)
@@ -138,6 +139,7 @@ pub(crate) async fn sync(
                 &network_settings,
                 python_preference,
                 python_downloads,
+                false,
                 no_config,
                 active,
                 cache,
@@ -154,6 +156,7 @@ pub(crate) async fn sync(
                 python_preference,
                 python_downloads,
                 &install_mirrors,
+                false,
                 no_config,
                 active,
                 cache,
@@ -163,6 +166,8 @@ pub(crate) async fn sync(
             .await?,
         ),
     };
+
+    let _lock = environment.lock().await?;
 
     // Notify the user of any environment changes.
     match &environment {
@@ -330,7 +335,7 @@ pub(crate) async fn sync(
                         network_settings.native_tls,
                     )
                     .report(err)
-                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                    .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
                 }
                 Err(err) => return Err(err.into()),
             }
@@ -413,7 +418,7 @@ pub(crate) async fn sync(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(ProjectError::LockMismatch(lock)) if dry_run.enabled() => {
             // The lockfile is mismatched, but we're in dry-run mode. We should proceed with the
@@ -455,7 +460,7 @@ pub(crate) async fn sync(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     }
@@ -468,6 +473,7 @@ pub(crate) async fn sync(
 
 /// The outcome of a `lock` operation within a `sync` operation.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Outcome {
     /// The `lock` operation was successful.
     Success(Lock),
@@ -600,6 +606,12 @@ pub(super) async fn do_sync(
         sources,
     } = settings;
 
+    let client_builder = BaseClientBuilder::new()
+        .connectivity(network_settings.connectivity)
+        .native_tls(network_settings.native_tls)
+        .keyring(keyring_provider)
+        .allow_insecure_host(network_settings.allow_insecure_host.clone());
+
     // Validate that the Python version is supported by the lockfile.
     if !target
         .lock()
@@ -680,14 +692,10 @@ pub(super) async fn do_sync(
     store_credentials_from_target(target);
 
     // Initialize the registry client.
-    let client = RegistryClientBuilder::new(cache.clone())
-        .native_tls(network_settings.native_tls)
-        .connectivity(network_settings.connectivity)
-        .allow_insecure_host(network_settings.allow_insecure_host.clone())
-        .url_auth_policies(UrlAuthPolicies::from(index_locations))
-        .index_urls(index_locations.index_urls())
+    let client = RegistryClientBuilder::try_from(client_builder)?
+        .cache(cache.clone())
+        .index_locations(index_locations)
         .index_strategy(index_strategy)
-        .keyring(keyring_provider)
         .markers(venv.interpreter().markers())
         .platform(venv.interpreter().platform())
         .build();

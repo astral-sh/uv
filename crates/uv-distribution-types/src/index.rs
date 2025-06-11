@@ -1,18 +1,17 @@
 use std::path::Path;
 use std::str::FromStr;
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use url::Url;
 
 use uv_auth::{AuthPolicy, Credentials};
+use uv_redacted::DisplaySafeUrl;
 
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
-use crate::{IndexUrl, IndexUrlError};
+use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError, SerializableStatusCode};
 
-#[derive(
-    Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "kebab-case")]
 pub struct Index {
@@ -83,7 +82,7 @@ pub struct Index {
     /// url = "https://pypi.org/simple"
     /// publish-url = "https://upload.pypi.org/legacy/"
     /// ```
-    pub publish_url: Option<Url>,
+    pub publish_url: Option<DisplaySafeUrl>,
     /// When uv should use authentication for requests to the index.
     ///
     /// ```toml
@@ -94,6 +93,17 @@ pub struct Index {
     /// ```
     #[serde(default)]
     pub authenticate: AuthPolicy,
+    /// Status codes that uv should ignore when deciding whether
+    /// to continue searching in the next index after a failure.
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "my-index"
+    /// url = "https://<omitted>/simple"
+    /// ignore-error-codes = [401, 403]
+    /// ```
+    #[serde(default)]
+    pub ignore_error_codes: Option<Vec<SerializableStatusCode>>,
 }
 
 #[derive(
@@ -131,6 +141,7 @@ impl Index {
             format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
         }
     }
 
@@ -145,6 +156,7 @@ impl Index {
             format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
         }
     }
 
@@ -159,6 +171,7 @@ impl Index {
             format: IndexFormat::Flat,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
         }
     }
 
@@ -180,7 +193,7 @@ impl Index {
     }
 
     /// Return the raw [`Url`] of the index.
-    pub fn raw_url(&self) -> &Url {
+    pub fn raw_url(&self) -> &DisplaySafeUrl {
         self.url.url()
     }
 
@@ -188,7 +201,7 @@ impl Index {
     ///
     /// For indexes with a `/simple` endpoint, this is simply the URL with the final segment
     /// removed. This is useful, e.g., for credential propagation to other endpoints on the index.
-    pub fn root_url(&self) -> Option<Url> {
+    pub fn root_url(&self) -> Option<DisplaySafeUrl> {
         self.url.root()
     }
 
@@ -214,6 +227,15 @@ impl Index {
         }
         Ok(self)
     }
+
+    /// Return the [`IndexStatusCodeStrategy`] for this index.
+    pub fn status_code_strategy(&self) -> IndexStatusCodeStrategy {
+        if let Some(ignore_error_codes) = &self.ignore_error_codes {
+            IndexStatusCodeStrategy::from_ignored_error_codes(ignore_error_codes)
+        } else {
+            IndexStatusCodeStrategy::from_index_url(self.url.url())
+        }
+    }
 }
 
 impl From<IndexUrl> for Index {
@@ -227,6 +249,7 @@ impl From<IndexUrl> for Index {
             format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
         }
     }
 }
@@ -249,6 +272,7 @@ impl FromStr for Index {
                     format: IndexFormat::Simple,
                     publish_url: None,
                     authenticate: AuthPolicy::default(),
+                    ignore_error_codes: None,
                 });
             }
         }
@@ -264,6 +288,7 @@ impl FromStr for Index {
             format: IndexFormat::Simple,
             publish_url: None,
             authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
         })
     }
 }

@@ -4,7 +4,7 @@ use assert_fs::{fixture::ChildPath, prelude::*};
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 
-use crate::common::{download_to_disk, uv_snapshot, venv_bin_path, TestContext};
+use crate::common::{TestContext, download_to_disk, uv_snapshot, venv_bin_path};
 use predicates::prelude::predicate;
 use tempfile::tempdir_in;
 use uv_fs::Simplified;
@@ -270,7 +270,7 @@ fn package() -> Result<()> {
 /// Ensure that we use the maximum Python version when a workspace contains mixed requirements.
 #[test]
 fn mixed_requires_python() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     // Create a workspace root with a minimum Python requirement of Python 3.12.
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
@@ -296,7 +296,7 @@ fn mixed_requires_python() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
-    // Create a child with a minimum Python requirement of Python 3.8.
+    // Create a child with a minimum Python requirement of Python 3.9.
     let child = context.temp_dir.child("packages").child("bird-feeder");
     child.create_dir_all()?;
 
@@ -312,7 +312,7 @@ fn mixed_requires_python() -> Result<()> {
         [project]
         name = "bird-feeder"
         version = "0.1.0"
-        requires-python = ">=3.8"
+        requires-python = ">=3.9"
 
         [build-system]
         requires = ["setuptools>=42"]
@@ -339,15 +339,15 @@ fn mixed_requires_python() -> Result<()> {
     "###);
 
     // Running `uv sync` again should fail.
-    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.8"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("-p").arg("3.9"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
-    error: The requested interpreter resolved to Python 3.8.[X], which is incompatible with the project's Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.8. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.8.[X]` followed by `uv pip install -e .`.
-    "###);
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
+    error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.9. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.9.[X]` followed by `uv pip install -e .`.
+    ");
 
     Ok(())
 }
@@ -8143,9 +8143,8 @@ fn find_links_relative_in_config_works_from_subdir() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "python-managed")]
 fn sync_dry_run() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8222,7 +8221,7 @@ fn sync_dry_run() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = "==3.8.*"
+        requires-python = "==3.9.*"
         dependencies = ["iniconfig"]
         "#,
     )?;
@@ -8233,7 +8232,7 @@ fn sync_dry_run() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Would replace existing virtual environment at: .venv
     Resolved 2 packages in [TIME]
     Would update lockfile at: uv.lock
@@ -8248,7 +8247,7 @@ fn sync_dry_run() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.8.[X] interpreter at: [PYTHON-3.8]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 2 packages in [TIME]
@@ -8376,7 +8375,7 @@ fn sync_dry_run_and_frozen() -> Result<()> {
 
 #[test]
 fn sync_script() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! { r#"
@@ -8526,7 +8525,7 @@ fn sync_script() -> Result<()> {
 
 #[test]
 fn sync_locked_script() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.8", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.12"]);
 
     let script = context.temp_dir.child("script.py");
     script.write_str(indoc! { r#"
@@ -8777,14 +8776,14 @@ fn sync_locked_script() -> Result<()> {
 
 #[test]
 fn sync_script_with_compatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let test_script = context.temp_dir.child("script.py");
 
     // Compatible build constraints.
     test_script.write_str(indoc! { r#"
         # /// script
-        # requires-python = ">=3.8"
+        # requires-python = ">=3.9"
         # dependencies = [
         #   "anyio>=3",
         #   "requests==1.2"
@@ -8830,7 +8829,7 @@ fn sync_script_with_compatible_build_constraints() -> Result<()> {
 
 #[test]
 fn sync_script_with_incompatible_build_constraints() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let test_script = context.temp_dir.child("script.py");
     let filters = context
@@ -8845,7 +8844,7 @@ fn sync_script_with_incompatible_build_constraints() -> Result<()> {
     // Incompatible build constraints.
     test_script.write_str(indoc! { r#"
         # /// script
-        # requires-python = ">=3.8"
+        # requires-python = ">=3.9"
         # dependencies = [
         #   "anyio>=3",
         #   "requests==1.2"
@@ -9856,6 +9855,200 @@ fn sync_upload_time() -> Result<()> {
     ----- stderr -----
     Audited 3 packages in [TIME]
     "###);
+
+    Ok(())
+}
+
+/// Ensure that workspace members that are also development dependencies are not duplicated with
+/// `--all-packages`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/13673#issuecomment-2912196406>
+#[test]
+fn repeated_dev_member_all_packages() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "first"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = []
+
+        [dependency-groups]
+        dev = ["second"]
+
+        [tool.uv.sources]
+        second = { workspace = true }
+
+        [tool.uv.workspace]
+        members = ["second"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    let src = context.temp_dir.child("src").child("first");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    let child = context.temp_dir.child("second");
+    fs_err::create_dir_all(&child)?;
+
+    let pyproject_toml = child.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "second"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig"]
+
+        [build-system]
+        requires = ["hatchling"]
+        build-backend = "hatchling.build"
+        "#,
+    )?;
+
+    let src = child.child("src").child("second");
+    src.create_dir_all()?;
+
+    let init = src.child("__init__.py");
+    init.touch()?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + first==0.1.0 (from file://[TEMP_DIR]/)
+     + iniconfig==2.0.0
+     + second==0.1.0 (from file://[TEMP_DIR]/second)
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-packages"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Audited 3 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Test that hash checking doesn't fail with dependency metadata.
+#[test]
+fn direct_url_dependency_metadata() -> Result<()> {
+    let context = TestContext::new("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(r#"
+        [project]
+        name = "debug"
+        version = "0.1.0"
+        requires-python = ">=3.9"
+        dependencies = [
+            "tqdm",
+        ]
+
+        [tool.uv]
+        dependency-metadata = [
+          { name = "tqdm", version = "4.67.1", requires-dist = [] },
+        ]
+
+        [tool.uv.sources]
+        tqdm = { url = "https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl" }
+        "#
+    )?;
+
+    uv_snapshot!(context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Installed 1 package in [TIME]
+     + tqdm==4.67.1 (from https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl)
+    ");
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn sync_required_environment_hint() -> Result<()> {
+    let context = TestContext::new("3.13");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.13.2"
+        dependencies = ["wheel_tag_test"]
+        "#,
+    )?;
+
+    // Populate the `--find-links` entries.
+    fs_err::create_dir_all(context.temp_dir.join("links"))?;
+
+    for entry in fs_err::read_dir(context.workspace_root.join("scripts/links"))? {
+        let entry = entry?;
+        let path = entry.path();
+        if path
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .is_some_and(|file_name| file_name.starts_with("wheel_tag_test-"))
+        {
+            let dest = context
+                .temp_dir
+                .join("links")
+                .join(path.file_name().unwrap());
+            fs_err::copy(&path, &dest)?;
+        }
+    }
+
+    uv_snapshot!(context.filters(), context.lock()
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg(context.temp_dir.join("links")), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let mut filters = context.filters();
+    filters.push((r"(macOS|Linux) \(`.*`\)", "[PLATFORM] (`[TAG]`)"));
+
+    uv_snapshot!(filters, context.sync()
+            .arg("--no-index")
+            .arg("--find-links")
+            .arg(context.temp_dir.join("links")), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Distribution `wheel-tag-test==0.1.0 @ registry+links` can't be installed because it doesn't have a source distribution or wheel for the current platform
+
+    hint: You're on [PLATFORM] (`[TAG]`), but `wheel-tag-test` (v0.1.0) only has wheels for the following platform: `win_amd64`; consider adding your platform to `tool.uv.required-environments` to ensure uv resolves to a version with compatible wheels
+    ");
 
     Ok(())
 }

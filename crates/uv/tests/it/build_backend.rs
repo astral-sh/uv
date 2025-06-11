@@ -1,4 +1,4 @@
-use crate::common::{uv_snapshot, venv_bin_path, TestContext};
+use crate::common::{TestContext, uv_snapshot, venv_bin_path};
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild};
@@ -24,6 +24,7 @@ const BUILT_BY_UV_TEST_SCRIPT: &str = indoc! {r#"
 ///
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel.
 #[test]
+#[cfg(feature = "pypi")]
 fn built_by_uv_direct_wheel() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
@@ -83,6 +84,7 @@ fn built_by_uv_direct_wheel() -> Result<()> {
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel,
 /// so we call the build backend directly.
 #[test]
+#[cfg(feature = "pypi")]
 fn built_by_uv_direct() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
@@ -160,6 +162,7 @@ fn built_by_uv_direct() -> Result<()> {
 /// We can't test end-to-end here including the PEP 517 bridge code since we don't have a uv wheel,
 /// so we call the build backend directly.
 #[test]
+#[cfg(feature = "pypi")]
 fn built_by_uv_editable() -> Result<()> {
     let context = TestContext::new("3.12");
     let built_by_uv = Path::new("../../scripts/packages/built-by-uv");
@@ -216,7 +219,7 @@ fn built_by_uv_editable() -> Result<()> {
     Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "git"))]
 #[test]
 fn preserve_executable_bit() -> Result<()> {
     use std::io::Write;
@@ -301,7 +304,7 @@ fn rename_module() -> Result<()> {
         module-name = "bar"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.7"]
+        requires = ["uv_build>=0.5,<0.8"]
         build-backend = "uv_build"
     "#})?;
 
@@ -387,7 +390,7 @@ fn rename_module_editable_build() -> Result<()> {
         module-name = "bar"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.7"]
+        requires = ["uv_build>=0.5,<0.8"]
         build-backend = "uv_build"
     "#})?;
 
@@ -449,8 +452,11 @@ fn build_module_name_normalization() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.5,<0.7"]
+        requires = ["uv_build>=0.5,<0.8"]
         build-backend = "uv_build"
+
+        [tool.uv.build-backend]
+        module-name = "Django_plugin"
     "#})?;
     fs_err::create_dir_all(context.temp_dir.join("src"))?;
 
@@ -458,28 +464,28 @@ fn build_module_name_normalization() -> Result<()> {
     uv_snapshot!(context
         .build_backend()
         .arg("build-wheel")
-        .arg(&wheel_dir), @r###"
+        .arg(&wheel_dir), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module directory at: `src/django_plugin`
-    "###);
+    error: Missing module directory for `Django_plugin` in `src`. Found: ``
+    ");
 
     fs_err::create_dir_all(context.temp_dir.join("src/Django_plugin"))?;
     // Error case 2: A matching module, but no `__init__.py`.
     uv_snapshot!(context
         .build_backend()
         .arg("build-wheel")
-        .arg(&wheel_dir), @r###"
+        .arg(&wheel_dir), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected an `__init__.py` at: `src/Django_plugin/__init__.py`
-    "###);
+    error: Expected a Python module directory at: `src/Django_plugin/__init__.py`
+    ");
 
     // Use `Django_plugin` instead of `django_plugin`
     context
@@ -521,7 +527,7 @@ fn build_module_name_normalization() -> Result<()> {
     ----- stderr -----
     ");
 
-    // Error case 3: Multiple modules a matching name.
+    // Former error case 3, now accepted: Multiple modules a matching name.
     // Requires a case-sensitive filesystem.
     #[cfg(target_os = "linux")]
     {
@@ -534,14 +540,12 @@ fn build_module_name_normalization() -> Result<()> {
             .build_backend()
             .arg("build-wheel")
             .arg(&wheel_dir), @r"
-        success: false
-        exit_code: 2
+        success: true
+        exit_code: 0
         ----- stdout -----
+        django_plugin-1.0.0-py3-none-any.whl
 
         ----- stderr -----
-        error: Expected an `__init__.py` at `django_plugin`, found multiple:
-        * `src/Django_plugin`
-        * `src/django_plugin`
         ");
     }
 
@@ -562,7 +566,7 @@ fn build_sdist_with_long_path() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.6,<0.7"]
+        requires = ["uv_build>=0.7,<0.8"]
         build-backend = "uv_build"
     "#})?;
     context
@@ -606,7 +610,7 @@ fn sdist_error_without_module() -> Result<()> {
         version = "1.0.0"
 
         [build-system]
-        requires = ["uv_build>=0.6,<0.7"]
+        requires = ["uv_build>=0.7,<0.8"]
         build-backend = "uv_build"
     "#})?;
 
@@ -635,7 +639,7 @@ fn sdist_error_without_module() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Expected a Python module directory at: `src/foo`
+    error: Missing module directory for `foo` in `src`. Found: ``
     ");
 
     Ok(())

@@ -237,7 +237,9 @@ fn clone_recursive(
             } else {
                 synchronized_copy(&from, &to, locks)?;
             }
-            warn_user_once!("Failed to clone files; falling back to full copy. This may lead to degraded performance.\n         If the cache and target directories are on different filesystems, reflinking may not be supported.\n         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.");
+            warn_user_once!(
+                "Failed to clone files; falling back to full copy. This may lead to degraded performance.\n         If the cache and target directories are on different filesystems, reflinking may not be supported.\n         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
+            );
         }
     }
 
@@ -362,7 +364,9 @@ fn hardlink_wheel_files(
             }
             Attempt::UseCopyFallback => {
                 synchronized_copy(path, &out_path, locks)?;
-                warn_user_once!("Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n         If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.");
+                warn_user_once!(
+                    "Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n         If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
+                );
             }
         }
 
@@ -458,7 +462,9 @@ fn symlink_wheel_files(
             }
             Attempt::UseCopyFallback => {
                 synchronized_copy(path, &out_path, locks)?;
-                warn_user_once!("Failed to symlink files; falling back to full copy. This may lead to degraded performance.\n         If the cache and target directories are on different filesystems, symlinking may not be supported.\n         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.");
+                warn_user_once!(
+                    "Failed to symlink files; falling back to full copy. This may lead to degraded performance.\n         If the cache and target directories are on different filesystems, symlinking may not be supported.\n         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning."
+                );
             }
         }
 
@@ -493,14 +499,14 @@ fn synchronized_copy(from: &Path, to: &Path, locks: &Locks) -> std::io::Result<(
 
 #[cfg(unix)]
 fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
-    std::os::unix::fs::symlink(original, link)
+    fs_err::os::unix::fs::symlink(original, link)
 }
 
 #[cfg(windows)]
 fn create_symlink<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
     if original.as_ref().is_dir() {
-        std::os::windows::fs::symlink_dir(original, link)
+        fs_err::os::windows::fs::symlink_dir(original, link)
     } else {
-        std::os::windows::fs::symlink_file(original, link)
+        fs_err::os::windows::fs::symlink_file(original, link)
     }
 }

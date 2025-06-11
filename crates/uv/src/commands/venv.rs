@@ -10,7 +10,6 @@ use miette::{Diagnostic, IntoDiagnostic};
 use owo_colors::OwoColorize;
 use thiserror::Error;
 
-use uv_auth::UrlAuthPolicies;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
@@ -27,16 +26,16 @@ use uv_python::{
 };
 use uv_resolver::{ExcludeNewer, FlatIndex};
 use uv_settings::PythonInstallMirrors;
-use uv_shell::{shlex_posix, shlex_windows, Shell};
+use uv_shell::{Shell, shlex_posix, shlex_windows};
 use uv_types::{AnyErrorBuild, BuildContext, BuildIsolation, BuildStack, HashStrategy};
 use uv_warnings::warn_user;
 use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceError};
 
-use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
-use crate::commands::pip::operations::{report_interpreter, Changelog};
-use crate::commands::project::{validate_project_requires_python, WorkspacePython};
-use crate::commands::reporters::PythonDownloadReporter;
 use crate::commands::ExitStatus;
+use crate::commands::pip::loggers::{DefaultInstallLogger, InstallLogger};
+use crate::commands::pip::operations::{Changelog, report_interpreter};
+use crate::commands::project::{WorkspacePython, validate_project_requires_python};
+use crate::commands::reporters::PythonDownloadReporter;
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
@@ -223,6 +222,7 @@ async fn venv_impl(
             Some(&reporter),
             install_mirrors.python_install_mirror.as_deref(),
             install_mirrors.pypy_install_mirror.as_deref(),
+            install_mirrors.python_downloads_json_url.as_deref(),
         )
         .await
         .into_diagnostic()?;
@@ -296,9 +296,8 @@ async fn venv_impl(
         let client = RegistryClientBuilder::try_from(client_builder)
             .into_diagnostic()?
             .cache(cache.clone())
-            .index_urls(index_locations.index_urls())
+            .index_locations(index_locations)
             .index_strategy(index_strategy)
-            .url_auth_policies(UrlAuthPolicies::from(index_locations))
             .keyring(keyring_provider)
             .allow_insecure_host(network_settings.allow_insecure_host.clone())
             .markers(interpreter.markers())

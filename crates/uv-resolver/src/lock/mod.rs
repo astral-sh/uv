@@ -15,7 +15,7 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serializer;
-use toml_edit::{value, Array, ArrayOfTables, InlineTable, Item, Table, Value};
+use toml_edit::{Array, ArrayOfTables, InlineTable, Item, Table, Value, value};
 use tracing::debug;
 use url::Url;
 
@@ -26,18 +26,18 @@ use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
-    redact_credentials, BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
-    DirectorySourceDist, Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations,
-    IndexMetadata, IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, RemoteSource, Requirement, RequirementSource,
-    ResolvedDist, StaticMetadata, ToUrlError, UrlString,
+    BuiltDist, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist, DirectorySourceDist,
+    Dist, DistributionMetadata, FileLocation, GitSourceDist, IndexLocations, IndexMetadata,
+    IndexUrl, Name, PathBuiltDist, PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RemoteSource, Requirement, RequirementSource, ResolvedDist, StaticMetadata,
+    ToUrlError, UrlString,
 };
-use uv_fs::{relative_to, PortablePath, PortablePathBuf};
+use uv_fs::{PortablePath, PortablePathBuf, relative_to};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
 use uv_git_types::{GitOid, GitReference, GitUrl, GitUrlParseError};
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
-use uv_pep508::{split_scheme, MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError};
+use uv_pep508::{MarkerEnvironment, MarkerTree, VerbatimUrl, VerbatimUrlError, split_scheme};
 use uv_platform_tags::{
     AbiTag, IncompatibleTag, LanguageTag, PlatformTag, TagCompatibility, TagPriority, Tags,
 };
@@ -45,6 +45,7 @@ use uv_pypi_types::{
     ConflictPackage, Conflicts, HashAlgorithm, HashDigest, HashDigests, Hashes, ParsedArchiveUrl,
     ParsedGitUrl,
 };
+use uv_redacted::DisplaySafeUrl;
 use uv_small_str::SmallString;
 use uv_types::{BuildContext, HashStrategy};
 use uv_workspace::WorkspaceMember;
@@ -824,10 +825,10 @@ impl Lock {
                     let mut table = InlineTable::new();
                     table.insert("package", Value::from(item.package().to_string()));
                     match item.conflict() {
-                        ConflictPackage::Extra(ref extra) => {
+                        ConflictPackage::Extra(extra) => {
                             table.insert("extra", Value::from(extra.to_string()));
                         }
-                        ConflictPackage::Group(ref group) => {
+                        ConflictPackage::Group(group) => {
                             table.insert("group", Value::from(group.to_string()));
                         }
                     }
@@ -1100,8 +1101,8 @@ impl Lock {
 
     fn find_by_id(&self, id: &PackageId) -> &Package {
         let index = *self.by_id.get(id).expect("locked package for ID");
-        let dist = self.packages.get(index).expect("valid index for package");
-        dist
+
+        (self.packages.get(index).expect("valid index for package")) as _
     }
 
     /// Return a [`SatisfiesResult`] if the given extras do not match the [`Package`] metadata.
@@ -1144,7 +1145,9 @@ impl Lock {
             Some(
                 FlatRequiresDist::from_requirements(requires_dist.clone(), &package.id.name)
                     .into_iter()
-                    .map(|requirement| normalize_requirement(requirement, root))
+                    .map(|requirement| {
+                        normalize_requirement(requirement, root, &self.requires_python)
+                    })
                     .collect::<Result<BTreeSet<_>, _>>()?,
             )
         } else {
@@ -1153,14 +1156,14 @@ impl Lock {
 
         // Validate the `requires-dist` metadata.
         let expected: BTreeSet<_> = Box::into_iter(requires_dist)
-            .map(|requirement| normalize_requirement(requirement, root))
+            .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
             .collect::<Result<_, _>>()?;
         let actual: BTreeSet<_> = package
             .metadata
             .requires_dist
             .iter()
             .cloned()
-            .map(|requirement| normalize_requirement(requirement, root))
+            .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
             .collect::<Result<_, _>>()?;
 
         if expected != actual && flattened.is_none_or(|expected| expected != actual) {
@@ -1180,7 +1183,9 @@ impl Lock {
                 Ok::<_, LockError>((
                     group,
                     Box::into_iter(requirements)
-                        .map(|requirement| normalize_requirement(requirement, root))
+                        .map(|requirement| {
+                            normalize_requirement(requirement, root, &self.requires_python)
+                        })
                         .collect::<Result<_, _>>()?,
                 ))
             })
@@ -1196,7 +1201,9 @@ impl Lock {
                     requirements
                         .iter()
                         .cloned()
-                        .map(|requirement| normalize_requirement(requirement, root))
+                        .map(|requirement| {
+                            normalize_requirement(requirement, root, &self.requires_python)
+                        })
                         .collect::<Result<_, _>>()?,
                 ))
             })
@@ -1263,14 +1270,14 @@ impl Lock {
             let expected: BTreeSet<_> = requirements
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .requirements
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedRequirements(expected, actual));
@@ -1282,14 +1289,14 @@ impl Lock {
             let expected: BTreeSet<_> = constraints
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .constraints
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedConstraints(expected, actual));
@@ -1301,14 +1308,14 @@ impl Lock {
             let expected: BTreeSet<_> = overrides
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .overrides
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedOverrides(expected, actual));
@@ -1320,14 +1327,14 @@ impl Lock {
             let expected: BTreeSet<_> = build_constraints
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             let actual: BTreeSet<_> = self
                 .manifest
                 .build_constraints
                 .iter()
                 .cloned()
-                .map(|requirement| normalize_requirement(requirement, root))
+                .map(|requirement| normalize_requirement(requirement, root, &self.requires_python))
                 .collect::<Result<_, _>>()?;
             if expected != actual {
                 return Ok(SatisfiesResult::MismatchedBuildConstraints(
@@ -1347,7 +1354,9 @@ impl Lock {
                         requirements
                             .iter()
                             .cloned()
-                            .map(|requirement| normalize_requirement(requirement, root))
+                            .map(|requirement| {
+                                normalize_requirement(requirement, root, &self.requires_python)
+                            })
                             .collect::<Result<_, _>>()?,
                     ))
                 })
@@ -1363,7 +1372,9 @@ impl Lock {
                         requirements
                             .iter()
                             .cloned()
-                            .map(|requirement| normalize_requirement(requirement, root))
+                            .map(|requirement| {
+                                normalize_requirement(requirement, root, &self.requires_python)
+                            })
                             .collect::<Result<_, _>>()?,
                     ))
                 })
@@ -1394,7 +1405,7 @@ impl Lock {
                 .into_iter()
                 .filter_map(|index| match index.url() {
                     IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
-                        Some(UrlString::from(index.url().redacted().as_ref()))
+                        Some(UrlString::from(index.url().without_credentials().as_ref()))
                     }
                     IndexUrl::Path(_) => None,
                 })
@@ -2228,7 +2239,7 @@ impl Package {
                     Source::Direct(url, direct) => {
                         let filename: WheelFilename =
                             self.wheels[best_wheel_index].filename.clone();
-                        let url = Url::from(ParsedArchiveUrl {
+                        let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                             url: url.to_url().map_err(LockErrorKind::InvalidUrl)?,
                             subdirectory: direct.subdirectory.clone(),
                             ext: DistExtension::Wheel,
@@ -2390,7 +2401,7 @@ impl Package {
                     GitUrl::from_commit(url, GitReference::from(git.kind.clone()), git.precise)?;
 
                 // Reconstruct the PEP 508-compatible URL from the `GitSource`.
-                let url = Url::from(ParsedGitUrl {
+                let url = DisplaySafeUrl::from(ParsedGitUrl {
                     url: git_url.clone(),
                     subdirectory: git.subdirectory.clone(),
                 });
@@ -2409,7 +2420,7 @@ impl Package {
                     return Ok(None);
                 };
                 let location = url.to_url().map_err(LockErrorKind::InvalidUrl)?;
-                let url = Url::from(ParsedArchiveUrl {
+                let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                     url: location.clone(),
                     subdirectory: direct.subdirectory.clone(),
                     ext: DistExtension::Source(ext),
@@ -2488,8 +2499,9 @@ impl Package {
                     name: name.clone(),
                     version: version.clone(),
                 })?;
-                let file_url = Url::from_file_path(workspace_root.join(path).join(file_path))
-                    .map_err(|()| LockErrorKind::PathToUrl)?;
+                let file_url =
+                    DisplaySafeUrl::from_file_path(workspace_root.join(path).join(file_path))
+                        .map_err(|()| LockErrorKind::PathToUrl)?;
                 let filename = sdist
                     .filename()
                     .ok_or_else(|| LockErrorKind::MissingFilename {
@@ -2837,6 +2849,34 @@ struct PackageMetadata {
     dependency_groups: BTreeMap<GroupName, BTreeSet<Requirement>>,
 }
 
+impl PackageMetadata {
+    fn unwire(self, requires_python: &RequiresPython) -> PackageMetadata {
+        // We need to complexify these markers so things like
+        // `requires_python < '0'` get normalized to False
+        let unwire_requirements = |requirements: BTreeSet<Requirement>| -> BTreeSet<Requirement> {
+            requirements
+                .into_iter()
+                .map(|mut requirement| {
+                    let complexified_marker =
+                        requires_python.complexify_markers(requirement.marker);
+                    requirement.marker = complexified_marker;
+                    requirement
+                })
+                .collect()
+        };
+
+        PackageMetadata {
+            requires_dist: unwire_requirements(self.requires_dist),
+            provides_extras: self.provides_extras,
+            dependency_groups: self
+                .dependency_groups
+                .into_iter()
+                .map(|(group, requirements)| (group, unwire_requirements(requirements)))
+                .collect(),
+        }
+    }
+}
+
 impl PackageWire {
     fn unwire(
         self,
@@ -2865,9 +2905,10 @@ impl PackageWire {
                 .map(|dep| dep.unwire(requires_python, unambiguous_package_ids))
                 .collect()
         };
+
         Ok(Package {
             id: self.id,
-            metadata: self.metadata,
+            metadata: self.metadata.unwire(requires_python),
             sdist: self.sdist,
             wheels: self.wheels,
             fork_markers: self
@@ -3153,7 +3194,7 @@ impl Source {
         match index_url {
             IndexUrl::Pypi(_) | IndexUrl::Url(_) => {
                 // Remove any sensitive credentials from the index URL.
-                let redacted = index_url.redacted();
+                let redacted = index_url.without_credentials();
                 let source = RegistrySource::Url(UrlString::from(redacted.as_ref()));
                 Ok(Source::Registry(source))
             }
@@ -3366,7 +3407,7 @@ impl TryFrom<SourceWire> for Source {
         match wire {
             Registry { registry } => Ok(Source::Registry(registry.into())),
             Git { git } => {
-                let url = Url::parse(&git)
+                let url = DisplaySafeUrl::parse(&git)
                     .map_err(|err| SourceParseError::InvalidUrl {
                         given: git.to_string(),
                         err,
@@ -3874,12 +3915,12 @@ impl From<GitSourceKind> for GitReference {
     }
 }
 
-/// Construct the lockfile-compatible [`URL`] for a [`GitSourceDist`].
-fn locked_git_url(git_dist: &GitSourceDist) -> Url {
+/// Construct the lockfile-compatible [`DisplaySafeUrl`] for a [`GitSourceDist`].
+fn locked_git_url(git_dist: &GitSourceDist) -> DisplaySafeUrl {
     let mut url = git_dist.git.repository().clone();
 
-    // Redact the credentials.
-    redact_credentials(&mut url);
+    // Remove the credentials.
+    url.remove_credentials();
 
     // Clear out any existing state.
     url.set_fragment(None);
@@ -4111,7 +4152,7 @@ impl Wheel {
                             name: filename.name,
                             version: filename.version,
                         }
-                        .into())
+                        .into());
                     }
                 };
                 let file = Box::new(uv_distribution_types::File {
@@ -4141,11 +4182,12 @@ impl Wheel {
                             name: filename.name,
                             version: filename.version,
                         }
-                        .into())
+                        .into());
                     }
                 };
-                let file_url = Url::from_file_path(root.join(index_path).join(file_path))
-                    .map_err(|()| LockErrorKind::PathToUrl)?;
+                let file_url =
+                    DisplaySafeUrl::from_file_path(root.join(index_path).join(file_path))
+                        .map_err(|()| LockErrorKind::PathToUrl)?;
                 let file = Box::new(uv_distribution_types::File {
                     dist_info_metadata: false,
                     filename: SmallString::from(filename.to_string()),
@@ -4490,24 +4532,35 @@ impl From<Hash> for Hashes {
                 sha256: None,
                 sha384: None,
                 sha512: None,
+                blake2b: None,
             },
             HashAlgorithm::Sha256 => Hashes {
                 md5: None,
                 sha256: Some(value.0.digest),
                 sha384: None,
                 sha512: None,
+                blake2b: None,
             },
             HashAlgorithm::Sha384 => Hashes {
                 md5: None,
                 sha256: None,
                 sha384: Some(value.0.digest),
                 sha512: None,
+                blake2b: None,
             },
             HashAlgorithm::Sha512 => Hashes {
                 md5: None,
                 sha256: None,
                 sha384: None,
                 sha512: Some(value.0.digest),
+                blake2b: None,
+            },
+            HashAlgorithm::Blake2b => Hashes {
+                md5: None,
+                sha256: None,
+                sha384: None,
+                sha512: None,
+                blake2b: Some(value.0.digest),
             },
         }
     }
@@ -4516,13 +4569,13 @@ impl From<Hash> for Hashes {
 /// Convert a [`FileLocation`] into a normalized [`UrlString`].
 fn normalize_file_location(location: &FileLocation) -> Result<UrlString, ToUrlError> {
     match location {
-        FileLocation::AbsoluteUrl(ref absolute) => Ok(absolute.without_fragment()),
+        FileLocation::AbsoluteUrl(absolute) => Ok(absolute.without_fragment()),
         FileLocation::RelativeUrl(_, _) => Ok(normalize_url(location.to_url()?)),
     }
 }
 
-/// Convert a [`Url`] into a normalized [`UrlString`] by removing the fragment.
-fn normalize_url(mut url: Url) -> UrlString {
+/// Convert a [`DisplaySafeUrl`] into a normalized [`UrlString`] by removing the fragment.
+fn normalize_url(mut url: DisplaySafeUrl) -> UrlString {
     url.set_fragment(None);
     UrlString::from(url)
 }
@@ -4535,9 +4588,11 @@ fn normalize_url(mut url: Url) -> UrlString {
 /// 2. Ensures that the lock and install paths are appropriately framed with respect to the
 ///    current [`Workspace`].
 /// 3. Removes the `origin` field, which is only used in `requirements.txt`.
+/// 4. Simplifies the markers using the provided [`RequiresPython`] instance.
 fn normalize_requirement(
     mut requirement: Requirement,
     root: &Path,
+    requires_python: &RequiresPython,
 ) -> Result<Requirement, LockError> {
     // Sort the extras and groups for consistency.
     requirement.extras.sort();
@@ -4554,8 +4609,8 @@ fn normalize_requirement(
             let git = {
                 let mut repository = git.repository().clone();
 
-                // Redact the credentials.
-                redact_credentials(&mut repository);
+                // Remove the credentials.
+                repository.remove_credentials();
 
                 // Remove the fragment and query from the URL; they're already present in the source.
                 repository.set_fragment(None);
@@ -4565,7 +4620,7 @@ fn normalize_requirement(
             };
 
             // Reconstruct the PEP 508 URL from the underlying data.
-            let url = Url::from(ParsedGitUrl {
+            let url = DisplaySafeUrl::from(ParsedGitUrl {
                 url: git.clone(),
                 subdirectory: subdirectory.clone(),
             });
@@ -4574,7 +4629,7 @@ fn normalize_requirement(
                 name: requirement.name,
                 extras: requirement.extras,
                 groups: requirement.groups,
-                marker: requirement.marker,
+                marker: requires_python.simplify_markers(requirement.marker),
                 source: RequirementSource::Git {
                     git,
                     subdirectory,
@@ -4597,7 +4652,7 @@ fn normalize_requirement(
                 name: requirement.name,
                 extras: requirement.extras,
                 groups: requirement.groups,
-                marker: requirement.marker,
+                marker: requires_python.simplify_markers(requirement.marker),
                 source: RequirementSource::Path {
                     install_path,
                     ext,
@@ -4621,7 +4676,7 @@ fn normalize_requirement(
                 name: requirement.name,
                 extras: requirement.extras,
                 groups: requirement.groups,
-                marker: requirement.marker,
+                marker: requires_python.simplify_markers(requirement.marker),
                 source: RequirementSource::Directory {
                     install_path,
                     editable,
@@ -4640,7 +4695,7 @@ fn normalize_requirement(
             let index = index
                 .map(|index| index.url.into_url())
                 .map(|mut index| {
-                    redact_credentials(&mut index);
+                    index.remove_credentials();
                     index
                 })
                 .map(|index| IndexMetadata::from(IndexUrl::from(VerbatimUrl::from_url(index))));
@@ -4648,7 +4703,7 @@ fn normalize_requirement(
                 name: requirement.name,
                 extras: requirement.extras,
                 groups: requirement.groups,
-                marker: requirement.marker,
+                marker: requires_python.simplify_markers(requirement.marker),
                 source: RequirementSource::Registry {
                     specifier,
                     index,
@@ -4663,14 +4718,14 @@ fn normalize_requirement(
             ext,
             url: _,
         } => {
-            // Redact the credentials.
-            redact_credentials(&mut location);
+            // Remove the credentials.
+            location.remove_credentials();
 
             // Remove the fragment from the URL; it's already present in the source.
             location.set_fragment(None);
 
             // Reconstruct the PEP 508 URL from the underlying data.
-            let url = Url::from(ParsedArchiveUrl {
+            let url = DisplaySafeUrl::from(ParsedArchiveUrl {
                 url: location.clone(),
                 subdirectory: subdirectory.clone(),
                 ext,
@@ -4680,7 +4735,7 @@ fn normalize_requirement(
                 name: requirement.name,
                 extras: requirement.extras,
                 groups: requirement.groups,
-                marker: requirement.marker,
+                marker: requires_python.simplify_markers(requirement.marker),
                 source: RequirementSource::Url {
                     location,
                     subdirectory,
@@ -5029,32 +5084,23 @@ impl std::fmt::Display for WheelTagHint {
                     } else {
                         format!("`{}`", best.cyan())
                     };
-                    if let Some(version) = version {
-                        write!(
-                            f,
-                            "{}{} You're on {}, but `{}` ({}) only has wheels for the following platform{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
-                            best,
-                            package.cyan(),
-                            format!("v{version}").cyan(),
-                            tags.iter()
-                                .map(|tag| format!("`{}`", tag.cyan()))
-                                .join(", "),
-                        )
+                    let package_ref = if let Some(version) = version {
+                        format!("`{}` ({})", package.cyan(), format!("v{version}").cyan())
                     } else {
-                        write!(
-                            f,
-                            "{}{} You're on {}, but `{}` only has wheels for the following platform{s}: {}",
-                            "hint".bold().cyan(),
-                            ":".bold(),
-                            best,
-                            package.cyan(),
-                            tags.iter()
-                                .map(|tag| format!("`{}`", tag.cyan()))
-                                .join(", "),
-                        )
-                    }
+                        format!("`{}`", package.cyan())
+                    };
+                    writeln!(
+                        f,
+                        "{}{} You're on {}, but {} only has wheels for the following platform{s}: {}; consider adding your platform to `{}` to ensure uv resolves to a version with compatible wheels",
+                        "hint".bold().cyan(),
+                        ":".bold(),
+                        best,
+                        package_ref,
+                        tags.iter()
+                            .map(|tag| format!("`{}`", tag.cyan()))
+                            .join(", "),
+                        "tool.uv.required-environments".green()
+                    )
                 } else {
                     if let Some(version) = version {
                         write!(

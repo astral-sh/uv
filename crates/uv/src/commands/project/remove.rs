@@ -30,10 +30,10 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::LockMode;
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
-    default_dependency_groups, default_extras, ProjectEnvironment, ProjectError,
-    ProjectInterpreter, ScriptInterpreter, UniversalState,
+    ProjectEnvironment, ProjectError, ProjectInterpreter, ScriptInterpreter, UniversalState,
+    default_dependency_groups, default_extras,
 };
-use crate::commands::{diagnostics, project, ExitStatus};
+use crate::commands::{ExitStatus, diagnostics, project};
 use crate::printer::Printer;
 use crate::settings::{NetworkSettings, ResolverInstallerSettings};
 
@@ -215,6 +215,7 @@ pub(crate) async fn remove(
                     python_preference,
                     python_downloads,
                     &install_mirrors,
+                    false,
                     no_config,
                     active,
                     cache,
@@ -233,6 +234,7 @@ pub(crate) async fn remove(
                     &network_settings,
                     python_preference,
                     python_downloads,
+                    no_sync,
                     no_config,
                     active,
                     cache,
@@ -253,6 +255,7 @@ pub(crate) async fn remove(
                 python_preference,
                 python_downloads,
                 &install_mirrors,
+                no_sync,
                 no_config,
                 active,
                 cache,
@@ -264,6 +267,8 @@ pub(crate) async fn remove(
             AddTarget::Script(script, Box::new(interpreter))
         }
     };
+
+    let _lock = target.acquire_lock().await?;
 
     // Determine the lock mode.
     let mode = if locked {
@@ -294,7 +299,7 @@ pub(crate) async fn remove(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     };
@@ -308,11 +313,6 @@ pub(crate) async fn remove(
         // If we're not syncing, exit early.
         return Ok(ExitStatus::Success);
     };
-
-    // Perform a full sync, because we don't know what exactly is affected by the removal.
-    // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
-    let extras = ExtrasSpecification::from_all_extras();
-    let install_options = InstallOptions::default();
 
     // Determine the default groups to include.
     let default_groups = default_dependency_groups(project.pyproject_toml())?;
@@ -338,10 +338,10 @@ pub(crate) async fn remove(
     match project::sync::do_sync(
         target,
         venv,
-        &extras.with_defaults(default_extras),
+        &ExtrasSpecification::default().with_defaults(default_extras),
         &DependencyGroups::default().with_defaults(default_groups),
         EditableMode::Editable,
-        install_options,
+        InstallOptions::default(),
         Modifications::Exact,
         (&settings).into(),
         &network_settings,
@@ -360,7 +360,7 @@ pub(crate) async fn remove(
         Err(ProjectError::Operation(err)) => {
             return diagnostics::OperationDiagnostic::native_tls(network_settings.native_tls)
                 .report(err)
-                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()))
+                .map_or(Ok(ExitStatus::Failure), |err| Err(err.into()));
         }
         Err(err) => return Err(err.into()),
     }

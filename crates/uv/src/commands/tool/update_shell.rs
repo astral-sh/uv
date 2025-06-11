@@ -53,18 +53,27 @@ pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {
 
     // Determine the current shell.
     let Some(shell) = Shell::from_env() else {
-        return Err(anyhow::anyhow!("The executable directory {} is not in PATH, but the current shell could not be determined", executable_directory.simplified_display().cyan()));
+        return Err(anyhow::anyhow!(
+            "The executable directory {} is not in PATH, but the current shell could not be determined",
+            executable_directory.simplified_display().cyan()
+        ));
     };
 
     // Look up the configuration files (e.g., `.bashrc`, `.zshrc`) for the shell.
     let files = shell.configuration_files();
     if files.is_empty() {
-        return Err(anyhow::anyhow!("The executable directory {} is not in PATH, but updating {shell} is currently unsupported", executable_directory.simplified_display().cyan()));
+        return Err(anyhow::anyhow!(
+            "The executable directory {} is not in PATH, but updating {shell} is currently unsupported",
+            executable_directory.simplified_display().cyan()
+        ));
     }
 
     // Prepare the command (e.g., `export PATH="$HOME/.cargo/bin:$PATH"`).
     let Some(command) = shell.prepend_path(&executable_directory) else {
-        return Err(anyhow::anyhow!("The executable directory {} is not in PATH, but the necessary command to update {shell} could not be determined", executable_directory.simplified_display().cyan()));
+        return Err(anyhow::anyhow!(
+            "The executable directory {} is not in PATH, but the necessary command to update {shell} could not be determined",
+            executable_directory.simplified_display().cyan()
+        ));
     };
 
     // Update each file, as necessary.
@@ -136,6 +145,9 @@ pub(crate) async fn update_shell(printer: Printer) -> Result<ExitStatus> {
         writeln!(printer.stderr(), "Restart your shell to apply changes")?;
         Ok(ExitStatus::Success)
     } else {
-        Err(anyhow::anyhow!("The executable directory {} is not in PATH, but the {shell} configuration files are already up-to-date", executable_directory.simplified_display().cyan()))
+        Err(anyhow::anyhow!(
+            "The executable directory {} is not in PATH, but the {shell} configuration files are already up-to-date",
+            executable_directory.simplified_display().cyan()
+        ))
     }
 }

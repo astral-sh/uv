@@ -4,7 +4,7 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 use tracing::trace;
 
-use uv_distribution_types::IndexUrl;
+use uv_distribution_types::{IndexUrl, InstalledDist};
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl};
@@ -113,6 +113,21 @@ impl Preference {
             fork_markers: vec![],
             hashes: HashDigests::empty(),
         }))
+    }
+
+    /// Create a [`Preference`] from an installed distribution.
+    pub fn from_installed(dist: &InstalledDist) -> Option<Self> {
+        let InstalledDist::Registry(dist) = dist else {
+            return None;
+        };
+        Some(Self {
+            name: dist.name.clone(),
+            version: dist.version.clone(),
+            marker: MarkerTree::TRUE,
+            index: PreferenceIndex::Any,
+            fork_markers: vec![],
+            hashes: HashDigests::empty(),
+        })
     }
 
     /// Return the [`PackageName`] of the package for this [`Preference`].

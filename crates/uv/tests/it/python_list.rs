@@ -1,7 +1,7 @@
 use uv_python::platform::{Arch, Os};
 use uv_static::EnvVars;
 
-use crate::common::{uv_snapshot, TestContext};
+use crate::common::{TestContext, uv_snapshot};
 
 #[test]
 fn python_list() {
@@ -365,8 +365,9 @@ fn python_list_downloads() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.17-[PLATFORM]    <download available>
+    cpython-3.10.18-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
     ");
@@ -376,6 +377,7 @@ fn python_list_downloads() {
     success: true
     exit_code: 0
     ----- stdout -----
+    cpython-3.10.18-[PLATFORM]    <download available>
     cpython-3.10.17-[PLATFORM]    <download available>
     cpython-3.10.16-[PLATFORM]    <download available>
     cpython-3.10.15-[PLATFORM]    <download available>
@@ -396,6 +398,7 @@ fn python_list_downloads() {
     pypy-3.10.14-[PLATFORM]       <download available>
     pypy-3.10.13-[PLATFORM]       <download available>
     pypy-3.10.12-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
     ");
@@ -420,8 +423,9 @@ fn python_list_downloads_installed() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.17-[PLATFORM]    <download available>
+    cpython-3.10.18-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
     ");
@@ -446,8 +450,9 @@ fn python_list_downloads_installed() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.17-[PLATFORM]    managed/cpython-3.10.17-[PLATFORM]/[INSTALL-BIN]/python
+    cpython-3.10.18-[PLATFORM]    managed/cpython-3.10.18-[PLATFORM]/[INSTALL-BIN]/python
     pypy-3.10.16-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
     ");
@@ -457,8 +462,9 @@ fn python_list_downloads_installed() {
     success: true
     exit_code: 0
     ----- stdout -----
-    cpython-3.10.17-[PLATFORM]    <download available>
+    cpython-3.10.18-[PLATFORM]    <download available>
     pypy-3.10.16-[PLATFORM]       <download available>
+    graalpy-3.10.0-[PLATFORM]     <download available>
 
     ----- stderr -----
     ");

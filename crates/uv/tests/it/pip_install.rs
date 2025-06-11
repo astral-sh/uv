@@ -11,15 +11,15 @@ use indoc::indoc;
 use predicates::prelude::predicate;
 use url::Url;
 use wiremock::{
-    matchers::{basic_auth, method, path},
     Mock, MockServer, ResponseTemplate,
+    matchers::{basic_auth, method, path},
 };
 
 #[cfg(feature = "git")]
 use crate::common::{self, decode_token};
 use crate::common::{
-    build_vendor_links_url, download_to_disk, get_bin, uv_snapshot, venv_bin_path,
-    venv_to_interpreter, TestContext,
+    DEFAULT_PYTHON_VERSION, TestContext, build_vendor_links_url, download_to_disk, get_bin,
+    uv_snapshot, venv_bin_path, venv_to_interpreter,
 };
 use uv_fs::Simplified;
 use uv_static::EnvVars;
@@ -246,6 +246,27 @@ fn invalid_pyproject_toml_option_unknown_field() -> Result<()> {
 }
 
 #[test]
+fn invalid_toml_filename() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let test_toml = context.temp_dir.child("test.toml");
+    test_toml.touch()?;
+
+    uv_snapshot!(context.pip_install()
+        .arg("-r")
+        .arg("test.toml"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: `test.toml` is not a valid PEP 751 filename: expected TOML file to start with `pylock.` and end with `.toml` (e.g., `pylock.toml`, `pylock.dev.toml`)
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
 fn invalid_uv_toml_option_disallowed() -> Result<()> {
     let context = TestContext::new("3.12");
     let uv_toml = context.temp_dir.child("uv.toml");
@@ -262,6 +283,36 @@ fn invalid_uv_toml_option_disallowed() -> Result<()> {
     ----- stderr -----
     error: Failed to parse: `uv.toml`. The `managed` field is not allowed in a `uv.toml` file. `managed` is only applicable in the context of a project, and should be placed in a `pyproject.toml` file instead.
     "###
+    );
+
+    Ok(())
+}
+
+#[test]
+fn cache_uv_toml_credentials() -> Result<()> {
+    let context = TestContext::new("3.12");
+    let uv_toml = context.temp_dir.child("uv.toml");
+    uv_toml.write_str(indoc! {r#"
+    [pip]
+    extra-index-url = ["https://public:heron@pypi-proxy.fly.dev/basic-auth/simple/"]
+    "#})?;
+
+    // Provide an extra index with the same username and URL as in `uv.toml` but
+    // no password.
+    uv_snapshot!(context.pip_install()
+        .arg("iniconfig")
+        .arg("--extra-index-url")
+        .arg("https://public@pypi-proxy.fly.dev/basic-auth/simple/"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + iniconfig==2.0.0
+    "
     );
 
     Ok(())
@@ -1857,11 +1908,48 @@ fn install_extra_index_url_has_priority() {
     context.assert_command("import flask").failure();
 }
 
+/// Ensure that the index is fetched only once when duplicate indices are specified
+#[tokio::test]
+async fn install_deduplicated_indices() {
+    let context = TestContext::new("3.12");
+
+    let redirect_server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .respond_with(
+            ResponseTemplate::new(302).insert_header("Location", "https://pypi.org/simple/sniffio"),
+        )
+        .expect(1)
+        .mount(&redirect_server)
+        .await;
+
+    uv_snapshot!(context
+        .pip_install()
+        .arg("sniffio")  // Use a zero-dependency package
+        .arg("--index")
+        .arg(redirect_server.uri())
+        .arg("--default-index")
+        .arg(redirect_server.uri())
+        .arg("--index-strategy")
+        .arg("unsafe-first-match"),  // Anything but "first-index"
+        @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + sniffio==1.3.1
+    ");
+}
+
 /// Install a package from a public GitHub repository
 #[test]
 #[cfg(feature = "git")]
 fn install_git_public_https() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     uv_snapshot!(
         context
@@ -1886,7 +1974,7 @@ fn install_git_public_https() {
 #[test]
 #[cfg(feature = "git")]
 fn install_implicit_git_public_https() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     uv_snapshot!(
         context
@@ -1911,7 +1999,7 @@ fn install_implicit_git_public_https() {
 #[test]
 #[cfg(feature = "git")]
 fn update_ref_git_public_https() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     uv_snapshot!(
         context
@@ -1958,7 +2046,7 @@ fn update_ref_git_public_https() {
 #[test]
 #[cfg(feature = "git")]
 fn install_git_public_https_missing_branch_or_tag() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
@@ -1987,7 +2075,7 @@ fn install_git_public_https_missing_branch_or_tag() {
 #[test]
 #[cfg(feature = "git")]
 fn install_git_public_https_missing_commit() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     let mut filters = context.filters();
     // Windows does not style the command the same as Unix, so we must omit it from the snapshot
@@ -2023,26 +2111,67 @@ fn install_git_public_https_missing_commit() {
     "###);
 }
 
+#[test]
+#[cfg(feature = "git")]
+fn install_git_public_https_exact_commit() {
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
+
+    // `uv pip install` a Git dependency with an exact commit.
+    uv_snapshot!(context.filters(), context.pip_install()
+        // Normally Updating/Updated notifications are suppressed in tests (because their order can
+        // be nondeterministic), but here that's exactly what we want to test for.
+        .env_remove(EnvVars::UV_TEST_NO_CLI_PROGRESS)
+        // Whether fetching happens during resolution or later depends on whether the GitHub fast
+        // path is taken, which isn't reliable. Disable it, so that we get a stable order of events
+        // here.
+        .env(EnvVars::UV_NO_GITHUB_FAST_PATH, "true")
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")
+        , @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+       Updating https://github.com/astral-test/uv-public-pypackage (b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+        Updated https://github.com/astral-test/uv-public-pypackage (b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+    Resolved 1 package in [TIME]
+       Building uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
+          Built uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
+    ");
+
+    // Run the exact same command again, with that commit now in cache.
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env_remove(EnvVars::UV_TEST_NO_CLI_PROGRESS)
+        .env(EnvVars::UV_NO_GITHUB_FAST_PATH, "true")
+        .arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389")
+        , @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Audited 1 package in [TIME]
+    ");
+}
+
 /// Install a package from a private GitHub repository using a PAT
 #[test]
 #[cfg(all(not(windows), feature = "git"))]
 fn install_git_private_https_pat() {
     use crate::common::decode_token;
 
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
-
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
     let package = format!(
         "uv-private-pypackage@ git+https://{token}@github.com/astral-test/uv-private-pypackage"
     );
 
-    uv_snapshot!(filters, context.pip_install().arg(package)
-        , @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg(package)
+        , @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2051,8 +2180,8 @@ fn install_git_private_https_pat() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://***@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
-    "###);
+     + uv-private-pypackage==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+    ");
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
 }
@@ -2062,19 +2191,14 @@ fn install_git_private_https_pat() {
 #[test]
 #[cfg(all(not(windows), feature = "git"))]
 fn install_git_private_https_pat_mixed_with_public() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
-
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
 
     let package = format!(
         "uv-private-pypackage @ git+https://{token}@github.com/astral-test/uv-private-pypackage"
     );
 
-    uv_snapshot!(filters, context.pip_install().arg(package).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"),
+    uv_snapshot!(context.filters(), context.pip_install().arg(package).arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"),
     @r###"
     success: true
     exit_code: 0
@@ -2084,7 +2208,7 @@ fn install_git_private_https_pat_mixed_with_public() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://***@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
      + uv-public-pypackage==0.1.0 (from git+https://github.com/astral-test/uv-public-pypackage@b270df1a2fb5d012294e9aaf05e7e0bab1e6a389)
     "###);
 
@@ -2095,14 +2219,9 @@ fn install_git_private_https_pat_mixed_with_public() {
 #[test]
 #[cfg(all(not(windows), feature = "git"))]
 fn install_git_private_https_multiple_pat() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token_1 = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let token_2 = decode_token(common::READ_ONLY_GITHUB_TOKEN_2);
-
-    let filters: Vec<_> = [(token_1.as_str(), "***_1"), (token_2.as_str(), "***_2")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
 
     let package_1 = format!(
         "uv-private-pypackage @ git+https://{token_1}@github.com/astral-test/uv-private-pypackage"
@@ -2111,7 +2230,7 @@ fn install_git_private_https_multiple_pat() {
         "uv-private-pypackage-2 @ git+https://{token_2}@github.com/astral-test/uv-private-pypackage-2"
     );
 
-    uv_snapshot!(filters, context.pip_install().arg(package_1).arg(package_2)
+    uv_snapshot!(context.filters(), context.pip_install().arg(package_1).arg(package_2)
         , @r###"
     success: true
     exit_code: 0
@@ -2121,8 +2240,8 @@ fn install_git_private_https_multiple_pat() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://***_1@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
-     + uv-private-pypackage-2==0.1.0 (from git+https://***_2@github.com/astral-test/uv-private-pypackage-2@45c0bec7365710f09b1f4dbca61c86dde9537e4e)
+     + uv-private-pypackage==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage@d780faf0ac91257d4d5a4f0c5a0e4509608c0071)
+     + uv-private-pypackage-2==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage-2@45c0bec7365710f09b1f4dbca61c86dde9537e4e)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -2132,14 +2251,10 @@ fn install_git_private_https_multiple_pat() {
 #[test]
 #[cfg(feature = "git")]
 fn install_git_private_https_pat_at_ref() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
 
-    let mut filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
+    let mut filters = context.filters();
     filters.push((r"git\+https://", ""));
 
     // A user is _required_ on Windows
@@ -2150,9 +2265,11 @@ fn install_git_private_https_pat_at_ref() {
         ""
     };
 
-    let package = format!("uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac");
-    uv_snapshot!(filters, context.pip_install()
-        .arg(package), @r###"
+    let package = format!(
+        "uv-private-pypackage @ git+https://{user}{token}@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac"
+    );
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(package), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -2161,8 +2278,8 @@ fn install_git_private_https_pat_at_ref() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from ***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
-    "###);
+     + uv-private-pypackage==0.1.0 (from git+https://****@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
+    ");
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
 }
@@ -2176,16 +2293,11 @@ fn install_git_private_https_pat_at_ref() {
 #[cfg(feature = "git")]
 #[ignore]
 fn install_git_private_https_pat_and_username() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let user = "astral-test-bot";
 
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
-
-    uv_snapshot!(filters, context.pip_install().arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"))
+    uv_snapshot!(context.filters(), context.pip_install().arg(format!("uv-private-pypackage @ git+https://{user}:{token}@github.com/astral-test/uv-private-pypackage"))
         , @r###"
     success: true
     exit_code: 0
@@ -2195,7 +2307,7 @@ fn install_git_private_https_pat_and_username() {
     Resolved 1 package in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
-     + uv-private-pypackage==0.1.0 (from git+https://astral-test-bot:***@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
+     + uv-private-pypackage==0.1.0 (from git+https://astral-test-bot:****@github.com/astral-test/uv-private-pypackage@6c09ce9ae81f50670a60abd7d95f30dd416d00ac)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -2205,13 +2317,16 @@ fn install_git_private_https_pat_and_username() {
 #[test]
 #[cfg(all(not(windows), feature = "git"))]
 fn install_git_private_https_pat_not_authorized() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     // A revoked token
     let token = "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";
 
     let mut filters = context.filters();
-    filters.insert(0, (token, "***"));
+    // TODO(john): We need this filter because we are displaying the token when
+    // an underlying process error message is being displayed. We should actually
+    // mask it.
+    filters.push((token, "***"));
     filters.push(("`.*/git fetch (.*)`", "`git fetch $1`"));
 
     // We provide a username otherwise (since the token is invalid), the git cli will prompt for a password
@@ -2224,7 +2339,7 @@ fn install_git_private_https_pat_not_authorized() {
     ----- stdout -----
 
     ----- stderr -----
-      × Failed to download and build `uv-private-pypackage @ git+https://git:***@github.com/astral-test/uv-private-pypackage`
+      × Failed to download and build `uv-private-pypackage @ git+https://git:****@github.com/astral-test/uv-private-pypackage`
       ├─▶ Git operation failed
       ├─▶ failed to clone into: [CACHE_DIR]/git-v0/db/8401f5508e3e612d
       ╰─▶ process didn't exit successfully: `git fetch --force --update-head-ok 'https://git:***@github.com/astral-test/uv-private-pypackage' '+HEAD:refs/remotes/origin/HEAD'` (exit status: 128)
@@ -2241,20 +2356,15 @@ fn install_git_private_https_pat_not_authorized() {
 #[test]
 #[cfg(not(windows))]
 fn install_github_artifact_private_https_pat_mixed_with_public() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token = decode_token(common::READ_ONLY_GITHUB_TOKEN);
-
-    let filters: Vec<_> = [(token.as_str(), "***")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
 
     let private_package = format!(
         "uv-private-pypackage @ https://{token}@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl"
     );
     let public_package = "uv-public-pypackage @ https://raw.githubusercontent.com/astral-test/uv-public-pypackage/main/dist/uv_public_pypackage-0.1.0-py3-none-any.whl";
 
-    uv_snapshot!(filters, context.pip_install().arg(private_package).arg(public_package),
+    uv_snapshot!(context.filters(), context.pip_install().arg(private_package).arg(public_package),
     @r###"
     success: true
     exit_code: 0
@@ -2264,7 +2374,7 @@ fn install_github_artifact_private_https_pat_mixed_with_public() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + uv-private-pypackage==0.1.0 (from https://***@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
+     + uv-private-pypackage==0.1.0 (from https://****@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
      + uv-public-pypackage==0.1.0 (from https://raw.githubusercontent.com/astral-test/uv-public-pypackage/main/dist/uv_public_pypackage-0.1.0-py3-none-any.whl)
     "###);
 
@@ -2276,14 +2386,9 @@ fn install_github_artifact_private_https_pat_mixed_with_public() {
 #[test]
 #[cfg(not(windows))]
 fn install_github_artifact_private_https_multiple_pat() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
     let token_1 = decode_token(common::READ_ONLY_GITHUB_TOKEN);
     let token_2 = decode_token(common::READ_ONLY_GITHUB_TOKEN_2);
-
-    let filters: Vec<_> = [(token_1.as_str(), "***_1"), (token_2.as_str(), "***_2")]
-        .into_iter()
-        .chain(context.filters())
-        .collect();
 
     let package_1 = format!(
         "uv-private-pypackage @ https://astral-test-bot:{token_1}@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl"
@@ -2292,7 +2397,7 @@ fn install_github_artifact_private_https_multiple_pat() {
         "uv-private-pypackage-2 @ https://astral-test-bot:{token_2}@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl"
     );
 
-    uv_snapshot!(filters, context.pip_install().arg(package_1).arg(package_2)
+    uv_snapshot!(context.filters(), context.pip_install().arg(package_1).arg(package_2)
         , @r###"
     success: true
     exit_code: 0
@@ -2302,8 +2407,8 @@ fn install_github_artifact_private_https_multiple_pat() {
     Resolved 2 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 2 packages in [TIME]
-     + uv-private-pypackage==0.1.0 (from https://astral-test-bot:***_1@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
-     + uv-private-pypackage-2==0.1.0 (from https://astral-test-bot:***_2@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl)
+     + uv-private-pypackage==0.1.0 (from https://astral-test-bot:****@raw.githubusercontent.com/astral-test/uv-private-pypackage/main/dist/uv_private_pypackage-0.1.0-py3-none-any.whl)
+     + uv-private-pypackage-2==0.1.0 (from https://astral-test-bot:****@raw.githubusercontent.com/astral-test/uv-private-pypackage-2/main/dist/uv_private_pypackage_2-0.1.0-py3-none-any.whl)
     "###);
 
     context.assert_installed("uv_private_pypackage", "0.1.0");
@@ -2315,7 +2420,7 @@ fn install_github_artifact_private_https_multiple_pat() {
 #[test]
 #[cfg(feature = "git")]
 fn install_git_private_https_interactive() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     let package = "uv-private-pypackage@ git+https://github.com/astral-test/uv-private-pypackage";
 
@@ -2791,7 +2896,7 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
         build-backend = "setuptools.build_meta"
     "#})?;
 
-    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r###"
+    uv_snapshot!(context.filters(), context.pip_install().arg("."), @r"
     success: false
     exit_code: 1
     ----- stdout -----
@@ -2801,8 +2906,8 @@ fn no_prerelease_hint_source_builds() -> Result<()> {
       × Failed to build `project @ file://[TEMP_DIR]/`
       ├─▶ Failed to resolve requirements from `setup.py` build
       ├─▶ No solution found when resolving: `setuptools>=40.8.0`
-      ╰─▶ Because only setuptools<40.8.0 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
-    "###
+      ╰─▶ Because only setuptools<=40.4.3 is available and you require setuptools>=40.8.0, we can conclude that your requirements are unsatisfiable.
+    "
     );
 
     Ok(())
@@ -3665,7 +3770,7 @@ fn launcher_with_symlink() -> Result<()> {
     );
 
     #[cfg(windows)]
-    if let Err(error) = std::os::windows::fs::symlink_file(
+    if let Err(error) = fs_err::os::windows::fs::symlink_file(
         context.venv.join("Scripts\\simple_launcher.exe"),
         context.temp_dir.join("simple_launcher.exe"),
     ) {
@@ -3678,7 +3783,7 @@ fn launcher_with_symlink() -> Result<()> {
     }
 
     #[cfg(unix)]
-    std::os::unix::fs::symlink(
+    fs_err::os::unix::fs::symlink(
         context.venv.join("bin/simple_launcher"),
         context.temp_dir.join("simple_launcher"),
     )?;
@@ -5138,8 +5243,8 @@ fn dry_run_install_already_installed() -> std::result::Result<(), Box<dyn std::e
 }
 
 #[test]
-fn dry_run_install_transitive_dependency_already_installed(
-) -> std::result::Result<(), Box<dyn std::error::Error>> {
+fn dry_run_install_transitive_dependency_already_installed()
+-> std::result::Result<(), Box<dyn std::error::Error>> {
     let context = TestContext::new("3.12");
 
     let requirements_txt = context.temp_dir.child("requirements.txt");
@@ -5461,21 +5566,21 @@ fn install_package_basic_auth_from_keyring() {
         .arg("subprocess")
         .arg("--strict")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "heron"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
-    Request for public@pypi-proxy.fly.dev
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@pypi-proxy.fly.dev
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
      + anyio==4.3.0
      + idna==3.6
      + sniffio==1.3.1
-    "###
+    "
     );
 
     context.assert_command("import anyio").success();
@@ -5508,19 +5613,19 @@ fn install_package_basic_auth_from_keyring_wrong_password() {
         .arg("subprocess")
         .arg("--strict")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"public": "foobar"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
-    Request for public@pypi-proxy.fly.dev
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
           hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-    "###
+    "
     );
 }
 
@@ -5551,19 +5656,19 @@ fn install_package_basic_auth_from_keyring_wrong_username() {
         .arg("subprocess")
         .arg("--strict")
         .env(EnvVars::KEYRING_TEST_CREDENTIALS, r#"{"pypi-proxy.fly.dev": {"other": "heron"}}"#)
-        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r###"
+        .env(EnvVars::PATH, venv_bin_path(&context.venv)), @r"
     success: false
     exit_code: 1
     ----- stdout -----
 
     ----- stderr -----
-    Request for public@https://pypi-proxy.fly.dev/basic-auth/simple/anyio/
-    Request for public@pypi-proxy.fly.dev
+    Keyring request for public@https://pypi-proxy.fly.dev/basic-auth/simple
+    Keyring request for public@pypi-proxy.fly.dev
       × No solution found when resolving dependencies:
       ╰─▶ Because anyio was not found in the package registry and you require anyio, we can conclude that your requirements are unsatisfiable.
 
           hint: An index URL (https://pypi-proxy.fly.dev/basic-auth/simple) could not be queried due to a lack of valid authentication credentials (401 Unauthorized).
-    "###
+    "
     );
 }
 
@@ -6285,7 +6390,7 @@ fn already_installed_multiple_versions() -> Result<()> {
 #[test]
 #[cfg(feature = "git")]
 fn already_installed_remote_url() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     // First, install from the remote URL
     uv_snapshot!(context.filters(), context.pip_install().arg("uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage"), @r###"
@@ -8065,7 +8170,7 @@ fn install_relocatable() -> Result<()> {
     #[cfg(unix)]
     {
         let script_symlink_path = context.temp_dir.join("black");
-        std::os::unix::fs::symlink(script_path, script_symlink_path.clone())?;
+        fs_err::os::unix::fs::symlink(script_path, script_symlink_path.clone())?;
         Command::new(script_symlink_path.as_os_str())
             .assert()
             .success()
@@ -8195,7 +8300,7 @@ fn install_unsupported_environment_yml() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: Conda environment files (i.e. `environment.yml`) are not supported
+    error: Conda environment files (i.e., `environment.yml`) are not supported
     ");
 
     Ok(())
@@ -8204,7 +8309,7 @@ fn install_unsupported_environment_yml() -> Result<()> {
 /// Include a `build_constraints.txt` file with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
     constraints_txt.write_str("setuptools==1")?;
@@ -8231,7 +8336,7 @@ fn incompatible_build_constraint() -> Result<()> {
 /// Include a `build_constraints.txt` file with a compatible constraint.
 #[test]
 fn compatible_build_constraint() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
     constraints_txt.write_str("setuptools>=40")?;
@@ -8239,7 +8344,7 @@ fn compatible_build_constraint() -> Result<()> {
     uv_snapshot!(context.pip_install()
         .arg("requests==1.2")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8249,7 +8354,7 @@ fn compatible_build_constraint() -> Result<()> {
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + requests==1.2.0
-    "###
+    "
     );
 
     Ok(())
@@ -8258,7 +8363,7 @@ fn compatible_build_constraint() -> Result<()> {
 /// Include `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint_in_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -8287,6 +8392,7 @@ build-constraint-dependencies = [
 }
 
 /// Include a `build_constraints.txt` file with a compatible constraint.
+#[cfg(feature = "python-eol")]
 #[test]
 fn compatible_build_constraint_in_pyproject_toml() -> Result<()> {
     let context = TestContext::new("3.8");
@@ -8301,7 +8407,7 @@ build-constraint-dependencies = [
     )?;
 
     uv_snapshot!(context.pip_install()
-        .arg("requests==1.2"), @r###"
+        .arg("requests==1.2"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8311,7 +8417,7 @@ build-constraint-dependencies = [
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + requests==1.2.0
-    "###
+    "
     );
 
     Ok(())
@@ -8320,7 +8426,7 @@ build-constraint-dependencies = [
 /// Merge `build_constraints.txt` with `build-constraint-dependencies` in pyproject.toml with an incompatible constraint.
 #[test]
 fn incompatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     // Incompatible setuptools version in pyproject.toml, compatible in build_constraints.txt.
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
@@ -8384,7 +8490,7 @@ build-constraint-dependencies = [
 /// Merge `build_constraints.txt` with `build-constraint-dependencies` in pyproject.toml with a compatible constraint.
 #[test]
 fn compatible_build_constraint_merged_with_pyproject_toml() -> Result<()> {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new("3.9");
 
     let constraints_txt = context.temp_dir.child("build_constraints.txt");
     constraints_txt.write_str("setuptools>=40")?;
@@ -8400,7 +8506,7 @@ build-constraint-dependencies = [
     uv_snapshot!(context.pip_install()
         .arg("requests==1.2")
         .arg("--build-constraint")
-        .arg("build_constraints.txt"), @r###"
+        .arg("build_constraints.txt"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -8410,7 +8516,7 @@ build-constraint-dependencies = [
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + requests==1.2.0
-    "###
+    "
     );
     Ok(())
 }
@@ -8511,7 +8617,7 @@ fn install_build_isolation_package() -> Result<()> {
 /// Install a package with an unsupported extension.
 #[test]
 fn invalid_extension() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6.tar.baz")
@@ -8531,7 +8637,7 @@ fn invalid_extension() {
 /// Install a package without unsupported extension.
 #[test]
 fn no_extension() {
-    let context = TestContext::new("3.8");
+    let context = TestContext::new(DEFAULT_PYTHON_VERSION);
 
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("ruff @ https://files.pythonhosted.org/packages/f7/69/96766da2cdb5605e6a31ef2734aff0be17901cefb385b885c2ab88896d76/ruff-0.5.6")
@@ -11231,6 +11337,61 @@ fn reserved_script_name() -> Result<()> {
     Uninstalled 1 package in [TIME]
     error: Failed to install: project-0.1.0-py3-none-any.whl (project==0.1.0 (from file://[TEMP_DIR]/))
       Caused by: Scripts must not use the reserved name python
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn pep_751_dependency() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pylock_toml = context.temp_dir.child("pylock.toml");
+    pylock_toml.write_str(r#"
+        # This file was autogenerated by uv via the following command:
+        #    uv export --cache-dir [CACHE_DIR] -o pylock.toml
+        lock-version = "1.0"
+        created-by = "uv"
+        requires-python = ">=3.12"
+
+        [[packages]]
+        name = "anyio"
+        version = "4.3.0"
+        sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", upload-time = 2024-02-19T08:36:28Z, size = 159642, hashes = { sha256 = "f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6" } }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", upload-time = 2024-02-19T08:36:26Z, size = 85584, hashes = { sha256 = "048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8" } }]
+        dependencies = [
+            { name = "idna" },
+            { name = "sniffio" },
+        ]
+
+        [[packages]]
+        name = "idna"
+        version = "3.6"
+        sdist = { url = "https://files.pythonhosted.org/packages/bf/3f/ea4b9117521a1e9c50344b909be7886dd00a519552724809bb1f486986c2/idna-3.6.tar.gz", upload-time = 2023-11-25T15:40:54Z, size = 175426, hashes = { sha256 = "9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca" } }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/c2/e7/a82b05cf63a603df6e68d59ae6a68bf5064484a0718ea5033660af4b54a9/idna-3.6-py3-none-any.whl", upload-time = 2023-11-25T15:40:52Z, size = 61567, hashes = { sha256 = "c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f" } }]
+
+        [[packages]]
+        name = "sniffio"
+        version = "1.3.1"
+        sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
+        wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
+    "#)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview")
+        .arg("-r")
+        .arg("pylock.toml"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
     "
     );
 

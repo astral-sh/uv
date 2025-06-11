@@ -198,6 +198,14 @@ impl ResolverEnvironment {
         crate::marker::requires_python(pep508_marker)
     }
 
+    /// For a universal resolution, return the markers of the current fork.
+    pub(crate) fn fork_markers(&self) -> Option<MarkerTree> {
+        match self.kind {
+            Kind::Specific { .. } => None,
+            Kind::Universal { markers, .. } => Some(markers),
+        }
+    }
+
     /// Narrow this environment given the forking markers.
     ///
     /// This effectively intersects any markers in this environment with the

@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, sync::Arc};
 
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use rustc_hash::FxHashSet;
 use tracing::trace;
 
@@ -11,7 +11,7 @@ use uv_distribution_types::{Dist, DistributionMetadata, Requirement, Requirement
 use uv_resolver::{InMemoryIndex, MetadataResponse, ResolverEnvironment};
 use uv_types::{BuildContext, HashStrategy, RequestedRequirements};
 
-use crate::{required_dist, Error};
+use crate::{Error, required_dist};
 
 /// A resolver for resolving lookahead requirements from direct URLs.
 ///

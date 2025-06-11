@@ -6,6 +6,7 @@ use itertools::Itertools;
 use tracing::debug;
 use uv_dirs::user_uv_config_dir;
 use uv_fs::Simplified;
+use uv_warnings::warn_user_once;
 
 use crate::PythonRequest;
 
@@ -171,6 +172,17 @@ impl PythonVersionFile {
                     })
                     .map(ToString::to_string)
                     .map(|version| PythonRequest::parse(&version))
+                    .filter(|request| {
+                        if let PythonRequest::ExecutableName(name) = request {
+                            warn_user_once!(
+                                "Ignoring unsupported Python request `{name}` in version file: {}",
+                                path.display()
+                            );
+                            false
+                        } else {
+                            true
+                        }
+                    })
                     .collect();
                 Ok(Some(Self { path, versions }))
             }

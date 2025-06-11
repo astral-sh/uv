@@ -1,21 +1,21 @@
-use std::cmp::Ordering;
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 use std::path::Path;
 use std::str::FromStr;
-use std::{fmt, mem};
-
-use itertools::Itertools;
+use std::{fmt, iter, mem};
 use thiserror::Error;
 use toml_edit::{
     Array, ArrayOfTables, DocumentMut, Formatted, Item, RawString, Table, TomlError, Value,
 };
-use url::Url;
 
 use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Index;
 use uv_fs::PortablePath;
 use uv_normalize::GroupName;
-use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
+use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
+use uv_redacted::DisplaySafeUrl;
 
 use crate::pyproject::{DependencyType, Source};
 
@@ -44,11 +44,15 @@ pub enum Error {
     MalformedWorkspace,
     #[error("Expected a dependency at index {0}")]
     MissingDependency(usize),
+    #[error("Failed to parse `version` field of `pyproject.toml`")]
+    VersionParse(#[from] VersionParseError),
     #[error("Cannot perform ambiguous update; found multiple entries for `{}`:\n{}", package_name, requirements.iter().map(|requirement| format!("- `{requirement}`")).join("\n"))]
     Ambiguous {
         package_name: PackageName,
         requirements: Vec<Requirement>,
     },
+    #[error("Unknown bound king {0}")]
+    UnknownBoundKind(String),
 }
 
 /// The result of editing an array in a TOML document.
@@ -78,6 +82,169 @@ impl ArrayEdit {
     pub fn index(&self) -> usize {
         match self {
             Self::Update(i) | Self::Add(i) => *i,
+        }
+    }
+}
+
+/// The default version specifier when adding a dependency.
+// While PEP 440 allows an arbitrary number of version digits, the `major` and `minor` build on
+// most projects sticking to two or three components and a SemVer-ish versioning system, so can
+// bump the major or minor version of a major.minor or major.minor.patch input version.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub enum AddBoundsKind {
+    /// Only a lower bound, e.g., `>=1.2.3`.
+    #[default]
+    Lower,
+    /// Allow the same major version, similar to the semver caret, e.g., `>=1.2.3, <2.0.0`.
+    ///
+    /// Leading zeroes are skipped, e.g. `>=0.1.2, <0.2.0`.
+    Major,
+    /// Allow the same minor version, similar to the semver tilde, e.g., `>=1.2.3, <1.3.0`.
+    ///
+    /// Leading zeroes are skipped, e.g. `>=0.1.2, <0.1.3`.
+    Minor,
+    /// Pin the exact version, e.g., `==1.2.3`.
+    ///
+    /// This option is not recommended, as versions are already pinned in the uv lockfile.
+    Exact,
+}
+
+impl Display for AddBoundsKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Lower => write!(f, "lower"),
+            Self::Major => write!(f, "major"),
+            Self::Minor => write!(f, "minor"),
+            Self::Exact => write!(f, "exact"),
+        }
+    }
+}
+
+impl AddBoundsKind {
+    fn specifiers(self, version: Version) -> VersionSpecifiers {
+        // Nomenclature: "major" is the most significant component of the version, "minor" is the
+        // second most significant component, so most versions are either major.minor.patch or
+        // 0.major.minor.
+        match self {
+            AddBoundsKind::Lower => {
+                VersionSpecifiers::from(VersionSpecifier::greater_than_equal_version(version))
+            }
+            AddBoundsKind::Major => {
+                let leading_zeroes = version
+                    .release()
+                    .iter()
+                    .take_while(|digit| **digit == 0)
+                    .count();
+
+                // Special case: The version is 0.
+                if leading_zeroes == version.release().len() {
+                    let upper_bound = Version::new(
+                        [0, 1]
+                            .into_iter()
+                            .chain(iter::repeat_n(0, version.release().iter().skip(2).len())),
+                    );
+                    return VersionSpecifiers::from_iter([
+                        VersionSpecifier::greater_than_equal_version(version),
+                        VersionSpecifier::less_than_version(upper_bound),
+                    ]);
+                }
+
+                // Compute the new major version and pad it to the same length:
+                // 1.2.3 -> 2.0.0
+                // 1.2 -> 2.0
+                // 1 -> 2
+                // We ignore leading zeroes, adding Semver-style semantics to 0.x versions, too:
+                // 0.1.2 -> 0.2.0
+                // 0.0.1 -> 0.0.2
+                let major = version.release().get(leading_zeroes).copied().unwrap_or(0);
+                // The length of the lower bound minus the leading zero and bumped component.
+                let trailing_zeros = version.release().iter().skip(leading_zeroes + 1).len();
+                let upper_bound = Version::new(
+                    iter::repeat_n(0, leading_zeroes)
+                        .chain(iter::once(major + 1))
+                        .chain(iter::repeat_n(0, trailing_zeros)),
+                );
+
+                VersionSpecifiers::from_iter([
+                    VersionSpecifier::greater_than_equal_version(version),
+                    VersionSpecifier::less_than_version(upper_bound),
+                ])
+            }
+            AddBoundsKind::Minor => {
+                let leading_zeroes = version
+                    .release()
+                    .iter()
+                    .take_while(|digit| **digit == 0)
+                    .count();
+
+                // Special case: The version is 0.
+                if leading_zeroes == version.release().len() {
+                    let upper_bound = [0, 0, 1]
+                        .into_iter()
+                        .chain(iter::repeat_n(0, version.release().iter().skip(3).len()));
+                    return VersionSpecifiers::from_iter([
+                        VersionSpecifier::greater_than_equal_version(version),
+                        VersionSpecifier::less_than_version(Version::new(upper_bound)),
+                    ]);
+                }
+
+                // If both major and minor version are 0, the concept of bumping the minor version
+                // instead of the major version is not useful. Instead, we bump the next
+                // non-zero part of the version. This avoids extending the three components of 0.0.1
+                // to the four components of 0.0.1.1.
+                if leading_zeroes >= 2 {
+                    let most_significant =
+                        version.release().get(leading_zeroes).copied().unwrap_or(0);
+                    // The length of the lower bound minus the leading zero and bumped component.
+                    let trailing_zeros = version.release().iter().skip(leading_zeroes + 1).len();
+                    let upper_bound = Version::new(
+                        iter::repeat_n(0, leading_zeroes)
+                            .chain(iter::once(most_significant + 1))
+                            .chain(iter::repeat_n(0, trailing_zeros)),
+                    );
+                    return VersionSpecifiers::from_iter([
+                        VersionSpecifier::greater_than_equal_version(version),
+                        VersionSpecifier::less_than_version(upper_bound),
+                    ]);
+                }
+
+                // Compute the new minor version and pad it to the same length where possible:
+                // 1.2.3 -> 1.3.0
+                // 1.2 -> 1.3
+                // 1 -> 1.1
+                // We ignore leading zero, adding Semver-style semantics to 0.x versions, too:
+                // 0.1.2 -> 0.1.3
+                // 0.0.1 -> 0.0.2
+
+                // If the version has only one digit, say `1`, or if there are only leading zeroes,
+                // pad with zeroes.
+                let major = version.release().get(leading_zeroes).copied().unwrap_or(0);
+                let minor = version
+                    .release()
+                    .get(leading_zeroes + 1)
+                    .copied()
+                    .unwrap_or(0);
+                let upper_bound = Version::new(
+                    iter::repeat_n(0, leading_zeroes)
+                        .chain(iter::once(major))
+                        .chain(iter::once(minor + 1))
+                        .chain(iter::repeat_n(
+                            0,
+                            version.release().iter().skip(leading_zeroes + 2).len(),
+                        )),
+                );
+
+                VersionSpecifiers::from_iter([
+                    VersionSpecifier::greater_than_equal_version(version),
+                    VersionSpecifier::less_than_version(upper_bound),
+                ])
+            }
+            AddBoundsKind::Exact => {
+                VersionSpecifiers::from_iter([VersionSpecifier::equals_version(version)])
+            }
         }
     }
 }
@@ -170,6 +337,7 @@ impl PyProjectTomlMut {
         &mut self,
         req: &Requirement,
         source: Option<&Source>,
+        raw: bool,
     ) -> Result<ArrayEdit, Error> {
         // Get or create `project.dependencies`.
         let dependencies = self
@@ -179,7 +347,7 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let edit = add_dependency(req, dependencies, source.is_some())?;
+        let edit = add_dependency(req, dependencies, source.is_some(), raw)?;
 
         if let Some(source) = source {
             self.add_source(&req.name, source)?;
@@ -195,6 +363,7 @@ impl PyProjectTomlMut {
         &mut self,
         req: &Requirement,
         source: Option<&Source>,
+        raw: bool,
     ) -> Result<ArrayEdit, Error> {
         // Get or create `tool.uv.dev-dependencies`.
         let dev_dependencies = self
@@ -212,7 +381,7 @@ impl PyProjectTomlMut {
             .as_array_mut()
             .ok_or(Error::MalformedDependencies)?;
 
-        let edit = add_dependency(req, dev_dependencies, source.is_some())?;
+        let edit = add_dependency(req, dev_dependencies, source.is_some(), raw)?;
 
         if let Some(source) = source {
             self.add_source(&req.name, source)?;
@@ -266,7 +435,7 @@ impl PyProjectTomlMut {
                 if table
                     .get("url")
                     .and_then(|item| item.as_str())
-                    .and_then(|url| Url::parse(url).ok())
+                    .and_then(|url| DisplaySafeUrl::parse(url).ok())
                     .is_some_and(|url| {
                         CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url())
                     })
@@ -303,10 +472,10 @@ impl PyProjectTomlMut {
         if table
             .get("url")
             .and_then(|item| item.as_str())
-            .and_then(|url| Url::parse(url).ok())
+            .and_then(|url| DisplaySafeUrl::parse(url).ok())
             .is_none_or(|url| CanonicalUrl::new(&url) != CanonicalUrl::new(index.url.url()))
         {
-            let mut formatted = Formatted::new(index.url.redacted().to_string());
+            let mut formatted = Formatted::new(index.url.without_credentials().to_string());
             if let Some(value) = table.get("url").and_then(Item::as_value) {
                 if let Some(prefix) = value.decor().prefix() {
                     formatted.decor_mut().set_prefix(prefix.clone());
@@ -364,7 +533,7 @@ impl PyProjectTomlMut {
             if table
                 .get("url")
                 .and_then(|item| item.as_str())
-                .and_then(|url| Url::parse(url).ok())
+                .and_then(|url| DisplaySafeUrl::parse(url).ok())
                 .is_some_and(|url| CanonicalUrl::new(&url) == CanonicalUrl::new(index.url.url()))
             {
                 return false;
@@ -399,6 +568,7 @@ impl PyProjectTomlMut {
         group: &ExtraName,
         req: &Requirement,
         source: Option<&Source>,
+        raw: bool,
     ) -> Result<ArrayEdit, Error> {
         // Get or create `project.optional-dependencies`.
         let optional_dependencies = self
@@ -427,7 +597,7 @@ impl PyProjectTomlMut {
         .as_array_mut()
         .ok_or(Error::MalformedDependencies)?;
 
-        let added = add_dependency(req, group, source.is_some())?;
+        let added = add_dependency(req, group, source.is_some(), raw)?;
 
         // If `project.optional-dependencies` is an inline table, reformat it.
         //
@@ -456,6 +626,7 @@ impl PyProjectTomlMut {
         group: &GroupName,
         req: &Requirement,
         source: Option<&Source>,
+        raw: bool,
     ) -> Result<ArrayEdit, Error> {
         // Get or create `dependency-groups`.
         let dependency_groups = self
@@ -491,7 +662,7 @@ impl PyProjectTomlMut {
         .as_array_mut()
         .ok_or(Error::MalformedDependencies)?;
 
-        let added = add_dependency(req, group, source.is_some())?;
+        let added = add_dependency(req, group, source.is_some(), raw)?;
 
         // To avoid churn in pyproject.toml, we only sort new group keys if the
         // existing keys were sorted.
@@ -518,22 +689,19 @@ impl PyProjectTomlMut {
         Ok(added)
     }
 
-    /// Set the minimum version for an existing dependency.
-    pub fn set_dependency_minimum_version(
+    /// Set the constraint for a requirement for an existing dependency.
+    pub fn set_dependency_bound(
         &mut self,
         dependency_type: &DependencyType,
         index: usize,
         version: Version,
+        bound_kind: AddBoundsKind,
     ) -> Result<(), Error> {
         let group = match dependency_type {
-            DependencyType::Production => self.set_project_dependency_minimum_version()?,
-            DependencyType::Dev => self.set_dev_dependency_minimum_version()?,
-            DependencyType::Optional(ref extra) => {
-                self.set_optional_dependency_minimum_version(extra)?
-            }
-            DependencyType::Group(ref group) => {
-                self.set_dependency_group_requirement_minimum_version(group)?
-            }
+            DependencyType::Production => self.dependencies_array()?,
+            DependencyType::Dev => self.dev_dependencies_array()?,
+            DependencyType::Optional(extra) => self.optional_dependencies_array(extra)?,
+            DependencyType::Group(group) => self.dependency_groups_array(group)?,
         };
 
         let Some(req) = group.get(index) else {
@@ -544,16 +712,16 @@ impl PyProjectTomlMut {
             .as_str()
             .and_then(try_parse_requirement)
             .ok_or(Error::MalformedDependencies)?;
-        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(VersionSpecifiers::from(
-            VersionSpecifier::greater_than_equal_version(version),
-        )));
+        req.version_or_url = Some(VersionOrUrl::VersionSpecifier(
+            bound_kind.specifiers(version),
+        ));
         group.replace(index, req.to_string());
 
         Ok(())
     }
 
-    /// Set the minimum version for an existing dependency in `project.dependencies`.
-    fn set_project_dependency_minimum_version(&mut self) -> Result<&mut Array, Error> {
+    /// Get the TOML array for `project.dependencies`.
+    fn dependencies_array(&mut self) -> Result<&mut Array, Error> {
         // Get or create `project.dependencies`.
         let dependencies = self
             .project()?
@@ -565,8 +733,8 @@ impl PyProjectTomlMut {
         Ok(dependencies)
     }
 
-    /// Set the minimum version for an existing dependency in `tool.uv.dev-dependencies`.
-    fn set_dev_dependency_minimum_version(&mut self) -> Result<&mut Array, Error> {
+    /// Get the TOML array for `tool.uv.dev-dependencies`.
+    fn dev_dependencies_array(&mut self) -> Result<&mut Array, Error> {
         // Get or create `tool.uv.dev-dependencies`.
         let dev_dependencies = self
             .doc
@@ -586,11 +754,8 @@ impl PyProjectTomlMut {
         Ok(dev_dependencies)
     }
 
-    /// Set the minimum version for an existing dependency in `project.optional-dependencies`.
-    fn set_optional_dependency_minimum_version(
-        &mut self,
-        group: &ExtraName,
-    ) -> Result<&mut Array, Error> {
+    /// Get the TOML array for a `project.optional-dependencies` entry.
+    fn optional_dependencies_array(&mut self, group: &ExtraName) -> Result<&mut Array, Error> {
         // Get or create `project.optional-dependencies`.
         let optional_dependencies = self
             .project()?
@@ -618,11 +783,8 @@ impl PyProjectTomlMut {
         Ok(group)
     }
 
-    /// Set the minimum version for an existing dependency in `dependency-groups`.
-    fn set_dependency_group_requirement_minimum_version(
-        &mut self,
-        group: &GroupName,
-    ) -> Result<&mut Array, Error> {
+    /// Get the TOML array for a `dependency-groups` entry.
+    fn dependency_groups_array(&mut self, group: &GroupName) -> Result<&mut Array, Error> {
         // Get or create `dependency-groups`.
         let dependency_groups = self
             .doc
@@ -942,6 +1104,46 @@ impl PyProjectTomlMut {
 
         types
     }
+
+    pub fn version(&mut self) -> Result<Version, Error> {
+        let version = self
+            .doc
+            .get("project")
+            .and_then(Item::as_table)
+            .and_then(|project| project.get("version"))
+            .and_then(Item::as_str)
+            .ok_or(Error::MalformedWorkspace)?;
+
+        Ok(Version::from_str(version)?)
+    }
+
+    pub fn has_dynamic_version(&mut self) -> bool {
+        let Some(dynamic) = self
+            .doc
+            .get("project")
+            .and_then(Item::as_table)
+            .and_then(|project| project.get("dynamic"))
+            .and_then(Item::as_array)
+        else {
+            return false;
+        };
+
+        dynamic.iter().any(|val| val.as_str() == Some("version"))
+    }
+
+    pub fn set_version(&mut self, version: &Version) -> Result<(), Error> {
+        let project = self
+            .doc
+            .get_mut("project")
+            .and_then(Item::as_table_mut)
+            .ok_or(Error::MalformedWorkspace)?;
+        project.insert(
+            "version",
+            Item::Value(Value::String(Formatted::new(version.to_string()))),
+        );
+
+        Ok(())
+    }
 }
 
 /// Returns an implicit table.
@@ -958,6 +1160,7 @@ pub fn add_dependency(
     req: &Requirement,
     deps: &mut Array,
     has_source: bool,
+    raw: bool,
 ) -> Result<ArrayEdit, Error> {
     let mut to_replace = find_dependencies(&req.name, Some(&req.marker), deps);
 
@@ -967,72 +1170,90 @@ pub fn add_dependency(
             enum Sort {
                 /// The list is sorted in a case-insensitive manner.
                 CaseInsensitive,
+                /// The list is sorted naively in a case-insensitive manner.
+                CaseInsensitiveNaive,
                 /// The list is sorted in a case-sensitive manner.
                 CaseSensitive,
+                /// The list is sorted naively in a case-sensitive manner.
+                CaseSensitiveNaive,
                 /// The list is unsorted.
                 Unsorted,
             }
 
-            /// Compare two [`Value`] requirements case-insensitively.
-            fn case_insensitive(a: &Value, b: &Value) -> Ordering {
-                a.as_str()
-                    .map(str::to_lowercase)
-                    .as_deref()
-                    .map(split_specifiers)
-                    .cmp(
-                        &b.as_str()
-                            .map(str::to_lowercase)
-                            .as_deref()
-                            .map(split_specifiers),
-                    )
+            fn is_sorted<T, I>(items: I) -> bool
+            where
+                I: IntoIterator<Item = T>,
+                T: PartialOrd + Copy,
+            {
+                items.into_iter().tuple_windows().all(|(a, b)| a <= b)
             }
 
-            /// Compare two [`Value`] requirements case-sensitively.
-            fn case_sensitive(a: &Value, b: &Value) -> Ordering {
-                a.as_str()
-                    .map(split_specifiers)
-                    .cmp(&b.as_str().map(split_specifiers))
-            }
+            // `deps` are either requirements (strings) or include groups (inline tables).
+            // Here we pull out just the requirements for determining the sort.
+            let reqs: Vec<_> = deps.iter().filter_map(Value::as_str).collect();
+            let reqs_lowercase: Vec<_> = reqs.iter().copied().map(str::to_lowercase).collect();
 
             // Determine if the dependency list is sorted prior to
             // adding the new dependency; the new dependency list
             // will be sorted only when the original list is sorted
             // so that user's custom dependency ordering is preserved.
             //
-            // Additionally, if the table is invalid (i.e. contains non-string values)
-            // we still treat it as unsorted for the sake of simplicity.
+            // Any items which aren't strings are ignored, e.g.
+            // `{ include-group = "..." }` in dependency-groups.
             //
             // We account for both case-sensitive and case-insensitive sorting.
-            let sort = deps
-                .iter()
-                .all(Value::is_str)
-                .then(|| {
-                    if deps.iter().tuple_windows().all(|(a, b)| {
-                        matches!(case_insensitive(a, b), Ordering::Less | Ordering::Equal)
-                    }) {
-                        Some(Sort::CaseInsensitive)
-                    } else if deps.iter().tuple_windows().all(|(a, b)| {
-                        matches!(case_sensitive(a, b), Ordering::Less | Ordering::Equal)
-                    }) {
-                        Some(Sort::CaseSensitive)
-                    } else {
-                        None
-                    }
-                })
-                .flatten()
-                .unwrap_or(Sort::Unsorted);
+            let sort = if is_sorted(
+                reqs_lowercase
+                    .iter()
+                    .map(String::as_str)
+                    .map(split_specifiers),
+            ) {
+                Sort::CaseInsensitive
+            } else if is_sorted(reqs.iter().copied().map(split_specifiers)) {
+                Sort::CaseSensitive
+            } else if is_sorted(reqs_lowercase.iter().map(String::as_str)) {
+                Sort::CaseInsensitiveNaive
+            } else if is_sorted(reqs) {
+                Sort::CaseSensitiveNaive
+            } else {
+                Sort::Unsorted
+            };
 
-            let req_string = req.to_string();
+            let req_string = if raw {
+                req.displayable_with_credentials().to_string()
+            } else {
+                req.to_string()
+            };
             let index = match sort {
-                Sort::CaseInsensitive => deps.iter().position(|d| {
-                    case_insensitive(d, &Value::from(req_string.as_str())) == Ordering::Greater
+                Sort::CaseInsensitive => deps.iter().position(|dep| {
+                    dep.as_str().is_some_and(|dep| {
+                        split_specifiers(&dep.to_lowercase())
+                            > split_specifiers(&req_string.to_lowercase())
+                    })
                 }),
-                Sort::CaseSensitive => deps.iter().position(|d| {
-                    case_sensitive(d, &Value::from(req_string.as_str())) == Ordering::Greater
+                Sort::CaseInsensitiveNaive => deps.iter().position(|dep| {
+                    dep.as_str()
+                        .is_some_and(|dep| dep.to_lowercase() > req_string.to_lowercase())
                 }),
+                Sort::CaseSensitive => deps.iter().position(|dep| {
+                    dep.as_str()
+                        .is_some_and(|dep| split_specifiers(dep) > split_specifiers(&req_string))
+                }),
+                Sort::CaseSensitiveNaive => deps
+                    .iter()
+                    .position(|dep| dep.as_str().is_some_and(|dep| *dep > *req_string)),
                 Sort::Unsorted => None,
             };
-            let index = index.unwrap_or(deps.len());
+            let index = index.unwrap_or_else(|| {
+                // The dependency should be added to the end, ignoring any
+                // `include-group` items. This preserves the order for users who
+                // keep their `include-groups` at the bottom.
+                deps.iter()
+                    .enumerate()
+                    .filter_map(|(i, dep)| if dep.is_str() { Some(i + 1) } else { None })
+                    .last()
+                    .unwrap_or(deps.len())
+            });
 
             let mut value = Value::from(req_string.as_str());
 
@@ -1421,7 +1642,9 @@ fn split_specifiers(req: &str) -> (&str, &str) {
 
 #[cfg(test)]
 mod test {
-    use super::split_specifiers;
+    use super::{AddBoundsKind, split_specifiers};
+    use std::str::FromStr;
+    use uv_pep440::Version;
 
     #[test]
     fn split() {
@@ -1432,6 +1655,117 @@ mod test {
             ("flask[dotenv]", ">=1.0")
         );
         assert_eq!(split_specifiers("flask[dotenv]"), ("flask[dotenv]", ""));
-        assert_eq!(split_specifiers("flask @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"), ("flask", "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"));
+        assert_eq!(
+            split_specifiers(
+                "flask @ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"
+            ),
+            (
+                "flask",
+                "@ https://files.pythonhosted.org/packages/af/47/93213ee66ef8fae3b93b3e29206f6b251e65c97bd91d8e1c5596ef15af0a/flask-3.1.0-py3-none-any.whl"
+            )
+        );
+    }
+
+    #[test]
+    fn bound_kind_to_specifiers_exact() {
+        let tests = [
+            ("0", "==0"),
+            ("0.0", "==0.0"),
+            ("0.0.0", "==0.0.0"),
+            ("0.1", "==0.1"),
+            ("0.0.1", "==0.0.1"),
+            ("0.0.0.1", "==0.0.0.1"),
+            ("1.0.0", "==1.0.0"),
+            ("1.2", "==1.2"),
+            ("1.2.3", "==1.2.3"),
+            ("1.2.3.4", "==1.2.3.4"),
+            ("1.2.3.4a1.post1", "==1.2.3.4a1.post1"),
+        ];
+
+        for (version, expected) in tests {
+            let actual = AddBoundsKind::Exact
+                .specifiers(Version::from_str(version).unwrap())
+                .to_string();
+            assert_eq!(actual, expected, "{version}");
+        }
+    }
+
+    #[test]
+    fn bound_kind_to_specifiers_lower() {
+        let tests = [
+            ("0", ">=0"),
+            ("0.0", ">=0.0"),
+            ("0.0.0", ">=0.0.0"),
+            ("0.1", ">=0.1"),
+            ("0.0.1", ">=0.0.1"),
+            ("0.0.0.1", ">=0.0.0.1"),
+            ("1", ">=1"),
+            ("1.0.0", ">=1.0.0"),
+            ("1.2", ">=1.2"),
+            ("1.2.3", ">=1.2.3"),
+            ("1.2.3.4", ">=1.2.3.4"),
+            ("1.2.3.4a1.post1", ">=1.2.3.4a1.post1"),
+        ];
+
+        for (version, expected) in tests {
+            let actual = AddBoundsKind::Lower
+                .specifiers(Version::from_str(version).unwrap())
+                .to_string();
+            assert_eq!(actual, expected, "{version}");
+        }
+    }
+
+    #[test]
+    fn bound_kind_to_specifiers_major() {
+        let tests = [
+            ("0", ">=0, <0.1"),
+            ("0.0", ">=0.0, <0.1"),
+            ("0.0.0", ">=0.0.0, <0.1.0"),
+            ("0.0.0.0", ">=0.0.0.0, <0.1.0.0"),
+            ("0.1", ">=0.1, <0.2"),
+            ("0.0.1", ">=0.0.1, <0.0.2"),
+            ("0.0.1.1", ">=0.0.1.1, <0.0.2.0"),
+            ("0.0.0.1", ">=0.0.0.1, <0.0.0.2"),
+            ("1", ">=1, <2"),
+            ("1.0.0", ">=1.0.0, <2.0.0"),
+            ("1.2", ">=1.2, <2.0"),
+            ("1.2.3", ">=1.2.3, <2.0.0"),
+            ("1.2.3.4", ">=1.2.3.4, <2.0.0.0"),
+            ("1.2.3.4a1.post1", ">=1.2.3.4a1.post1, <2.0.0.0"),
+        ];
+
+        for (version, expected) in tests {
+            let actual = AddBoundsKind::Major
+                .specifiers(Version::from_str(version).unwrap())
+                .to_string();
+            assert_eq!(actual, expected, "{version}");
+        }
+    }
+
+    #[test]
+    fn bound_kind_to_specifiers_minor() {
+        let tests = [
+            ("0", ">=0, <0.0.1"),
+            ("0.0", ">=0.0, <0.0.1"),
+            ("0.0.0", ">=0.0.0, <0.0.1"),
+            ("0.0.0.0", ">=0.0.0.0, <0.0.1.0"),
+            ("0.1", ">=0.1, <0.1.1"),
+            ("0.0.1", ">=0.0.1, <0.0.2"),
+            ("0.0.1.1", ">=0.0.1.1, <0.0.2.0"),
+            ("0.0.0.1", ">=0.0.0.1, <0.0.0.2"),
+            ("1", ">=1, <1.1"),
+            ("1.0.0", ">=1.0.0, <1.1.0"),
+            ("1.2", ">=1.2, <1.3"),
+            ("1.2.3", ">=1.2.3, <1.3.0"),
+            ("1.2.3.4", ">=1.2.3.4, <1.3.0.0"),
+            ("1.2.3.4a1.post1", ">=1.2.3.4a1.post1, <1.3.0.0"),
+        ];
+
+        for (version, expected) in tests {
+            let actual = AddBoundsKind::Minor
+                .specifiers(Version::from_str(version).unwrap())
+                .to_string();
+            assert_eq!(actual, expected, "{version}");
+        }
     }
 }

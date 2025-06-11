@@ -930,12 +930,6 @@ impl PubGrubReportFormatter<'_> {
                 });
             }
             if index_capabilities.forbidden(&index.url) {
-                // If the index is a PyTorch index (e.g., `https://download.pytorch.org/whl/cu118`),
-                // avoid noting the lack of credentials. PyTorch returns a 403 (Forbidden) status
-                // code for any package that does not exist.
-                if index.url.url().host_str() == Some("download.pytorch.org") {
-                    continue;
-                }
                 hints.insert(PubGrubHint::ForbiddenIndex {
                     index: index.url.clone(),
                 });
@@ -1414,7 +1408,8 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     requires_python.cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
+                        .cyan(),
                     package_requires_python.cyan(),
                     package_requires_python.cyan(),
                 )
@@ -1432,7 +1427,8 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     requires_python.cyan(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
+                        .cyan(),
                     package_requires_python.cyan(),
                 )
             }
@@ -1448,7 +1444,8 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} The Python interpreter uses a Python version that is not supported by your dependencies (e.g., {} only supports {}). Consider passing a `--python-version` value to raise the minimum supported version.",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None).cyan(),
+                    PackageRange::compatibility(&PubGrubPackage::base(name), package_set, None)
+                        .cyan(),
                     package_requires_python.cyan(),
                 )
             }
@@ -1521,7 +1518,7 @@ impl std::fmt::Display for PubGrubHint {
                     "hint".bold().cyan(),
                     ":".bold(),
                     name.cyan(),
-                    found_index.cyan(),
+                    found_index.without_credentials().cyan(),
                     PackageRange::compatibility(&PubGrubPackage::base(name), range, None).cyan(),
                     next_index.cyan(),
                     "--index-strategy unsafe-best-match".green(),
@@ -1533,7 +1530,7 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    index.redacted().cyan(),
+                    index.without_credentials().cyan(),
                     "401 Unauthorized".red(),
                 )
             }
@@ -1543,7 +1540,7 @@ impl std::fmt::Display for PubGrubHint {
                     "{}{} An index URL ({}) could not be queried due to a lack of valid authentication credentials ({}).",
                     "hint".bold().cyan(),
                     ":".bold(),
-                    index.redacted().cyan(),
+                    index.without_credentials().cyan(),
                     "403 Forbidden".red(),
                 )
             }

@@ -4,8 +4,8 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Error, Result};
-use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use itertools::{Either, Itertools};
 use owo_colors::OwoColorize;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -15,7 +15,7 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{
-    python_executable_dir, ManagedPythonInstallation, ManagedPythonInstallations,
+    ManagedPythonInstallation, ManagedPythonInstallations, python_executable_dir,
 };
 use uv_python::platform::{Arch, Libc};
 use uv_python::{
@@ -28,7 +28,7 @@ use uv_warnings::warn_user;
 
 use crate::commands::python::{ChangeEvent, ChangeEventKind};
 use crate::commands::reporters::PythonDownloadReporter;
-use crate::commands::{elapsed, ExitStatus};
+use crate::commands::{ExitStatus, elapsed};
 use crate::printer::Printer;
 use crate::settings::NetworkSettings;
 
@@ -43,7 +43,7 @@ struct InstallRequest {
 }
 
 impl InstallRequest {
-    fn new(request: PythonRequest) -> Result<Self> {
+    fn new(request: PythonRequest, python_downloads_json_url: Option<&str>) -> Result<Self> {
         // Make sure the request is a valid download request and fill platform information
         let download_request = PythonDownloadRequest::from_request(&request)
             .ok_or_else(|| {
@@ -55,18 +55,22 @@ impl InstallRequest {
             .fill()?;
 
         // Find a matching download
-        let download = match ManagedPythonDownload::from_request(&download_request) {
-            Ok(download) => download,
-            Err(downloads::Error::NoDownloadFound(request))
-                if request.libc().is_some_and(Libc::is_musl)
-                    && request.arch().is_some_and(Arch::is_arm) =>
+        let download =
+            match ManagedPythonDownload::from_request(&download_request, python_downloads_json_url)
             {
-                return Err(anyhow::anyhow!(
-                    "uv does not yet provide musl Python distributions on aarch64."
-                ));
-            }
-            Err(err) => return Err(err.into()),
-        };
+                Ok(download) => download,
+                Err(downloads::Error::NoDownloadFound(request))
+                    if request.libc().is_some_and(Libc::is_musl)
+                        && request
+                            .arch()
+                            .is_some_and(|arch| Arch::is_arm(&arch.inner())) =>
+                {
+                    return Err(anyhow::anyhow!(
+                        "uv does not yet provide musl Python distributions on aarch64."
+                    ));
+                }
+                Err(err) => return Err(err.into()),
+            };
 
         Ok(Self {
             request,
@@ -131,6 +135,7 @@ pub(crate) async fn install(
     force: bool,
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
+    python_downloads_json_url: Option<String>,
     network_settings: NetworkSettings,
     default: bool,
     python_downloads: PythonDownloads,
@@ -141,7 +146,10 @@ pub(crate) async fn install(
     let start = std::time::Instant::now();
 
     if default && !preview.is_enabled() {
-        writeln!(printer.stderr(), "The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default`")?;
+        writeln!(
+            printer.stderr(),
+            "The `--default` flag is only available in preview mode; add the `--preview` flag to use `--default`"
+        )?;
         return Ok(ExitStatus::Failure);
     }
 
@@ -171,13 +179,13 @@ pub(crate) async fn install(
             }]
         })
         .into_iter()
-        .map(InstallRequest::new)
+        .map(|a| InstallRequest::new(a, python_downloads_json_url.as_deref()))
         .collect::<Result<Vec<_>>>()?
     } else {
         targets
             .iter()
             .map(|target| PythonRequest::parse(target.as_str()))
-            .map(InstallRequest::new)
+            .map(|a| InstallRequest::new(a, python_downloads_json_url.as_deref()))
             .collect::<Result<Vec<_>>>()?
     };
 
@@ -219,7 +227,10 @@ pub(crate) async fn install(
                 changelog.existing.insert(installation.key().clone());
                 if matches!(&request.request, &PythonRequest::Any) {
                     // Construct an install request matching the existing installation
-                    match InstallRequest::new(PythonRequest::Key(installation.into())) {
+                    match InstallRequest::new(
+                        PythonRequest::Key(installation.into()),
+                        python_downloads_json_url.as_deref(),
+                    ) {
                         Ok(request) => {
                             debug!("Will reinstall `{}`", installation.key().green());
                             unsatisfied.push(Cow::Owned(request));

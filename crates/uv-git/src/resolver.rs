@@ -3,15 +3,16 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use dashmap::mapref::one::Ref;
 use dashmap::DashMap;
+use dashmap::mapref::one::Ref;
 use fs_err::tokio as fs;
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 
-use uv_cache_key::{cache_digest, RepositoryUrl};
+use uv_cache_key::{RepositoryUrl, cache_digest};
 use uv_fs::LockedFile;
 use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
+use uv_static::EnvVars;
 use uv_version::version;
 
 use crate::{Fetch, GitSource, Reporter};
@@ -52,8 +53,12 @@ impl GitResolver {
     pub async fn github_fast_path(
         &self,
         url: &GitUrl,
-        client: &ClientWithMiddleware,
+        client: ClientWithMiddleware,
     ) -> Result<Option<GitOid>, GitResolverError> {
+        if std::env::var_os(EnvVars::UV_NO_GITHUB_FAST_PATH).is_some() {
+            return Ok(None);
+        }
+
         let reference = RepositoryReference::from(url);
 
         // If the URL is already precise, return it.
@@ -112,7 +117,7 @@ impl GitResolver {
     pub async fn fetch(
         &self,
         url: &GitUrl,
-        client: impl Into<ClientWithMiddleware>,
+        client: ClientWithMiddleware,
         disable_ssl: bool,
         offline: bool,
         cache: PathBuf,

@@ -17,8 +17,10 @@ pub struct Installer<'a> {
     link_mode: LinkMode,
     cache: Option<&'a Cache>,
     reporter: Option<Arc<dyn Reporter>>,
-    installer_name: Option<String>,
-    installer_metadata: bool,
+    /// The name of the [`Installer`].
+    name: Option<String>,
+    /// The metadata associated with the [`Installer`].
+    metadata: bool,
 }
 
 impl<'a> Installer<'a> {
@@ -29,8 +31,8 @@ impl<'a> Installer<'a> {
             link_mode: LinkMode::default(),
             cache: None,
             reporter: None,
-            installer_name: Some("uv".to_string()),
-            installer_metadata: true,
+            name: Some("uv".to_string()),
+            metadata: true,
         }
     }
 
@@ -62,7 +64,7 @@ impl<'a> Installer<'a> {
     #[must_use]
     pub fn with_installer_name(self, installer_name: Option<String>) -> Self {
         Self {
-            installer_name,
+            name: installer_name,
             ..self
         }
     }
@@ -71,7 +73,7 @@ impl<'a> Installer<'a> {
     #[must_use]
     pub fn with_installer_metadata(self, installer_metadata: bool) -> Self {
         Self {
-            installer_metadata,
+            metadata: installer_metadata,
             ..self
         }
     }
@@ -84,8 +86,8 @@ impl<'a> Installer<'a> {
             cache,
             link_mode,
             reporter,
-            installer_name,
-            installer_metadata,
+            name: installer_name,
+            metadata: installer_metadata,
         } = self;
 
         if cache.is_some_and(Cache::is_temporary) {
@@ -136,11 +138,11 @@ impl<'a> Installer<'a> {
         install(
             wheels,
             self.venv.interpreter().layout(),
-            self.installer_name,
+            self.name,
             self.link_mode,
             self.reporter,
             self.venv.relocatable(),
-            self.installer_metadata,
+            self.metadata,
         )
     }
 }

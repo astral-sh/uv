@@ -36,7 +36,7 @@ drawbacks:
 
 Instead, uv supports its own environment variables, like `UV_INDEX_URL`. uv also supports persistent
 configuration in a `uv.toml` file or a `[tool.uv.pip]` section of `pyproject.toml`. For more
-information, see [Configuration files](../configuration/files.md).
+information, see [Configuration files](../concepts/configuration-files.md).
 
 ## Pre-release compatibility
 
@@ -120,8 +120,8 @@ While `unsafe-best-match` is the closest to `pip`'s behavior, it exposes users t
 "dependency confusion" attacks.
 
 uv also supports pinning packages to dedicated indexes (see:
-[_Indexes_](../configuration/indexes.md#pinning-a-package-to-an-index)), such that a given package
-is _always_ installed from a specific index.
+[_Indexes_](../concepts/indexes.md#pinning-a-package-to-an-index)), such that a given package is
+_always_ installed from a specific index.
 
 ## PEP 517 build isolation
 
@@ -400,7 +400,7 @@ the `subprocess` option is supported.
 
 Unlike `pip`, uv does not enable keyring authentication by default.
 
-Unlike `pip`, uv does not wait until a request returns a HTTP 401 before searching for
+Unlike `pip`, uv does not wait until a request returns an HTTP 401 before searching for
 authentication. uv attaches authentication to all requests for hosts with credentials available.
 
 ## `egg` support

@@ -12,12 +12,12 @@ serializing and deserializing.
 */
 
 use rkyv::{
+    Archive, Deserialize, Portable, Serialize,
     api::high::{HighDeserializer, HighSerializer, HighValidator},
     bytecheck::CheckBytes,
     rancor,
     ser::allocator::ArenaHandle,
     util::AlignedVec,
-    Archive, Deserialize, Portable, Serialize,
 };
 
 use crate::{Error, ErrorKind};

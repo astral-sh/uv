@@ -2,8 +2,8 @@ use rustc_hash::FxHashMap;
 use uv_distribution_types::IndexMetadata;
 use uv_normalize::PackageName;
 
-use crate::resolver::ResolverEnvironment;
 use crate::ResolveError;
+use crate::resolver::ResolverEnvironment;
 
 /// See [`crate::resolver::ForkState`].
 #[derive(Default, Debug, Clone)]
