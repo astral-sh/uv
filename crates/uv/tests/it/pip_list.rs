@@ -483,7 +483,6 @@ fn list_exclude() {
 
 #[test]
 #[cfg(feature = "pypi")]
-#[cfg(not(windows))]
 fn list_format_json() {
     let context = TestContext::new("3.12");
 
