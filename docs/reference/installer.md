@@ -20,6 +20,12 @@ To change the installation path, use `UV_INSTALL_DIR`:
     PS> powershell -ExecutionPolicy ByPass -c {$env:UV_INSTALL_DIR = "C:\Custom\Path";irm https://astral.sh/uv/install.ps1 | iex}
     ```
 
+!!! note
+
+    Changing the installation path only affects where the uv binary is installed. uv will still store
+    its data (cache, Python installations, tools, etc.) in the default locations. See the
+    [storage reference](./storage.md) for details on these locations and how to customize them.
+
 ## Disabling shell modifications
 
 The installer may also update your shell profiles to ensure the uv binary is on your `PATH`. To
