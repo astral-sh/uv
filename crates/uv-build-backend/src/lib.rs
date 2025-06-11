@@ -206,7 +206,7 @@ fn find_roots(
     debug!("Source root: {}", src_root.user_display());
 
     if namespace {
-        // `namespace = true` disables all checks.
+        // `namespace = true` disables module structure checks.
         let module_relative = if let Some(module_name) = module_name {
             module_name.split('.').collect::<PathBuf>()
         } else {

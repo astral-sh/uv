@@ -62,9 +62,8 @@ For a namespace packages, the path can be dotted. The example below expects to f
 module-name = "cloud.db.schema"
 ```
 
-Complex namespaces with more than one root module can be built by setting the `namespace` option.
-Note that this option disables most coherence check, but it is still required to have a valid
-namespace package structure:
+Complex namespaces with more than one root module can be built by setting the `namespace` option,
+which allows more than one root `__init__.py`:
 
 ```toml
 [tool.uv.build-backend]

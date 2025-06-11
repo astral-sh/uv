@@ -87,11 +87,10 @@ pub struct BuildBackendSettings {
 
     /// Build a namespace package.
     ///
-    /// Build a PEP 420 implicit namespace package. Note that this disables most coherence checks,
-    /// but there still needs to be a valid package structure.
+    /// Build a PEP 420 implicit namespace package, allowing more than one root `__init__.py`.
     ///
-    /// Use this option when the namespace package contains multiple root `__init__.py`, for namespace
-    /// packages with a single root `__init__.py` use a dotted `module-name` instead.
+    /// Use this option when the namespace package contains multiple root `__init__.py`, for
+    /// namespace packages with a single root `__init__.py` use a dotted `module-name` instead.
     #[option(
         default = r#"false"#,
         value_type = "bool",

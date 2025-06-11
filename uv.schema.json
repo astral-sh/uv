@@ -684,7 +684,7 @@
           "type": "string"
         },
         "namespace": {
-          "description": "Build a namespace package.\n\nBuild a PEP 420 implicit namespace package. Note that this disables most coherence checks, but there still needs to be a valid package structure.\n\nUse this option is the namespace package contains multiple root `__init__.py`, for namespace packages with a single root `__init__.py` use a dotted `module-name` instead.",
+          "description": "Build a namespace package.\n\nBuild a PEP 420 implicit namespace package, allowing more than one root `__init__.py`.\n\nUse this option when the namespace package contains multiple root `__init__.py`, for namespace packages with a single root `__init__.py` use a dotted `module-name` instead.",
           "default": false,
           "type": "boolean"
         },
