@@ -1,5 +1,6 @@
 #![allow(clippy::single_match_else)]
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::path::Path;
@@ -694,6 +695,7 @@ async fn do_lock(
             interpreter,
             &requires_python,
             index_locations,
+            target.path_dependency_source_indexes(),
             upgrade,
             &options,
             &hasher,
@@ -907,6 +909,7 @@ impl ValidatedLock {
         interpreter: &Interpreter,
         requires_python: &RequiresPython,
         index_locations: &IndexLocations,
+        path_dependency_source_indexes: Option<&[Index]>,
         upgrade: &Upgrade,
         options: &Options,
         hasher: &HashStrategy,
@@ -1066,10 +1069,21 @@ impl ValidatedLock {
         // However, if _no_ indexes were provided, we assume that the user wants to reuse the existing
         // distributions, even though a failure to reuse the lockfile will result in re-resolving
         // against PyPI by default.
-        let indexes = if index_locations.is_none() {
+        let validation_indexes = if index_locations.is_none() {
             None
         } else {
-            Some(index_locations)
+            // If indexes were defined as sources in path dependencies, add them to the
+            // index locations to use for validation.
+            path_dependency_source_indexes
+                .filter(|source_indexes| !source_indexes.is_empty())
+                .map(|source_indexes| {
+                    Cow::Owned(index_locations.clone().combine(
+                        source_indexes.to_vec(),
+                        Vec::new(),
+                        false,
+                    ))
+                })
+                .or(Some(Cow::Borrowed(index_locations)))
         };
 
         // Determine whether the lockfile satisfies the workspace requirements.
@@ -1084,7 +1098,7 @@ impl ValidatedLock {
                 build_constraints,
                 dependency_groups,
                 dependency_metadata,
-                indexes,
+                validation_indexes,
                 interpreter.tags()?,
                 hasher,
                 index,
