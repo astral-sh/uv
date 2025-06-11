@@ -60,7 +60,7 @@ pub struct RequirementsSpecification {
     pub constraints: Vec<NameRequirementSpecification>,
     /// The overrides for the project.
     pub overrides: Vec<UnresolvedRequirementSpecification>,
-    /// The exclues
+    /// The excludes for the project.
     pub excludes: Vec<UnresolvedRequirementSpecification>,
     /// The `pylock.toml` file from which to extract the resolution.
     pub pylock: Option<PathBuf>,
@@ -282,7 +282,7 @@ impl RequirementsSpecification {
             }
             if !excludes.is_empty() {
                 return Err(anyhow::anyhow!(
-                    "Cannot specify groups with a `pylock.toml` file"
+                    "Cannot specify excludes with a `pylock.toml` file"
                 ));
             }
         }
