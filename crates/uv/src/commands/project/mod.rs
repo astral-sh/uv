@@ -24,7 +24,7 @@ use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
 use uv_normalize::{
-    DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName, DEV_DEPENDENCIES,
+    DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName,
 };
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
@@ -176,7 +176,9 @@ pub(crate) enum ProjectError {
     #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
     MissingGroupScript(GroupName),
 
-    #[error("Default extra `{0}` (from `tool.uv.default-extras`) is not defined in the project's `optional-dependencies` table")]
+    #[error(
+        "Default extra `{0}` (from `tool.uv.default-extras`) is not defined in the project's `optional-dependencies` table"
+    )]
     MissingDefaultExtra(ExtraName),
 
     #[error(

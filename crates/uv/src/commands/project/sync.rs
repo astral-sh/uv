@@ -39,9 +39,9 @@ use crate::commands::project::install_target::InstallTarget;
 use crate::commands::project::lock::{LockMode, LockOperation, LockResult};
 use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
+    PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment, UniversalState,
     default_dependency_groups, default_extras, detect_conflicts, script_specification,
-    update_environment, PlatformState, ProjectEnvironment, ProjectError, ScriptEnvironment,
-    UniversalState,
+    update_environment,
 };
 use crate::commands::{ExitStatus, diagnostics};
 use crate::printer::Printer;
