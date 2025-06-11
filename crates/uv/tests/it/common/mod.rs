@@ -62,7 +62,7 @@ pub const INSTA_FILTERS: &[(&str, &str)] = &[
     (r"tv_sec: \d+", "tv_sec: [TIME]"),
     (r"tv_nsec: \d+", "tv_nsec: [TIME]"),
     // Rewrite Windows output to Unix output
-    (r"\\([\w\d]|\.)", "/$1"),
+    (r"\\{1,2}([\w\d]|\.)", "/$1"),
     (r"uv\.exe", "uv"),
     // uv version display
     (
