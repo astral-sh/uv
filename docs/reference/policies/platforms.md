@@ -47,6 +47,7 @@ uv supports and is tested against the following Python versions:
 - 3.11
 - 3.12
 - 3.13
+- 3.14
 
 uv has Tier 1 support for the following Python implementations:
 
