@@ -525,8 +525,8 @@ src
 │   │   ├── query_builder
 │   │   │   └── __init__.py
 │   │   └── sql
-│   │       ├── parser.py
-│   │       └── __init__.py
+│   │       ├── __init__.py
+│   │       └── parser.py
 │   └── database_pro
 │       ├── __init__.py
 │       └── query_builder.py
