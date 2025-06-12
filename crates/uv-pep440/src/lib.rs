@@ -30,8 +30,8 @@ pub use version_ranges::{
 pub use {
     version::{
         BumpCommand, LocalSegment, LocalVersion, LocalVersionSlice, MIN_VERSION, Operator,
-        OperatorParseError, Prerelease, PrereleaseKind, Version, VersionParseError, VersionPattern,
-        VersionPatternParseError,
+        OperatorParseError, Prerelease, PrereleaseKind, Version, VersionDigit, VersionParseError,
+        VersionPattern, VersionPatternParseError,
     },
     version_specifier::{
         TildeVersionSpecifier, VersionSpecifier, VersionSpecifierBuildError, VersionSpecifiers,
