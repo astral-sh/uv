@@ -289,9 +289,17 @@ async fn list_json(cache: &Cache, printer: Printer) -> Result<ExitStatus> {
                 let entrypoints = tool
                     .entrypoints()
                     .iter()
-                    .map(|entrypoint| Entrypoint {
-                        name: entrypoint.name.to_string(),
-                        path: entrypoint.install_path.display().to_string(),
+                    .map(|entrypoint| {
+                        let name = entrypoint.name.to_string();
+                        let path = entrypoint.install_path.display().to_string();
+
+                        let path = if cfg!(windows) {
+                            path.replace('/', "\\")
+                        } else {
+                            path
+                        };
+
+                        Entrypoint { name, path }
                     })
                     .collect::<Vec<_>>();
 
