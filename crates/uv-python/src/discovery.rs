@@ -640,7 +640,7 @@ fn find_all_minor(
 /// Note interpreters may be excluded by the given [`EnvironmentPreference`], [`PythonPreference`],
 /// [`VersionRequest`], or [`PlatformRequest`].
 ///
-/// The [`PlatformRequest`] is currently on applied to managed Python installations before querying
+/// The [`PlatformRequest`] is currently only applied to managed Python installations before querying
 /// the interpreter. The caller is responsible for ensuring it is applied otherwise.
 ///
 /// See [`python_executables`] for more information on discovery.
