@@ -1493,25 +1493,61 @@ jobs:
       - name: "Prepare binary"
         run: chmod +x ./uv
 
+      - name: "Configure AWS credentials"
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: "Get AWS CodeArtifact token"
+        run: |
+          UV_TEST_AWS_TOKEN=$(aws codeartifact get-authorization-token \
+            --domain tests \
+            --domain-owner ${{ secrets.AWS_ACCOUNT_ID }} \
+            --region us-east-1 \
+            --query authorizationToken \
+            --output text)
+          echo "UV_TEST_AWS_TOKEN=$UV_TEST_AWS_TOKEN" >> $GITHUB_ENV
+
+      - name: "Authenticate with GCP"
+        id: "auth"
+        uses: "google-github-actions/auth@v2"
+        with:
+          credentials_json: "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}"
+
+      - name: "Set up GCP SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
+
+      - name: "Get GCP Artifact Registry token"
+        id: get_token
+        run: |
+          UV_TEST_GCP_TOKEN=$(gcloud auth print-access-token)
+          echo "UV_TEST_GCP_TOKEN=$UV_TEST_GCP_TOKEN" >> $GITHUB_ENV
+
       - name: "Run registry tests"
         run: ./uv run -p ${{ env.PYTHON_VERSION }} scripts/registries-test.py --uv ./uv
         env:
           RUST_LOG: uv=debug
+          UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
           UV_TEST_ARTIFACTORY_URL: ${{ secrets.UV_TEST_ARTIFACTORY_URL }}
           UV_TEST_ARTIFACTORY_USERNAME: ${{ secrets.UV_TEST_ARTIFACTORY_USERNAME }}
-          UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
-          UV_TEST_AZURE_URL: ${{ secrets.UV_TEST_AZURE_URL }}
-          UV_TEST_AZURE_USERNAME: ${{ secrets.UV_TEST_AZURE_USERNAME }}
+          UV_TEST_AWS_URL: ${{ secrets.UV_TEST_AWS_URL }}
+          UV_TEST_AWS_USERNAME: aws
           UV_TEST_AZURE_TOKEN: ${{ secrets.UV_TEST_AZURE_TOKEN }}
+          UV_TEST_AZURE_URL: ${{ secrets.UV_TEST_AZURE_URL }}
+          UV_TEST_AZURE_USERNAME: dummy
+          UV_TEST_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_CLOUDSMITH_TOKEN }}
           UV_TEST_CLOUDSMITH_URL: ${{ secrets.UV_TEST_CLOUDSMITH_URL }}
           UV_TEST_CLOUDSMITH_USERNAME: ${{ secrets.UV_TEST_CLOUDSMITH_USERNAME }}
-          UV_TEST_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_CLOUDSMITH_TOKEN }}
+          UV_TEST_GCP_URL: ${{ secrets.UV_TEST_GCP_URL }}
+          UV_TEST_GCP_USERNAME: oauth2accesstoken
+          UV_TEST_GEMFURY_TOKEN: ${{ secrets.UV_TEST_GEMFURY_TOKEN }}
           UV_TEST_GEMFURY_URL: ${{ secrets.UV_TEST_GEMFURY_URL }}
           UV_TEST_GEMFURY_USERNAME: ${{ secrets.UV_TEST_GEMFURY_USERNAME }}
-          UV_TEST_GEMFURY_TOKEN: ${{ secrets.UV_TEST_GEMFURY_TOKEN }}
-          UV_TEST_GITLAB_URL: ${{ secrets.UV_TEST_GITLAB_URL }}
-          UV_TEST_GITLAB_USERNAME: ${{ secrets.UV_TEST_GITLAB_USERNAME }}
           UV_TEST_GITLAB_TOKEN: ${{ secrets.UV_TEST_GITLAB_TOKEN }}
+          UV_TEST_GITLAB_URL: ${{ secrets.UV_TEST_GITLAB_URL }}
+          UV_TEST_GITLAB_USERNAME: token
 
   integration-test-publish:
     timeout-minutes: 20
