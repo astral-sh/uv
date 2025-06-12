@@ -1349,11 +1349,12 @@ uv upgrade [OPTIONS]
 
 <h3 class="cli-reference">Options</h3>
 
-<dl class="cli-reference"><dt id="uv-upgrade--allow-insecure-host"><a href="#uv-upgrade--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
+<dl class="cli-reference"><dt id="uv-upgrade--allow"><a href="#uv-upgrade--allow"><code>--allow</code></a> <i>allow</i></dt><dd><p>Allow only some version digits to change, others will be skipped: <code>1,2,3,4</code> (major, minor, patch, build number)</p>
+<p>May also be set with the <code>UV_UPGRADE_TYPES</code> environment variable.</p></dd><dt id="uv-upgrade--allow-insecure-host"><a href="#uv-upgrade--allow-insecure-host"><code>--allow-insecure-host</code></a>, <code>--trusted-host</code> <i>allow-insecure-host</i></dt><dd><p>Allow insecure connections to a host.</p>
 <p>Can be provided multiple times.</p>
 <p>Expects to receive either a hostname (e.g., <code>localhost</code>), a host-port pair (e.g., <code>localhost:8080</code>), or a URL (e.g., <code>https://localhost</code>).</p>
 <p>WARNING: Hosts included in this list will not be verified against the system's certificate store. Only use <code>--allow-insecure-host</code> in a secure network with verified sources, as it bypasses SSL verification and could expose you to MITM attacks.</p>
-<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-upgrade--build-constraints"><a href="#uv-upgrade--build-constraints"><code>--build-constraints</code></a>, <code>--build-constraint</code>, <code>-b</code> <i>build-constraints</i></dt><dt id="uv-upgrade--cache-dir"><a href="#uv-upgrade--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
+<p>May also be set with the <code>UV_INSECURE_HOST</code> environment variable.</p></dd><dt id="uv-upgrade--cache-dir"><a href="#uv-upgrade--cache-dir"><code>--cache-dir</code></a> <i>cache-dir</i></dt><dd><p>Path to the cache directory.</p>
 <p>Defaults to <code>$XDG_CACHE_HOME/uv</code> or <code>$HOME/.cache/uv</code> on macOS and Linux, and <code>%LOCALAPPDATA%\uv\cache</code> on Windows.</p>
 <p>To view the location of the cache directory, run <code>uv cache dir</code>.</p>
 <p>May also be set with the <code>UV_CACHE_DIR</code> environment variable.</p></dd><dt id="uv-upgrade--color"><a href="#uv-upgrade--color"><code>--color</code></a> <i>color-choice</i></dt><dd><p>Control the use of color in output.</p>
@@ -1368,7 +1369,7 @@ uv upgrade [OPTIONS]
 <p>May also be set with the <code>UV_CONFIG_FILE</code> environment variable.</p></dd><dt id="uv-upgrade--directory"><a href="#uv-upgrade--directory"><code>--directory</code></a> <i>directory</i></dt><dd><p>Change to the given directory prior to running the command.</p>
 <p>Relative paths are resolved with the given directory as the base.</p>
 <p>See <code>--project</code> to only change the project root directory.</p>
-</dd><dt id="uv-upgrade--dry-run"><a href="#uv-upgrade--dry-run"><code>--dry-run</code></a></dt><dd><p>Run without performing the upgrade</p>
+</dd><dt id="uv-upgrade--dry-run"><a href="#uv-upgrade--dry-run"><code>--dry-run</code></a></dt><dd><p>Run without performing the upgrades</p>
 </dd><dt id="uv-upgrade--help"><a href="#uv-upgrade--help"><code>--help</code></a>, <code>-h</code></dt><dd><p>Display the concise help for this command</p>
 </dd><dt id="uv-upgrade--managed-python"><a href="#uv-upgrade--managed-python"><code>--managed-python</code></a></dt><dd><p>Require use of uv-managed Python versions.</p>
 <p>By default, uv prefers using Python versions it manages. However, it will use system Python versions if a uv-managed Python is not installed. This option disables use of system Python versions.</p>
@@ -1399,7 +1400,7 @@ metadata when there are not wheels.</p>
 <p>May also be set with the <code>UV_PYTHON</code> environment variable.</p></dd><dt id="uv-upgrade--quiet"><a href="#uv-upgrade--quiet"><code>--quiet</code></a>, <code>-q</code></dt><dd><p>Use quiet output.</p>
 <p>Repeating this option, e.g., <code>-qq</code>, will enable a silent mode in which uv will write no output to stdout.</p>
 </dd><dt id="uv-upgrade--recursive"><a href="#uv-upgrade--recursive"><code>--recursive</code></a></dt><dd><p>Search recursively for pyproject.toml files</p>
-<p>May also be set with the <code>UV_UPGRADE_RECURSIVE</code> environment variable.</p></dd><dt id="uv-upgrade--types"><a href="#uv-upgrade--types"><code>--types</code></a> <i>types</i></dt><dd><p>Only search specific tables in pyproject.toml (case-insensitive). * <code>prod,dev,optional,groups</code> (default) * <code>prod,dev,opt,group</code> or <code>p,d,o,g</code> (abbreviated) * <code>prd,dev,extra,group</code> or <code>p,d,e,g</code> (optional / extra)</p>
+<p>May also be set with the <code>UV_UPGRADE_RECURSIVE</code> environment variable.</p></dd><dt id="uv-upgrade--types"><a href="#uv-upgrade--types"><code>--types</code></a> <i>types</i></dt><dd><p>Only search specific tables in pyproject.toml: <code>prod,dev,optional,groups</code></p>
 <p>May also be set with the <code>UV_UPGRADE_TYPES</code> environment variable.</p></dd><dt id="uv-upgrade--verbose"><a href="#uv-upgrade--verbose"><code>--verbose</code></a>, <code>-v</code></dt><dd><p>Use verbose output.</p>
 <p>You can configure fine-grained logging using the <code>RUST_LOG</code> environment variable. (<a href="https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives">https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html#directives</a>)</p>
 </dd></dl>

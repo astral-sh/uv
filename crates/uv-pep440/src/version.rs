@@ -1,5 +1,5 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
-use std::fmt::Formatter;
+use std::fmt::{Display, Formatter};
 use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::LazyLock;
@@ -2846,6 +2846,58 @@ impl From<VersionParseError> for VersionPatternParseError {
         Self {
             kind: Box::new(PatternErrorKind::Version(err)),
         }
+    }
+}
+
+/// Store digits for a small version
+#[derive(Default)]
+pub struct VersionDigit {
+    major: usize,
+    minor: usize,
+    patch: usize,
+    build: usize,
+}
+
+impl VersionDigit {
+    /// Increase a digit
+    pub fn add(&mut self, digit: usize) {
+        match digit {
+            1 => self.major += 1,
+            2 => self.minor += 1,
+            3 => self.patch += 1,
+            4 => self.build += 1,
+            _ => {}
+        }
+    }
+
+    /// Increase all digits from `other`
+    pub fn add_other(&mut self, other: &Self) {
+        self.major += other.major;
+        self.minor += other.minor;
+        self.patch += other.patch;
+        self.build = other.build;
+    }
+
+    /// Are all digits empty?
+    pub fn is_empty(&self) -> bool {
+        self.major == 0 && self.minor == 0 && self.patch == 0 && self.build == 0
+    }
+
+    /// Format all digits as 1.2.3.4 if not empty.
+    pub fn format(&self, prefix: &str, suffix: &str) -> String {
+        if self.is_empty() {
+            return String::new();
+        }
+        format!(
+            "{prefix}{}.{}.{}.{}{suffix}",
+            self.major, self.minor, self.patch, self.build
+        )
+    }
+}
+
+impl Display for VersionDigit {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.format("", ""))
     }
 }
 

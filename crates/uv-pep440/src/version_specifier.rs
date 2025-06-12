@@ -4,6 +4,7 @@ use std::fmt::Formatter;
 use std::ops::{Bound, DerefMut};
 use std::str::FromStr;
 
+use crate::version::VersionDigit;
 use crate::{
     Operator, OperatorParseError, Version, VersionPattern, VersionPatternParseError, version,
 };
@@ -135,22 +136,36 @@ impl VersionSpecifiers {
     }
 
     /// Bump last constraint if it doesn't contain `latest`
-    pub fn bump_last(&mut self, latest: &Version) -> (bool, bool, Option<usize>) {
+    pub fn bump_last(
+        &mut self,
+        latest: &Version,
+        allow: &[usize],
+        skipped: &mut VersionDigit,
+    ) -> (bool, bool, Option<usize>) {
         match self.last_mut().filter(|last| !last.contains(latest)) {
             Some(last) => {
                 let last_copy = last.clone();
-                let (bumped, mut upgraded) = last.version.bump_to(latest, last.operator);
+                let mut last_new = last.clone();
+                let (mut bumped, mut upgraded) = last_new.version.bump_to(latest, last.operator);
                 // Special case: unresolvable requirement has been downgraded to latest
                 // We need to change >2.0 to >=1.2 for latest 1.2.3 (EqualStar and >= stay untouched)
                 if bumped && last.operator == Operator::GreaterThan {
-                    last.operator = Operator::GreaterThanEqual; // Operator downgrade
+                    last_new.operator = Operator::GreaterThanEqual; // Operator downgrade
                     upgraded = false;
                 }
                 let old = last_copy.version.release();
-                let new = last.version.release();
-                let semver = bumped
-                    .then(|| old.semver_change(&new, last.operator))
+                let new = last_new.version.release();
+                let mut semver = bumped
+                    .then(|| old.semver_change(&new, last_new.operator))
                     .flatten();
+                if matches!(semver, Some(i) if i > 0 && allow.contains(&i)) {
+                    *last = last_new;
+                } else if bumped {
+                    bumped = false;
+                    upgraded = false;
+                    skipped.add(semver.unwrap_or(0)); // Skip forbidden digits
+                    semver = None;
+                }
                 (bumped, upgraded, semver)
             }
             _ => (false, false, None),
@@ -2105,7 +2120,9 @@ Failed to parse version: Unexpected end of version specifier, expected operator.
             let old = VersionSpecifiers::from_str(old).unwrap();
             let new = VersionSpecifiers::from_str(new).unwrap();
             let latest = Version::from_str(latest).unwrap();
-            let (bumped, upgraded, semver_change) = modified.bump_last(&latest);
+            let mut skipped = VersionDigit::default();
+            let (bumped, upgraded, semver_change) =
+                modified.bump_last(&latest, &[1, 2, 3, 4], &mut skipped);
             let should_bump = !new.to_string().is_empty();
             let not = if should_bump { "not " } else { "" };
             let semver_changed = semver_change.unwrap_or(0);
@@ -2132,6 +2149,10 @@ Failed to parse version: Unexpected end of version specifier, expected operator.
             assert_eq!(
                 bumped, should_bump,
                 "[{i}]: did {not}bump {old} to {modified} for {latest}{testcase}"
+            );
+            assert!(
+                skipped.is_empty(),
+                "[{i}]: skipped {skipped}: did not bump {old} to {modified} {latest}{testcase}",
             );
             assert_eq!(
                 upgraded,
