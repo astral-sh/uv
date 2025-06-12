@@ -258,6 +258,17 @@ pub enum DependencyTarget {
     PyProjectToml,
 }
 
+type UpgradeResult = (
+    usize,
+    String,
+    Requirement,
+    Requirement,
+    Version,
+    bool,
+    DependencyType,
+    Option<usize>,
+);
+
 impl PyProjectTomlMut {
     /// Initialize a [`PyProjectTomlMut`] from a [`str`].
     pub fn from_toml(raw: &str, target: DependencyTarget) -> Result<Self, Error> {
@@ -1209,18 +1220,7 @@ impl PyProjectTomlMut {
         &mut self,
         find_latest: &F,
         tables: &[DependencyType],
-    ) -> (
-        usize,
-        Vec<(
-            usize,
-            String,
-            Requirement,
-            Requirement,
-            Version,
-            bool,
-            DependencyType,
-        )>,
-    ) {
+    ) -> (usize, Vec<UpgradeResult>) {
         let mut all_upgrades = Vec::new();
         let mut found = 0;
 
@@ -1324,15 +1324,7 @@ impl PyProjectTomlMut {
 
     async fn replace_dependencies<Fut: Future<Output = Option<Version>>, F: Fn(String) -> Fut>(
         find_latest: &F,
-        all_upgrades: &mut Vec<(
-            usize,
-            String,
-            Requirement,
-            Requirement,
-            Version,
-            bool,
-            DependencyType,
-        )>,
+        all_upgrades: &mut Vec<UpgradeResult>,
         item: &mut Item,
         dependency_type: &DependencyType,
     ) {
@@ -1344,25 +1336,9 @@ impl PyProjectTomlMut {
     async fn find_upgrades<Fut: Future<Output = Option<Version>>, F: Fn(String) -> Fut>(
         find_latest: F,
         dependencies: &mut Array,
-        all_upgrades: &[(
-            usize,
-            String,
-            Requirement,
-            Requirement,
-            Version,
-            bool,
-            DependencyType,
-        )],
+        all_upgrades: &[UpgradeResult],
         dependency_type: &DependencyType,
-    ) -> Vec<(
-        usize,
-        String,
-        Requirement,
-        Requirement,
-        Version,
-        bool,
-        DependencyType,
-    )> {
+    ) -> Vec<UpgradeResult> {
         let mut upgrades = Vec::new();
         for (i, dep) in dependencies.iter().enumerate() {
             let Some(mut req) = dep.as_str().and_then(try_parse_requirement) else {
@@ -1376,14 +1352,14 @@ impl PyProjectTomlMut {
             };
             if let Some(upgrade) = match all_upgrades
                 .iter()
-                .find(|(_, _, _, r, _, _, _)| r.name == req.name)
+                .find(|(_, _, _, r, _, _, _, _)| r.name == req.name)
             {
-                Some((_, _, _, _, v, _, _)) => Some(v.clone()), // reuse cached upgrade
+                Some((_, _, _, _, v, _, _, _)) => Some(v.clone()), // reuse cached upgrade
                 _ => find_latest(req.name.to_string())
                     .await
                     .filter(|latest| !version_specifiers.contains(latest)),
             } {
-                let (bumped, upgraded) = version_specifiers.bump_last(&upgrade);
+                let (bumped, upgraded, semver) = version_specifiers.bump_last(&upgrade);
                 if bumped {
                     req.version_or_url = Some(VersionOrUrl::VersionSpecifier(version_specifiers));
                     upgrades.push((
@@ -1394,6 +1370,7 @@ impl PyProjectTomlMut {
                         upgrade,
                         upgraded,
                         dependency_type.clone(),
+                        semver,
                     ));
                 }
             }
@@ -1403,21 +1380,13 @@ impl PyProjectTomlMut {
 
     async fn replace_upgrades<Fut: Future<Output = Option<Version>>, F: Fn(String) -> Fut>(
         find_latest: F,
-        all_upgrades: &mut Vec<(
-            usize,
-            String,
-            Requirement,
-            Requirement,
-            Version,
-            bool,
-            DependencyType,
-        )>,
+        all_upgrades: &mut Vec<UpgradeResult>,
         dependencies: &mut Array,
         dependency_type: &DependencyType,
     ) {
         let upgrades =
             Self::find_upgrades(find_latest, dependencies, all_upgrades, dependency_type).await;
-        for (i, _dep, _old, new, _upgrade, _upgraded, _) in &upgrades {
+        for (i, _dep, _old, new, _upgrade, _upgraded, _, _) in &upgrades {
             let string = new.to_string();
             dependencies.replace(*i, toml_edit::Value::from(string));
         }
