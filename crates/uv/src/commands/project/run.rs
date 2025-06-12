@@ -632,6 +632,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                     validate_project_requires_python(
                         &interpreter,
                         Some(project.workspace()),
+                        &groups,
                         requires_python,
                         &source,
                     )?;

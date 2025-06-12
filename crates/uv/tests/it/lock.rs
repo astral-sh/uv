@@ -18298,29 +18298,29 @@ fn lock_request_requires_python() -> Result<()> {
     )?;
 
     // Request a version that conflicts with `--requires-python`.
-    uv_snapshot!(context.filters(), context.lock().arg("--python").arg("3.12"), @r###"
+    uv_snapshot!(context.filters(), context.lock().arg("--python").arg("3.12"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.8, <=3.10`
-    "###);
+    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.8, <=3.10`. The requirement comes from `project`.
+    ");
 
     // Add a `.python-version` file that conflicts.
     let python_version = context.temp_dir.child(".python-version");
     python_version.write_str("3.12")?;
 
-    uv_snapshot!(context.filters(), context.lock(), @r###"
+    uv_snapshot!(context.filters(), context.lock(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: The Python request from `.python-version` resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.8, <=3.10`. Use `uv python pin` to update the `.python-version` file to a compatible version.
-    "###);
+    error: The Python request from `.python-version` resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.8, <=3.10`. Use `uv python pin` to update the `.python-version` file to a compatible version. The requirement comes from `project`.
+    ");
 
     Ok(())
 }

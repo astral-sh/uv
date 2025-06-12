@@ -257,6 +257,7 @@ async fn venv_impl(
         match validate_project_requires_python(
             &interpreter,
             project.as_ref().map(VirtualProject::workspace),
+            &groups,
             &requires_python,
             &source,
         ) {

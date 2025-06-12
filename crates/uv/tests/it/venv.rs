@@ -475,17 +475,17 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
     context.venv.assert(predicates::path::is_dir());
 
     // We warn if we receive an incompatible version
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`. The requirement comes from `foo`.
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     Ok(())
@@ -621,17 +621,17 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`. The requirement comes from `foo:dev`.
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // We error if there's no compatible version

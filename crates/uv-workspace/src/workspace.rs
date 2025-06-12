@@ -96,6 +96,8 @@ pub struct DiscoveryOptions {
     pub members: MemberDiscovery,
 }
 
+pub type RequiresPythonSources = BTreeMap<(PackageName, Option<GroupName>), VersionSpecifiers>;
+
 /// A workspace, consisting of a root directory and members. See [`ProjectWorkspace`].
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(serde::Serialize))]
@@ -414,13 +416,11 @@ impl Workspace {
     }
 
     /// Returns an iterator over the `requires-python` values for each member of the workspace.
-    #[allow(clippy::type_complexity)]
     pub fn requires_python(
         &self,
         groups: &DependencyGroupsWithDefaults,
-    ) -> Result<Vec<(&PackageName, Option<GroupName>, VersionSpecifiers)>, DependencyGroupError>
-    {
-        let mut requires = Vec::new();
+    ) -> Result<RequiresPythonSources, DependencyGroupError> {
+        let mut requires = RequiresPythonSources::new();
         for (name, member) in self.packages() {
             // Get the top-level requires-python for this package, which is always active
             //
@@ -432,7 +432,7 @@ impl Workspace {
                 .project
                 .as_ref()
                 .and_then(|project| project.requires_python.as_ref())
-                .map(|requires_python| (name, None, requires_python.clone()));
+                .map(|requires_python| ((name.to_owned(), None), requires_python.clone()));
             requires.extend(top_requires);
 
             // Get the requires-python for each enabled group on this package
@@ -444,9 +444,9 @@ impl Workspace {
                     .into_iter()
                     .filter_map(move |(group_name, flat_group)| {
                         if groups.contains(&group_name) {
-                            flat_group
-                                .requires_python
-                                .map(|requires_python| (name, Some(group_name), requires_python))
+                            flat_group.requires_python.map(|requires_python| {
+                                ((name.to_owned(), Some(group_name)), requires_python)
+                            })
                         } else {
                             None
                         }

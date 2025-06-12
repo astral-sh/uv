@@ -346,7 +346,7 @@ fn mixed_requires_python() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
-    error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12`. However, a workspace member (`bird-feeder`) supports Python >=3.9. To install the workspace member on its own, navigate to `packages/bird-feeder`, then run `uv venv --python 3.9.[X]` followed by `uv pip install -e .`.
+    error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12`. The requirement comes from `albatross`.
     ");
 
     Ok(())
@@ -4080,17 +4080,17 @@ fn sync_custom_environment_path() -> Result<()> {
 
     // But if it's just an incompatible virtual environment...
     fs_err::remove_dir_all(context.temp_dir.join("foo"))?;
-    uv_snapshot!(context.filters(), context.venv().arg("foo").arg("--python").arg("3.11"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("foo").arg("--python").arg("3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`. The requirement comes from `project`.
     Creating virtual environment at: foo
     Activate with: source foo/[BIN]/activate
-    "###);
+    ");
 
     // Even with some extraneous content...
     fs_err::write(context.temp_dir.join("foo").join("file"), b"")?;
@@ -5817,17 +5817,17 @@ fn sync_invalid_environment() -> Result<()> {
 
     // But if it's just an incompatible virtual environment...
     fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`. The requirement comes from `project`.
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###);
+    ");
 
     // Even with some extraneous content...
     fs_err::write(context.temp_dir.join(".venv").join("file"), b"")?;
@@ -5884,17 +5884,17 @@ fn sync_invalid_environment() -> Result<()> {
 
     // But if it's not a virtual environment...
     fs_err::remove_dir_all(context.temp_dir.join(".venv"))?;
-    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r###"
+    uv_snapshot!(context.filters(), context.venv().arg("--python").arg("3.11"), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`
+    warning: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`. The requirement comes from `project`.
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###);
+    ");
 
     // Which we detect by the presence of a `pyvenv.cfg` file
     fs_err::remove_file(context.temp_dir.join(".venv").join("pyvenv.cfg"))?;
@@ -6004,15 +6004,15 @@ fn sync_python_version() -> Result<()> {
     "###);
 
     // Unless explicitly requested...
-    uv_snapshot!(context.filters(), context.sync().arg("--python").arg("3.10"), @r###"
+    uv_snapshot!(context.filters(), context.sync().arg("--python").arg("3.10"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
-    error: The requested interpreter resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11`
-    "###);
+    error: The requested interpreter resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11`. The requirement comes from `project`.
+    ");
 
     // But a pin should take precedence
     uv_snapshot!(context.filters(), context.python_pin().arg("3.12"), @r###"
@@ -6051,15 +6051,15 @@ fn sync_python_version() -> Result<()> {
     "###);
 
     // We should warn on subsequent uses, but respect the pinned version?
-    uv_snapshot!(context.filters(), context.sync(), @r###"
+    uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
-    error: The Python request from `.python-version` resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11`. Use `uv python pin` to update the `.python-version` file to a compatible version.
-    "###);
+    error: The Python request from `.python-version` resolved to Python 3.10.[X], which is incompatible with the project's Python requirement: `>=3.11`. Use `uv python pin` to update the `.python-version` file to a compatible version. The requirement comes from `project`.
+    ");
 
     // Unless the pin file is outside the project, in which case we should just ignore it entirely
     let child_dir = context.temp_dir.child("child");

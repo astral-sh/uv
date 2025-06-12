@@ -133,7 +133,7 @@ fn run_with_python_version() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
-    error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.11, <4`
+    error: The requested interpreter resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.11, <4`. The requirement comes from `foo`.
     ");
 
     Ok(())
@@ -3136,25 +3136,25 @@ fn run_isolated_incompatible_python() -> Result<()> {
     })?;
 
     // We should reject Python 3.9...
-    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("main.py"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
     Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
-    error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12`. Use `uv python pin` to update the `.python-version` file to a compatible version.
-    "###);
+    error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12`. Use `uv python pin` to update the `.python-version` file to a compatible version. The requirement comes from `foo`.
+    ");
 
     // ...even if `--isolated` is provided.
-    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r###"
+    uv_snapshot!(context.filters(), context.run().arg("--isolated").arg("main.py"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12`. Use `uv python pin` to update the `.python-version` file to a compatible version.
-    "###);
+    error: The Python request from `.python-version` resolved to Python 3.9.[X], which is incompatible with the project's Python requirement: `>=3.12`. Use `uv python pin` to update the `.python-version` file to a compatible version. The requirement comes from `foo`.
+    ");
 
     Ok(())
 }
@@ -4724,7 +4724,7 @@ fn run_groups_requires_python() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    error: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`. However, a workspace member (`project`) supports Python >=3.11. To install the workspace member on its own, navigate to ``, then run `uv venv --python 3.11.[X]` followed by `uv pip install -e .`.
+    error: The requested interpreter resolved to Python 3.11.[X], which is incompatible with the project's Python requirement: `>=3.12`. The requirement comes from `project:dev`.
     ");
 
     // Enabling foo we can't find an interpreter
@@ -4836,7 +4836,7 @@ fn run_groups_include_requires_python() -> Result<()> {
 
     ----- stderr -----
     Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
-    error: The requested interpreter resolved to Python 3.13.[X], which is incompatible with the project's Python requirement: `==3.12.*`. However, a workspace member (`project`) supports Python >=3.11. To install the workspace member on its own, navigate to ``, then run `uv venv --python 3.13.[X]` followed by `uv pip install -e .`.
+    error: The requested interpreter resolved to Python 3.13.[X], which is incompatible with the project's Python requirement: `==3.12.*`. The requirement comes from `project:dev`.
     ");
     Ok(())
 }

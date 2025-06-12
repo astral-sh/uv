@@ -84,6 +84,7 @@ pub(crate) async fn find(
         match validate_project_requires_python(
             python.interpreter(),
             project.as_ref().map(VirtualProject::workspace),
+            &groups,
             &requires_python,
             &source,
         ) {
