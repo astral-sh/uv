@@ -152,7 +152,7 @@
       ]
     },
     "dependency-groups": {
-      "description": "Additional settings for `dependency-groups`",
+      "description": "Additional settings for `dependency-groups`.",
       "anyOf": [
         {
           "$ref": "#/definitions/ToolUvDependencyGroups"

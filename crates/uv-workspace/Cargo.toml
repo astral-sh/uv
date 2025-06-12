@@ -18,6 +18,7 @@ workspace = true
 [dependencies]
 uv-build-backend = { workspace = true, features = ["schemars"] }
 uv-cache-key = { workspace = true }
+uv-configuration = { workspace = true }
 uv-distribution-types = { workspace = true }
 uv-fs = { workspace = true, features = ["tokio", "schemars"] }
 uv-git-types = { workspace = true }
@@ -44,7 +45,6 @@ tokio = { workspace = true }
 toml = { workspace = true }
 toml_edit = { workspace = true }
 tracing = { workspace = true }
-uv-configuration.workspace = true
 
 [dev-dependencies]
 anyhow = { workspace = true }

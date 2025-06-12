@@ -115,7 +115,7 @@ pub(crate) enum ProjectError {
     RequestedPythonProjectIncompatibility(Version, RequiresPython, RequiresPythonSources),
 
     #[error(
-        "The Python request from `{_0}` resolved to Python {_1}, which is incompatible with the project's Python requirement: `{_2}`. Use `uv python pin` to update the `.python-version` file to a compatible version{}",
+        "The Python request from `{_0}` resolved to Python {_1}, which is incompatible with the project's Python requirement: `{_2}`{}\nUse `uv python pin` to update the `.python-version` file to a compatible version",
         format_optional_requires_python_sources(_3)
     )]
     DotPythonVersionProjectIncompatibility(String, Version, RequiresPython, RequiresPythonSources),
@@ -2654,7 +2654,7 @@ fn format_optional_requires_python_sources(conflicts: &RequiresPythonSources) ->
     // If there's lots of conflicts, print a list
     if conflicts.len() > 1 {
         return format!(
-            ". The following conflicts were found:\n{}",
+            ".\nThe following conflicts were found:\n{}",
             format_requires_python_sources(conflicts)
         );
     }
@@ -2662,9 +2662,9 @@ fn format_optional_requires_python_sources(conflicts: &RequiresPythonSources) ->
     if conflicts.len() == 1 {
         let ((package, group), _) = conflicts.iter().next().unwrap();
         if let Some(group) = group {
-            return format!(". The requirement comes from `{package}:{group}`.");
+            return format!(" (from `{package}:{group}`).");
         }
-        return format!(". The requirement comes from `{package}`.");
+        return format!(" (from `{package}`).");
     }
     // Otherwise don't elaborate
     String::new()

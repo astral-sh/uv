@@ -129,7 +129,7 @@ default-groups = ["docs"]
 
 ### [`dependency-groups`](#dependency-groups) {: #dependency-groups }
 
-Additional settings for `dependency-groups`
+Additional settings for `dependency-groups`.
 
 **Default value**: `[]`
 

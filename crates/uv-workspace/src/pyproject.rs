@@ -353,7 +353,7 @@ pub struct ToolUv {
     )]
     pub default_groups: Option<DefaultGroups>,
 
-    /// Additional settings for `dependency-groups`
+    /// Additional settings for `dependency-groups`.
     #[option(
         default = "[]",
         value_type = "dict",
