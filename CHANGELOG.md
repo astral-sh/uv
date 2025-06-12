@@ -3,6 +3,46 @@
 <!-- prettier-ignore-start -->
 
 
+## 0.7.13
+
+
+### Python
+
+- Add Python 3.14.0b2
+- Add Python 3.13.5
+- Fix stability of `uuid.getnode` on 3.13
+
+See the
+[`python-build-standalone` release notes](https://github.com/astral-sh/python-build-standalone/releases/tag/20250612)
+for more details.
+
+### Enhancements
+
+- Download versions in `uv python pin` if not found ([#13946](https://github.com/astral-sh/uv/pull/13946))
+- Use TTY detection to determine if SIGINT forwarding is enabled ([#13925](https://github.com/astral-sh/uv/pull/13925))
+- Avoid fetching an exact, cached Git commit, even if it isn't locked ([#13748](https://github.com/astral-sh/uv/pull/13748))
+- Add `zstd` and `deflate` to `Accept-Encoding` ([#13982](https://github.com/astral-sh/uv/pull/13982))
+- Build binaries for riscv64  ([#12688](https://github.com/astral-sh/uv/pull/12688))
+
+### Bug fixes
+
+- Check if relative URL is valid directory before treating as index ([#13917](https://github.com/astral-sh/uv/pull/13917))
+- Ignore Python discovery errors during `uv python pin` ([#13944](https://github.com/astral-sh/uv/pull/13944))
+- Do not allow `uv add --group ... --script` ([#13997](https://github.com/astral-sh/uv/pull/13997))
+
+### Preview changes
+
+- Build backend: Support namespace packages ([#13833](https://github.com/astral-sh/uv/pull/13833))
+
+### Documentation
+
+- Add 3.14 to the supported platform reference ([#13990](https://github.com/astral-sh/uv/pull/13990))
+- Add an `llms.txt` to uv ([#13929](https://github.com/astral-sh/uv/pull/13929))
+- Add supported macOS version to the platform reference ([#13993](https://github.com/astral-sh/uv/pull/13993))
+- Update platform support reference to include Python implementation list ([#13991](https://github.com/astral-sh/uv/pull/13991))
+- Update pytorch.md ([#13899](https://github.com/astral-sh/uv/pull/13899))
+- Update the CLI help and reference to include references to the Python bin directory ([#13978](https://github.com/astral-sh/uv/pull/13978))
+
 ## 0.7.12
 
 ### Enhancements
