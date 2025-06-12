@@ -1,12 +1,14 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use uv_configuration::SourceStrategy;
 use uv_distribution_types::{IndexLocations, Requirement};
 use uv_normalize::{GroupName, PackageName};
 use uv_workspace::dependency_groups::FlatDependencyGroups;
 use uv_workspace::pyproject::{Sources, ToolUvSources};
-use uv_workspace::{DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache};
+use uv_workspace::{
+    DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache, WorkspaceError,
+};
 
 use crate::metadata::{GitWorkspaceMember, LoweredRequirement, MetadataError};
 
@@ -69,7 +71,13 @@ impl SourcedDependencyGroups {
                 SourceStrategy::Disabled => MemberDiscovery::None,
             },
         };
-        let project = VirtualProject::discover_defaulted(pyproject_path, &discovery, cache).await?;
+
+        // The subsequent API takes an absolute path to the dir the pyproject is in
+        let empty = PathBuf::new();
+        let absolute_pyproject_path =
+            std::path::absolute(pyproject_path).map_err(WorkspaceError::Normalize)?;
+        let project_dir = absolute_pyproject_path.parent().unwrap_or(&empty);
+        let project = VirtualProject::discover_defaulted(project_dir, &discovery, cache).await?;
 
         // Collect the dependency groups.
         let dependency_groups =

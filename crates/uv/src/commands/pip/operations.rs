@@ -4,7 +4,6 @@ use anyhow::{Context, anyhow};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::env::current_dir;
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -214,12 +213,8 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
         }
 
         for (pyproject_path, groups) in groups {
-            let empty = PathBuf::new();
-            let pyproject_parent = pyproject_path.parent().unwrap_or(&empty);
-            // TODO(Gankra): this surely isn't right but VirtualProject::discover asserts on relative paths... hrm.
-            let project_dir = current_dir().unwrap().join(pyproject_parent);
             let metadata = SourcedDependencyGroups::from_virtual_project(
-                &project_dir,
+                pyproject_path,
                 None,
                 build_dispatch.locations(),
                 build_dispatch.sources(),
