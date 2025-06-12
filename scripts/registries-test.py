@@ -42,10 +42,13 @@ import tempfile
 from pathlib import Path
 from typing import Dict
 
+import colorama
 from colorama import Fore
-from colorama import init as colorama_init
 
-colorama_init(autoreset=True)
+
+def initialize_colorama(force_color=False):
+    colorama.init(strip=not force_color, autoreset=True)
+
 
 cwd = Path(__file__).parent
 
@@ -294,12 +297,20 @@ def parse_args() -> argparse.Namespace:
         default="3.12",
         help="minimum Python version for tests (default: 3.12)",
     )
+    parser.add_argument("--color", choices=["always", "auto", "never"], default="auto")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     env = os.environ.copy()
+
+    if args.color == "always":
+        initialize_colorama(force_color=True)
+    elif args.color == "never":
+        initialize_colorama(force_color=False)
+    else:
+        initialize_colorama(force_color=sys.stdout.isatty())
 
     # If using 1Password, fetch credentials from the vault
     if args.use_op:

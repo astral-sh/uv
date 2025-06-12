@@ -1526,7 +1526,7 @@ jobs:
           echo "UV_TEST_GCP_TOKEN=$UV_TEST_GCP_TOKEN" >> $GITHUB_ENV
 
       - name: "Run registry tests"
-        run: ./uv run -p ${{ env.PYTHON_VERSION }} scripts/registries-test.py --uv ./uv
+        run: ./uv run -p ${{ env.PYTHON_VERSION }} scripts/registries-test.py --uv ./uv --color always
         env:
           RUST_LOG: uv=debug
           UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
