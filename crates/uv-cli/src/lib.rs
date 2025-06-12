@@ -3404,7 +3404,12 @@ pub struct AddArgs {
     /// Add the requirements to the development dependency group.
     ///
     /// This option is an alias for `--group dev`.
-    #[arg(long, conflicts_with("optional"), conflicts_with("group"))]
+    #[arg(
+        long,
+        conflicts_with("optional"),
+        conflicts_with("group"),
+        conflicts_with("script")
+    )]
     pub dev: bool,
 
     /// Add the requirements to the package's optional dependencies for the specified extra.
@@ -3418,7 +3423,12 @@ pub struct AddArgs {
     /// Add the requirements to the specified dependency group.
     ///
     /// These requirements will not be included in the published metadata for the project.
-    #[arg(long, conflicts_with("dev"), conflicts_with("optional"))]
+    #[arg(
+        long,
+        conflicts_with("dev"),
+        conflicts_with("optional"),
+        conflicts_with("script")
+    )]
     pub group: Option<GroupName>,
 
     /// Add the requirements as editable.
@@ -3547,11 +3557,21 @@ pub struct RemoveArgs {
     pub dev: bool,
 
     /// Remove the packages from the project's optional dependencies for the specified extra.
-    #[arg(long, conflicts_with("dev"), conflicts_with("group"))]
+    #[arg(
+        long,
+        conflicts_with("dev"),
+        conflicts_with("group"),
+        conflicts_with("script")
+    )]
     pub optional: Option<ExtraName>,
 
     /// Remove the packages from the specified dependency group.
-    #[arg(long, conflicts_with("dev"), conflicts_with("optional"))]
+    #[arg(
+        long,
+        conflicts_with("dev"),
+        conflicts_with("optional"),
+        conflicts_with("script")
+    )]
     pub group: Option<GroupName>,
 
     /// Avoid syncing the virtual environment after re-locking the project.
