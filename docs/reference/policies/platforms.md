@@ -31,6 +31,12 @@ build on aarch64 Windows, but does not consider either platform to be supported 
 minimum supported Windows versions are Windows 10 and Windows Server 2016, following
 [Rust's own Tier 1 support](https://blog.rust-lang.org/2024/02/26/Windows-7.html).
 
+## macOS versions
+
+uv supports macOS 13+ (Ventura).
+
+uv is known to work on macOS 12, but requires installation of a `realpath` executable.
+
 ## Python support
 
 uv supports and is tested against the following Python versions:
