@@ -100,6 +100,10 @@ impl EnvVars {
     /// file as the constraints file. Uses space-separated list of files.
     pub const UV_CONSTRAINT: &'static str = "UV_CONSTRAINT";
 
+    /// Equivalent to the `--package` command-line argument. If set, uv
+    /// will run the command in this workspace member.
+    pub const UV_PACKAGE: &'static str = "UV_PACKAGE";
+
     /// Equivalent to the `--build-constraint` command-line argument. If set, uv will use this file
     /// as constraints for any source distribution builds. Uses space-separated list of files.
     pub const UV_BUILD_CONSTRAINT: &'static str = "UV_BUILD_CONSTRAINT";
