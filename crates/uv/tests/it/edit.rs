@@ -1967,6 +1967,42 @@ fn remove_both_dev() -> Result<()> {
     Ok(())
 }
 
+/// Do not allow add for groups in scripts.
+#[test]
+fn disallow_group_script_add() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let script = context.temp_dir.child("main.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.13"
+        # dependencies = []
+        #
+        # ///
+    "#})?;
+
+    uv_snapshot!(context.filters(), context
+        .add()
+        .arg("--group")
+        .arg("dev")
+        .arg("anyio==3.7.0")
+        .arg("--script")
+        .arg("main.py"), @r###"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: the argument '--group <GROUP>' cannot be used with '--script <SCRIPT>'
+
+    Usage: uv add --cache-dir [CACHE_DIR] --group <GROUP> --exclude-newer <EXCLUDE_NEWER> <PACKAGES|--requirements <REQUIREMENTS>>
+
+    For more information, try '--help'.
+    "###);
+
+    Ok(())
+}
+
 /// `uv remove --group dev` should remove from both `dev-dependencies` and `dependency-groups.dev`.
 #[test]
 fn remove_both_dev_group() -> Result<()> {
