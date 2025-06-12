@@ -668,7 +668,7 @@ pub struct VersionArgs {
 
 #[derive(Args)]
 pub struct UpgradeProjectArgs {
-    /// Run without performing the upgrade.
+    /// Run without performing the upgrades.
     #[arg(long)]
     pub dry_run: bool,
 
@@ -676,10 +676,7 @@ pub struct UpgradeProjectArgs {
     #[arg(long, env = EnvVars::UV_UPGRADE_RECURSIVE)]
     pub recursive: bool,
 
-    /// Only search specific tables in pyproject.toml (case-insensitive).
-    /// * `prod,dev,optional,groups` (default)
-    /// * `prod,dev,opt,group` or `p,d,o,g` (abbreviated)
-    /// * `prd,dev,extra,group` or `p,d,e,g` (optional / extra)
+    /// Only search specific tables in pyproject.toml: `prod,dev,optional,groups`.
     #[arg(
         long,
         env = EnvVars::UV_UPGRADE_TYPES,
@@ -688,8 +685,15 @@ pub struct UpgradeProjectArgs {
     )]
     pub types: Vec<Maybe<DependencyType>>,
 
-    #[arg(long, short, alias = "build-constraint", env = EnvVars::UV_BUILD_CONSTRAINT, value_delimiter = ' ', value_parser = parse_maybe_file_path)]
-    pub build_constraints: Vec<Maybe<PathBuf>>,
+    /// Allow only some version digits to change, others will be skipped:
+    /// `1,2,3,4` (major, minor, patch, build number).
+    #[arg(
+        long,
+        env = EnvVars::UV_UPGRADE_TYPES,
+        value_delimiter = ',',
+        value_parser = parse_version_digit,
+    )]
+    pub allow: Vec<Maybe<usize>>,
 
     /// The Python interpreter to use during resolution (overrides pyproject.toml).
     ///
@@ -1357,6 +1361,21 @@ fn parse_dependency_type(input: &str) -> Result<Maybe<DependencyType>, String> {
     } else {
         match DependencyType::from_str(input) {
             Ok(table) => Ok(Maybe::Some(table)),
+            Err(err) => Err(err.to_string()),
+        }
+    }
+}
+
+/// Parse a string into an [`usize`], mapping the empty string or unknown digits to `None`.
+///
+/// Allowed: 1, 2, 3 or 4.
+fn parse_version_digit(input: &str) -> Result<Maybe<usize>, String> {
+    if input.is_empty() {
+        Ok(Maybe::None)
+    } else {
+        match usize::from_str(input) {
+            Ok(digit) if (1..=4).contains(&digit) => Ok(Maybe::Some(digit)),
+            Ok(_) => Ok(Maybe::None),
             Err(err) => Err(err.to_string()),
         }
     }

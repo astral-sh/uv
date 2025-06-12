@@ -1166,6 +1166,12 @@ impl EnvVars {
     #[attr_hidden]
     pub const UV_UPGRADE_TYPES: &'static str = "UV_UPGRADE_TYPES";
 
+    /// Which version digits are allowed to change? Others will be skipped.
+    ///
+    /// Default `1,2,3,4` (major, minor, patch, build number).
+    #[attr_hidden]
+    pub const UV_UPGRADE_ALLOW: &'static str = "UV_UPGRADE_ALLOW";
+
     /// Overrides terminal width used for wrapping. This variable is not read by uv directly.
     ///
     /// This is a quasi-standard variable, described, e.g., in `ncurses(3x)`.
