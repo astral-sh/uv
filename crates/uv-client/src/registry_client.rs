@@ -558,7 +558,7 @@ impl RegistryClient {
         let simple_request = self
             .uncached_client(url)
             .get(Url::from(url.clone()))
-            .header("Accept-Encoding", "gzip")
+            .header("Accept-Encoding", "gzip, deflate, zstd")
             .header("Accept", MediaType::accepts())
             .build()
             .map_err(|err| ErrorKind::from_reqwest(url.clone(), err))?;
