@@ -9,6 +9,7 @@ use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
 use crate::printer::Printer;
 use anyhow::Result;
+use itertools::Itertools;
 use owo_colors::OwoColorize;
 use prettytable::format::FormatBuilder;
 use prettytable::row;
@@ -20,7 +21,7 @@ use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::Concurrency;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{IndexCapabilities, IndexLocations};
-use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep440::{Version, VersionDigit, VersionSpecifiers};
 use uv_pep508::{PackageName, Requirement};
 use uv_resolver::{PrereleaseMode, RequiresPython};
 use uv_warnings::warn_user;
@@ -41,6 +42,15 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
         tables if !tables.is_empty() => tables,
         _ => DependencyType::iter().to_vec(),
     };
+    let allow: Vec<_> = match args
+        .allow
+        .iter()
+        .filter_map(|t| t.clone().into_option())
+        .collect::<Vec<_>>()
+    {
+        allow if !allow.is_empty() => allow,
+        _ => vec![1, 2, 3, 4],
+    };
     let tomls = match args
         .recursive
         .then(|| search_pyproject_tomls(Path::new(".")))
@@ -52,19 +62,10 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
 
     let printer = Printer::Default;
     let info = format!("{}{}", "info".cyan().bold(), ":".bold());
-
-    let mut item_written = false;
-    let prepend = |written| {
-        if written {
-            writeln!(printer.stderr()).expect("");
-        }
-    };
-
-    let (mut all_found, mut all_bumped) = (0, 0);
+    let (mut item_written, mut all_found, mut all_bumped, mut all_skipped) =
+        (false, 0, 0, VersionDigit::default());
 
     for toml_dir in tomls {
-        prepend(item_written);
-        item_written = false;
         let pyproject_toml = Path::new(&toml_dir).join("pyproject.toml");
         let content = match fs_err::tokio::read_to_string(pyproject_toml.clone()).await {
             Ok(content) => content,
@@ -140,12 +141,19 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
             format!("{}/", &toml_dir[2..])
         };
         let subpath = format!("{relative}pyproject.toml");
-        let (found, upgrades) = toml.upgrade_all_dependencies(&find_latest, &tables).await;
+        let mut skipped = VersionDigit::default();
+        let (found, upgrades) = toml
+            .upgrade_all_dependencies(&find_latest, &tables, &allow, &mut skipped)
+            .await;
+        all_skipped.add_other(&skipped);
         let bumped = upgrades.len();
         all_found += found;
         all_bumped += bumped;
         if upgrades.is_empty() {
             if args.recursive && bumped == 0 {
+                if !skipped.is_empty() {
+                    writeln!(printer.stderr(), "{info} Skipped {skipped} in {subpath}")?;
+                }
                 continue; // Skip intermediate messages if nothing was changed
             }
             if found == 0 {
@@ -156,16 +164,21 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
             } else {
                 writeln!(
                     printer.stderr(),
-                    "{info} No upgrades found in {subpath}, check manually if not committed yet"
+                    "{info} No upgrades found in {subpath}, check manually if not committed yet{}",
+                    skipped.format(" (skipped ", ")")
                 )?;
             }
             continue;
         }
+        if item_written {
+            writeln!(printer.stderr()).expect("");
+        }
+        item_written = false;
         let mut table = prettytable::Table::new();
         table.set_format(FormatBuilder::new().column_separator(' ').build());
         let dry_run = format!(
-            "upgraded {subpath}{}",
-            if args.dry_run { " (dry run)" } else { "" }
+            "{} {subpath}",
+            if args.dry_run { "dry-run" } else { "upgraded" }
         );
         table.add_row(
             row![r->"#", rb->"name", Fr->"-old", bFg->"+new", "latest", "S", "type", dry_run],
@@ -202,11 +215,16 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
             }
             writeln!(
                 printer.stderr(),
-                "{info} {subpath} upgraded 🚀 Check manually, update lock + venv {} and run tests",
-                "`uv sync -U`".green().bold()
+                "{info} Upgraded {subpath} 🚀 Check manually, update lock + venv {} and run tests{}",
+                "`uv sync -U`".green().bold(),
+                skipped.format(" (skipped ", ")")
             )?;
+        } else if !skipped.is_empty() {
+            writeln!(printer.stderr(), "{info} Skipped {skipped} in {subpath}")?;
         }
-        item_written = true;
+        if !item_written {
+            item_written = true;
+        }
     }
     if args.recursive && all_bumped == 0 {
         if all_found == 0 {
@@ -214,9 +232,21 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
         } else {
             writeln!(
                 printer.stderr(),
-                "{info} No upgrades found recursively, check manually if not committed yet"
+                "{info} No upgrades found recursively, check manually if not committed yet{}",
+                all_skipped.format(" (skipped ", ")")
             )?;
         }
+    } else if args.recursive && !all_skipped.is_empty() {
+        writeln!(
+            printer.stderr(),
+            "{info} Skipped {all_skipped} in {all_bumped} upgrades for --allow={}",
+            allow
+                .iter()
+                .sorted()
+                .map(std::string::ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        )?;
     }
 
     Ok(ExitStatus::Success)

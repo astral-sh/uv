@@ -30,7 +30,7 @@ pub use version_ranges::{
 pub use {
     version::{
         LocalSegment, LocalVersion, LocalVersionSlice, MIN_VERSION, Operator, OperatorParseError,
-        Prerelease, PrereleaseKind, Version, VersionParseError, VersionPattern,
+        Prerelease, PrereleaseKind, Version, VersionDigit, VersionParseError, VersionPattern,
         VersionPatternParseError,
     },
     version_specifier::{
