@@ -169,7 +169,7 @@ default = true
 
 def run_test(
     env: dict[str, str],
-    uv: str,
+    uv: Path,
     registry_name: str,
     registry_url: str,
     package: str,
