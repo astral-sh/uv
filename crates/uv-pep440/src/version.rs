@@ -5,6 +5,7 @@ use std::ops::Deref;
 use std::sync::LazyLock;
 use std::{
     borrow::Borrow,
+    cmp,
     cmp::Ordering,
     hash::{Hash, Hasher},
     str::FromStr,
@@ -1706,6 +1707,68 @@ impl FromStr for VersionPattern {
 /// digits may be stored in a compressed representation.
 pub struct Release<'a> {
     inner: ReleaseInner<'a>,
+}
+
+impl Release<'_> {
+    /// Which digit changed: `1`=major, `2`=minor, `3`=patch, `4`=build number, `None`=undetermined/equal
+    pub(crate) fn semver_change(&self, right: &Self, op: Operator) -> Option<usize> {
+        let l = self.len();
+        let mut me: Vec<_> = self[..].to_vec();
+        // decrease the last digit != 0 to determine major/minor upgrade:
+        // <1     to <1.0.1 is major
+        // <1.2.0 to <1.2.1 is minor
+        if op == Operator::LessThan {
+            for i in (0..l).rev() {
+                if me[i] != 0 {
+                    me[i] -= 1;
+                    break;
+                }
+            }
+        }
+
+        if l < right.len() && (op == Operator::LessThan || op == Operator::GreaterThan) {
+            let lhs = &me[..l];
+            let mut non_zero = 0;
+            for (i, v) in lhs.iter().enumerate() {
+                if *v != 0 {
+                    non_zero = i + 1;
+                }
+            }
+            return Some(non_zero);
+        }
+
+        let l = cmp::min(self.len(), right.len());
+
+        // Slice to the loop iteration range to enable bound check
+        // elimination in the compiler
+        let lhs = &me[..l];
+        let rhs = &right[..l];
+
+        for (i, v) in lhs.iter().enumerate() {
+            match v.cmp(&rhs[i]) {
+                Ordering::Equal => (),
+                _ => return Some(i + 1),
+            }
+        }
+
+        let longer = if self.len() > right.len() {
+            &me[..]
+        } else {
+            &right[..]
+        };
+        if self.cmp(right) == Ordering::Equal {
+            if op == Operator::GreaterThanEqual {
+                return Some(l); // Operator downgrade
+            }
+            for (i, v) in longer.iter().enumerate() {
+                if *v != 0 {
+                    return Some(i + 1);
+                }
+            }
+        }
+
+        None
+    }
 }
 
 enum ReleaseInner<'a> {

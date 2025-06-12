@@ -167,7 +167,9 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
             "upgraded {subpath}{}",
             if args.dry_run { " (dry run)" } else { "" }
         );
-        table.add_row(row![r->"#", rb->"name", Fr->"-old", bFg->"+new", "latest", "type", dry_run]); // diff-like
+        table.add_row(
+            row![r->"#", rb->"name", Fr->"-old", bFg->"+new", "latest", "S", "type", dry_run],
+        ); // diff-like
         let remove_spaces = |v: &Requirement| {
             v.clone()
                 .version_or_url
@@ -178,7 +180,7 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
         upgrades
             .iter()
             .enumerate()
-            .for_each(|(i, (_, _dep, old, new, version, upgraded, dependency_type))| {
+            .for_each(|(i, (_, _dep, old, new, version, upgraded, dependency_type, semver_change))| {
                 let from = remove_spaces(old);
                 let to = remove_spaces(new);
                 let upordown = if *upgraded { "✅ up" } else { "❌ down" };
@@ -188,8 +190,9 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
                     DependencyType::Optional(extra) => format!("{extra} [extra]"),
                     DependencyType::Group(group) => format!("{group} [group]"),
                 };
+                let semver = semver_change.map_or(String::new(), |s| s.to_string());
                 table.add_row(
-                    row![r->i + 1, rb->old.name, Fr->from, bFg->to, version.to_string(), _type, upordown],
+                    row![r->i + 1, rb->old.name, Fr->from, bFg->to, version.to_string(), semver, _type, upordown],
                 );
             });
         table.printstd();
@@ -234,7 +237,7 @@ fn search_pyproject_tomls(root: &Path) -> Result<Vec<String>, anyhow::Error> {
     // Hint: Doesn't skip special folders like `build`, `dist` or `target`
     let is_hidden_or_not_pyproject = |path: &Path| {
         path.file_name().and_then(OsStr::to_str).is_some_and(|s| {
-            s.starts_with('.') || s.starts_with('_') || s == "target" || path.is_file() && s != "pyproject.toml"
+            s.starts_with('.') || s.starts_with('_') || path.is_file() && s != "pyproject.toml"
         })
     };
 
