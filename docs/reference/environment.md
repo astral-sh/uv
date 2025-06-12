@@ -275,6 +275,11 @@ Equivalent to the `--offline` command-line argument. If set, uv will disable net
 Equivalent to the `--override` command-line argument. If set, uv will use this file
 as the overrides file. Uses space-separated list of files.
 
+### `UV_PACKAGE`
+
+Equivalent to the `--package` command-line argument. If set, uv
+will run the command in this workspace member.
+
 ### `UV_PRERELEASE`
 
 Equivalent to the `--prerelease` command-line argument. For example, if set to
