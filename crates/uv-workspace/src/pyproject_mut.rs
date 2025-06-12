@@ -12,7 +12,7 @@ use uv_cache_key::CanonicalUrl;
 use uv_distribution_types::Index;
 use uv_fs::PortablePath;
 use uv_normalize::GroupName;
-use uv_pep440::{Version, VersionParseError, VersionSpecifier, VersionSpecifiers};
+use uv_pep440::{Version, VersionDigit, VersionParseError, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{ExtraName, MarkerTree, PackageName, Requirement, VersionOrUrl};
 use uv_redacted::DisplaySafeUrl;
 
@@ -1136,6 +1136,8 @@ impl PyProjectTomlMut {
         &mut self,
         find_latest: &F,
         tables: &[DependencyType],
+        allow: &[usize],
+        skipped: &mut VersionDigit,
     ) -> (usize, Vec<UpgradeResult>) {
         let mut all_upgrades = Vec::new();
         let mut found = 0;
@@ -1157,6 +1159,8 @@ impl PyProjectTomlMut {
                 &mut all_upgrades,
                 item,
                 &DependencyType::Production,
+                allow,
+                skipped,
             )
             .await;
         }
@@ -1184,6 +1188,8 @@ impl PyProjectTomlMut {
                         &mut all_upgrades,
                         item,
                         &DependencyType::Optional(_extra),
+                        allow,
+                        skipped,
                     )
                     .await;
                 }
@@ -1211,6 +1217,8 @@ impl PyProjectTomlMut {
                         &mut all_upgrades,
                         item,
                         &DependencyType::Group(_group),
+                        allow,
+                        skipped,
                     )
                     .await;
                 }
@@ -1231,8 +1239,15 @@ impl PyProjectTomlMut {
             .flatten()
         {
             found += item.as_array().map_or(0, Array::len);
-            Self::replace_dependencies(find_latest, &mut all_upgrades, item, &DependencyType::Dev)
-                .await;
+            Self::replace_dependencies(
+                find_latest,
+                &mut all_upgrades,
+                item,
+                &DependencyType::Dev,
+                allow,
+                skipped,
+            )
+            .await;
         }
 
         (found, all_upgrades)
@@ -1243,9 +1258,19 @@ impl PyProjectTomlMut {
         all_upgrades: &mut Vec<UpgradeResult>,
         item: &mut Item,
         dependency_type: &DependencyType,
+        allow: &[usize],
+        skipped: &mut VersionDigit,
     ) {
         if let Some(dependencies) = item.as_array_mut().filter(|d| !d.is_empty()) {
-            Self::replace_upgrades(find_latest, all_upgrades, dependencies, dependency_type).await;
+            Self::replace_upgrades(
+                find_latest,
+                all_upgrades,
+                dependencies,
+                dependency_type,
+                allow,
+                skipped,
+            )
+            .await;
         }
     }
 
@@ -1254,6 +1279,8 @@ impl PyProjectTomlMut {
         dependencies: &mut Array,
         all_upgrades: &[UpgradeResult],
         dependency_type: &DependencyType,
+        allow: &[usize],
+        skipped: &mut VersionDigit,
     ) -> Vec<UpgradeResult> {
         let mut upgrades = Vec::new();
         for (i, dep) in dependencies.iter().enumerate() {
@@ -1275,7 +1302,8 @@ impl PyProjectTomlMut {
                     .await
                     .filter(|latest| !version_specifiers.contains(latest)),
             } {
-                let (bumped, upgraded, semver) = version_specifiers.bump_last(&upgrade);
+                let (bumped, upgraded, semver) =
+                    version_specifiers.bump_last(&upgrade, allow, skipped);
                 if bumped {
                     req.version_or_url = Some(VersionOrUrl::VersionSpecifier(version_specifiers));
                     upgrades.push((
@@ -1299,9 +1327,18 @@ impl PyProjectTomlMut {
         all_upgrades: &mut Vec<UpgradeResult>,
         dependencies: &mut Array,
         dependency_type: &DependencyType,
+        allow: &[usize],
+        skipped: &mut VersionDigit,
     ) {
-        let upgrades =
-            Self::find_upgrades(find_latest, dependencies, all_upgrades, dependency_type).await;
+        let upgrades = Self::find_upgrades(
+            find_latest,
+            dependencies,
+            all_upgrades,
+            dependency_type,
+            allow,
+            skipped,
+        )
+        .await;
         for (i, _dep, _old, new, _upgrade, _upgraded, _, _) in &upgrades {
             let string = new.to_string();
             dependencies.replace(*i, toml_edit::Value::from(string));
