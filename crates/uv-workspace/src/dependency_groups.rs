@@ -244,13 +244,13 @@ impl IntoIterator for FlatDependencyGroups {
 
 #[derive(Debug, Error)]
 #[error("{} has malformed dependency groups", if path.is_empty() && package.is_empty() {
-    "project".to_string()
+    "Project".to_string()
 } else if path.is_empty() {
-    format!("`{package}`")
+    format!("Project `{package}`")
 } else if package.is_empty() {
     format!("`{path}`")
 } else {
-    format!("`{package} @ {path}")
+    format!("Project `{package} @ {path}`")
 })]
 pub struct DependencyGroupError {
     package: String,

@@ -493,19 +493,19 @@ fn create_venv_respects_pyproject_requires_python() -> Result<()> {
 
 #[test]
 fn create_venv_respects_group_requires_python() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.9", "3.10", "3.12"]);
+    let context = TestContext::new_with_versions(&["3.9", "3.10", "3.11", "3.12"]);
 
     // Without a Python requirement, we use the first on the PATH
-    uv_snapshot!(context.filters(), context.venv(), @r###"
+    uv_snapshot!(context.filters(), context.venv(), @r"
     success: true
     exit_code: 0
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Using CPython 3.9.[X] interpreter at: [PYTHON-3.9]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
-    "###
+    "
     );
 
     // With `requires-python = ">=3.10"` on the default group, we pick 3.10
@@ -515,7 +515,6 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
         [project]
         name = "foo"
         version = "1.0.0"
-        requires-python = "<3.13"
         dependencies = []
         
         [dependency-groups]
@@ -534,7 +533,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Using CPython 3.10.[X] interpreter at: [PYTHON-3.10]
     Creating virtual environment at: .venv
     Activate with: source .venv/[BIN]/activate
     "
@@ -542,7 +541,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
 
     // When the top-level requires-python and default group requires-python
     // both apply, their intersection is used. However non-default groups
-    // should not be consulted!
+    // should not be consulted! (here the top-level wins)
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
@@ -575,7 +574,7 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
 
     // When the top-level requires-python and default group requires-python
     // both apply, their intersection is used. However non-default groups
-    // should not be consulted!
+    // should not be consulted! (here the group wins)
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(indoc! { r#"
         [project]
@@ -661,9 +660,9 @@ fn create_venv_respects_group_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-      × The workspace contains conflicting Python requirements:
-      │ - `foo`: `<3.12`
-      │ - `foo --group dev`: `>=3.12`
+      × Found conflicting Python requirements:
+      │ - foo: <3.12
+      │ - foo:dev: >=3.12
     "
     );
 

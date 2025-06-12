@@ -195,11 +195,11 @@ pub(crate) enum ProjectError {
     #[error("Environment markers `{0}` don't overlap with Python requirement `{1}`")]
     DisjointEnvironment(MarkerTreeContents, VersionSpecifiers),
 
-    #[error("The workspace contains conflicting Python requirements:\n{}", _0.iter().map(|((package, group), specifiers)| {
+    #[error("Found conflicting Python requirements:\n{}", _0.iter().map(|((package, group), specifiers)| {
         if let Some(group) = group {
-            format!("- `{package} --group {group}`: `{specifiers}`")
+            format!("- {package}:{group}: {specifiers}")
         } else {
-            format!("- `{package}`: `{specifiers}`")
+            format!("- {package}: {specifiers}")
         }
     }).join("\n"))]
     DisjointRequiresPython(BTreeMap<(PackageName, Option<GroupName>), VersionSpecifiers>),

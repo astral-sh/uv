@@ -380,7 +380,6 @@ async fn lock_and_sync(
     }
 
     // Determine the groups and extras that should be enabled.
-    // TODO(ibraheem): Should we accept CLI overrides for this? Should we even sync here?
     let default_groups = default_dependency_groups(project.pyproject_toml())?;
     let default_extras = DefaultExtras::default();
     let groups = DependencyGroups::default().with_defaults(default_groups);

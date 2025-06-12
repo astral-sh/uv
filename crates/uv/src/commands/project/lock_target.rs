@@ -217,7 +217,7 @@ impl<'lock> LockTarget<'lock> {
     pub(crate) fn requires_python(self) -> Result<Option<RequiresPython>, ProjectError> {
         match self {
             Self::Workspace(workspace) => {
-                // TODO(Gankra): I'm not sure if this should be none of the groups or *all*
+                // When locking, don't try to enforce requires-python bounds that appear on groups
                 let groups = DependencyGroupsWithDefaults::none();
                 find_requires_python(workspace, &groups)
             }

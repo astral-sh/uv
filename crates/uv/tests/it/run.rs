@@ -4601,7 +4601,8 @@ fn run_default_groups() -> Result<()> {
 
 #[test]
 fn run_groups_requires_python() -> Result<()> {
-    let context = TestContext::new_with_versions(&["3.11", "3.12", "3.13"]);
+    let context =
+        TestContext::new_with_versions(&["3.11", "3.12", "3.13"]).with_filtered_python_sources();
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4727,29 +4728,16 @@ fn run_groups_requires_python() -> Result<()> {
     ");
 
     // Enabling foo we can't find an interpreter
-    if cfg!(windows) {
-        uv_snapshot!(context.filters(), context.run()
-            .arg("--group").arg("foo")
-            .arg("python").arg("-c").arg("import typing_extensions"), @r"
-        success: false
-        exit_code: 2
-        ----- stdout -----
+    uv_snapshot!(context.filters(), context.run()
+        .arg("--group").arg("foo")
+        .arg("python").arg("-c").arg("import typing_extensions"), @r"
+    success: false
+    exit_code: 2
+    ----- stdout -----
 
-        ----- stderr -----
-        error: No interpreter found for Python >=3.14 in managed installations, search path, or registry
-        ");
-    } else {
-        uv_snapshot!(context.filters(), context.run()
-            .arg("--group").arg("foo")
-            .arg("python").arg("-c").arg("import typing_extensions"), @r"
-        success: false
-        exit_code: 2
-        ----- stdout -----
-
-        ----- stderr -----
-        error: No interpreter found for Python >=3.14 in managed installations or search path
-        ");
-    }
+    ----- stderr -----
+    error: No interpreter found for Python >=3.14 in [PYTHON SOURCES]
+    ");
 
     Ok(())
 }
@@ -4832,10 +4820,10 @@ fn run_groups_include_requires_python() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: The workspace contains conflicting Python requirements:
-    - `project`: `>=3.11`
-    - `project --group bar`: `>=3.13`
-    - `project --group dev`: `>=3.12, <3.13`
+    error: Found conflicting Python requirements:
+    - project: >=3.11
+    - project:bar: >=3.13
+    - project:dev: >=3.12, <3.13
     ");
 
     // Explicitly requesting an out-of-range python fails

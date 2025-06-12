@@ -8944,7 +8944,7 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `example` has malformed dependency groups
+    error: Project `example` has malformed dependency groups
       Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
@@ -8954,7 +8954,7 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `example` has malformed dependency groups
+    error: Project `example` has malformed dependency groups
       Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
@@ -8964,7 +8964,7 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `example` has malformed dependency groups
+    error: Project `example` has malformed dependency groups
       Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
@@ -8974,7 +8974,7 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `example` has malformed dependency groups
+    error: Project `example` has malformed dependency groups
       Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
@@ -8984,7 +8984,7 @@ fn transitive_group_conflicts_cycle() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    error: `example` has malformed dependency groups
+    error: Project `example` has malformed dependency groups
       Caused by: Detected a cycle in `dependency-groups`: `dev` -> `test` -> `dev`
     ");
 
