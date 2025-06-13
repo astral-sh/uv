@@ -564,11 +564,6 @@ fn install_requirements_txt() -> Result<()> {
 #[tokio::test]
 async fn install_remote_requirements_txt() -> Result<()> {
     let context = TestContext::new("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"127\.0\.0\.1[^\r\n]*", "[LOCALHOST]")])
-        .collect::<Vec<_>>();
 
     let username = "user";
     let password = "password";
@@ -579,17 +574,17 @@ async fn install_remote_requirements_txt() -> Result<()> {
     let mut requirements_url = Url::parse(&format!("{}/requirements.txt", &server_url))?;
 
     // Should fail without credentials
-    uv_snapshot!(filters, context.pip_install()
+    uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
         .arg(requirements_url.as_str())
-        .arg("--strict"), @r###"
+        .arg("--strict"), @r"
     success: false
     exit_code: 2
     ----- stdout -----
 
     ----- stderr -----
-    error: Error while accessing remote requirements file: `http://[LOCALHOST]
-    "###
+    error: Error while accessing remote requirements file: `http://[LOCALHOST]/requirements.txt`
+    "
     );
 
     let _ = requirements_url.set_username(username);
