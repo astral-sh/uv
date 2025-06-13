@@ -1,8 +1,9 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use owo_colors::OwoColorize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
+use std::str::FromStr;
 use tracing::debug;
 
 use uv_cache::Cache;
@@ -366,6 +367,7 @@ async fn upgrade_tool(
         (environment, outcome)
     };
 
+    // If we modified the target tool, reinstall the entrypoints.
     if matches!(
         outcome,
         UpgradeOutcome::UpgradeEnvironment | UpgradeOutcome::UpgradeTool
@@ -374,12 +376,55 @@ async fn upgrade_tool(
         // existing executables.
         remove_entrypoints(&existing_tool_receipt);
 
-        // If we modified the target tool, reinstall the entrypoints.
+        // Find a suitable path to install into.
+        let executable_directory = uv_tool::tool_executable_dir()?;
+        fs_err::create_dir_all(&executable_directory)
+            .context("Failed to create executable directory")?;
+
+        // Collect dependency packages (excluding the main tool itself) that have entrypoints
+        let dependency_packages: BTreeSet<_> = existing_tool_receipt
+            .entrypoints()
+            .iter()
+            .filter_map(|entry| {
+                let pkg_str = entry.from.as_ref()?;
+                let pkg = PackageName::from_str(pkg_str).ok()?;
+                if pkg != *name { Some(pkg) } else { None }
+            })
+            .collect();
+
+        // Install entrypoints for all dependency packages
+        let mut deps_entrypoints = Vec::new();
+        for dependency in &dependency_packages {
+            debug!("Installing entrypoints for {dependency} as part of tool {name}");
+            let entrypoints = install_executables(
+                &environment,
+                name,
+                dependency,
+                installed_tools,
+                &deps_entrypoints,
+                &executable_directory,
+                &ToolOptions::from(options.clone()),
+                true,
+                existing_tool_receipt.python().to_owned(),
+                existing_tool_receipt.requirements().to_vec(),
+                existing_tool_receipt.constraints().to_vec(),
+                existing_tool_receipt.overrides().to_vec(),
+                existing_tool_receipt.build_constraints().to_vec(),
+                printer,
+            )?;
+            deps_entrypoints.extend(entrypoints);
+        }
+
+        // Install entrypoints from the target package.
+        debug!("Installing entrypoints for tool {name}");
         install_executables(
             &environment,
             name,
+            name,
             installed_tools,
-            ToolOptions::from(options),
+            &deps_entrypoints,
+            &executable_directory,
+            &ToolOptions::from(options),
             true,
             existing_tool_receipt.python().to_owned(),
             existing_tool_receipt.requirements().to_vec(),

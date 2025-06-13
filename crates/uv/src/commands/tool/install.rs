@@ -1,8 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::str::FromStr;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
@@ -46,6 +46,7 @@ pub(crate) async fn install(
     editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
+    with_executables_from: BTreeSet<PackageName>,
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
@@ -592,17 +593,57 @@ pub(crate) async fn install(
         }
     };
 
+    let force_install = force || invalid_tool_receipt;
+
+    // Find a suitable path to install into.
+    let executable_directory = uv_tool::tool_executable_dir()?;
+    fs_err::create_dir_all(&executable_directory)
+        .context("Failed to create executable directory")?;
+
+    // Install additional executables, if any was explicitly requested.
+    let mut installed_executables = vec![];
+    for pkg in with_executables_from {
+        debug!(
+            "Installing executables for `{}` as part of tool `{}`",
+            pkg, from.name
+        );
+        let mut entrypoints = install_executables(
+            &environment,
+            &from.name,
+            &pkg,
+            &installed_tools,
+            &installed_executables,
+            &executable_directory,
+            &options,
+            force_install,
+            python.clone(),
+            requirements.clone(),
+            constraints.clone(),
+            overrides.clone(),
+            build_constraints.clone(),
+            printer,
+        )?;
+        installed_executables.append(&mut entrypoints);
+    }
+
+    // Install entrypoints from the target package.
+    debug!("Installing executables for tool `{}`", from.name);
     install_executables(
         &environment,
         &from.name,
+        &from.name,
         &installed_tools,
-        options,
-        force || invalid_tool_receipt,
+        &installed_executables,
+        &executable_directory,
+        &options,
+        force_install,
         python,
         requirements,
         constraints,
         overrides,
         build_constraints,
         printer,
-    )
+    )?;
+
+    Ok(ExitStatus::Success)
 }
