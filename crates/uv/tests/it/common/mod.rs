@@ -507,20 +507,7 @@ impl TestContext {
             for (version, executable) in &python_versions {
                 let parent = python_dir.child(version.to_string());
                 parent.create_dir_all().unwrap();
-                // Ensure the link points to the canonicalized patch version path if
-                // the `python-patch` feature is enabled
-                if cfg!(feature = "python-patch") {
-                    parent
-                        .child("python3")
-                        .symlink_to_file(
-                            executable
-                                .canonicalize()
-                                .expect("Failed to canonicalize executable path"),
-                        )
-                        .unwrap();
-                } else {
-                    parent.child("python3").symlink_to_file(executable).unwrap();
-                }
+                parent.child("python3").symlink_to_file(executable).unwrap();
             }
         }
 
