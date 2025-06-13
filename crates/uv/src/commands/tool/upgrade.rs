@@ -393,15 +393,15 @@ async fn upgrade_tool(
             .collect();
 
         // Install entrypoints for all dependency packages
-        let mut deps_entrypoints = Vec::new();
+        let mut installed_entrypoints = Vec::new();
         for dependency in &dependency_packages {
             debug!("Installing entrypoints for {dependency} as part of tool {name}");
-            let entrypoints = install_executables(
+            install_executables(
                 &environment,
                 name,
                 dependency,
                 installed_tools,
-                &deps_entrypoints,
+                &mut installed_entrypoints,
                 &executable_directory,
                 &ToolOptions::from(options.clone()),
                 true,
@@ -412,7 +412,6 @@ async fn upgrade_tool(
                 existing_tool_receipt.build_constraints().to_vec(),
                 printer,
             )?;
-            deps_entrypoints.extend(entrypoints);
         }
 
         // Install entrypoints from the target package.
@@ -422,7 +421,7 @@ async fn upgrade_tool(
             name,
             name,
             installed_tools,
-            &deps_entrypoints,
+            &mut installed_entrypoints,
             &executable_directory,
             &ToolOptions::from(options),
             true,

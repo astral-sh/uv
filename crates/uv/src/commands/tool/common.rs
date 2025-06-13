@@ -25,6 +25,7 @@ use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
 use uv_warnings::warn_user_once;
 
+use crate::ExitStatus;
 use crate::commands::pip;
 use crate::commands::project::ProjectError;
 use crate::commands::reporters::PythonDownloadReporter;
@@ -165,7 +166,7 @@ pub(crate) fn install_executables(
     tool_name: &PackageName,
     name: &PackageName,
     installed_tools: &InstalledTools,
-    existing_entrypoints: &[ToolEntrypoint],
+    installed_entrypoints: &mut Vec<ToolEntrypoint>,
     executable_directory: &Path,
     options: &ToolOptions,
     force: bool,
@@ -175,7 +176,7 @@ pub(crate) fn install_executables(
     overrides: Vec<Requirement>,
     build_constraints: Vec<Requirement>,
     printer: Printer,
-) -> anyhow::Result<Vec<ToolEntrypoint>> {
+) -> anyhow::Result<ExitStatus> {
     let site_packages = SitePackages::from_environment(environment)?;
     let installed = site_packages.get_packages(name);
     let Some(installed_dist) = installed.first().copied() else {
@@ -291,11 +292,10 @@ pub(crate) fn install_executables(
     )?;
 
     debug!("Adding receipt for tool `{tool_name}`");
-    let mut all_entrypoints = existing_entrypoints.to_vec();
     let mut new_entrypoints = Vec::with_capacity(target_entry_points.len());
     for (entry, _, target_path) in target_entry_points {
         let tool_entry = ToolEntrypoint::new(entry, target_path, name.to_string());
-        all_entrypoints.push(tool_entry.clone());
+        installed_entrypoints.push(tool_entry.clone());
         new_entrypoints.push(tool_entry);
     }
     let tool = Tool::new(
@@ -304,14 +304,14 @@ pub(crate) fn install_executables(
         overrides,
         build_constraints,
         python,
-        all_entrypoints,
+        installed_entrypoints.clone(),
         options.clone(),
     );
     installed_tools.add_tool_receipt(tool_name, tool)?;
 
     warn_out_of_path(executable_directory);
 
-    Ok(new_entrypoints)
+    Ok(ExitStatus::Success)
 }
 
 fn warn_out_of_path(executable_directory: &Path) {
