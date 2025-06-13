@@ -6,7 +6,6 @@ use owo_colors::OwoColorize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Arc;
 use tracing::debug;
 
@@ -241,18 +240,13 @@ pub(crate) async fn resolve<InstalledPackages: InstalledPackagesProvider>(
             // Apply dependency-groups
             for (group_name, group) in &metadata.dependency_groups {
                 if groups.contains(group_name) {
-                    requirements.extend(group.iter().cloned().map(|group| {
-                        Requirement {
-                            origin: Some(RequirementOrigin::Group(
-                                pyproject_path.clone(),
-                                metadata
-                                    .name
-                                    .clone()
-                                    .unwrap_or(PackageName::from_str("none").unwrap()),
-                                group_name.clone(),
-                            )),
-                            ..group
-                        }
+                    requirements.extend(group.iter().cloned().map(|group| Requirement {
+                        origin: Some(RequirementOrigin::Group(
+                            pyproject_path.clone(),
+                            metadata.name.clone(),
+                            group_name.clone(),
+                        )),
+                        ..group
                     }));
                 }
             }
