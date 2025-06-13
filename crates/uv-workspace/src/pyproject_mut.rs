@@ -4,6 +4,7 @@ use std::str::FromStr;
 use std::{fmt, iter, mem};
 
 use itertools::Itertools;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use toml_edit::{
@@ -1209,16 +1210,88 @@ impl PyProjectTomlMut {
         types
     }
 
+    /// Returns package names of all dependencies with version constraints.
+    ///
+    /// This method searches `project.dependencies`, `project.optional-dependencies`,
+    /// `dependency-groups` and `tool.uv.dev-dependencies`.
+    pub fn find_versioned_dependencies(&self) -> FxHashSet<PackageName> {
+        let mut versioned_dependencies = FxHashSet::default();
+
+        if let Some(project) = self.doc.get("project").and_then(Item::as_table) {
+            // Check `project.dependencies`.
+            if let Some(dependencies) = project.get("dependencies").and_then(Item::as_array) {
+                Self::extract_names_if_versioned(&mut versioned_dependencies, dependencies);
+            }
+
+            // Check `project.optional-dependencies`.
+            if let Some(extras) = project
+                .get("optional-dependencies")
+                .and_then(Item::as_table)
+            {
+                for (extra, dependencies) in extras {
+                    let Some(dependencies) = dependencies.as_array() else {
+                        continue;
+                    };
+                    let Ok(_extra) = ExtraName::from_str(extra) else {
+                        continue;
+                    };
+                    Self::extract_names_if_versioned(&mut versioned_dependencies, dependencies);
+                }
+            }
+        }
+
+        // Check `dependency-groups`.
+        if let Some(groups) = self.doc.get("dependency-groups").and_then(Item::as_table) {
+            for (group, dependencies) in groups {
+                let Ok(_group) = GroupName::from_str(group) else {
+                    continue;
+                };
+                let Some(dependencies) = dependencies.as_array() else {
+                    continue;
+                };
+                Self::extract_names_if_versioned(&mut versioned_dependencies, dependencies);
+            }
+        }
+
+        // Check `tool.uv.dev-dependencies`.
+        if let Some(dependencies) = self
+            .doc
+            .get("tool")
+            .and_then(Item::as_table)
+            .and_then(|tool| tool.get("uv"))
+            .and_then(Item::as_table)
+            .and_then(|uv| uv.get("dev-dependencies"))
+            .and_then(Item::as_array)
+        {
+            Self::extract_names_if_versioned(&mut versioned_dependencies, dependencies);
+        }
+
+        versioned_dependencies
+    }
+
+    fn extract_names_if_versioned(types: &mut FxHashSet<PackageName>, dependencies: &Array) {
+        for dep in dependencies {
+            let Some(req) = dep.as_str().and_then(try_parse_requirement) else {
+                continue;
+            };
+            let name = req.name;
+            if types.contains(&name) {
+                continue;
+            }
+            // Skip requirements without version constraints
+            if let Some(VersionOrUrl::VersionSpecifier(_)) = req.version_or_url {
+                types.insert(name);
+            }
+        }
+    }
+
     /// Returns all dependencies in this `pyproject.toml`.
     ///
     /// This method searches `project.dependencies`, `project.optional-dependencies`,
     /// `dependency-groups` and `tool.uv.dev-dependencies`.
-    pub async fn upgrade_all_dependencies<
-        F: Fn(String) -> Fut,
-        Fut: Future<Output = Option<Version>>,
-    >(
+    pub fn upgrade_all_dependencies(
         &mut self,
-        find_latest: &F,
+        latest_versions: &FxHashMap<PackageName, Version>,
         tables: &[DependencyType],
         allow: &[usize],
         skipped: &mut VersionDigit,
@@ -1239,14 +1312,13 @@ impl PyProjectTomlMut {
         {
             found += item.as_array().map_or(0, Array::len);
             Self::replace_dependencies(
-                find_latest,
+                latest_versions,
                 &mut all_upgrades,
                 item,
                 &DependencyType::Production,
                 allow,
                 skipped,
-            )
-            .await;
+            );
         }
 
         // Check `project.optional-dependencies`
@@ -1268,14 +1340,13 @@ impl PyProjectTomlMut {
                 if let Some(_extra) = extra {
                     found += item.as_array().map_or(0, Array::len);
                     Self::replace_dependencies(
-                        find_latest,
+                        latest_versions,
                         &mut all_upgrades,
                         item,
                         &DependencyType::Optional(_extra),
                         allow,
                         skipped,
-                    )
-                    .await;
+                    );
                 }
             }
         }
@@ -1297,14 +1368,13 @@ impl PyProjectTomlMut {
                 if let Some(_group) = group {
                     found += item.as_array().map_or(0, Array::len);
                     Self::replace_dependencies(
-                        find_latest,
+                        latest_versions,
                         &mut all_upgrades,
                         item,
                         &DependencyType::Group(_group),
                         allow,
                         skipped,
-                    )
-                    .await;
+                    );
                 }
             }
         }
@@ -1324,21 +1394,20 @@ impl PyProjectTomlMut {
         {
             found += item.as_array().map_or(0, Array::len);
             Self::replace_dependencies(
-                find_latest,
+                latest_versions,
                 &mut all_upgrades,
                 item,
                 &DependencyType::Dev,
                 allow,
                 skipped,
-            )
-            .await;
+            );
         }
 
         (found, all_upgrades)
     }
 
-    async fn replace_dependencies<Fut: Future<Output = Option<Version>>, F: Fn(String) -> Fut>(
-        find_latest: &F,
+    fn replace_dependencies(
+        latest_versions: &FxHashMap<PackageName, Version>,
         all_upgrades: &mut Vec<UpgradeResult>,
         item: &mut Item,
         dependency_type: &DependencyType,
@@ -1347,21 +1416,19 @@ impl PyProjectTomlMut {
     ) {
         if let Some(dependencies) = item.as_array_mut().filter(|d| !d.is_empty()) {
             Self::replace_upgrades(
-                find_latest,
+                latest_versions,
                 all_upgrades,
                 dependencies,
                 dependency_type,
                 allow,
                 skipped,
-            )
-            .await;
+            );
         }
     }
 
-    async fn find_upgrades<Fut: Future<Output = Option<Version>>, F: Fn(String) -> Fut>(
-        find_latest: F,
+    fn find_upgrades(
+        latest_versions: &FxHashMap<PackageName, Version>,
         dependencies: &mut Array,
-        all_upgrades: &[UpgradeResult],
         dependency_type: &DependencyType,
         allow: &[usize],
         skipped: &mut VersionDigit,
@@ -1377,17 +1444,9 @@ impl PyProjectTomlMut {
             else {
                 continue;
             };
-            if let Some(upgrade) = match all_upgrades
-                .iter()
-                .find(|(_, _, _, r, _, _, _, _)| r.name == req.name)
-            {
-                Some((_, _, _, _, v, _, _, _)) => Some(v.clone()), // reuse cached upgrade
-                _ => find_latest(req.name.to_string())
-                    .await
-                    .filter(|latest| !version_specifiers.contains(latest)),
-            } {
+            if let Some(upgrade) = latest_versions.get(&old.name) {
                 let (bumped, upgraded, semver) =
-                    version_specifiers.bump_last(&upgrade, allow, skipped);
+                    version_specifiers.bump_last(upgrade, allow, skipped);
                 if bumped {
                     req.version_or_url = Some(VersionOrUrl::VersionSpecifier(version_specifiers));
                     upgrades.push((
@@ -1395,7 +1454,7 @@ impl PyProjectTomlMut {
                         dep.as_str().unwrap().to_string(),
                         old,
                         req,
-                        upgrade,
+                        upgrade.clone(),
                         upgraded,
                         dependency_type.clone(),
                         semver,
@@ -1406,8 +1465,8 @@ impl PyProjectTomlMut {
         upgrades
     }
 
-    async fn replace_upgrades<Fut: Future<Output = Option<Version>>, F: Fn(String) -> Fut>(
-        find_latest: F,
+    fn replace_upgrades(
+        latest_versions: &FxHashMap<PackageName, Version>,
         all_upgrades: &mut Vec<UpgradeResult>,
         dependencies: &mut Array,
         dependency_type: &DependencyType,
@@ -1415,14 +1474,12 @@ impl PyProjectTomlMut {
         skipped: &mut VersionDigit,
     ) {
         let upgrades = Self::find_upgrades(
-            find_latest,
+            latest_versions,
             dependencies,
-            all_upgrades,
             dependency_type,
             allow,
             skipped,
-        )
-        .await;
+        );
         for (i, _dep, _old, new, _upgrade, _upgraded, _, _) in &upgrades {
             let string = new.to_string();
             dependencies.replace(*i, toml_edit::Value::from(string));

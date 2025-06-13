@@ -9,10 +9,12 @@ use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
 use crate::printer::Printer;
 use anyhow::Result;
+use futures::StreamExt;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
 use prettytable::format::FormatBuilder;
 use prettytable::row;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tokio::sync::Semaphore;
 use uv_cache::{Cache, Refresh};
 use uv_cache_info::Timestamp;
@@ -62,11 +64,27 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
 
     let printer = Printer::Default;
     let info = format!("{}{}", "info".cyan().bold(), ":".bold());
+
+    #[allow(deprecated)]
+    let cache_dir = env::home_dir().unwrap().join(".cache/uv");
+    let cache = Cache::from_settings(false, Some(cache_dir))?.init()?;
+    let capabilities = IndexCapabilities::default();
+    let client_builder = BaseClientBuilder::default();
+
+    // Initialize the registry client.
+    let client = RegistryClientBuilder::new(client_builder, cache)
+        .index_locations(IndexLocations::default())
+        .build();
+    let concurrency = Concurrency::default();
+    let download_concurrency = Semaphore::new(concurrency.downloads);
+
     let (mut item_written, mut all_found, mut all_bumped, mut all_skipped) =
         (false, 0, 0, VersionDigit::default());
 
-    for toml_dir in tomls {
-        let pyproject_toml = Path::new(&toml_dir).join("pyproject.toml");
+    let mut all_latest_versions = FxHashMap::default();
+
+    for toml_dir in &tomls {
+        let pyproject_toml = Path::new(toml_dir).join("pyproject.toml");
         let content = match fs_err::tokio::read_to_string(pyproject_toml.clone()).await {
             Ok(content) => content,
             Err(err) => {
@@ -85,19 +103,6 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
                 return Ok(ExitStatus::Error);
             }
         };
-
-        #[allow(deprecated)]
-        let cache_dir = env::home_dir().unwrap().join(".cache/uv");
-        let cache = Cache::from_settings(false, Some(cache_dir))?.init()?;
-        let capabilities = IndexCapabilities::default();
-        let client_builder = BaseClientBuilder::new();
-
-        // Initialize the registry client.
-        let client = RegistryClientBuilder::try_from(client_builder)?
-            .cache(cache.clone().with_refresh(Refresh::All(Timestamp::now())))
-            .index_locations(&IndexLocations::default())
-            .build();
-        let download_concurrency = Semaphore::new(Concurrency::default().downloads);
 
         let python = args
             .python
@@ -122,17 +127,23 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
             requires_python: &requires_python,
         };
 
-        let find_latest = async |name: String| {
-            client
-                .find_latest(
-                    &PackageName::from_str(name.as_str()).unwrap(),
-                    None,
-                    &download_concurrency,
-                )
-                .await
-                .ok()
-                .flatten()
-                .map(DistFilename::into_version)
+        let find_latest = async |names: &FxHashSet<PackageName>| {
+            let mut fetches = futures::stream::iter(names.iter())
+                .map(async |name| {
+                    let latest = client
+                        .find_latest(name, None, &download_concurrency)
+                        .await?;
+                    Ok::<(&PackageName, Option<DistFilename>), uv_client::Error>((name, latest))
+                })
+                .buffer_unordered(concurrency.downloads);
+
+            let mut map = FxHashMap::default();
+            while let Ok(Some((package, version))) = fetches.next().await.transpose() {
+                if let Some(version) = version.as_ref() {
+                    map.insert(package.clone(), version.clone().into_version());
+                }
+            }
+            map
         };
 
         let relative = if toml_dir == "." {
@@ -142,9 +153,17 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
         };
         let subpath = format!("{relative}pyproject.toml");
         let mut skipped = VersionDigit::default();
-        let (found, upgrades) = toml
-            .upgrade_all_dependencies(&find_latest, &tables, &allow, &mut skipped)
-            .await;
+
+        let versioned = toml.find_versioned_dependencies();
+        let query_versions = versioned
+            .into_iter()
+            .filter(|p| !all_latest_versions.contains_key(p))
+            .collect();
+        let latest_versions = find_latest(&query_versions).await;
+        all_latest_versions.extend(latest_versions.clone());
+
+        let (found, upgrades) =
+            toml.upgrade_all_dependencies(&latest_versions, &tables, &allow, &mut skipped);
         all_skipped.add_other(&skipped);
         let bumped = upgrades.len();
         all_found += found;
@@ -215,7 +234,7 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
             }
             writeln!(
                 printer.stderr(),
-                "{info} Upgraded {subpath} 🚀 Check manually, update lock + venv {} and run tests{}",
+                "{info} Upgraded {subpath} 🚀 Check manually, update {} and run tests{}",
                 "`uv sync -U`".green().bold(),
                 skipped.format(" (skipped ", ")")
             )?;
@@ -226,27 +245,47 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
             item_written = true;
         }
     }
-    if args.recursive && all_bumped == 0 {
-        if all_found == 0 {
-            writeln!(printer.stderr(), "{info} No dependencies found recursively")?;
+    let files = format!(
+        "{} file{}",
+        tomls.len(),
+        if tomls.len() == 1 { "" } else { "s" }
+    );
+    if args.recursive {
+        if tomls.is_empty() {
+            warn_user!("No pyproject.toml files found recursively");
+            return Ok(ExitStatus::Error);
+        } else if all_bumped == 0 {
+            if all_found == 0 {
+                writeln!(
+                    printer.stderr(),
+                    "{info} No dependencies in {files} found recursively"
+                )?;
+            } else {
+                writeln!(
+                    printer.stderr(),
+                    "{info} No upgrades in {all_found} dependencies and {files} found, check manually if not committed yet{}",
+                    all_skipped.format(" (skipped ", ")")
+                )?;
+            }
+        } else if !all_skipped.is_empty() {
+            writeln!(
+                printer.stderr(),
+                "{info} Skipped {all_skipped} in {all_bumped} upgrades for --allow={}",
+                allow
+                    .iter()
+                    .sorted()
+                    .map(std::string::ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )?;
         } else {
             writeln!(
                 printer.stderr(),
-                "{info} No upgrades found recursively, check manually if not committed yet{}",
+                "{info} Upgraded {all_bumped} dependencies in {files} 🚀 Check manually, update {} and run tests{}",
+                "`uv sync -U`".green().bold(),
                 all_skipped.format(" (skipped ", ")")
             )?;
         }
-    } else if args.recursive && !all_skipped.is_empty() {
-        writeln!(
-            printer.stderr(),
-            "{info} Skipped {all_skipped} in {all_bumped} upgrades for --allow={}",
-            allow
-                .iter()
-                .sorted()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
-        )?;
     }
 
     Ok(ExitStatus::Success)
