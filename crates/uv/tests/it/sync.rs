@@ -380,7 +380,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
 
     // Running `uv sync --no-dev` should ideally succeed, locking for Python 3.8.
     // ...but once we pick the 3.8 interpreter the lock freaks out because it sees
-    // that the dependency-group containing sphinx will never succesfully install,
+    // that the dependency-group containing sphinx will never successfully install,
     // even though it's not enabled!
     uv_snapshot!(context.filters(), context.sync()
         .arg("--no-dev"), @r"
@@ -523,7 +523,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
 
     // Running `uv sync` should ideally succeed, locking for Python 3.8.
     // ...but once we pick the 3.8 interpreter the lock freaks out because it sees
-    // that the dependency-group containing sphinx will never succesfully install,
+    // that the dependency-group containing sphinx will never successfully install,
     // even though it's not enabled, or even a default!
     uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
