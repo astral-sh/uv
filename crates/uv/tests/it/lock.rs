@@ -4536,9 +4536,10 @@ fn lock_requires_python_exact() -> Result<()> {
 }
 
 /// Lock a requirement from PyPI with a compatible release Python bound.
+#[cfg(feature = "python-patch")]
 #[test]
 fn lock_requires_python_compatible_specifier() -> Result<()> {
-    let context = TestContext::new("3.12");
+    let context = TestContext::new("3.13.0");
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -4546,7 +4547,7 @@ fn lock_requires_python_compatible_specifier() -> Result<()> {
         [project]
         name = "warehouse"
         version = "1.0.0"
-        requires-python = "~=3.12"
+        requires-python = "~=3.13"
         "#,
     )?;
 
@@ -4556,7 +4557,7 @@ fn lock_requires_python_compatible_specifier() -> Result<()> {
     ----- stdout -----
 
     ----- stderr -----
-    warning: The release specifier (`~=3.12`) contains a compatible release match without a patch version. This will be interpreted as `>=3.12, <4`. Did you mean `~=3.12.[X]` to freeze the minor version?
+    warning: The release specifier (`~=3.13`) contains a compatible release match without a patch version. This will be interpreted as `>=3.13, <4`. Did you mean `~=3.13.0` to freeze the minor version?
     Resolved 1 package in [TIME]
     "###);
 
@@ -4565,7 +4566,7 @@ fn lock_requires_python_compatible_specifier() -> Result<()> {
         [project]
         name = "warehouse"
         version = "1.0.0"
-        requires-python = "~=3.12, <3.13"
+        requires-python = "~=3.13, <3.14"
         "#,
     )?;
 
@@ -4583,7 +4584,7 @@ fn lock_requires_python_compatible_specifier() -> Result<()> {
         [project]
         name = "warehouse"
         version = "1.0.0"
-        requires-python = "~=3.12.0"
+        requires-python = "~=3.13.0"
         "#,
     )?;
 
