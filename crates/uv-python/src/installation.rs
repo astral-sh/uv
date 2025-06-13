@@ -533,11 +533,11 @@ impl PythonInstallationMinorVersionKey {
     /// [`PythonInstallationMinorVersionKey`] to the installation with highest [`PythonInstallationKey`]
     /// for that minor version key.
     #[inline]
-    pub fn highest_installations_by_minor_version_key<I>(
+    pub fn highest_installations_by_minor_version_key<'a, I>(
         installations: I,
     ) -> FxHashMap<Self, ManagedPythonInstallation>
     where
-        I: IntoIterator<Item = ManagedPythonInstallation>,
+        I: IntoIterator<Item = &'a ManagedPythonInstallation>,
     {
         let mut minor_versions = FxHashMap::default();
         for installation in installations {
