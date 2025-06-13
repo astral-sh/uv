@@ -51,7 +51,7 @@ use crate::commands::project::lock_target::LockTarget;
 use crate::commands::project::{
     EnvironmentSpecification, PreferenceSource, ProjectEnvironment, ProjectError,
     ScriptEnvironment, ScriptInterpreter, UniversalState, WorkspacePython,
-    default_dependency_groups, script_specification, update_environment,
+    default_dependency_groups, default_extras, script_specification, update_environment,
     validate_project_requires_python,
 };
 use crate::commands::reporters::PythonDownloadReporter;
@@ -683,7 +683,7 @@ hint: If you are running a script with `{}` in the shebang, you may need to incl
                 let default_groups = default_dependency_groups(project.pyproject_toml())?;
 
                 // Determine the default extras to include.
-                let default_extras = DefaultExtras::default();
+                let default_extras = default_extras(project.pyproject_toml())?;
 
                 // Determine the lock mode.
                 let mode = if frozen {

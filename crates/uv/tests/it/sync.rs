@@ -2145,6 +2145,382 @@ fn sync_non_existent_default_group() -> Result<()> {
 }
 
 #[test]
+fn sync_default_extras() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [project.optional-dependencies]
+        dev = ["iniconfig"]
+        foo = ["anyio"]
+        bar = ["requests"]
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // Only the main dependencies should be installed.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + typing-extensions==4.10.0
+    ");
+
+    // If we set a different default extras, it should be synced instead.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [project.optional-dependencies]
+        dev = ["iniconfig"]
+        foo = ["anyio"]
+        bar = ["requests"]
+
+        [tool.uv]
+        default-extras = ["foo"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + sniffio==1.3.1
+    "###);
+
+    // `--no-extra` should remove from the defaults.
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [project.optional-dependencies]
+        dev = ["iniconfig"]
+        foo = ["anyio"]
+        bar = ["requests"]
+
+        [tool.uv]
+        default-extras = ["foo"]
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--no-extra").arg("foo"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 3 packages in [TIME]
+     - anyio==4.3.0
+     - idna==3.6
+     - sniffio==1.3.1
+    "###);
+
+    // Using `--extra` should include the defaults
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 4 packages in [TIME]
+     + anyio==4.3.0
+     + idna==3.6
+     + iniconfig==2.0.0
+     + sniffio==1.3.1
+    ");
+
+    // Using `--all-extras` should include the defaults
+    uv_snapshot!(context.filters(), context.sync().arg("--all-extras"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Prepared 4 packages in [TIME]
+    Installed 4 packages in [TIME]
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + requests==2.31.0
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--only-extra` should exclude the defaults
+    uv_snapshot!(context.filters(), context.sync().arg("--only-extra").arg("dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 7 packages in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - urllib3==2.2.1
+    ");
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-extras"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 7 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    ");
+
+    // Using `--no-default-extras` should exclude all extras.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-extras"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 8 packages in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - iniconfig==2.0.0
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - urllib3==2.2.1
+    "###);
+
+    uv_snapshot!(context.filters(), context.sync().arg("--all-extras"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--no-default-extras` with `--extra foo` and `--extras bar` should include those
+    // extras.
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-extras").arg("--extra").arg("foo").arg("--extra").arg("bar"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 1 package in [TIME]
+     - iniconfig==2.0.0
+    "###);
+
+    Ok(())
+}
+
+/// default-extras = "all" sugar works
+#[test]
+fn sync_default_extras_all() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "myproject"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [project.optional-dependencies]
+        dev = ["iniconfig"]
+        foo = ["anyio"]
+        bar = ["requests"]
+
+        [tool.uv]
+        default-extras = "all"
+        "#,
+    )?;
+
+    context.lock().assert().success();
+
+    // groups = "all" should behave like --all-extras in contexts where defaults exist
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Prepared 9 packages in [TIME]
+    Installed 9 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+     + urllib3==2.2.1
+    ");
+
+    // Using `--no-default-extras` should still work
+    uv_snapshot!(context.filters(), context.sync().arg("--no-default-extras"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 8 packages in [TIME]
+     - anyio==4.3.0
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - idna==3.6
+     - iniconfig==2.0.0
+     - requests==2.31.0
+     - sniffio==1.3.1
+     - urllib3==2.2.1
+    ");
+
+    // Using `--all-extras` should be redundant and work fine
+    uv_snapshot!(context.filters(), context.sync().arg("--all-extras"), @r###"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Installed 8 packages in [TIME]
+     + anyio==4.3.0
+     + certifi==2024.2.2
+     + charset-normalizer==3.3.2
+     + idna==3.6
+     + iniconfig==2.0.0
+     + requests==2.31.0
+     + sniffio==1.3.1
+     + urllib3==2.2.1
+    "###);
+
+    // Using `--extra` should be redundant and still work fine
+    uv_snapshot!(context.filters(), context.sync().arg("--extra").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Audited 9 packages in [TIME]
+    ");
+
+    // Using `--only-extra` should still disable defaults
+    uv_snapshot!(context.filters(), context.sync().arg("--only-extra").arg("foo"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    Uninstalled 5 packages in [TIME]
+     - certifi==2024.2.2
+     - charset-normalizer==3.3.2
+     - iniconfig==2.0.0
+     - requests==2.31.0
+     - urllib3==2.2.1
+    ");
+
+    Ok(())
+}
+
+/// default-extras = "gibberish" error
+#[test]
+fn sync_default_extras_gibberish() -> Result<()> {
+    let context = TestContext::new("3.12");
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["typing-extensions"]
+
+        [project.optional-dependencies]
+        dev = ["iniconfig"]
+        foo = ["anyio"]
+        bar = ["requests"]
+
+        [tool.uv]
+        default-extras = "gibberish"
+        "#,
+    )?;
+
+    uv_snapshot!(context.filters(), context.sync(), @r#"
+    success: false
+    exit_code: 2
+    ----- stdout -----
+
+    ----- stderr -----
+    error: Failed to parse: `pyproject.toml`
+      Caused by: TOML parse error at line 14, column 26
+       |
+    14 |         default-extras = "gibberish"
+       |                          ^^^^^^^^^^^
+    default-extras must be "all" or a ["list", "of", "extras"]
+    "#);
+
+    Ok(())
+}
+
+#[test]
 fn sync_default_groups() -> Result<()> {
     let context = TestContext::new("3.12");
 

@@ -174,14 +174,17 @@ uv run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p></dd><dt id="uv-run--no-cache"><a href="#uv-run--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p></dd><dt id="uv-run--no-config"><a href="#uv-run--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
-<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-run--no-default-groups"><a href="#uv-run--no-default-groups"><code>--no-default-groups</code></a></dt><dd><p>Ignore the default dependency groups.</p>
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-run--no-default-extras"><a href="#uv-run--no-default-extras"><code>--no-default-extras</code></a></dt><dd><p>Ignore the default extras.</p>
+<p>uv includes the extras defined in <code>tool.uv.default-extras</code> by default. This disables that option, however, specific extras can still be included with <code>--extra</code>.</p>
+</dd><dt id="uv-run--no-default-groups"><a href="#uv-run--no-default-groups"><code>--no-default-groups</code></a></dt><dd><p>Ignore the default dependency groups.</p>
 <p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 </dd><dt id="uv-run--no-dev"><a href="#uv-run--no-dev"><code>--no-dev</code></a></dt><dd><p>Disable the development dependency group.</p>
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
 <p>This option is only available when running in a project.</p>
 </dd><dt id="uv-run--no-editable"><a href="#uv-run--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
 <p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p></dd><dt id="uv-run--no-env-file"><a href="#uv-run--no-env-file"><code>--no-env-file</code></a></dt><dd><p>Avoid reading environment variables from a <code>.env</code> file</p>
-<p>May also be set with the <code>UV_NO_ENV_FILE</code> environment variable.</p></dd><dt id="uv-run--no-extra"><a href="#uv-run--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
+<p>May also be set with the <code>UV_NO_ENV_FILE</code> environment variable.</p></dd><dt id="uv-run--no-extra"><a href="#uv-run--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Disable the specified extra.</p>
+<p>This options always takes precedence over default extras, <code>--all-extras</code>, and <code>--extra</code>.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-run--no-group"><a href="#uv-run--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 <p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
@@ -203,6 +206,8 @@ uv run [OPTIONS] [COMMAND]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-run--only-dev"><a href="#uv-run--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
+</dd><dt id="uv-run--only-extra"><a href="#uv-run--only-extra"><code>--only-extra</code></a> <i>only-extra</i></dt><dd><p>Only include dependencies from the specified extra.</p>
+<p>May be provided multiple times. Implies <code>--no-default-extras</code>.</p>
 </dd><dt id="uv-run--only-group"><a href="#uv-run--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
@@ -1069,12 +1074,15 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p></dd><dt id="uv-sync--no-cache"><a href="#uv-sync--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p></dd><dt id="uv-sync--no-config"><a href="#uv-sync--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
-<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-sync--no-default-groups"><a href="#uv-sync--no-default-groups"><code>--no-default-groups</code></a></dt><dd><p>Ignore the default dependency groups.</p>
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-sync--no-default-extras"><a href="#uv-sync--no-default-extras"><code>--no-default-extras</code></a></dt><dd><p>Ignore the default extras.</p>
+<p>uv includes the extras defined in <code>tool.uv.default-extras</code> by default. This disables that option, however, specific extras can still be included with <code>--extra</code>.</p>
+</dd><dt id="uv-sync--no-default-groups"><a href="#uv-sync--no-default-groups"><code>--no-default-groups</code></a></dt><dd><p>Ignore the default dependency groups.</p>
 <p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 </dd><dt id="uv-sync--no-dev"><a href="#uv-sync--no-dev"><code>--no-dev</code></a></dt><dd><p>Disable the development dependency group.</p>
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
 </dd><dt id="uv-sync--no-editable"><a href="#uv-sync--no-editable"><code>--no-editable</code></a></dt><dd><p>Install any editable dependencies, including the project and any workspace members, as non-editable</p>
-<p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p></dd><dt id="uv-sync--no-extra"><a href="#uv-sync--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
+<p>May also be set with the <code>UV_NO_EDITABLE</code> environment variable.</p></dd><dt id="uv-sync--no-extra"><a href="#uv-sync--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Disable the specified extra.</p>
+<p>This options always takes precedence over default extras, <code>--all-extras</code>, and <code>--extra</code>.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-sync--no-group"><a href="#uv-sync--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 <p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
@@ -1097,6 +1105,8 @@ uv sync [OPTIONS]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-sync--only-dev"><a href="#uv-sync--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
+</dd><dt id="uv-sync--only-extra"><a href="#uv-sync--only-extra"><code>--only-extra</code></a> <i>only-extra</i></dt><dd><p>Only include dependencies from the specified extra.</p>
+<p>May be provided multiple times. Implies <code>--no-default-extras</code>.</p>
 </dd><dt id="uv-sync--only-group"><a href="#uv-sync--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
@@ -1430,7 +1440,9 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_NO_BUILD_PACKAGE</code> environment variable.</p></dd><dt id="uv-export--no-cache"><a href="#uv-export--no-cache"><code>--no-cache</code></a>, <code>--no-cache-dir</code>, <code>-n</code></dt><dd><p>Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation</p>
 <p>May also be set with the <code>UV_NO_CACHE</code> environment variable.</p></dd><dt id="uv-export--no-config"><a href="#uv-export--no-config"><code>--no-config</code></a></dt><dd><p>Avoid discovering configuration files (<code>pyproject.toml</code>, <code>uv.toml</code>).</p>
 <p>Normally, configuration files are discovered in the current directory, parent directories, or user configuration directories.</p>
-<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-export--no-default-groups"><a href="#uv-export--no-default-groups"><code>--no-default-groups</code></a></dt><dd><p>Ignore the default dependency groups.</p>
+<p>May also be set with the <code>UV_NO_CONFIG</code> environment variable.</p></dd><dt id="uv-export--no-default-extras"><a href="#uv-export--no-default-extras"><code>--no-default-extras</code></a></dt><dd><p>Ignore the default extras.</p>
+<p>uv includes the extras defined in <code>tool.uv.default-extras</code> by default. This disables that option, however, specific extras can still be included with <code>--extra</code>.</p>
+</dd><dt id="uv-export--no-default-groups"><a href="#uv-export--no-default-groups"><code>--no-default-groups</code></a></dt><dd><p>Ignore the default dependency groups.</p>
 <p>uv includes the groups defined in <code>tool.uv.default-groups</code> by default. This disables that option, however, specific groups can still be included with <code>--group</code>.</p>
 </dd><dt id="uv-export--no-dev"><a href="#uv-export--no-dev"><code>--no-dev</code></a></dt><dd><p>Disable the development dependency group.</p>
 <p>This option is an alias of <code>--no-group dev</code>. See <code>--no-default-groups</code> to disable all default groups instead.</p>
@@ -1441,7 +1453,8 @@ uv export [OPTIONS]
 <p>By default, the current project is included in the exported requirements file with all of its dependencies. The <code>--no-emit-project</code> option allows the project to be excluded, but all of its dependencies to remain included.</p>
 </dd><dt id="uv-export--no-emit-workspace"><a href="#uv-export--no-emit-workspace"><code>--no-emit-workspace</code></a>, <code>--no-install-workspace</code></dt><dd><p>Do not emit any workspace members, including the root project.</p>
 <p>By default, all workspace members and their dependencies are included in the exported requirements file, with all of their dependencies. The <code>--no-emit-workspace</code> option allows exclusion of all the workspace members while retaining their dependencies.</p>
-</dd><dt id="uv-export--no-extra"><a href="#uv-export--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Exclude the specified optional dependencies, if <code>--all-extras</code> is supplied.</p>
+</dd><dt id="uv-export--no-extra"><a href="#uv-export--no-extra"><code>--no-extra</code></a> <i>no-extra</i></dt><dd><p>Disable the specified extra.</p>
+<p>This options always takes precedence over default extras, <code>--all-extras</code>, and <code>--extra</code>.</p>
 <p>May be provided multiple times.</p>
 </dd><dt id="uv-export--no-group"><a href="#uv-export--no-group"><code>--no-group</code></a> <i>no-group</i></dt><dd><p>Disable the specified dependency group.</p>
 <p>This option always takes precedence over default groups, <code>--all-groups</code>, and <code>--group</code>.</p>
@@ -1460,6 +1473,8 @@ uv export [OPTIONS]
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-export--only-dev"><a href="#uv-export--only-dev"><code>--only-dev</code></a></dt><dd><p>Only include the development dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>This option is an alias for <code>--only-group dev</code>. Implies <code>--no-default-groups</code>.</p>
+</dd><dt id="uv-export--only-extra"><a href="#uv-export--only-extra"><code>--only-extra</code></a> <i>only-extra</i></dt><dd><p>Only include dependencies from the specified extra.</p>
+<p>May be provided multiple times. Implies <code>--no-default-extras</code>.</p>
 </dd><dt id="uv-export--only-group"><a href="#uv-export--only-group"><code>--only-group</code></a> <i>only-group</i></dt><dd><p>Only include dependencies from the specified dependency group.</p>
 <p>The project and its dependencies will be omitted.</p>
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>

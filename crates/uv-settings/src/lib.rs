@@ -216,6 +216,12 @@ fn validate_uv_toml(path: &Path, options: &Options) -> Result<(), Error> {
             "default-groups",
         ));
     }
+    if options.default_extras.is_some() {
+        return Err(Error::PyprojectOnlyField(
+            path.to_path_buf(),
+            "default-extras",
+        ));
+    }
     if options.managed.is_some() {
         return Err(Error::PyprojectOnlyField(path.to_path_buf(), "managed"));
     }

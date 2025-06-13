@@ -13,7 +13,7 @@ use uv_cache_key::cache_digest;
 use uv_client::{BaseClientBuilder, FlatIndexClient, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyGroupsWithDefaults, DryRun, ExtrasSpecification,
-    PreviewMode, Reinstall, SourceStrategy, Upgrade,
+    ExtrasSpecificationWithDefaults, PreviewMode, Reinstall, SourceStrategy, Upgrade,
 };
 use uv_dispatch::{BuildDispatch, SharedState};
 use uv_distribution::{DistributionDatabase, LoweredRequirement};
@@ -23,7 +23,9 @@ use uv_distribution_types::{
 use uv_fs::{CWD, LockedFile, Simplified};
 use uv_git::ResolvedRepositoryReference;
 use uv_installer::{SatisfiesResult, SitePackages};
-use uv_normalize::{DEV_DEPENDENCIES, DefaultGroups, ExtraName, GroupName, PackageName};
+use uv_normalize::{
+    DEV_DEPENDENCIES, DefaultExtras, DefaultGroups, ExtraName, GroupName, PackageName,
+};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerTreeContents;
 use uv_pypi_types::{ConflictPackage, ConflictSet, Conflicts};
@@ -173,6 +175,11 @@ pub(crate) enum ProjectError {
 
     #[error("PEP 723 scripts do not support dependency groups, but group `{0}` was specified")]
     MissingGroupScript(GroupName),
+
+    #[error(
+        "Default extra `{0}` (from `tool.uv.default-extras`) is not defined in the project's `optional-dependencies` table"
+    )]
+    MissingDefaultExtra(ExtraName),
 
     #[error(
         "Default group `{0}` (from `tool.uv.default-groups`) is not defined in the project's `dependency-groups` table"
@@ -2428,12 +2435,40 @@ pub(crate) fn default_dependency_groups(
     }
 }
 
+/// Returns the default extras from the [`PyProjectToml`].
+#[allow(clippy::result_large_err)]
+pub(crate) fn default_extras(
+    pyproject_toml: &PyProjectToml,
+) -> Result<DefaultExtras, ProjectError> {
+    if let Some(defaults) = pyproject_toml
+        .tool
+        .as_ref()
+        .and_then(|tool| tool.uv.as_ref().and_then(|uv| uv.default_extras.as_ref()))
+    {
+        if let DefaultExtras::List(defaults) = defaults {
+            for extra in defaults {
+                if pyproject_toml
+                    .project
+                    .as_ref()
+                    .and_then(|project| project.optional_dependencies.as_ref())
+                    .is_none_or(|extras| !extras.contains_key(extra))
+                {
+                    return Err(ProjectError::MissingDefaultExtra(extra.clone()));
+                }
+            }
+        }
+        Ok(defaults.clone())
+    } else {
+        Ok(DefaultExtras::default())
+    }
+}
+
 /// Validate that we aren't trying to install extras or groups that
 /// are declared as conflicting.
 #[allow(clippy::result_large_err)]
 pub(crate) fn detect_conflicts(
     lock: &Lock,
-    extras: &ExtrasSpecification,
+    extras: &ExtrasSpecificationWithDefaults,
     dev: &DependencyGroupsWithDefaults,
 ) -> Result<(), ProjectError> {
     // Note that we need to collect all extras and groups that match in
