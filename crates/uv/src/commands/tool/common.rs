@@ -23,7 +23,7 @@ use uv_python::{
 use uv_settings::{PythonInstallMirrors, ToolOptions};
 use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
-use uv_warnings::warn_user;
+use uv_warnings::warn_user_once;
 
 use crate::commands::pip;
 use crate::commands::project::ProjectError;
@@ -320,27 +320,27 @@ fn warn_out_of_path(executable_directory: &Path) {
         if let Some(shell) = Shell::from_env() {
             if let Some(command) = shell.prepend_path(executable_directory) {
                 if shell.supports_update() {
-                    warn_user!(
+                    warn_user_once!(
                         "`{}` is not on your PATH. To use installed tools, run `{}` or `{}`.",
                         executable_directory.simplified_display().cyan(),
                         command.green(),
                         "uv tool update-shell".green()
                     );
                 } else {
-                    warn_user!(
+                    warn_user_once!(
                         "`{}` is not on your PATH. To use installed tools, run `{}`.",
                         executable_directory.simplified_display().cyan(),
                         command.green()
                     );
                 }
             } else {
-                warn_user!(
+                warn_user_once!(
                     "`{}` is not on your PATH. To use installed tools, add the directory to your PATH.",
                     executable_directory.simplified_display().cyan(),
                 );
             }
         } else {
-            warn_user!(
+            warn_user_once!(
                 "`{}` is not on your PATH. To use installed tools, add the directory to your PATH.",
                 executable_directory.simplified_display().cyan(),
             );
