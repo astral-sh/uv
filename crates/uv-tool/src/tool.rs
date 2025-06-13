@@ -102,7 +102,6 @@ impl TryFrom<ToolWire> for Tool {
 pub struct ToolEntrypoint {
     pub name: String,
     pub install_path: PathBuf,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub from: Option<String>,
 }
 
