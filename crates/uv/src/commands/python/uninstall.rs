@@ -232,7 +232,7 @@ async fn do_uninstall(
     let remaining_installations: Vec<_> = installations.find_all()?.collect();
     let remaining_minor_versions =
         PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
-            remaining_installations,
+            remaining_installations.iter(),
         );
 
     for (_, installation) in remaining_minor_versions
@@ -249,7 +249,7 @@ async fn do_uninstall(
             if let Some(minor_version_link) =
                 PythonMinorVersionLink::from_installation(installation, preview)
             {
-                if minor_version_link.symlink_exists() {
+                if minor_version_link.exists() {
                     let result = if cfg!(windows) {
                         fs_err::remove_dir(minor_version_link.symlink_directory.as_path())
                     } else {

@@ -31,8 +31,7 @@ use crate::platform::Error as PlatformError;
 use crate::platform::{Arch, Libc, Os};
 use crate::python_version::PythonVersion;
 use crate::{
-    Interpreter, PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib,
-    sysconfig,
+    PythonInstallationMinorVersionKey, PythonRequest, PythonVariant, macos_dylib, sysconfig,
 };
 
 #[derive(Error, Debug)]
@@ -59,8 +58,8 @@ pub enum Error {
     },
     #[error("Missing expected Python executable at {}", _0.user_display())]
     MissingExecutable(PathBuf),
-    #[error("Missing expected target directory for link at {}", _0.user_display())]
-    MissingLinkTargetDirectory(PathBuf),
+    #[error("Missing expected target directory for Python minor version link at {}", _0.user_display())]
+    MissingPythonMinorVersionLinkTargetDirectory(PathBuf),
     #[error("Failed to create canonical Python executable at {} from {}", to.user_display(), from.user_display())]
     CanonicalizeExecutable {
         from: PathBuf,
@@ -75,8 +74,8 @@ pub enum Error {
         #[source]
         err: io::Error,
     },
-    #[error("Failed to create Python executable link directory at {} from {}", to.user_display(), from.user_display())]
-    ExecutableLinkDirectory {
+    #[error("Failed to create Python minor version link directory at {} from {}", to.user_display(), from.user_display())]
+    PythonMinorVersionLinkDirectory {
         from: PathBuf,
         to: PathBuf,
         #[source]
@@ -745,10 +744,8 @@ impl PythonMinorVersionLink {
         // If preview mode is disabled, still return a `MinorVersionSymlink` for
         // existing symlinks, allowing continued operations without the `--preview`
         // flag after initial symlink directory installation.
-        if preview.is_disabled() {
-            if !minor_version_link.symlink_exists() {
-                return None;
-            }
+        if preview.is_disabled() && !minor_version_link.exists() {
+            return None;
         }
         Some(minor_version_link)
     }
@@ -760,14 +757,6 @@ impl PythonMinorVersionLink {
         PythonMinorVersionLink::from_executable(
             installation.executable(false).as_path(),
             installation.key(),
-            preview,
-        )
-    }
-
-    pub fn from_interpreter(interpreter: &Interpreter, preview: PreviewMode) -> Option<Self> {
-        PythonMinorVersionLink::from_executable(
-            interpreter.sys_executable(),
-            &interpreter.key(),
             preview,
         )
     }
@@ -785,13 +774,13 @@ impl PythonMinorVersionLink {
                 );
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                return Err(Error::MissingLinkTargetDirectory(
+                return Err(Error::MissingPythonMinorVersionLinkTargetDirectory(
                     self.target_directory.clone(),
                 ));
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
             Err(err) => {
-                return Err(Error::ExecutableLinkDirectory {
+                return Err(Error::PythonMinorVersionLinkDirectory {
                     from: self.symlink_directory.clone(),
                     to: self.target_directory.clone(),
                     err,
@@ -801,7 +790,7 @@ impl PythonMinorVersionLink {
         Ok(())
     }
 
-    pub fn symlink_exists(&self) -> bool {
+    pub fn exists(&self) -> bool {
         #[cfg(unix)]
         {
             self.symlink_directory
@@ -825,7 +814,7 @@ impl PythonMinorVersionLink {
 /// Derive the full path to an executable from the given base path and executable
 /// name. On Unix, this is, e.g., `<base>/bin/python3.10`. On Windows, this is,
 /// e.g., `<base>\python.exe`.
-pub fn executable_path_from_base(
+fn executable_path_from_base(
     base: &Path,
     executable_name: &str,
     implementation: &LenientImplementationName,
@@ -844,26 +833,26 @@ pub fn executable_path_from_base(
     }
 }
 
-/// Create a link to the managed Python executable.
+/// Create a link to a managed Python executable.
 ///
-/// If the file already exists at the target path, an error will be returned.
-pub fn create_bin_link(target: &Path, executable: PathBuf) -> Result<(), Error> {
-    let bin = target.parent().ok_or(Error::NoExecutableDirectory)?;
-    fs_err::create_dir_all(bin).map_err(|err| Error::ExecutableDirectory {
-        to: bin.to_path_buf(),
+/// If the file already exists at the link path, an error will be returned.
+pub fn create_link_to_executable(link: &Path, executable: PathBuf) -> Result<(), Error> {
+    let link_parent = link.parent().ok_or(Error::NoExecutableDirectory)?;
+    fs_err::create_dir_all(link_parent).map_err(|err| Error::ExecutableDirectory {
+        to: link_parent.to_path_buf(),
         err,
     })?;
 
     if cfg!(unix) {
         // Note this will never copy on Unix — we use it here to allow compilation on Windows
-        match symlink_or_copy_file(&executable, target) {
+        match symlink_or_copy_file(&executable, link) {
             Ok(()) => Ok(()),
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 Err(Error::MissingExecutable(executable.clone()))
             }
             Err(err) => Err(Error::LinkExecutable {
                 from: executable,
-                to: target.to_path_buf(),
+                to: link.to_path_buf(),
                 err,
             }),
         }
@@ -875,11 +864,11 @@ pub fn create_bin_link(target: &Path, executable: PathBuf) -> Result<(), Error> 
         // error context anyway
         #[allow(clippy::disallowed_types)]
         {
-            std::fs::File::create_new(target)
+            std::fs::File::create_new(link)
                 .and_then(|mut file| file.write_all(launcher.as_ref()))
                 .map_err(|err| Error::LinkExecutable {
                     from: executable,
-                    to: target.to_path_buf(),
+                    to: link.to_path_buf(),
                     err,
                 })
         }

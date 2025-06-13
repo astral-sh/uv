@@ -13,7 +13,7 @@ use tracing::debug;
 use uv_configuration::PreviewMode;
 use uv_fs::{CWD, Simplified, cachedir};
 use uv_pypi_types::Scheme;
-use uv_python::managed::{PythonMinorVersionLink, create_bin_link};
+use uv_python::managed::{PythonMinorVersionLink, create_link_to_executable};
 use uv_python::{Interpreter, VirtualEnvironment};
 use uv_shell::escape_posix_for_single_quotes;
 use uv_version::version;
@@ -153,20 +153,18 @@ pub(crate) fn create(
             &interpreter.key(),
             preview,
         ) {
-            if tracing::enabled!(tracing::Level::DEBUG) {
-                let debug_symlink_term = if cfg!(windows) {
-                    "junction"
-                } else {
-                    "symlink directory"
-                };
-                debug!(
-                    "Using {} {} instead of base Python path: {}",
-                    debug_symlink_term,
-                    &minor_version_link.symlink_directory.display(),
-                    &base_python.display()
-                );
-            }
-            if !minor_version_link.symlink_exists() {
+            let debug_symlink_term = if cfg!(windows) {
+                "junction"
+            } else {
+                "symlink directory"
+            };
+            debug!(
+                "Using {} {} instead of base Python path: {}",
+                debug_symlink_term,
+                &minor_version_link.symlink_directory.display(),
+                &base_python.display()
+            );
+            if !minor_version_link.exists() {
                 minor_version_link
                     .create_directory()
                     .map_err(Error::Python)?;
@@ -233,9 +231,11 @@ pub(crate) fn create(
     if cfg!(windows) {
         if interpreter.is_standalone() {
             let target = scripts.join(WindowsExecutable::Python.exe(interpreter));
-            create_bin_link(target.as_path(), executable_target.clone()).map_err(Error::Python)?;
+            create_link_to_executable(target.as_path(), executable_target.clone())
+                .map_err(Error::Python)?;
             let targetw = scripts.join(WindowsExecutable::Pythonw.exe(interpreter));
-            create_bin_link(targetw.as_path(), executable_target).map_err(Error::Python)?;
+            create_link_to_executable(targetw.as_path(), executable_target)
+                .map_err(Error::Python)?;
         } else {
             copy_launcher_windows(
                 WindowsExecutable::Python,
