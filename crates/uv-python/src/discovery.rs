@@ -1185,7 +1185,7 @@ pub(crate) fn find_python_installation(
 ///
 /// See [`find_python_installation`] for more details on installation discovery.
 #[instrument(skip_all, fields(request))]
-pub fn find_best_python_installation(
+pub(crate) fn find_best_python_installation(
     request: &PythonRequest,
     environments: EnvironmentPreference,
     preference: PythonPreference,
