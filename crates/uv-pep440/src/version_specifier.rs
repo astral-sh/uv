@@ -416,7 +416,7 @@ impl VersionSpecifier {
         &self.operator
     }
 
-    /// Get the version, e.g. `<=` in `<= 2.0.0`
+    /// Get the version, e.g. `2.0.0` in `<= 2.0.0`
     pub fn version(&self) -> &Version {
         &self.version
     }
@@ -614,6 +614,11 @@ impl VersionSpecifier {
             | Operator::NotEqualStar
             | Operator::NotEqual => false,
         }
+    }
+
+    /// Returns true if this is a `~=` specifier without a patch version (e.g. `~=3.11`).
+    pub fn is_tilde_without_patch(&self) -> bool {
+        self.operator == Operator::TildeEqual && self.version.release().len() == 2
     }
 }
 

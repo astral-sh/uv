@@ -130,11 +130,10 @@ impl From<VersionSpecifier> for Ranges<Version> {
 ///
 /// See: <https://github.com/pypa/pip/blob/a432c7f4170b9ef798a15f035f5dfdb4cc939f35/src/pip/_internal/resolution/resolvelib/candidates.py#L540>
 pub fn release_specifiers_to_ranges(specifiers: VersionSpecifiers) -> Ranges<Version> {
-    let mut range = Ranges::full();
-    for specifier in specifiers {
-        range = range.intersection(&release_specifier_to_range(specifier));
-    }
-    range
+    specifiers
+        .into_iter()
+        .map(release_specifier_to_range)
+        .fold(Ranges::full(), |acc, range| acc.intersection(&range))
 }
 
 /// Convert the [`VersionSpecifier`] to a PubGrub-compatible version range, using release-only
