@@ -94,7 +94,7 @@ def fetch_op_items(vault_name: str, env: Dict[str, str]) -> Dict[str, str]:
         # Only process items that match the registry naming pattern
         if item_title.startswith("UV_TEST_"):
             # Extract the registry name (e.g., "AWS" from "UV_TEST_AWS")
-            registry_name = item_title[8:]  # Remove "UV_TEST_" prefix
+            registry_name = item_title.removeprefix("UV_TEST_")
 
             # Get the item details
             item_details = subprocess.run(
@@ -164,7 +164,7 @@ url = "{registry_url}"
 default = true
 """
     pyproject_file = Path(project_dir) / "pyproject.toml"
-    pyproject_file.write_text(pyproject_content, encoding="utf-8")
+    pyproject_file.write_text(pyproject_content)
 
 
 def run_test(
