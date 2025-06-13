@@ -378,8 +378,10 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
-    // Running `uv sync --no-dev` should succeed, locking for Python 3.8.
-    // ...but it doesn't! HRM! Is this a bug in sync?
+    // Running `uv sync --no-dev` should ideally succeed, locking for Python 3.8.
+    // ...but once we pick the 3.8 interpreter the lock freaks out because it sees
+    // that the dependency-group containing sphinx will never succesfully install,
+    // even though it's not enabled!
     uv_snapshot!(context.filters(), context.sync()
         .arg("--no-dev"), @r"
     success: false
@@ -397,7 +399,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
           hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
-    // Running `uv sync` should fail, as now sphinx is involved
+    // Running `uv sync` should always fail, as now sphinx is involved
     uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
     exit_code: 1
@@ -430,6 +432,25 @@ fn group_requires_python_useful_defaults() -> Result<()> {
         "#,
     )?;
 
+    // Running `uv sync --no-dev` should succeed, still using the Python 3.8.
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--no-dev"), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 29 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + exceptiongroup==1.2.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // Running `uv sync` should succeed, bumping to Python 3.9 as sphinx is now involved.
     uv_snapshot!(context.filters(), context.sync(), @r"
     success: true
     exit_code: 0
@@ -440,7 +461,7 @@ fn group_requires_python_useful_defaults() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 29 packages in [TIME]
-    Prepared 27 packages in [TIME]
+    Prepared 22 packages in [TIME]
     Installed 27 packages in [TIME]
      + alabaster==0.7.16
      + anyio==4.3.0
@@ -500,8 +521,10 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     let init = src.child("__init__.py");
     init.touch()?;
 
-    // Running `uv sync` should succeed, locking for Python 3.8.
-    // ...but it doesn't! HRM! Is this a bug in sync?
+    // Running `uv sync` should ideally succeed, locking for Python 3.8.
+    // ...but once we pick the 3.8 interpreter the lock freaks out because it sees
+    // that the dependency-group containing sphinx will never succesfully install,
+    // even though it's not enabled, or even a default!
     uv_snapshot!(context.filters(), context.sync(), @r"
     success: false
     exit_code: 1
@@ -518,7 +541,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
           hint: The `requires-python` value (>=3.8) includes Python versions that are not supported by your dependencies (e.g., sphinx==7.2.6 only supports >=3.9). Consider using a more restrictive `requires-python` value (like >=3.9).
     ");
 
-    // Running `uv sync --group mygroup` should fail, as now sphinx is involved
+    // Running `uv sync --group mygroup` should definitely fail, as now sphinx is involved
     uv_snapshot!(context.filters(), context.sync()
         .arg("--group").arg("mygroup"), @r"
     success: false
@@ -552,6 +575,25 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
         "#,
     )?;
 
+    // Running `uv sync` should succeed, locking for the previous picked Python 3.8.
+    uv_snapshot!(context.filters(), context.sync(), @r"
+    success: true
+    exit_code: 0
+    ----- stdout -----
+
+    ----- stderr -----
+    Resolved 29 packages in [TIME]
+    Prepared 5 packages in [TIME]
+    Installed 5 packages in [TIME]
+     + anyio==4.3.0
+     + exceptiongroup==1.2.0
+     + idna==3.6
+     + sniffio==1.3.1
+     + typing-extensions==4.10.0
+    ");
+
+    // Running `uv sync --group mygroup` should pass, bumping the interpreter to 3.9,
+    // as the group requires-python saves us
     uv_snapshot!(context.filters(), context.sync()
         .arg("--group").arg("mygroup"), @r"
     success: true
@@ -563,7 +605,7 @@ fn group_requires_python_useful_non_defaults() -> Result<()> {
     Removed virtual environment at: .venv
     Creating virtual environment at: .venv
     Resolved 29 packages in [TIME]
-    Prepared 27 packages in [TIME]
+    Prepared 22 packages in [TIME]
     Installed 27 packages in [TIME]
      + alabaster==0.7.16
      + anyio==4.3.0
