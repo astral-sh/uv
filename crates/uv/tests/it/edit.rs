@@ -11453,11 +11453,6 @@ fn add_missing_package_on_pytorch() -> Result<()> {
 #[tokio::test]
 async fn add_unexpected_error_code() -> Result<()> {
     let context = TestContext::new("3.12");
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain([(r"127\.0\.0\.1(?::\d+)?", "[LOCALHOST]")])
-        .collect::<Vec<_>>();
 
     let server = MockServer::start().await;
 
@@ -11476,7 +11471,7 @@ async fn add_unexpected_error_code() -> Result<()> {
         "#
     })?;
 
-    uv_snapshot!(filters, context.add().arg("anyio").arg("--index").arg(server.uri()), @r"
+    uv_snapshot!(context.filters(), context.add().arg("anyio").arg("--index").arg(server.uri()), @r"
     success: false
     exit_code: 2
     ----- stdout -----
