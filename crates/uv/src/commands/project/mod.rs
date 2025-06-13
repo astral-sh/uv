@@ -110,21 +110,27 @@ pub(crate) enum ProjectError {
 
     #[error(
         "The requested interpreter resolved to Python {_0}, which is incompatible with the project's Python requirement: `{_1}`{}",
-        format_optional_requires_python_sources(_2)
+        format_optional_requires_python_sources(_2, *_3)
     )]
-    RequestedPythonProjectIncompatibility(Version, RequiresPython, RequiresPythonSources),
+    RequestedPythonProjectIncompatibility(Version, RequiresPython, RequiresPythonSources, bool),
 
     #[error(
         "The Python request from `{_0}` resolved to Python {_1}, which is incompatible with the project's Python requirement: `{_2}`{}\nUse `uv python pin` to update the `.python-version` file to a compatible version",
-        format_optional_requires_python_sources(_3)
+        format_optional_requires_python_sources(_3, *_4)
     )]
-    DotPythonVersionProjectIncompatibility(String, Version, RequiresPython, RequiresPythonSources),
+    DotPythonVersionProjectIncompatibility(
+        String,
+        Version,
+        RequiresPython,
+        RequiresPythonSources,
+        bool,
+    ),
 
     #[error(
         "The resolved Python interpreter (Python {_0}) is incompatible with the project's Python requirement: `{_1}`{}",
-        format_optional_requires_python_sources(_2)
+        format_optional_requires_python_sources(_2, *_3)
     )]
-    RequiresPythonProjectIncompatibility(Version, RequiresPython, RequiresPythonSources),
+    RequiresPythonProjectIncompatibility(Version, RequiresPython, RequiresPythonSources, bool),
 
     #[error(
         "The requested interpreter resolved to Python {0}, which is incompatible with the script's Python requirement: `{1}`"
@@ -444,6 +450,9 @@ pub(crate) fn validate_project_requires_python(
         .flatten()
         .filter(|(.., requires)| !requires.contains(interpreter.python_version()))
         .collect::<RequiresPythonSources>();
+    let workspace_non_trivial = workspace
+        .map(|workspace| workspace.packages().len() > 1)
+        .unwrap_or(false);
 
     match source {
         PythonRequestSource::UserRequest => {
@@ -451,6 +460,7 @@ pub(crate) fn validate_project_requires_python(
                 interpreter.python_version().clone(),
                 requires_python.clone(),
                 conflicting_requires,
+                workspace_non_trivial,
             ))
         }
         PythonRequestSource::DotPythonVersion(file) => {
@@ -459,6 +469,7 @@ pub(crate) fn validate_project_requires_python(
                 interpreter.python_version().clone(),
                 requires_python.clone(),
                 conflicting_requires,
+                workspace_non_trivial,
             ))
         }
         PythonRequestSource::RequiresPython => {
@@ -466,6 +477,7 @@ pub(crate) fn validate_project_requires_python(
                 interpreter.python_version().clone(),
                 requires_python.clone(),
                 conflicting_requires,
+                workspace_non_trivial,
             ))
         }
     }
@@ -2650,11 +2662,14 @@ fn format_requires_python_sources(conflicts: &RequiresPythonSources) -> String {
         .join("\n")
 }
 
-fn format_optional_requires_python_sources(conflicts: &RequiresPythonSources) -> String {
+fn format_optional_requires_python_sources(
+    conflicts: &RequiresPythonSources,
+    workspace_non_trivial: bool,
+) -> String {
     // If there's lots of conflicts, print a list
     if conflicts.len() > 1 {
         return format!(
-            ".\nThe following conflicts were found:\n{}",
+            ".\nThe following `requires-python` declarations do not permit this version:\n{}",
             format_requires_python_sources(conflicts)
         );
     }
@@ -2662,9 +2677,17 @@ fn format_optional_requires_python_sources(conflicts: &RequiresPythonSources) ->
     if conflicts.len() == 1 {
         let ((package, group), _) = conflicts.iter().next().unwrap();
         if let Some(group) = group {
-            return format!(" (from `{package}:{group}`).");
+            if workspace_non_trivial {
+                return format!(
+                    " (from workspace member `{package}`'s `tool.uv.dependency-groups.{group}.requires-python`)."
+                );
+            }
+            return format!(" (from `tool.uv.dependency-groups.{group}.requires-python`).");
         }
-        return format!(" (from `{package}`).");
+        if workspace_non_trivial {
+            return format!(" (from workspace member `{package}`'s `project.requires-python`).");
+        }
+        return " (from `project.requires-python`)".to_owned();
     }
     // Otherwise don't elaborate
     String::new()
