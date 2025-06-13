@@ -1,10 +1,3 @@
-use std::env;
-use std::ffi::OsStr;
-use std::fmt::Write;
-use std::io::ErrorKind;
-use std::path::Path;
-use std::str::FromStr;
-
 use crate::commands::ExitStatus;
 use crate::commands::pip::latest::LatestClient;
 use crate::printer::Printer;
@@ -15,9 +8,13 @@ use owo_colors::OwoColorize;
 use prettytable::format::FormatBuilder;
 use prettytable::row;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::ffi::OsStr;
+use std::fmt::Write;
+use std::io::ErrorKind;
+use std::path::Path;
+use std::str::FromStr;
 use tokio::sync::Semaphore;
-use uv_cache::{Cache, Refresh};
-use uv_cache_info::Timestamp;
+use uv_cache::Cache;
 use uv_cli::{Maybe, UpgradeProjectArgs};
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::Concurrency;
@@ -34,7 +31,10 @@ use walkdir::WalkDir;
 /// Upgrade all dependencies in the project requirements (pyproject.toml).
 ///
 /// This doesn't read or modify uv.lock, only constraints like `<1.0` are bumped.
-pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Result<ExitStatus> {
+pub(crate) async fn upgrade_project_dependencies(
+    args: UpgradeProjectArgs,
+    cache: Cache,
+) -> Result<ExitStatus> {
     let tables: Vec<_> = match args
         .types
         .iter()
@@ -65,9 +65,6 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
     let printer = Printer::Default;
     let info = format!("{}{}", "info".cyan().bold(), ":".bold());
 
-    #[allow(deprecated)]
-    let cache_dir = env::home_dir().unwrap().join(".cache/uv");
-    let cache = Cache::from_settings(false, Some(cache_dir))?.init()?;
     let capabilities = IndexCapabilities::default();
     let client_builder = BaseClientBuilder::default();
 
@@ -76,7 +73,6 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
         .index_locations(IndexLocations::default())
         .build();
     let concurrency = Concurrency::default();
-    let download_concurrency = Semaphore::new(concurrency.downloads);
 
     let (mut item_written, mut all_found, mut all_bumped, mut all_skipped) =
         (false, 0, 0, VersionDigit::default());
@@ -85,37 +81,13 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
 
     for toml_dir in &tomls {
         let pyproject_toml = Path::new(toml_dir).join("pyproject.toml");
-        let content = match fs_err::tokio::read_to_string(pyproject_toml.clone()).await {
-            Ok(content) => content,
-            Err(err) => {
-                if err.kind() == ErrorKind::NotFound {
-                    warn_user!("No pyproject.toml found in current directory");
-                    return Ok(ExitStatus::Error);
-                }
-                return Err(err.into());
-            }
-        };
-        let mut toml = match PyProjectTomlMut::from_toml(&content, DependencyTarget::PyProjectToml)
-        {
-            Ok(toml) => toml,
-            Err(err) => {
-                warn_user!("Couldn't read pyproject.toml: {}", err);
-                return Ok(ExitStatus::Error);
-            }
+        let mut toml = match read_pyproject_toml(&pyproject_toml).await {
+            Ok(value) => value,
+            Err(value) => return value,
         };
 
-        let python = args
-            .python
-            .clone()
-            .and_then(Maybe::into_option)
-            .or_else(|| {
-                toml.get_requires_python()
-                    .map(std::string::ToString::to_string)
-            });
-        let version_specifiers = python.and_then(|s| VersionSpecifiers::from_str(&s).ok());
-        let requires_python = version_specifiers
-            .map(|v| RequiresPython::from_specifiers(&v))
-            .unwrap_or_else(|| RequiresPython::greater_than_equal_version(&Version::new([4]))); // allow any by default
+        let python = get_python(&args, &toml);
+        let requires_python = create_requires_python(python);
 
         // Initialize the client to fetch the latest version of each package.
         let client = LatestClient {
@@ -125,25 +97,6 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
             exclude_newer: None,
             tags: None,
             requires_python: &requires_python,
-        };
-
-        let find_latest = async |names: &FxHashSet<PackageName>| {
-            let mut fetches = futures::stream::iter(names.iter())
-                .map(async |name| {
-                    let latest = client
-                        .find_latest(name, None, &download_concurrency)
-                        .await?;
-                    Ok::<(&PackageName, Option<DistFilename>), uv_client::Error>((name, latest))
-                })
-                .buffer_unordered(concurrency.downloads);
-
-            let mut map = FxHashMap::default();
-            while let Ok(Some((package, version))) = fetches.next().await.transpose() {
-                if let Some(version) = version.as_ref() {
-                    map.insert(package.clone(), version.clone().into_version());
-                }
-            }
-            map
         };
 
         let relative = if toml_dir == "." {
@@ -159,7 +112,7 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
             .into_iter()
             .filter(|p| !all_latest_versions.contains_key(p))
             .collect();
-        let latest_versions = find_latest(&query_versions).await;
+        let latest_versions = find_latest(&client, &query_versions, concurrency.downloads).await;
         all_latest_versions.extend(latest_versions.clone());
 
         let (found, upgrades) =
@@ -289,6 +242,72 @@ pub(crate) async fn upgrade_project_dependencies(args: UpgradeProjectArgs) -> Re
     }
 
     Ok(ExitStatus::Success)
+}
+
+fn create_requires_python(python: Option<String>) -> RequiresPython {
+    let version_specifiers = python.and_then(|s| VersionSpecifiers::from_str(&s).ok());
+    version_specifiers
+        .map(|v| RequiresPython::from_specifiers(&v))
+        .unwrap_or_else(|| RequiresPython::greater_than_equal_version(&Version::new([4]))) // allow any by default
+}
+
+fn get_python(args: &UpgradeProjectArgs, toml: &PyProjectTomlMut) -> Option<String> {
+    let python = args
+        .python
+        .clone()
+        .and_then(Maybe::into_option)
+        .or_else(|| {
+            toml.get_requires_python()
+                .map(std::string::ToString::to_string)
+        });
+    python
+}
+
+async fn read_pyproject_toml(
+    pyproject_toml: &Path,
+) -> Result<PyProjectTomlMut, Result<ExitStatus>> {
+    let content = match fs_err::tokio::read_to_string(pyproject_toml.to_path_buf()).await {
+        Ok(content) => content,
+        Err(err) => {
+            if err.kind() == ErrorKind::NotFound {
+                warn_user!("No pyproject.toml found in current directory");
+                return Err(Ok(ExitStatus::Error));
+            }
+            return Err(Err(err.into()));
+        }
+    };
+    let toml = match PyProjectTomlMut::from_toml(&content, DependencyTarget::PyProjectToml) {
+        Ok(toml) => toml,
+        Err(err) => {
+            warn_user!("Couldn't read pyproject.toml: {}", err);
+            return Err(Ok(ExitStatus::Error));
+        }
+    };
+    Ok(toml)
+}
+
+async fn find_latest(
+    client: &LatestClient<'_>,
+    names: &FxHashSet<PackageName>,
+    downloads: usize,
+) -> FxHashMap<PackageName, Version> {
+    let download_concurrency = Semaphore::new(downloads);
+    let mut fetches = futures::stream::iter(names.iter())
+        .map(async |name| {
+            let latest = client
+                .find_latest(name, None, &download_concurrency)
+                .await?;
+            Ok::<(&PackageName, Option<DistFilename>), uv_client::Error>((name, latest))
+        })
+        .buffer_unordered(downloads);
+
+    let mut map = FxHashMap::default();
+    while let Ok(Some((package, version))) = fetches.next().await.transpose() {
+        if let Some(version) = version.as_ref() {
+            map.insert(package.clone(), version.clone().into_version());
+        }
+    }
+    map
 }
 
 /// Recursively search for pyproject.toml files.

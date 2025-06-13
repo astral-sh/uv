@@ -6,10 +6,12 @@ use std::fmt::Write;
 use std::io::stdout;
 #[cfg(feature = "self-update")]
 use std::ops::Bound;
+use std::ops::Sub;
 use std::path::Path;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
+use std::time::{Duration, SystemTime};
 
 use anstream::eprintln;
 use anyhow::{Result, anyhow, bail};
@@ -2388,7 +2390,21 @@ async fn run_project(
             .await
         }
         ProjectCommand::Upgrade(args) => {
-            Box::pin(commands::upgrade_project_dependencies(args)).await
+            // --refresh -> now() -> uncached
+            // --no-refresh -> cached (overrides --refresh)
+            // otherwise: cache subsequent runs for 10 minutes
+            let timestamp = Timestamp::from(SystemTime::now().sub(Duration::from_secs(60 * 10)));
+            let refresh_package = args.refresh.refresh_package.clone();
+            let _refresh = if args.refresh.refresh || args.refresh.no_refresh {
+                Refresh::from_args(Some(!args.refresh.no_refresh), refresh_package)
+            } else if refresh_package.is_empty() {
+                Refresh::All(timestamp) // user didn't pass flags or package
+            } else {
+                Refresh::Packages(refresh_package, vec![], timestamp)
+            };
+            let cache = cache.with_refresh(_refresh);
+
+            Box::pin(commands::upgrade_project_dependencies(args, cache)).await
         }
         ProjectCommand::Tree(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.

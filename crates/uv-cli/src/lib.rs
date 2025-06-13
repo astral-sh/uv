@@ -695,6 +695,9 @@ pub struct UpgradeProjectArgs {
     )]
     pub allow: Vec<Maybe<usize>>,
 
+    #[command(flatten)]
+    pub refresh: RefreshArgs,
+
     /// The Python interpreter to use during resolution (overrides pyproject.toml).
     ///
     /// A Python interpreter is required for building source distributions to determine package
