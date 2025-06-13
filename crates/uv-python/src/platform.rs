@@ -54,22 +54,25 @@ impl Ord for Arch {
         // Similarly if someone manually requests an aarch64 windows install, we
         // should respect that request (this is the way users should "override"
         // this behaviour).
-        let native = if cfg!(all(windows, target_arch = "aarch64")) {
+        let preferred = if cfg!(all(windows, target_arch = "aarch64")) {
             Arch {
                 family: target_lexicon::Architecture::X86_64,
                 variant: None,
             }
         } else {
+            // Prefer native architectures
             Arch::from_env()
         };
 
-        // Prefer native architectures
-        match (self.family == native.family, other.family == native.family) {
+        match (
+            self.family == preferred.family,
+            other.family == preferred.family,
+        ) {
             (true, true) => unreachable!(),
             (true, false) => std::cmp::Ordering::Less,
             (false, true) => std::cmp::Ordering::Greater,
             (false, false) => {
-                // Both non-native, fallback to lexicographic order
+                // Both non-preferred, fallback to lexicographic order
                 self.family.to_string().cmp(&other.family.to_string())
             }
         }
