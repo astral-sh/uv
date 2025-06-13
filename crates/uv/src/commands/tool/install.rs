@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::str::FromStr;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use owo_colors::OwoColorize;
 use tracing::{debug, trace};
 
@@ -46,7 +46,7 @@ pub(crate) async fn install(
     editable: bool,
     from: Option<String>,
     with: &[RequirementsSource],
-    with_executables_from: BTreeSet<PackageName>,
+    mut with_executables_from: BTreeSet<PackageName>,
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
     build_constraints: &[RequirementsSource],
@@ -599,45 +599,13 @@ pub(crate) async fn install(
 
     let force_install = force || invalid_tool_receipt;
 
-    // Find a suitable path to install into.
-    let executable_directory = uv_tool::tool_executable_dir()?;
-    fs_err::create_dir_all(&executable_directory)
-        .context("Failed to create executable directory")?;
+    with_executables_from.insert(package_name.clone());
 
-    // Install additional executables, if any was explicitly requested.
-    let mut installed_entrypoints = Vec::new();
-    for pkg in with_executables_from {
-        debug!(
-            "Installing executables for `{}` as part of tool `{}`",
-            pkg, package_name
-        );
-        install_executables(
-            &environment,
-            &package_name,
-            &pkg,
-            &installed_tools,
-            &mut installed_entrypoints,
-            &executable_directory,
-            &options,
-            force_install,
-            python.clone(),
-            requirements.clone(),
-            constraints.clone(),
-            overrides.clone(),
-            build_constraints.clone(),
-            printer,
-        )?;
-    }
-
-    // Install entrypoints from the target package.
-    debug!("Installing executables for tool `{}`", package_name);
     install_executables(
         &environment,
         &package_name,
-        &package_name,
+        with_executables_from,
         &installed_tools,
-        &mut installed_entrypoints,
-        &executable_directory,
         &options,
         force_install,
         python,
@@ -646,5 +614,7 @@ pub(crate) async fn install(
         overrides,
         build_constraints,
         printer,
-    )
+    )?;
+
+    Ok(ExitStatus::Success)
 }

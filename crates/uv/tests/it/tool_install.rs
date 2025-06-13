@@ -3653,11 +3653,11 @@ fn tool_install_additional_entrypoints() {
         .arg("ansible==9.3.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
-    
+
     ----- stderr -----
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
@@ -3680,7 +3680,7 @@ fn tool_install_additional_entrypoints() {
     Installed 11 executables from `ansible-core`: ansible, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault
     Installed 2 executables from `black`: black, blackd
     Installed 1 executable: ansible-community
-    "###);
+    ");
 
     // NOTE(lucab): on Windows `name` values contain an `.exe` suffix,
     // which is hidden in the snapshot but results in a different sorting.
@@ -3725,7 +3725,7 @@ fn tool_install_additional_entrypoints() {
     success: true
     exit_code: 0
     ----- stdout -----
-    
+
     ----- stderr -----
     Uninstalled 14 executables: ansible, ansible-community, ansible-config, ansible-connection, ansible-console, ansible-doc, ansible-galaxy, ansible-inventory, ansible-playbook, ansible-pull, ansible-test, ansible-vault, black, blackd
     "###);

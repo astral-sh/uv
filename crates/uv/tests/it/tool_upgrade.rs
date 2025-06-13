@@ -861,7 +861,7 @@ fn test_tool_upgrade_additional_entrypoints() {
         .arg("babel==2.14.0")
         .env("UV_TOOL_DIR", tool_dir.as_os_str())
         .env("XDG_BIN_HOME", bin_dir.as_os_str())
-        .env("PATH", bin_dir.as_os_str()), @r###"
+        .env("PATH", bin_dir.as_os_str()), @r"
     success: true
     exit_code: 0
     ----- stdout -----
@@ -879,7 +879,7 @@ fn test_tool_upgrade_additional_entrypoints() {
      + platformdirs==4.2.0
     Installed 2 executables from `black`: black, blackd
     Installed 1 executable: pybabel
-    "###);
+    ");
 
     // Upgrade python, and make sure that all the entrypoints above get
     // re-installed.

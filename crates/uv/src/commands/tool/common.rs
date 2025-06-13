@@ -3,7 +3,7 @@ use itertools::Itertools;
 use owo_colors::OwoColorize;
 use std::{
     collections::BTreeSet, collections::Bound, env::consts::EXE_SUFFIX, ffi::OsString, fmt::Write,
-    path::Path,
+    iter, path::Path,
 };
 use tracing::{debug, warn};
 use uv_cache::Cache;
@@ -25,7 +25,6 @@ use uv_shell::Shell;
 use uv_tool::{InstalledTools, Tool, ToolEntrypoint, entrypoint_paths};
 use uv_warnings::warn_user_once;
 
-use crate::ExitStatus;
 use crate::commands::pip;
 use crate::commands::project::ProjectError;
 use crate::commands::reporters::PythonDownloadReporter;
@@ -164,10 +163,8 @@ pub(crate) async fn refine_interpreter(
 pub(crate) fn install_executables(
     environment: &PythonEnvironment,
     tool_name: &PackageName,
-    name: &PackageName,
+    entrypoints: impl IntoIterator<Item = PackageName>,
     installed_tools: &InstalledTools,
-    installed_entrypoints: &mut Vec<ToolEntrypoint>,
-    executable_directory: &Path,
     options: &ToolOptions,
     force: bool,
     python: Option<String>,
@@ -176,142 +173,159 @@ pub(crate) fn install_executables(
     overrides: Vec<Requirement>,
     build_constraints: Vec<Requirement>,
     printer: Printer,
-) -> anyhow::Result<ExitStatus> {
-    let site_packages = SitePackages::from_environment(environment)?;
-    let installed = site_packages.get_packages(name);
-    let Some(installed_dist) = installed.first().copied() else {
-        bail!("Expected at least one requirement")
-    };
-
+) -> anyhow::Result<()> {
+    let executable_directory = uv_tool::tool_executable_dir()?;
+    fs_err::create_dir_all(&executable_directory)
+        .context("Failed to create executable directory")?;
     debug!(
         "Installing tool executables into: {}",
         executable_directory.user_display()
     );
 
-    let entry_points = entrypoint_paths(
-        &site_packages,
-        installed_dist.name(),
-        installed_dist.version(),
-    )?;
+    let site_packages = SitePackages::from_environment(environment)?;
+    let mut installed_entrypoints = Vec::new();
 
-    // Determine the entry points targets. Use a sorted collection for deterministic output.
-    let target_entry_points = entry_points
-        .into_iter()
-        .map(|(name, source_path)| {
-            let target_path = executable_directory.join(
-                source_path
-                    .file_name()
-                    .map(std::borrow::ToOwned::to_owned)
-                    .unwrap_or_else(|| OsString::from(name.clone())),
-            );
-            (name, source_path, target_path)
-        })
-        .collect::<BTreeSet<_>>();
-
-    if target_entry_points.is_empty() {
-        writeln!(
-            printer.stdout(),
-            "No executables are provided by `{from}`",
-            from = name.cyan()
-        )?;
-
-        hint_executable_from_dependency(name, &site_packages, printer)?;
-
-        // Clean up the environment we just created.
-        installed_tools.remove_environment(name)?;
-
-        return Err(anyhow::anyhow!(
-            "Failed to install entrypoints for `{from}`",
-            from = name.cyan()
-        ));
-    }
-
-    // Error if we're overwriting an existing entrypoint, unless the user passed `--force`.
-    if !force {
-        let mut existing_entry_points = target_entry_points
-            .iter()
-            .filter(|(_, _, target_path)| target_path.exists())
-            .peekable();
-        if existing_entry_points.peek().is_some() {
-            // Clean up the environment we just created
-            installed_tools.remove_environment(tool_name)?;
-
-            let existing_entry_points = existing_entry_points
-                // SAFETY: We know the target has a filename because we just constructed it above
-                .map(|(_, _, target)| target.file_name().unwrap().to_string_lossy())
-                .collect::<Vec<_>>();
-            let (s, exists) = if existing_entry_points.len() == 1 {
-                ("", "exists")
-            } else {
-                ("s", "exist")
-            };
-            bail!(
-                "Executable{s} already {exists}: {} (use `--force` to overwrite)",
-                existing_entry_points
-                    .iter()
-                    .map(|name| name.bold())
-                    .join(", ")
-            )
+    // Move the tool name to the end of entrypoints, so that it is installed last.
+    let mut other_packages = Vec::new();
+    for package in entrypoints {
+        if package != *tool_name {
+            other_packages.push(package);
         }
     }
+    let ordered_packages = other_packages
+        .into_iter()
+        .chain(iter::once(tool_name.clone()));
 
-    #[cfg(windows)]
-    let itself = std::env::current_exe().ok();
+    for package in ordered_packages {
+        if package == *tool_name {
+            debug!("Installing entrypoints for tool `{}`", package);
+        } else {
+            debug!(
+                "Installing entrypoints for `{}` as part of tool `{}`",
+                package, tool_name
+            );
+        }
 
-    let mut names = BTreeSet::new();
-    for (name, src, dst) in &target_entry_points {
-        debug!("Installing executable: `{name}`");
+        let installed = site_packages.get_packages(&package);
+        let dist = installed
+            .first()
+            .context("Expected at least one requirement")?;
+        let dist_entrypoints = entrypoint_paths(&site_packages, dist.name(), dist.version())?;
 
-        #[cfg(unix)]
-        replace_symlink(src, dst).context("Failed to install executable")?;
+        // Determine the entry points targets. Use a sorted collection for deterministic output.
+        let target_entrypoints = dist_entrypoints
+            .into_iter()
+            .map(|(name, source_path)| {
+                let target_path = executable_directory.join(
+                    source_path
+                        .file_name()
+                        .map(std::borrow::ToOwned::to_owned)
+                        .unwrap_or_else(|| OsString::from(name.clone())),
+                );
+                (name, source_path, target_path)
+            })
+            .collect::<BTreeSet<_>>();
+
+        if target_entrypoints.is_empty() {
+            writeln!(
+                printer.stdout(),
+                "No executables are provided by `{}`",
+                package.cyan()
+            )?;
+
+            hint_executable_from_dependency(&package, &site_packages, printer)?;
+
+            // Clean up the environment we just created.
+            installed_tools.remove_environment(&package)?;
+
+            return Err(anyhow::anyhow!(
+                "Failed to install entrypoints for `{}`",
+                package.cyan()
+            ));
+        }
+
+        // Error if we're overwriting an existing entrypoint, unless the user passed `--force`.
+        if !force {
+            let mut existing_entrypoints = target_entrypoints
+                .iter()
+                .filter(|(_, _, target_path)| target_path.exists())
+                .peekable();
+            if existing_entrypoints.peek().is_some() {
+                // Clean up the environment we just created
+                installed_tools.remove_environment(tool_name)?;
+
+                let existing_entrypoints = existing_entrypoints
+                    // SAFETY: We know the target has a filename because we just constructed it above
+                    .map(|(_, _, target)| target.file_name().unwrap().to_string_lossy())
+                    .collect::<Vec<_>>();
+                let (s, exists) = if existing_entrypoints.len() == 1 {
+                    ("", "exists")
+                } else {
+                    ("s", "exist")
+                };
+                bail!(
+                    "Executable{s} already {exists}: {} (use `--force` to overwrite)",
+                    existing_entrypoints
+                        .iter()
+                        .map(|name| name.bold())
+                        .join(", ")
+                )
+            }
+        }
 
         #[cfg(windows)]
-        if itself
-            .as_ref()
-            .is_some_and(|itself| std::path::absolute(dst).is_ok_and(|target| *itself == target))
-        {
-            self_replace::self_replace(src).context("Failed to install entrypoint")?;
-        } else {
-            fs_err::copy(src, dst).context("Failed to install entrypoint")?;
+        let itself = std::env::current_exe().ok();
+
+        let mut names = BTreeSet::new();
+        for (name, src, target) in target_entrypoints {
+            debug!("Installing executable: `{name}`");
+
+            #[cfg(unix)]
+            replace_symlink(src, &target).context("Failed to install executable")?;
+
+            #[cfg(windows)]
+            if itself.as_ref().is_some_and(|itself| {
+                std::path::absolute(&target).is_ok_and(|target| *itself == target)
+            }) {
+                self_replace::self_replace(src).context("Failed to install entrypoint")?;
+            } else {
+                fs_err::copy(src, &target).context("Failed to install entrypoint")?;
+            }
+
+            names.insert(name.trim_end_matches(EXE_SUFFIX).to_string());
+            let tool_entry = ToolEntrypoint::new(name, target, package.to_string());
+            installed_entrypoints.push(tool_entry);
         }
 
-        names.insert(name.trim_end_matches(EXE_SUFFIX));
+        let s = if names.len() == 1 { "" } else { "s" };
+        let from_pkg = if *tool_name == package {
+            String::new()
+        } else {
+            format!(" from `{package}`")
+        };
+        writeln!(
+            printer.stderr(),
+            "Installed {} executable{s}{from_pkg}: {}",
+            names.len(),
+            names.iter().map(|name| name.bold()).join(", ")
+        )?;
     }
-
-    let plural = if names.len() == 1 { "" } else { "s" };
-    let from_pkg = if tool_name == name {
-        String::new()
-    } else {
-        format!(" from `{name}`")
-    };
-    writeln!(
-        printer.stderr(),
-        "Installed {} executable{plural}{from_pkg}: {}",
-        names.len(),
-        names.iter().map(|name| name.bold()).join(", ")
-    )?;
 
     debug!("Adding receipt for tool `{tool_name}`");
-    let mut new_entrypoints = Vec::with_capacity(target_entry_points.len());
-    for (entry, _, target_path) in target_entry_points {
-        let tool_entry = ToolEntrypoint::new(entry, target_path, name.to_string());
-        installed_entrypoints.push(tool_entry.clone());
-        new_entrypoints.push(tool_entry);
-    }
     let tool = Tool::new(
         requirements,
         constraints,
         overrides,
         build_constraints,
         python,
-        installed_entrypoints.clone(),
+        installed_entrypoints,
         options.clone(),
     );
     installed_tools.add_tool_receipt(tool_name, tool)?;
 
-    warn_out_of_path(executable_directory);
+    warn_out_of_path(&executable_directory);
 
-    Ok(ExitStatus::Success)
+    Ok(())
 }
 
 fn warn_out_of_path(executable_directory: &Path) {
