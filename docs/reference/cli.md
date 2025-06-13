@@ -208,7 +208,7 @@ uv run [OPTIONS] [COMMAND]
 <p>May be provided multiple times. Implies <code>--no-default-groups</code>.</p>
 </dd><dt id="uv-run--package"><a href="#uv-run--package"><code>--package</code></a> <i>package</i></dt><dd><p>Run the command in a specific package in the workspace.</p>
 <p>If the workspace member does not exist, uv will exit with an error.</p>
-</dd><dt id="uv-run--prerelease"><a href="#uv-run--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
+<p>May also be set with the <code>UV_PACKAGE</code> environment variable.</p></dd><dt id="uv-run--prerelease"><a href="#uv-run--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 <p>May also be set with the <code>UV_PRERELEASE</code> environment variable.</p><p>Possible values:</p>
 <ul>
@@ -539,7 +539,7 @@ uv add [OPTIONS] <PACKAGES|--requirements <REQUIREMENTS>>
 <p>The group may then be activated when installing the project with the <code>--extra</code> flag.</p>
 <p>To enable an optional extra for this requirement instead, see <code>--extra</code>.</p>
 </dd><dt id="uv-add--package"><a href="#uv-add--package"><code>--package</code></a> <i>package</i></dt><dd><p>Add the dependency to a specific package in the workspace</p>
-</dd><dt id="uv-add--prerelease"><a href="#uv-add--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
+<p>May also be set with the <code>UV_PACKAGE</code> environment variable.</p></dd><dt id="uv-add--prerelease"><a href="#uv-add--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 <p>May also be set with the <code>UV_PRERELEASE</code> environment variable.</p><p>Possible values:</p>
 <ul>
@@ -720,7 +720,7 @@ uv remove [OPTIONS] <PACKAGES>...
 <p>When disabled, uv will only use locally cached data and locally available files.</p>
 <p>May also be set with the <code>UV_OFFLINE</code> environment variable.</p></dd><dt id="uv-remove--optional"><a href="#uv-remove--optional"><code>--optional</code></a> <i>optional</i></dt><dd><p>Remove the packages from the project's optional dependencies for the specified extra</p>
 </dd><dt id="uv-remove--package"><a href="#uv-remove--package"><code>--package</code></a> <i>package</i></dt><dd><p>Remove the dependencies from a specific package in the workspace</p>
-</dd><dt id="uv-remove--prerelease"><a href="#uv-remove--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
+<p>May also be set with the <code>UV_PACKAGE</code> environment variable.</p></dd><dt id="uv-remove--prerelease"><a href="#uv-remove--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 <p>May also be set with the <code>UV_PRERELEASE</code> environment variable.</p><p>Possible values:</p>
 <ul>
@@ -893,7 +893,7 @@ uv version [OPTIONS] [VALUE]
 <li><code>text</code>:  Display the version as plain text</li>
 <li><code>json</code>:  Display the version as JSON</li>
 </ul></dd><dt id="uv-version--package"><a href="#uv-version--package"><code>--package</code></a> <i>package</i></dt><dd><p>Update the version of a specific package in the workspace</p>
-</dd><dt id="uv-version--prerelease"><a href="#uv-version--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
+<p>May also be set with the <code>UV_PACKAGE</code> environment variable.</p></dd><dt id="uv-version--prerelease"><a href="#uv-version--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 <p>May also be set with the <code>UV_PRERELEASE</code> environment variable.</p><p>Possible values:</p>
 <ul>
@@ -1103,7 +1103,7 @@ uv sync [OPTIONS]
 </dd><dt id="uv-sync--package"><a href="#uv-sync--package"><code>--package</code></a> <i>package</i></dt><dd><p>Sync for a specific package in the workspace.</p>
 <p>The workspace's environment (<code>.venv</code>) is updated to reflect the subset of dependencies declared by the specified workspace member package.</p>
 <p>If the workspace member does not exist, uv will exit with an error.</p>
-</dd><dt id="uv-sync--prerelease"><a href="#uv-sync--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
+<p>May also be set with the <code>UV_PACKAGE</code> environment variable.</p></dd><dt id="uv-sync--prerelease"><a href="#uv-sync--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 <p>May also be set with the <code>UV_PRERELEASE</code> environment variable.</p><p>Possible values:</p>
 <ul>
@@ -1466,7 +1466,7 @@ uv export [OPTIONS]
 </dd><dt id="uv-export--output-file"><a href="#uv-export--output-file"><code>--output-file</code></a>, <code>-o</code> <i>output-file</i></dt><dd><p>Write the exported requirements to the given file</p>
 </dd><dt id="uv-export--package"><a href="#uv-export--package"><code>--package</code></a> <i>package</i></dt><dd><p>Export the dependencies for a specific package in the workspace.</p>
 <p>If the workspace member does not exist, uv will exit with an error.</p>
-</dd><dt id="uv-export--prerelease"><a href="#uv-export--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
+<p>May also be set with the <code>UV_PACKAGE</code> environment variable.</p></dd><dt id="uv-export--prerelease"><a href="#uv-export--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 <p>May also be set with the <code>UV_PRERELEASE</code> environment variable.</p><p>Possible values:</p>
 <ul>
@@ -4648,7 +4648,7 @@ uv build [OPTIONS] [SRC]
 </dd><dt id="uv-build--package"><a href="#uv-build--package"><code>--package</code></a> <i>package</i></dt><dd><p>Build a specific package in the workspace.</p>
 <p>The workspace will be discovered from the provided source directory, or the current directory if no source directory is provided.</p>
 <p>If the workspace member does not exist, uv will exit with an error.</p>
-</dd><dt id="uv-build--prerelease"><a href="#uv-build--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
+<p>May also be set with the <code>UV_PACKAGE</code> environment variable.</p></dd><dt id="uv-build--prerelease"><a href="#uv-build--prerelease"><code>--prerelease</code></a> <i>prerelease</i></dt><dd><p>The strategy to use when considering pre-release versions.</p>
 <p>By default, uv will accept pre-releases for packages that <em>only</em> publish pre-releases, along with first-party requirements that contain an explicit pre-release marker in the declared specifiers (<code>if-necessary-or-explicit</code>).</p>
 <p>May also be set with the <code>UV_PRERELEASE</code> environment variable.</p><p>Possible values:</p>
 <ul>
