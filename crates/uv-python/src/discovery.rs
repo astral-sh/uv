@@ -354,7 +354,7 @@ fn python_executables_from_installed<'a>(
                                         &installation,
                                         preview,
                                     )
-                                    .filter(PythonMinorVersionLink::symlink_exists)
+                                    .filter(PythonMinorVersionLink::exists)
                                     .map(
                                         |minor_version_link| {
                                             minor_version_link.symlink_executable.clone()

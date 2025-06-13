@@ -16,8 +16,8 @@ use uv_configuration::PreviewMode;
 use uv_fs::Simplified;
 use uv_python::downloads::{self, DownloadResult, ManagedPythonDownload, PythonDownloadRequest};
 use uv_python::managed::{
-    ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink, create_bin_link,
-    python_executable_dir,
+    ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
+    create_link_to_executable, python_executable_dir,
 };
 use uv_python::platform::{Arch, Libc};
 use uv_python::{
@@ -471,13 +471,12 @@ pub(crate) async fn install(
         }
     }
 
-    // Read all existing managed installations and find the highest installed patch
-    // for each installed minor version.
-    let installations = ManagedPythonInstallations::from_settings(install_dir)?.init()?;
-    let existing_installations: Vec<_> = installations.find_all()?.collect();
     let minor_versions =
         PythonInstallationMinorVersionKey::highest_installations_by_minor_version_key(
-            existing_installations,
+            installations
+                .iter()
+                .copied()
+                .chain(existing_installations.iter()),
         );
 
     for installation in minor_versions.values() {
@@ -650,7 +649,7 @@ fn create_bin_links(
             installation.executable(false)
         };
 
-        match create_bin_link(&target, executable.clone()) {
+        match create_link_to_executable(&target, executable.clone()) {
             Ok(()) => {
                 debug!(
                     "Installed executable at `{}` for {}",
@@ -786,7 +785,7 @@ fn create_bin_links(
                         .remove(&target);
                 }
 
-                create_bin_link(&target, executable)?;
+                create_link_to_executable(&target, executable)?;
                 debug!(
                     "Updated executable at `{}` to {}",
                     target.simplified_display(),

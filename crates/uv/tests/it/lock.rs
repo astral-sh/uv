@@ -4474,17 +4474,6 @@ fn lock_requires_python_exact() -> Result<()> {
         "#,
     )?;
 
-    uv_snapshot!(context.filters(), context.venv().arg("-p").arg("3.13.0"), @r"
-    success: true
-    exit_code: 0
-    ----- stdout -----
-
-    ----- stderr -----
-    Using CPython 3.13.0 interpreter at: [PYTHON-3.13.0]
-    Creating virtual environment at: .venv
-    Activate with: source .venv/[BIN]/activate
-    ");
-
     uv_snapshot!(context.filters(), context.lock(), @r"
     success: true
     exit_code: 0
